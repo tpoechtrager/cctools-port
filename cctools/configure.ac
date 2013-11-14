@@ -1,4 +1,4 @@
-AC_INIT([cctools], [839], [cjacker@gmail.com])
+AC_INIT([cctools], [845], [cjacker@gmail.com])
 
 AC_CANONICAL_BUILD
 AC_CANONICAL_HOST
@@ -164,12 +164,68 @@ AC_COMPILE_IFELSE(
 )
 CFLAGS=$ORIGCFLAGS
 
+
+ORIGCFLAGS=$CFLAGS
+CFLAGS="$CFLAGS -Wno-unused-private-field"
+AC_MSG_CHECKING([if -Wno-unused-variable is supported])
+AC_COMPILE_IFELSE(
+   [AC_LANG_SOURCE([[const char hw[] = "Hello, World\n";]])],
+   [WARNINGS="$WARNINGS -Wno-unused-private-field"
+    AC_MSG_RESULT([yes])],
+   [AC_MSG_RESULT([no])]
+)
+CFLAGS=$ORIGCFLAGS
+
+ORIGCFLAGS=$CFLAGS
+CFLAGS="$CFLAGS -Wno-unused-function"
+AC_MSG_CHECKING([if -Wno-unused-variable is supported])
+AC_COMPILE_IFELSE(
+   [AC_LANG_SOURCE([[const char hw[] = "Hello, World\n";]])],
+   [WARNINGS="$WARNINGS -Wno-unused-function"
+    AC_MSG_RESULT([yes])],
+   [AC_MSG_RESULT([no])]
+)
+CFLAGS=$ORIGCFLAGS
+
+ORIGCFLAGS=$CFLAGS
+CFLAGS="$CFLAGS -Wno-objc-root-class"
+AC_MSG_CHECKING([if -Wno-unused-variable is supported])
+AC_COMPILE_IFELSE(
+   [AC_LANG_SOURCE([[const char hw[] = "Hello, World\n";]])],
+   [WARNINGS="$WARNINGS -Wno-objc-root-class"
+    AC_MSG_RESULT([yes])],
+   [AC_MSG_RESULT([no])]
+)
+CFLAGS=$ORIGCFLAGS
+
+ORIGCFLAGS=$CFLAGS
+CFLAGS="$CFLAGS -Wno-deprecated-objc-isa-usage"
+AC_MSG_CHECKING([if -Wno-unused-variable is supported])
+AC_COMPILE_IFELSE(
+   [AC_LANG_SOURCE([[const char hw[] = "Hello, World\n";]])],
+   [WARNINGS="$WARNINGS -Wno-deprecated-objc-isa-usage"
+    AC_MSG_RESULT([yes])],
+   [AC_MSG_RESULT([no])]
+)
+CFLAGS=$ORIGCFLAGS
+
 ORIGCFLAGS=$CFLAGS
 CFLAGS="$CFLAGS -Wno-invalid-offsetof"
 AC_MSG_CHECKING([if -Wno-invalid-offsetof is supported])
 AC_COMPILE_IFELSE(
    [AC_LANG_SOURCE([[const char hw[] = "Hello, World\n";]])],
    [WARNINGS="$WARNINGS -Wno-invalid-offsetof"
+    AC_MSG_RESULT([yes])],
+   [AC_MSG_RESULT([no])]
+)
+CFLAGS=$ORIGCFLAGS
+
+ORIGCFLAGS=$CFLAGS
+CFLAGS="$CFLAGS -Wno-int-conversion"
+AC_MSG_CHECKING([if -Wno-invalid-offsetof is supported])
+AC_COMPILE_IFELSE(
+   [AC_LANG_SOURCE([[const char hw[] = "Hello, World\n";]])],
+   [WARNINGS="$WARNINGS -Wno-int-conversion"
     AC_MSG_RESULT([yes])],
    [AC_MSG_RESULT([no])]
 )

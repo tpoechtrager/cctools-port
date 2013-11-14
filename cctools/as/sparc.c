@@ -166,7 +166,7 @@ struct sparc_it
     expressionS exp;
     int pcrel;
     char pcrel_reloc;	/* do relocation? */
-    enum reloc_type_sparc reloc;
+    int reloc;
   };
 
 struct sparc_it the_insn;

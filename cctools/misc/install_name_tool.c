@@ -978,6 +978,7 @@ uint32_t *header_size)
 	    rpath2->path.offset = sizeof(struct rpath_command);
 	    path2 = (char *)rpath2 + rpath2->path.offset;
 	    strcpy(path2, add_rpaths[i].new);
+	    lc2 = (struct load_command *)((char *)lc2 + lc2->cmdsize);
 	}
 	ncmds += nadd_rpaths;
 	ncmds -= ndelete_rpaths;

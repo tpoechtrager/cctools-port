@@ -295,6 +295,7 @@ struct load_command {
 #define LC_SOURCE_VERSION 0x2A /* source version used to build binary */
 #define LC_DYLIB_CODE_SIGN_DRS 0x2B /* Code signing DRs copied from linked dylibs */
 #define	LC_ENCRYPTION_INFO_64 0x2C /* 64-bit encrypted segment information */
+#define LC_LINKER_OPTION 0x2D /* linker options in MH_OBJECT files */
 
 
 /*
@@ -1177,7 +1178,7 @@ struct encryption_info_command {
 
 /*
  * The encryption_info_command_64 contains the file offset and size of an
- * of an encrypted segment (for use in 64-bit targets).
+ * of an encrypted segment (for use in x86_64 targets).
  */
 struct encryption_info_command_64 {
    uint32_t	cmd;		/* LC_ENCRYPTION_INFO_64 */
@@ -1374,6 +1375,17 @@ struct dyld_info_command {
 #define EXPORT_SYMBOL_FLAGS_WEAK_DEFINITION			0x04
 #define EXPORT_SYMBOL_FLAGS_REEXPORT				0x08
 #define EXPORT_SYMBOL_FLAGS_STUB_AND_RESOLVER			0x10
+
+/*
+ * The linker_option_command contains linker options embedded in object files.
+ */
+struct linker_option_command {
+    uint32_t  cmd;	/* LC_LINKER_OPTION only used in MH_OBJECT filetypes */
+    uint32_t  cmdsize;
+    uint32_t  count;	/* number of strings */
+    /* concatenation of zero terminated UTF8 strings.
+       Zero filled at end to align */
+};
 
 /*
  * The symseg_command contains the offset and size of the GNU style

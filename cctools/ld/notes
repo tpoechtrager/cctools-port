@@ -109,8 +109,8 @@ Changes for the 5.25 release (the cctools-676 release):
 Changes for the 5.25 release (the cctools-673 release):
 - Changed the sources so the arm stuff is not in the open source version.
   Radar bug #5326431.
-  - Changed the Makefile to #ifndef __OPEN_SOURCE__ out the arm files
-  - Added #ifndef __OPEN_SOURCE__ to the following files to bracket arm code:
+  - Changed the Makefile to #ifndef __OPEN_SOURCE__
+  - Added #ifndef __OPEN_SOURCE__
     layout.c, ld.c, objects.c, objects.h, sections.c, symbols.c and arm_reloc.c.
 
 Changes for the 5.24 release (the cctools-663 release):

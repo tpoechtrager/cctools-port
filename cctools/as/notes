@@ -25,6 +25,13 @@ Bugs to be fixed:
 - The PowerPC extended branch mnemonic like beqlrl need to take a CRFONLY or
   a number shifted over by 2 (like the fcmpu instruction).
 
+Changes for the 5.33 release (the cctools-840 release):
+- Added the environment variable AS_INTEGRATED_ASSEMBLER to be like the -q flag
+  and use clang(1) with -integrated-as when -Q is not used and the targeted
+  architecture is supported by clang(1).  Radar bug #12671669.
+- Added support for new archs: armv6m / armv7m / armv7em and updated main() in
+  as.c . Radar bug #11314463.
+
 Changes for the 5.32 release (the cctools-832 release):
 - Fixed command line parsing problems in the driver that was not skiping the
   parsing the characters after multiple character options.  Radar bug #11754204.
@@ -471,9 +478,9 @@ Changes for the 5.27 release (the cctools-762 release):
 Changes for the 5.27 release (the cctools-760 release):
 - Changed the sources so the armv7 stuff is a no longer #ifndef __OPEN_SOURCE__
   Radar bug #7016121.
-  - Changed the Makefile and removed the #ifndef __OPEN_SOURCE__ for the arm
+  - Changed the Makefile and removed the #ifndef __OPEN_SOURCE__
     build.
-  - Removed the #ifndef __OPEN_SOURCE__ from as.c that was bracketing armv7
+  - Removed the #ifndef __OPEN_SOURCE__
     the reference.
 
 Changes for the 5.27 release (the cctools-759 release):
@@ -984,8 +991,8 @@ Changes for the 5.26 release (the cctools-701 release):
 Changes for the 5.25 release (the cctools-697 release):
 - Changed the sources so the arm assembler is not in the open source version.
   Radar bug #5844124.
-  - Changed the Makefile to #ifndef __OPEN_SOURCE__ out the arm build
-  - Added #ifndef __OPEN_SOURCE__ to as.c to bracket armv7 reference.
+  - Changed the Makefile to #ifndef __OPEN_SOURCE__
+  - Added #ifndef __OPEN_SOURCE__
 
 Changes for the 5.25 release (the cctools-689 release):
 - Fixed a place that needed force_cpusubtype_ALL tested in md_assemble() in
@@ -1522,7 +1529,7 @@ Changes for the 5.25 release (the cctools-678 release):
 Changes for the 5.25 release (the cctools-677 release):
 - Changed the Makefile to not use -Wno-long-double and -no-cpp-precomp .
   Radar bug #5563553.
-- Fixed a problem with the #ifndef __OPEN_SOURCE__ change in done for bug
+- Fixed a problem with the #ifndef __OPEN_SOURCE__
   #5326431 in layout.c in fixup_section().  Where the non __OPEN_SOURCE__
   defined else clause was missing the needed #ifdef for x86_64.
   Radar bug #5575380.
@@ -1615,8 +1622,8 @@ Changes for the 5.25 release (the cctools-676 release):
 Changes for the 5.25 release (the cctools-673 release):
 - Changed the sources so the arm stuff is not in the open source version.
   Radar bug #5326431.
-  - Changed the Makefile to #ifndef __OPEN_SOURCE__ out the arm build
-  - Added #ifndef __OPEN_SOURCE__ to the following files to bracket arm code:
+  - Changed the Makefile to #ifndef __OPEN_SOURCE__
+  - Added #ifndef __OPEN_SOURCE__
     as.c, layout.c, messages.c, write_object.c, symbols.c, symbols.h and
     write_object.c .
 

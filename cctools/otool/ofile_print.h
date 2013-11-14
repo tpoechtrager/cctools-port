@@ -40,7 +40,7 @@
 extern void print_fat_headers(
     struct fat_header *fat_header,
     struct fat_arch *fat_archs,
-    uint32_t size,
+    uint64_t size,
     enum bool verbose);
 
 extern void print_ar_hdr(
@@ -314,6 +314,10 @@ extern void print_encryption_info_command_64(
     struct encryption_info_command_64 *ec,
     uint32_t object_size);
 
+extern void print_linker_option_command(
+    struct linker_option_command *lo,
+    struct load_command *lc);
+
 extern void print_dyld_info_info_command(
     struct dyld_info_command *dc,
     uint32_t object_size);
@@ -547,6 +551,11 @@ extern void print_coff_reloc_section(
     char *object_addr,
     uint32_t object_size,
     enum bool verbose);
+
+extern char *get_label(
+    uint64_t addr,
+    struct symbol *sorted_symbols,
+    uint32_t nsorted_symbols);
 
 extern void print_label(
     uint64_t addr,

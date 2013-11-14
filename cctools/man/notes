@@ -2,8 +2,12 @@ TODO:
 - Add -v description to checksyms.
 - The 4.4bsd a.out(5) man page is wrong for Rhapsody.
 
+Changes for the 5.30 release (the cctools-841 release):
+- Changed the Makefile to stop installing gprof.1 .  Radar bug #12206921.
+- Added the -mcpu= option to otool.1 .  Radar bug #12839170.
+
 Changes for the 5.33 release (the cctools-838 release):
-- Change the otool(1) man age to indicate that -q is the default.  Radar bug
+- Change the otool(1) man page to indicate that -q is the default.  Radar bug
   #9801054.
 
 Changes for the 5.32 release (the cctools-830 release):

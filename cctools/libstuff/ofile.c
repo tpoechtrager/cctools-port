@@ -3369,6 +3369,7 @@ struct ofile *ofile)
     struct prebind_cksum_command *cs;
     struct encryption_info_command *encrypt_info;
     struct encryption_info_command_64 *encrypt_info64;
+    struct linker_option_command *lo;
     struct dyld_info_command *dyld_info;
     struct uuid_command *uuid;
     struct rpath_command *rpath;
@@ -4212,6 +4213,23 @@ check_linkedit_data_command:
 				 "(cryptoff field plus cryptsize field of "
 				 "LC_ENCRYPTION_INFO_64 command %u extends past"
 				 " the end of the file)", i);
+		    goto return_bad;
+		}
+		break;
+
+	    case LC_LINKER_OPTION:
+		if(l.cmdsize < sizeof(struct linker_option_command)){
+		    Mach_O_error(ofile, "malformed object (LC_LINKER_OPTION "
+			         "cmdsize too small) in command %u", i);
+		    goto return_bad;
+		}
+		lo = (struct linker_option_command *)lc;
+		if(swapped) 
+		    swap_linker_option_command(lo, host_byte_sex);
+		if(lo->cmdsize <
+		   sizeof(struct linker_option_command)){
+		    Mach_O_error(ofile, "malformed object (LC_LINKER_OPTION "
+				 " command %u cmdsize too small)", i);
 		    goto return_bad;
 		}
 		break;

@@ -707,6 +707,17 @@ char **envp)
 				    CPU_SUBTYPE_ARM_V6;
 			    }
 			    else if(strcmp(*work_argv,
+					   "armv6m") == 0){
+				if(archflag_cpusubtype != -1 &&
+				   archflag_cpusubtype !=
+					CPU_SUBTYPE_ARM_V6M)
+				    as_fatal("can't specify more "
+				       "than one -arch flag ");
+				specific_archflag = *work_argv;
+				archflag_cpusubtype =
+				    CPU_SUBTYPE_ARM_V6M;
+			    }
+			    else if(strcmp(*work_argv,
 					   "armv7") == 0){
 				if(archflag_cpusubtype != -1 &&
 				   archflag_cpusubtype !=
@@ -749,6 +760,28 @@ char **envp)
 				specific_archflag = *work_argv;
 				archflag_cpusubtype =
 				    CPU_SUBTYPE_ARM_V7K;
+			    }
+			    else if(strcmp(*work_argv,
+					   "armv7m") == 0){
+				if(archflag_cpusubtype != -1 &&
+				   archflag_cpusubtype !=
+					CPU_SUBTYPE_ARM_V7M)
+				    as_fatal("can't specify more "
+				       "than one -arch flag ");
+				specific_archflag = *work_argv;
+				archflag_cpusubtype =
+				    CPU_SUBTYPE_ARM_V7M;
+			    }
+			    else if(strcmp(*work_argv,
+					   "armv7em") == 0){
+				if(archflag_cpusubtype != -1 &&
+				   archflag_cpusubtype !=
+					CPU_SUBTYPE_ARM_V7EM)
+				    as_fatal("can't specify more "
+				       "than one -arch flag ");
+				specific_archflag = *work_argv;
+				archflag_cpusubtype =
+				    CPU_SUBTYPE_ARM_V7EM;
 			    }
 			    else
 				as_fatal("I expected 'arm' after "

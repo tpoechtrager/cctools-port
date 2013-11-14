@@ -134,7 +134,7 @@ struct i860_it {
     nlist_t *nlistp;
     expressionS exp;
     int pcrel;
-    enum reloc_type_i860 reloc;
+    int reloc;
 };
 static struct i860_it the_insn;
 

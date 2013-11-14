@@ -93,6 +93,7 @@ struct load_command *load_commands)
     struct rpath_command *rpath;
     struct encryption_info_command *ec;
     struct encryption_info_command_64 *ec64;
+    struct linker_option_command *lo;
     struct dyld_info_command *dc;
     struct version_min_command *vc;
     uint32_t flavor, count;
@@ -1155,6 +1156,15 @@ check_dylinker_command:
 		}
 		break;
 
+	    case LC_LINKER_OPTION:
+		lo = (struct linker_option_command *)lc;
+		if(lo->cmdsize < sizeof(struct linker_option_command)){
+		    error("in swap_object_headers(): malformed load commands "
+			  "(LC_LINKER_OPTION command %lu is too small", i);
+		    return(FALSE);
+		}
+		break;
+
 	    case LC_DYLD_INFO:
 	    case LC_DYLD_INFO_ONLY:
 		dc = (struct dyld_info_command *)lc;
@@ -1650,6 +1660,11 @@ check_dylinker_command:
 	    case LC_ENCRYPTION_INFO_64:
 		ec64 = (struct encryption_info_command_64 *)lc;
 		swap_encryption_command_64(ec64, target_byte_sex);
+		break;
+		
+	    case LC_LINKER_OPTION:
+		lo = (struct linker_option_command *)lc;
+		swap_linker_option_command(lo, target_byte_sex);
 		break;
 		
 	    case LC_DYLD_INFO:

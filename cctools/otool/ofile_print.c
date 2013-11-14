@@ -303,7 +303,7 @@ void
 print_fat_headers(
 struct fat_header *fat_header,
 struct fat_arch *fat_archs,
-uint32_t size,
+uint64_t size,
 enum bool verbose)
 {
     uint32_t i, j;
@@ -585,6 +585,9 @@ struct fat_arch *fat_arch)
 	    case CPU_SUBTYPE_ARM_V6:
 		printf("armv6\n");
 		break;
+	    case CPU_SUBTYPE_ARM_V6M:
+		printf("armv6m\n");
+		break;
 	    case CPU_SUBTYPE_ARM_V7:
 		printf("armv7\n");
 		break;
@@ -596,6 +599,12 @@ struct fat_arch *fat_arch)
 		break;
 	    case CPU_SUBTYPE_ARM_V7K:
 		printf("armv7k\n");
+		break;
+	    case CPU_SUBTYPE_ARM_V7M:
+		printf("armv7m\n");
+		break;
+	    case CPU_SUBTYPE_ARM_V7EM:
+		printf("armv7em\n");
 		break;
 	    default:
 		goto print_arch_unknown;
@@ -867,6 +876,10 @@ cpu_subtype_t cpusubtype)
 		printf("    cputype CPU_TYPE_ARM\n"
 		       "    cpusubtype CPU_SUBTYPE_ARM_V6\n");
 		break;
+	    case CPU_SUBTYPE_ARM_V6M:
+		printf("    cputype CPU_TYPE_ARM\n"
+		       "    cpusubtype CPU_SUBTYPE_ARM_V6M\n");
+		break;
 	    case CPU_SUBTYPE_ARM_V7:
 		printf("    cputype CPU_TYPE_ARM\n"
 		       "    cpusubtype CPU_SUBTYPE_ARM_V7\n");
@@ -882,6 +895,14 @@ cpu_subtype_t cpusubtype)
 	    case CPU_SUBTYPE_ARM_V7K:
 		printf("    cputype CPU_TYPE_ARM\n"
 		       "    cpusubtype CPU_SUBTYPE_ARM_V7K\n");
+		break;
+	    case CPU_SUBTYPE_ARM_V7M:
+		printf("    cputype CPU_TYPE_ARM\n"
+		       "    cpusubtype CPU_SUBTYPE_ARM_V7M\n");
+		break;
+	    case CPU_SUBTYPE_ARM_V7EM:
+		printf("    cputype CPU_TYPE_ARM\n"
+		       "    cpusubtype CPU_SUBTYPE_ARM_V7EM\n");
 		break;
 	    default:
 		goto print_arch_unknown;
@@ -1575,6 +1596,9 @@ NS32:
 		case CPU_SUBTYPE_ARM_V6:
 		    printf("         V6");
 		    break;
+		case CPU_SUBTYPE_ARM_V6M:
+		    printf("        V6M");
+		    break;
 		case CPU_SUBTYPE_ARM_V7:
 		    printf("         V7");
 		    break;
@@ -1586,6 +1610,12 @@ NS32:
 		    break;
 		case CPU_SUBTYPE_ARM_V7K:
 		    printf("        V7K");
+		    break;
+		case CPU_SUBTYPE_ARM_V7M:
+		    printf("        V7M");
+		    break;
+		case CPU_SUBTYPE_ARM_V7EM:
+		    printf("       V7EM");
 		    break;
 		default:
 		    printf(" %10d", cpusubtype & ~CPU_SUBTYPE_MASK);
@@ -1791,6 +1821,7 @@ enum bool very_verbose)
     struct rpath_command rpath;
     struct encryption_info_command encrypt;
     struct encryption_info_command_64 encrypt64;
+    struct linker_option_command lo;
     struct dyld_info_command dyld_info;
     struct version_min_command vd;
     struct entry_point_command ep;
@@ -2163,6 +2194,17 @@ enum bool very_verbose)
 		if(swapped)
 		    swap_encryption_command_64(&encrypt64, host_byte_sex);
 		print_encryption_info_command_64(&encrypt64, object_size);
+		break;
+
+	    case LC_LINKER_OPTION:
+		memset((char *)&lo, '\0',
+		       sizeof(struct linker_option_command));
+		size = left < sizeof(struct linker_option_command) ?
+		       left : sizeof(struct linker_option_command);
+		memcpy((char *)&lo, (char *)lc, size);
+		if(swapped)
+		    swap_linker_option_command(&lo, host_byte_sex);
+		print_linker_option_command(&lo, lc);
 		break;
 
 	    case LC_DYLD_INFO:
@@ -3549,6 +3591,49 @@ uint32_t object_size)
 	    printf("\n");
 	printf("    cryptid   %u\n", ec->cryptid);
 	printf("        pad   %u\n", ec->pad);
+}
+
+/*
+ * print an LC_LINKER_OPTION command.  The linker_option_command structure
+ * specified must be aligned correctly and in the host byte sex.  The lc is
+ * the actual load command with the strings that follow it and must have been
+ * previously checked so that the cmdsize does not extend past the size of the
+ * load commands.
+ */
+void
+print_linker_option_command(
+struct linker_option_command *lo,
+struct load_command *lc)
+{
+    int left, len, i;
+    char *string;
+
+	printf("     cmd LC_LINKER_OPTION\n");
+	printf(" cmdsize %u", lo->cmdsize);
+	if(lo->cmdsize < sizeof(struct linker_option_command))
+	    printf(" Incorrect size\n");
+	else
+	    printf("\n");
+	printf("   count %u\n", lo->count);
+	string = (char *)lc + sizeof(struct linker_option_command);
+	left = lo->cmdsize - sizeof(struct linker_option_command);
+	i = 0;
+	while(left > 0){
+	    while(*string == '\0' && left > 0){
+		string++;
+		left--;
+	    }
+	    if(left > 0){
+		i++;
+		printf("  string #%d %.*s\n", i, left, string);
+		len = strnlen(string, left) + 1;
+		string += len;
+		left -= len;
+	    }
+	}
+	if(lo->count != i)
+	  printf("   count %u does not match number of strings %u\n",
+		 lo->count, i);
 }
 
 /*
@@ -8220,6 +8305,8 @@ const uint32_t strings_size)
 			    stride = s.reserved2;
 			else
 			    stride = 4;
+			if(stride == 0)
+			    return(NULL);
 			index = s.reserved1 + (value - s.addr) / stride;
 			if(index < nindirect_symbols &&
 		    	   symbols != NULL && strings != NULL &&
@@ -8255,6 +8342,8 @@ const uint32_t strings_size)
 			    stride = s64.reserved2;
 			else
 			    stride = 8;
+			if(stride == 0)
+			    return(NULL);
 			index = s64.reserved1 + (value - s64.addr) / stride;
 			if(index < nindirect_symbols &&
 		    	   symbols64 != NULL && strings != NULL &&
@@ -8347,7 +8436,37 @@ uint64_t addr)
 }
 
 /*
- * Print_label prints a symbol name for the addr if a symbol exist with the
+ * get_label returns a symbol name for the addr if a symbol exist with the
+ * same address else it returns NULL.
+ */
+char *
+get_label(
+uint64_t addr,
+struct symbol *sorted_symbols,
+uint32_t nsorted_symbols)
+{
+    int32_t high, low, mid;
+
+	low = 0;
+	high = nsorted_symbols - 1;
+	mid = (high - low) / 2;
+	while(high >= low){
+	    if(sorted_symbols[mid].n_value == addr)
+		return(sorted_symbols[mid].name);
+	    if(sorted_symbols[mid].n_value > addr){
+		high = mid - 1;
+		mid = (high + low) / 2;
+	    }
+	    else{
+		low = mid + 1;
+		mid = (high + low) / 2;
+	    }
+	}
+	return(NULL);
+}
+
+/*
+ * print_label prints a symbol name for the addr if a symbol exist with the
  * same address in label form, namely:.
  *
  * <symbol name>:\n
@@ -8361,25 +8480,12 @@ enum bool colon_and_newline,
 struct symbol *sorted_symbols,
 uint32_t nsorted_symbols)
 {
-    int32_t high, low, mid;
+    char *name;
 
-	low = 0;
-	high = nsorted_symbols - 1;
-	mid = (high - low) / 2;
-	while(high >= low){
-	    if(sorted_symbols[mid].n_value == addr){
-		printf("%s", sorted_symbols[mid].name);
-		if(colon_and_newline == TRUE)
-		    printf(":\n");
-		return;
-	    }
-	    if(sorted_symbols[mid].n_value > addr){
-		high = mid - 1;
-		mid = (high + low) / 2;
-	    }
-	    else{
-		low = mid + 1;
-		mid = (high + low) / 2;
-	    }
+	name = get_label(addr, sorted_symbols, nsorted_symbols);
+	if(name != NULL){
+	    printf("%s", name);
+	    if(colon_and_newline == TRUE)
+		printf(":\n");
 	}
 }

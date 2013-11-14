@@ -5,6 +5,7 @@
 
 extern LLVMDisasmContextRef llvm_create_disasm(
     const char *TripleName,
+    const char *CPU,
     void *DisInfo,
     int TagType,
     LLVMOpInfoCallback GetOpInfo,
@@ -20,5 +21,9 @@ extern size_t llvm_disasm_instruction(
     uint64_t Pc,
     char *OutString,
     size_t OutStringSize);
+
+__private_extern__ int llvm_disasm_set_options(
+    LLVMDisasmContextRef DC,
+    uint64_t Options);
 
 #endif /* _STUFF_LLVM_H_ */

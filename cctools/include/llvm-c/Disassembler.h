@@ -18,6 +18,13 @@
 #include <stddef.h>
 
 /**
+ * @defgroup LLVMCDisassembler Disassembler
+ * @ingroup LLVMC
+ *
+ * @{
+ */
+
+/**
  * An opaque reference to a disassembler context.
  */
 typedef void *LLVMDisasmContextRef;
@@ -68,6 +75,7 @@ struct LLVMOpInfoSymbol1 {
   const char *Name;  /* symbol name if not NULL */
   uint64_t Value;    /* symbol value if name is NULL */
 };
+
 struct LLVMOpInfo1 {
   struct LLVMOpInfoSymbol1 AddSymbol;
   struct LLVMOpInfoSymbol1 SubtractSymbol;
@@ -100,9 +108,9 @@ struct LLVMOpInfo1 {
  */
 typedef const char *(*LLVMSymbolLookupCallback)(void *DisInfo,
                                                 uint64_t ReferenceValue,
-						uint64_t *ReferenceType,
-						uint64_t ReferencePC,
-						const char **ReferenceName);
+                                                uint64_t *ReferenceType,
+                                                uint64_t ReferencePC,
+                                                const char **ReferenceName);
 /**
  * The reference types on input and output.
  */
@@ -130,11 +138,37 @@ extern "C" {
  * by passing a block of information in the DisInfo parameter and specifying the
  * TagType and callback functions as described above.  These can all be passed
  * as NULL.  If successful, this returns a disassembler context.  If not, it
- * returns NULL.
+ * returns NULL. This function is equivalent to calling LLVMCreateDisasmCPU()
+ * with an empty CPU name.
  */
 LLVMDisasmContextRef LLVMCreateDisasm(const char *TripleName, void *DisInfo,
                                       int TagType, LLVMOpInfoCallback GetOpInfo,
                                       LLVMSymbolLookupCallback SymbolLookUp);
+
+/**
+ * Create a disassembler for the TripleName and a specific CPU.  Symbolic
+ * disassembly is supported by passing a block of information in the DisInfo
+ * parameter and specifying the TagType and callback functions as described
+ * above.  These can all be passed * as NULL.  If successful, this returns a
+ * disassembler context.  If not, it returns NULL.
+ */
+LLVMDisasmContextRef LLVMCreateDisasmCPU(const char *Triple, const char *CPU,
+                                         void *DisInfo, int TagType,
+                                         LLVMOpInfoCallback GetOpInfo,
+                                         LLVMSymbolLookupCallback SymbolLookUp);
+
+/**
+ * Set the disassembler's options.  Returns 1 if it can set the Options and 0
+ * otherwise.
+ */
+int LLVMSetDisasmOptions(LLVMDisasmContextRef DC, uint64_t Options);
+
+/* The option to produce marked up assembly. */
+#define LLVMDisassembler_Option_UseMarkup 1
+/* The option to print immediates as hex. */
+#define LLVMDisassembler_Option_PrintImmHex 2
+/* The option use the other assembler printer variant */
+#define LLVMDisassembler_Option_AsmPrinterVariant 4
 
 /**
  * Dispose of a disassembler context.
@@ -154,6 +188,10 @@ void LLVMDisasmDispose(LLVMDisasmContextRef DC);
 size_t LLVMDisasmInstruction(LLVMDisasmContextRef DC, uint8_t *Bytes,
                              uint64_t BytesSize, uint64_t Pc,
                              char *OutString, size_t OutStringSize);
+
+/**
+ * @}
+ */
 
 #ifdef __cplusplus
 }

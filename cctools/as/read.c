@@ -103,7 +103,7 @@ char lex_type[256] = {
   3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
   3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
   3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-  3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3 
+  3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3
 };
 
 /*
@@ -142,7 +142,7 @@ char is_end_of_line(int c) { return is_end_of_line_tab[c & 0xFF]; }
 
 /*
  * The conditional assembly feature (.if, .else, .elseif and .endif) is
- * implemented with cond_state that tells us what we are in the middle of 
+ * implemented with cond_state that tells us what we are in the middle of
  * processing.  ignore can be either TRUE or FALSE.  When TRUE we are ignoring
  * the block of code in the middle of a conditional.  MAX_IF_DEPTH is the
  * maximum depth that if's can be nested.
@@ -202,7 +202,7 @@ static segT get_segmented_expression(expressionS *expP);
 static void pseudo_op_begin(void);
 #ifdef PPC
 static void ppcasm_pseudo_op_begin(void);
-#endif 
+#endif
 static void stab(uintptr_t what);
 static char get_absolute_expression_and_terminator(int32_t *val_pointer);
 static char *demand_copy_string(int *lenP);
@@ -852,7 +852,7 @@ char *buffer)	/* 1st character of each buffer of lines is here. */
  *    		a full line comment (in the case of "well formed" assembly it
  *				     must be "#APP\n" of a collection of lines
  *				     wrapped in "#APP\n ... #NO_APP\n")
- * 
+ *
  * input:
  *	buffer		pointer to the start of the buffer of lines
  *			(passed as an argument)
@@ -1219,9 +1219,9 @@ char *buffer)
  * The operand field can contain subfields separated by commas.  The number of
  * subfields is determined by the type of operation.  Spaces can appear
  * anywhere in the operand field except within a single symbol.
- * 
+ *
  * The comment field starts with a ; or a # .
- * 
+ *
  * input:
  *	buffer		pointer to the start of the buffer of lines
  *			(passed as an argument)
@@ -1560,7 +1560,7 @@ char **buffer)
 	free(new_buf);
 
 	/*
-	 * After coming back from our recursive call parse_a_buffer() we want 
+	 * After coming back from our recursive call parse_a_buffer() we want
 	 * resume parsing after the "#NO_APP\n".  So bump the line counters
 	 * for the "#NO_APP\n" and restore the state so we can return to
 	 * parse_a_buffer().
@@ -1588,7 +1588,7 @@ uintptr_t value)
 	while(is_end_of_line(*p) == FALSE)
 	    p++;
 	*p = '\0';
-	
+
 	as_fatal(".abort %s detected.  Assembly stopping.", input_line_pointer);
 }
 
@@ -1625,7 +1625,7 @@ uintptr_t arg)
  *  .p2alignl align_expression [ , 4byte_fill_expression [,max_bytes_to_fill]]
  *  .align32  align_expression [ , 4byte_fill_expression [,max_bytes_to_fill]]
  * Where align_expression is a power of 2 alignment.
- * 
+ *
  * The parameter fill_size can only be 1, 2 or 4 which is the size of the
  * fill_expression.  If the parameter bytes_p is non-zero the alignment value
  * is interpreted as the byte boundary, rather than the power of 2.
@@ -2503,7 +2503,7 @@ const struct builtin_section *s)
 	}
 	frcP = section_new(s->segname, s->sectname,
 			   s->flags & SECTION_TYPE,
-			   s->flags & SECTION_ATTRIBUTES, 
+			   s->flags & SECTION_ATTRIBUTES,
 			   s->sizeof_stub);
 	if(frcP->frch_section.align < s->default_align)
 	    frcP->frch_section.align = s->default_align;
@@ -3316,14 +3316,14 @@ symbolS *symbolP)
 	    symbolP->sy_value = exp.X_add_number + exp.X_add_symbol->sy_value;
 	    symbolP->sy_frag  = exp.X_add_symbol->sy_frag;
 	    break;
-	  
+
 	case SEG_UNKNOWN:
 	    symbolP->sy_forward = exp.X_add_symbol;
 /* commented out by GNU */
 /* as_bad("unknown symbol"); */
 /* need_pass_2 = TRUE; */
 	    break;
-	  
+
 	default:
 	    BAD_CASE(segment);
 	    break;
@@ -3347,7 +3347,7 @@ symbolS *symbolP)
  * This clobbers input_line_pointer, checks end-of-line.
  */
 void
-cons(	
+cons(
 uintptr_t nbytes) /* nbytes == 1 for .byte, 2 for .word, 4 for .long, 8 for .quad */
 {
     char c;
@@ -3370,7 +3370,7 @@ uintptr_t nbytes) /* nbytes == 1 for .byte, 2 for .word, 4 for .long, 8 for .qua
 	 */
 	if(nbytes >= (int)sizeof(signed_expr_t))
 	    mask = 0;
-	else 
+	else
 	    /* Don't store these bits. */
 	    mask = ~0ULL << (BITS_PER_CHAR * nbytes);
 	unmask = ~mask;		/* Do store these bits. */
@@ -3469,7 +3469,7 @@ uintptr_t nbytes) /* nbytes == 1 for .byte, 2 for .word, 4 for .long, 8 for .qua
 			0);
 		/*
 		 * If we have the special assembly time constant expression
-		 * of the difference of two symbols defined in the same section 
+		 * of the difference of two symbols defined in the same section
 		 * then divided by exactly 2 mark the fix to indicate this.
 		 */
 		fixP->fx_sectdiff_divide_by_two = exp.X_sectdiff_divide_by_two;
@@ -3793,7 +3793,7 @@ emit_leb128_expr (expressionS *exp, int sign)
 #else
       symbolS *sym;
       expressionS *expression;
-  
+
       sym = symbol_temp_new(exp->X_add_symbol->sy_other /* GUESS */, 0, NULL);
       expression = xmalloc(sizeof(expressionS));
       *expression = *exp;
@@ -3883,7 +3883,7 @@ uintptr_t append_zero) /* 0: don't append '\0', else 1 */
 
 /*
  * next_char_of_string() is used by stringer() and demand_copy_string() and
- * returns the next character from input_line_pointer that is in the string or 
+ * returns the next character from input_line_pointer that is in the string or
  * -1 for the trailing " character.  This routine handles escaped characters
  * like \b, \f, etc.
  */
@@ -4304,7 +4304,7 @@ uintptr_t value)
 	demand_empty_rest_of_line();
 }
 
-/* 
+/*
  * totally_ignore_line() ignores lines during conditional assembly.
  */
 void
@@ -4793,7 +4793,7 @@ uintptr_t value)
 /*
  * s_secure_log_unique() implements the pseudo op:
  *	.s_secure_log_unique log_msg
- * This opens the file given by the environment varable AS_SECURE_LOG_FILE, and 
+ * This opens the file given by the environment varable AS_SECURE_LOG_FILE, and
  * appends the current filename, line number, and the text given as the log_msg
  * in the directive.  If this is present, but AS_SECURE_LOG_FILE is not set,
  * an error message is generated.   If this appears twice without
@@ -4967,7 +4967,7 @@ uintptr_t value)
 /* Special stuff to allow assembly of Sun assembler sources
    This unfortunatley needs to be here instead of sparc.c because it
    uses the hash tables defined here.
-   see also sparc.c for pseudo_table entries 
+   see also sparc.c for pseudo_table entries
 */
 
 /* Handle the SUN sparc assembler .seg directive. .seg should only occur with
@@ -5016,7 +5016,7 @@ s_seg (ignore)
 
 #ifdef PPC
 /*
- * 
+ *
  */
 /*
  * s_ppcasm_end() implements the ppcasm pseudo op:

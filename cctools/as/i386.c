@@ -89,11 +89,7 @@
 #define SCALE1_WHEN_NO_INDEX 1
 #endif
 
-#ifdef ARCH64
-typedef enum reloc_type_x86_64 bfd_reloc_code_real_type;
-#else
-typedef enum reloc_type_generic bfd_reloc_code_real_type;
-#endif
+typedef int bfd_reloc_code_real_type;
 
 #ifndef DEFAULT_ARCH
 #ifdef ARCH64
@@ -215,12 +211,8 @@ struct _i386_insn
     unsigned int flags[MAX_OPERANDS];
 #define Operand_PCrel 1
 
-#ifdef ARCH64
     /* Relocation type for operand */
-    enum reloc_type_x86_64 reloc[MAX_OPERANDS];
-#else
-    enum reloc_type_generic reloc[MAX_OPERANDS];
-#endif
+    int reloc[MAX_OPERANDS];
 
     /* BASE_REG, INDEX_REG, and LOG2_SCALE_FACTOR are used to encode
        the base index byte below.  */

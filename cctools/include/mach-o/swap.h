@@ -31,7 +31,7 @@
 #include <mach-o/reloc.h>
 #include <mach-o/ranlib.h>
 
-#if __cplusplus
+#ifdef __cplusplus
 extern "C" {
 #endif /* __cplusplus */
 
@@ -200,7 +200,7 @@ extern void swap_dylib_table_of_contents(
     uint32_t ntocs,
     enum NXByteOrder target_byte_sex);
 
-#if __cplusplus
+#ifdef __cplusplus
 }
 #endif /* __cplusplus */
 

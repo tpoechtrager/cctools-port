@@ -2561,6 +2561,17 @@ enum byte_sex target_byte_sex)
 
 __private_extern__
  void
+swap_linker_option_command(
+struct linker_option_command *lo,
+enum byte_sex target_byte_sex)
+{
+	lo->cmd = SWAP_INT(lo->cmd);
+	lo->cmdsize = SWAP_INT(lo->cmdsize);
+	lo->count = SWAP_INT(lo->count);
+}
+
+__private_extern__
+ void
 swap_dyld_info_command(
 struct dyld_info_command *ed,
 enum byte_sex target_byte_sex)

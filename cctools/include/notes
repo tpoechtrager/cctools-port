@@ -1,3 +1,28 @@
+Changes for the 5.33 release (the cctools-843 release):
+- Updated the comment on the encryption_info_command_64 struct in
+  mach-o/loader.h .  Radar bug #13300310.
+
+Changes for the 5.33 release (the cctools-841 release):
+- Added support for the LC_LINKER_OPTION load command. Radar bug #12906665.
+  - Added the LC_LINKER_OPTION load command to <mach-o/loader.h> .
+  - Added swap_linker_option_command() in "stuff/bytesex.h" .
+- Added the LLVMCreateDisasmCPU() API to llvm-c/Disassembler.h .  And changed
+  the llvm_create_disasm() api in stuff/llvm.h to add a CPU argument.
+  Radar bug #12839170.
+- Added the LLVMDisassembler_Option_PrintImmHex constant to
+  llvm-c/Disassembler.h .  Radar bug #12810901.
+
+Changes for the 5.33 release (the cctools-840 release):
+- Added cpu subtypes to <mach/machine.h> for armv6m / armv7m / armv7em
+  Radar bug #11314463.
+- Updated the header in the mach-o directory that used "#if __cplusplus" to use
+  "#ifdef __cplusplus".  The headers: arch.h, dyld.h, dyld_priv.h, getsect.h,
+   nlist.h, redo_prebinding.h and swap.h were changed.  Radar bug #12476645.
+- Added support for marked up llvm disassembler output.  Radar bug #11764962.
+  - Updated llvm-c/Disassembler to the current source picking up the new
+    routine LLVMSetDisasmOptions().
+  - Added llvm_disasm_set_options() to stuff/llvm.h .
+
 Changes for the 5.32 release (the cctools-836 release):
 - Changed the Makefile to include "mach/arm/_structs.h" in the sources so this
   will build on non iOS trains.  Radar bug #12025943.
@@ -141,8 +166,8 @@ Changes for the 5.27 release (the cctools-769 release):
 Changes for the 5.26 release (the cctools-760 release):
 - Changed the sources so the armv7 stuff is a no longer #ifndef __OPEN_SOURCE__
   Radar bug #7016121.
-  - Changed the Makefile and removed #ifndef __OPEN_SOURCE__ for "opcode/arm.h".
-  - Removed the #ifndef __OPEN_SOURCE__ in "mach/machine.h" that bracket armv7.
+  - Changed the Makefile and removed #ifndef __OPEN_SOURCE__
+  - Removed the #ifndef __OPEN_SOURCE__
 
 Changes for the 5.26 release (the cctools-758 release):
 - Backed out the change for Radar bug #6511482:
@@ -244,8 +269,8 @@ Changes for the 5.25 release (the cctools-698 release):
 Changes for the 5.25 release (the cctools-697 release):
 - Changed the sources so the armv7 stuff is not in the open source version.
   Radar bug #5844124.
-  - Changed the Makefile to #ifndef __OPEN_SOURCE__ in "opcode/arm.h".
-  - Added #ifndef __OPEN_SOURCE__ to "mach/machine.h" to bracket armv7
+  - Changed the Makefile to #ifndef __OPEN_SOURCE__
+  - Added #ifndef __OPEN_SOURCE__
     references.
 
 Changes for the 5.25 release (the cctools-696 release):
@@ -288,9 +313,9 @@ Changes for the 5.25 release (the cctools-675 release):
 Changes for the 5.25 release (the cctools-673 release):
 - Changed the sources so the arm stuff is not in the open source version.
   Radar bug #5326431.
-  - Changed the Makefile to #ifndef __OPEN_SOURCE__ out the arm files and to
+  - Changed the Makefile to #ifndef __OPEN_SOURCE__
     run unifdef on nlist.h
-  - Added #ifndef __OPEN_SOURCE__ to the following files to bracket arm code:
+  - Added #ifndef __OPEN_SOURCE__
     mach/machine.h, mach-o/nlist.h, stuff/bytesex.h and stuff/symbol.h .
 
 Changes for the 5.24 release (the cctools-663 release):

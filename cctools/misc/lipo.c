@@ -822,6 +822,7 @@ void
 create_fat(void)
 {
     uint32_t i, j, offset;
+    char *rename_file;
     int fd;
 
 	/* fold in specified segment alignments */
@@ -878,16 +879,10 @@ create_fat(void)
 	    offset += thin_files[i].fat_arch.size;
 	}
 
-	/*
-	 * Create the output file.  The unlink() is done to handle the
-	 * problem when the outputfile is not writable but the directory
-	 * allows the file to be removed and thus created (since the file
-	 * may not be there the return code of the unlink() is ignored).
-	 */
-	(void)unlink(output_file);
-	if((fd = open(output_file, O_WRONLY | O_CREAT | O_TRUNC,
+	rename_file = makestr(output_file, ".lipo", NULL);
+	if((fd = open(rename_file, O_WRONLY | O_CREAT | O_TRUNC,
 		      output_filemode)) == -1)
-	    system_fatal("can't create output file: %s", output_file);
+	    system_fatal("can't create temporary output file: %s", rename_file);
 
 	/*
 	 * If this is an extract_family_flag operation and the is just one
@@ -899,8 +894,8 @@ create_fat(void)
 #endif /* __LITTLE_ENDIAN__ */
 	    if(write(fd, &fat_header, sizeof(struct fat_header)) !=
 	       sizeof(struct fat_header))
-		system_fatal("can't wtite fat header to output file: %s",
-			     output_file);
+		system_fatal("can't write fat header to output file: %s",
+			     rename_file);
 #ifdef __LITTLE_ENDIAN__
 	    swap_fat_header(&fat_header, LITTLE_ENDIAN_BYTE_SEX);
 #endif /* __LITTLE_ENDIAN__ */
@@ -911,7 +906,7 @@ create_fat(void)
 		if(write(fd, &(thin_files[i].fat_arch),
 			 sizeof(struct fat_arch)) != sizeof(struct fat_arch))
 		    system_fatal("can't write fat arch to output file: %s",
-				 output_file);
+				 rename_file);
 #ifdef __LITTLE_ENDIAN__
 		swap_fat_arch(&(thin_files[i].fat_arch), 1,
 			      LITTLE_ENDIAN_BYTE_SEX);
@@ -921,13 +916,17 @@ create_fat(void)
 	for(i = 0; i < nthin_files; i++){
 	    if(extract_family_flag == FALSE || nthin_files > 1)
 		if(lseek(fd, thin_files[i].fat_arch.offset, L_SET) == -1)
-		    system_fatal("can't lseek in output file: %s", output_file);
+		    system_fatal("can't lseek in output file: %s", rename_file);
 	    if(write(fd, thin_files[i].addr, thin_files[i].fat_arch.size)
 	       != (int)(thin_files[i].fat_arch.size))
-		system_fatal("can't write to output file: %s", output_file);
+		system_fatal("can't write to output file: %s", rename_file);
 	}
 	if(close(fd) == -1)
-	    system_fatal("can't close output file: %s", output_file);
+	    system_fatal("can't close output file: %s", rename_file);
+	if(rename(rename_file, output_file) == -1)
+	    system_error("can't move temporary file: %s to file: %s",
+			 output_file, rename_file);
+	free(rename_file);
 }
 
 /*
@@ -1471,7 +1470,7 @@ cpu_subtype_t *cpusubtype)
 #endif /* LTO_SUPPORT */
 		    }
 		}
-	    } 
+	    }
 	    offset += rnd(strtoul(ar_hdr->ar_size, NULL, 10),
 			    sizeof(short));
 	}
@@ -1541,15 +1540,18 @@ enum bool swapped)
     enum byte_sex host_byte_sex;
 
 	/*
-	 * Special case ppc, ppc64, i386 and x86_64 architectures and return 12.
+	 * Special case ppc and i386 architectures and return 12.
 	 * We know that with those architectures that the kernel and mmap only
 	 * need file offsets to be page (4096 byte) aligned.
 	 */
 	if(mhp->cputype == CPU_TYPE_POWERPC ||
-	   mhp->cputype == CPU_TYPE_POWERPC64 ||
-	   mhp->cputype == CPU_TYPE_I386 ||
-	   mhp->cputype == CPU_TYPE_X86_64)
+	   mhp->cputype == CPU_TYPE_I386)
 	    return(12);
+	/*
+	 * Special case ARM and return 14.  As it has 16k pages.
+	 */
+	if(mhp->cputype == CPU_TYPE_ARM)
+	    return(14);
 
 	host_byte_sex = get_host_byte_sex();
 
@@ -1630,13 +1632,11 @@ enum bool swapped)
     enum byte_sex host_byte_sex;
 
 	/*
-	 * Special case ppc, ppc64, i386 and x86_64 architectures and return 12.
+	 * Special case ppc64 and x86_64 architectures and return 12.
 	 * We know that with those architectures that the kernel and mmap only
 	 * need file offsets to be page (4096 byte) aligned.
 	 */
-	if(mhp64->cputype == CPU_TYPE_POWERPC ||
-	   mhp64->cputype == CPU_TYPE_POWERPC64 ||
-	   mhp64->cputype == CPU_TYPE_I386 ||
+	if(mhp64->cputype == CPU_TYPE_POWERPC64 ||
 	   mhp64->cputype == CPU_TYPE_X86_64)
 	    return(12);
 
@@ -1912,6 +1912,9 @@ struct fat_arch *fat_arch)
 	    case CPU_SUBTYPE_ARM_V6:
 		printf("armv6");
 		break;
+	    case CPU_SUBTYPE_ARM_V6M:
+		printf("armv6m");
+		break;
 	    case CPU_SUBTYPE_ARM_V7:
 		printf("armv7");
 		break;
@@ -1923,6 +1926,12 @@ struct fat_arch *fat_arch)
 		break;
 	    case CPU_SUBTYPE_ARM_V7K:
 		printf("armv7k");
+		break;
+	    case CPU_SUBTYPE_ARM_V7M:
+		printf("armv7m");
+		break;
+	    case CPU_SUBTYPE_ARM_V7EM:
+		printf("armv7em");
 		break;
 	    default:
 		goto print_arch_unknown;
@@ -2180,6 +2189,34 @@ cpu_subtype_t cpusubtype)
 	    case CPU_SUBTYPE_ARM_V6:
 		printf("    cputype CPU_TYPE_ARM\n"
 		       "    cpusubtype CPU_SUBTYPE_ARM_V6\n");
+		break;
+	    case CPU_SUBTYPE_ARM_V6M:
+		printf("    cputype CPU_TYPE_ARM\n"
+		       "    cpusubtype CPU_SUBTYPE_ARM_V6M\n");
+		break;
+	    case CPU_SUBTYPE_ARM_V7:
+		printf("    cputype CPU_TYPE_ARM\n"
+		       "    cpusubtype CPU_SUBTYPE_ARM_V7\n");
+		break;
+	    case CPU_SUBTYPE_ARM_V7F:
+		printf("    cputype CPU_TYPE_ARM\n"
+		       "    cpusubtype CPU_SUBTYPE_ARM_V7F\n");
+		break;
+	    case CPU_SUBTYPE_ARM_V7S:
+		printf("    cputype CPU_TYPE_ARM\n"
+		       "    cpusubtype CPU_SUBTYPE_ARM_V7S\n");
+		break;
+	    case CPU_SUBTYPE_ARM_V7K:
+		printf("    cputype CPU_TYPE_ARM\n"
+		       "    cpusubtype CPU_SUBTYPE_ARM_V7K\n");
+		break;
+	    case CPU_SUBTYPE_ARM_V7M:
+		printf("    cputype CPU_TYPE_ARM\n"
+		       "    cpusubtype CPU_SUBTYPE_ARM_V7M\n");
+		break;
+	    case CPU_SUBTYPE_ARM_V7EM:
+		printf("    cputype CPU_TYPE_ARM\n"
+		       "    cpusubtype CPU_SUBTYPE_ARM_V7EM\n");
 		break;
 	    case CPU_SUBTYPE_ARM_ALL:
 		printf("    cputype CPU_TYPE_ARM\n"

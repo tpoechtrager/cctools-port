@@ -1,4 +1,4 @@
-.TH OTOOL 1 "August 28, 2012" "Apple, Inc."
+.TH OTOOL 1 "December 11, 2012" "Apple, Inc."
 .SH NAME
 otool \- object file displaying tool
 .SH SYNOPSIS
@@ -137,6 +137,11 @@ Don't print leading addresses or headers with disassembly of sections.
 .B \-q
 Use the llvm disassembler when doing disassembly, this is available for the x86
 and arm architectures.  This is the default.
+.TP
+.BI \-mcpu= arg
+When doing disassembly using the llvm disassembler use the cpu
+.I arg.
+.TP
 .B \-Q
 Use
 .IR otool (1)'s

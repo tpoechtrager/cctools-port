@@ -198,7 +198,7 @@ get_more:
       if (p <= buffer_start + BEFORE_SIZE)
 	{
 	  int new;
-	
+
 	  new = limit - (buffer_start + BEFORE_SIZE + partial_size);
 	  partial_size += new;
 
@@ -326,7 +326,7 @@ unsigned int *line_ret)
   *line_ret = 0;
   if (physical_input_file)
     {				/* we tried to read SOME source */
-      *file_ret = logical_input_file ? 
+      *file_ret = logical_input_file ?
 		  logical_input_file : physical_input_file;
       if (input_file_is_open())
 	{			/* we can still read lines from source */
@@ -350,7 +350,7 @@ int *line)
     char *p, *q;
     static char directory_buf[MAXPATHLEN];
 
-	getwd(directory_buf);
+	getcwd(directory_buf, sizeof(directory_buf));
 	*fileName = NULL;
 	*directory = directory_buf;
 	*line = 0;
@@ -384,13 +384,15 @@ char *filename)
   fprintf (stderr,"as:file(%s) %s! ",
 	   filename, gripe
 	   );
-  if (errno > sys_nerr)
+  int xerrno = errno;
+  char errbuf[64];
+  if (strerror_r (errno, errbuf, sizeof(errbuf)))
     {
-      fprintf (stderr, "Unknown error #%d.", errno);
+      fprintf (stderr, "Unknown error #%d.", xerrno);
     }
   else
     {
-      fprintf (stderr, "%s.", sys_errlist [errno]);
+      fprintf (stderr, "%s.", errbuf);
     }
   (void)putc('\n', stderr);
   errno = 0;			/* After reporting, clear it. */

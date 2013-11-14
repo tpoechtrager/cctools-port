@@ -5,6 +5,31 @@
 TODO:
 - Deal with LC_PREPAGE and unknown load commands that don't need to be swapped.
 
+Changes for the 5.33 release (the cctools-845 release):
+- Added the lib_static_ofiles Makefile target to be used by the top level
+  Makefile so that it does not use the all target and causing libstuff.a to
+  be overwritten when built with the SED_RC_CFLAGS without the 64-bit archs.
+  Radar bug #13461906.
+
+Changes for the 5.33 release (the cctools-841 release):
+- Added support for the LC_LINKER_OPTION load command. Radar bug #12906665.
+  - Added swap_linker_option_command() to bytesex.c .
+  - Added support for the LC_LINKER_OPTION command in check_Mach_O() in
+    ofile.c and in swap_object_headers() in swap_headers.c .
+- Changed llvm_create_disasm() in llvm.c and added a CPU argument.
+  Radar bug #12839170.
+
+Changes for the 5.33 release (the cctools-840 release):
+- Changed llvm_create_disasm() in llvm.c to now call lto_initialize_disassembler
+  if it exists.  Radar bug #12750395.
+- Added support for new archs: armv6m / armv7m / armv7em . Radar bug #11314463.
+  - Added entries to the arch_flags[] table in arch.c .
+  - Updated cpusubtype_findbestarch() in best_arch.c .
+  - Updated get_arch_from_host() in get_arch_from_host.c .
+  - Updated get_lto_cputype() in lto.c .
+- Added support for marked up llvm disassembler output.  Radar bug #11764962.
+  - Added llvm_disasm_set_options() to llvm.c .
+
 Changes for the 5.32 release (the cctools-835 release):
 - Added support for the LC_ENCRYPTION_INFO_64 load command. Radar bug #11862845.
   - Added swap_encryption_command_64() to bytesex.c .
@@ -237,7 +262,7 @@ Changes for the 5.27 release (the cctools-760 release):
   Radar bug #7016121.
   - Changed the Makefile and removed the OPEN macro which was -D__OPEN_SOURCE__
     and removed it from CFLAGS.
-  - Removed #ifndef __OPEN_SOURCE__ from arch.c, best_arch.c and lto.c which
+  - Removed #ifndef __OPEN_SOURCE__
     bracketed armv7 references.
 
 Changes for the 5.27 release (the cctools-759 release):
@@ -414,7 +439,7 @@ Changes for the 5.25 release (the cctools-697 release):
   Radar bug #5844124.
   - Changed the Makefile to add the OPEN macro as -D__OPEN_SOURCE__ and added it
     to the CFLAGS.
-  - Added #ifndef __OPEN_SOURCE__ to arch.c and best_arch.c to bracket armv7
+  - Added #ifndef __OPEN_SOURCE__
     references.
 
 Changes for the 5.25 release (the cctools-696 release):
@@ -481,7 +506,7 @@ Changes for the 5.25 release (the cctools-673 release):
 - Changed the sources so the arm stuff is not in the open source version.
   Radar bug #5326431.
   - Changed the Makefile to build with -D__OPEN_SOURCE__ with $(OPEN)
-  - Added #ifndef __OPEN_SOURCE__ to the following files to bracket arm code:
+  - Added #ifndef __OPEN_SOURCE__
     arch.c, best_arch.c, bytesex.c, get_arch_from_host.c, ofile.c, reloc.c and
     swap_headers.c .
 

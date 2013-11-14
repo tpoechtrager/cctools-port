@@ -74,7 +74,7 @@ struct m88k_insn {
         uint32_t opcode;
         expressionS exp;
 #ifdef NeXT_MOD
-        enum reloc_type_m88k reloc;
+        int reloc;
 #else
         enum reloc_type reloc;
 #endif

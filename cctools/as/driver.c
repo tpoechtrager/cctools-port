@@ -210,6 +210,18 @@ char **envp)
 	    printf("%s: can't specifiy both -q and -Q\n", progname);
 	    exit(1);
 	}
+	/*
+	 * If the environment variable AS_INTEGRATED_ASSEMBLER is set then set
+	 * the qflag to call clang(1) with -integrated-as unless the -Q flag is
+	 * set and do this for the supported architectures.
+	 */
+	if(Qflag == FALSE &&
+           getenv("AS_INTEGRATED_ASSEMBLER") != NULL &&
+	   (arch_flag.cputype == CPU_TYPE_X86_64 ||
+	    arch_flag.cputype == CPU_TYPE_I386 ||
+	    arch_flag.cputype == CPU_TYPE_ARM)){
+	    qflag = TRUE;
+	}
 	if(qflag == TRUE &&
 	   (arch_flag.cputype != CPU_TYPE_X86_64 &&
 	    arch_flag.cputype != CPU_TYPE_I386 &&

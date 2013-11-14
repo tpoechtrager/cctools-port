@@ -1,18 +1,18 @@
 /*
  * Copyright (c) 2004, Apple Computer, Inc. All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
  * 1.  Redistributions of source code must retain the above copyright
- *     notice, this list of conditions and the following disclaimer. 
+ *     notice, this list of conditions and the following disclaimer.
  * 2.  Redistributions in binary form must reproduce the above copyright
  *     notice, this list of conditions and the following disclaimer in the
- *     documentation and/or other materials provided with the distribution. 
+ *     documentation and/or other materials provided with the distribution.
  * 3.  Neither the name of Apple Computer, Inc. ("Apple") nor the names of
  *     its contributors may be used to endorse or promote products derived
- *     from this software without specific prior written permission. 
- * 
+ *     from this software without specific prior written permission.
+ *
  * THIS SOFTWARE IS PROVIDED BY APPLE AND ITS CONTRIBUTORS "AS IS" AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -25,67 +25,63 @@
  * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#if defined(__MWERKS__) && !defined(__private_extern__)
-#define __private_extern__ __declspec(private_extern)
-#endif
-
-#include "mach/mach.h"
+#import "mach/mach.h"
 
 /* user defined (imported) */
-extern char *progname;
+extern char *progname __attribute__((visibility("hidden")));
 
 /* defined in errors.c */
 /* number of detected calls to error() */
-extern uint32_t errors;
+extern uint32_t errors __attribute__((visibility("hidden")));
 
 extern void warning(
     const char *format, ...)
 #ifdef __GNUC__
     __attribute__ ((format (printf, 1, 2)))
 #endif
-    ;
+    __attribute__((visibility("hidden")));
 extern void error(
     const char *format, ...)
 #ifdef __GNUC__
     __attribute__ ((format (printf, 1, 2)))
 #endif
-    ;
+    __attribute__((visibility("hidden")));
 extern void error_with_arch(
     const char *arch_name,
     const char *format, ...)
 #ifdef __GNUC__
     __attribute__ ((format (printf, 2, 3)))
 #endif
-    ;
+    __attribute__((visibility("hidden")));
 extern void system_error(
     const char *format, ...)
 #ifdef __GNUC__
     __attribute__ ((format (printf, 1, 2)))
 #endif
-    ;
+    __attribute__((visibility("hidden")));
 extern void fatal(
     const char *format, ...)
 #ifdef __GNUC__
     __attribute__ ((format (printf, 1, 2)))
 #endif
-    ;
+    __attribute__((visibility("hidden")));
 extern void system_fatal(
     const char *format, ...)
 #ifdef __GNUC__
     __attribute__ ((format (printf, 1, 2)))
 #endif
-    ;
+    __attribute__((visibility("hidden")));
 extern void my_mach_error(
     kern_return_t r,
     char *format, ...)
 #ifdef __GNUC__
     __attribute__ ((format (printf, 2, 3)))
 #endif
-    ;
+    __attribute__((visibility("hidden")));
 extern void mach_fatal(
     kern_return_t r,
     char *format, ...)
 #ifdef __GNUC__
     __attribute__ ((format (printf, 2, 3)))
 #endif
-    ;
+    __attribute__((visibility("hidden")));

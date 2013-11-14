@@ -26,7 +26,7 @@
 
 #include <mach-o/dyld.h>
 
-#if __cplusplus
+#ifdef __cplusplus
 extern "C" {
 #endif /* __cplusplus */
 
@@ -53,7 +53,7 @@ NSFindSectionAndOffsetInObjectFileImage(
 
 
 
-#if __cplusplus
+#ifdef __cplusplus
 }
 #endif /* __cplusplus */
 

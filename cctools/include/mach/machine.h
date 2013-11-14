@@ -310,6 +310,10 @@ extern vm_offset_t		interrupt_stack[];
 #define CPU_SUBTYPE_ARM_V7F		((cpu_subtype_t) 10) /* Cortex A9 */
 #define CPU_SUBTYPE_ARM_V7S		((cpu_subtype_t) 11) /* Swift */
 #define CPU_SUBTYPE_ARM_V7K		((cpu_subtype_t) 12) /* Kirkwood40 */
+#define CPU_SUBTYPE_ARM_V6M		((cpu_subtype_t) 14) /* Not meant to be run under xnu */
+#define CPU_SUBTYPE_ARM_V7M		((cpu_subtype_t) 15) /* Not meant to be run under xnu */
+#define CPU_SUBTYPE_ARM_V7EM		((cpu_subtype_t) 16) /* Not meant to be run under xnu */
+
 
 /*
  *	MC88000 subtypes

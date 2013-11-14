@@ -3,6 +3,90 @@ TODO:
 - HPPA, bring the private version of mach/hppa/thread_status.h in sync with
   the kernel header and change ofile_print.c to recognize new thread states.
 
+Changes for the 5.33 release (the cctools-845 release):
+- Fixed a bug in printing the fat headers that incorrectly complained parts
+  were "(past end of file)" when it shouldn't.  The size argument to 
+  print_fat_headers() should have been passed as a uint64_t .
+  Radar bug #13545561 .
+
+Changes for the 5.33 release (the cctools-844 release):
+- Changed processor() in main.c when creating the sorted symbol table to
+  ignore the symbol named ltmp0.  Radar bug #13406338.
+
+Changes for the 5.33 release (the cctools-843 release):
+- Added printing a missing leading tab in print_data_in_code() in arm_disasm.c .
+  Radar bug #13337414.
+
+Changes for the 5.33 release (the cctools-842 release):
+- Updated the intel disassembly to handle MH_KEXT_BUNDLE files.  Radar bug
+  #12237594.
+  - Changed processor() in main.c for the tflag and Vflag to check the
+    mh_filetype for MH_KEXT_BUNDLE and get call get_linked_reloc_info() and
+    use those external relocation entries.
+  - Changed print_text() in main.c to add the filetype argument and pass it.
+  - Changed i386_disassemble() in i386_disasm.[ch] to take the filetype
+    argument and changed in print_text() in main.c to pass it.
+  - Changed displacement() in i386_disasm.c to take the filetype argument and
+    changed the macro DISPLACEMENT() to pass it.
+  - Added the filetype field to the dis_info struct and set it from the
+    argument in i386_disassemble() 386_disasm.c .
+  - Changed displacement() to test the filetype argument to see it is not
+    MH_KEXT_BUNDLE before subtracting sect_addr to get the sect_offset.
+    Also the same is done in i386GetOpInfo() and x86_64GetOpInfo().
+
+Changes for the 5.33 release (the cctools-841 release):
+- Fixed a bug that would cause otool to crash if it had a symbol stub section
+  with a size of zero.  The fix was in guess_indirect_symbol() in ofile_print.c.
+  Radar bug #12924490.
+- Fixed a bug where otool(1) -t for 64-bit architectures was not printing the
+  full 64-bit address.  The fix was in print_text().  Radar bug #12914544.
+- Added support for the LC_LINKER_OPTION load command. Radar bug #12906665.
+  - Added print_linker_option_command() in ofile_print.[ch] .
+  - Added code in print_loadcmds() in ofile_print.c for LC_LINKER_OPTION.
+- Added the -n option to test disassembly with Intel syntax and the llvm
+  disassembler.  Radar bug #10989182
+- Added the -mcpu=arg option to pass arg as the CPU argument to the updated
+  llvm_create_disasm(), changes in main() in main.c and in otool.h .
+  Radar bug #12839170.
+- Added a call to llvm_disasm_set_options() with
+  LLVMDisassembler_Option_PrintImmHex for the llvm disassemblers in print_text()
+  in main.c .  Radar bug #12810901.
+
+Changes for the 5.33 release (the cctools-840 release):
+- Fixed it so otool(1) when using the llvm disassembler will correctly
+  disassemble arm sdiv and udiv instructions.  Radar bug #12464533.
+  - Added passing the cpusubtype to create_arm_llvm_disassembler() and
+    create_thumb_llvm_disassembler() in print_text() in main.c .
+  - Changed the TripleName passed to llvm_create_disasm() in
+    create_arm_llvm_disassembler() and create_thumb_llvm_disassembler() in 
+    arm_disasm.c to be based on the cpusubtype.
+- Added support for new archs: armv6m / armv7m / armv7em and updated
+  ofile_print.c .  Radar bug #11314463.
+- Changed to use libc++ instead of libstdc++ .  Radar bug #12624622.
+- Added support for marked up llvm disassembler output with the -e flag and the
+  -g flag to create and print temporary labels.  Radar bug #11764962.
+  - Added the struct inst to otool.h to support creating temporary labels with
+    the -g flag and disassembly.
+  - Changed print_label() in ofile_print.[ch] to get_label() so it can be used
+    to save a lable in the struct inst for later printing and to know it does
+    not need a temporary label.
+  - Changed the inteface to the arm and i386 disassemblers to support the -g
+    option.  It now passes in a pointer the inst struct it is disassembling on
+    first pass looking for temporary labels with inst->print set to FALSE, and
+    an array of insts and count on the second pass which is used to get the
+    temporary labels.
+  - Added code in the arm and i386 disassemblers to pass the array of insts and
+    count in the disasm info passed to SymbolLookUp() and updated that to look
+    for temporary labels.  And also puts a pointer to the inst being
+    disassembled into the disasm info so the has_raw_target_address and
+    raw_target_address fields
+    can be set if it is a branch and does not have a SymbolName for the target.
+  - Changed arm_disasm.c to not print the raw data when the -g flag is set.
+  - Changed print_text() in main.c to implement the -g flag and make a pass to
+    gather instructions that have raw addresses and need temporary labels, make
+    the temporary labels and finally disassemble and print using the temporary
+    labels.
+
 Changes for the 5.33 release (the cctools-838 release):
 - Change the default disassembler to use the llvm disassembler via setting the
   -q flag unless the -Q flag is set.  Radar bug #9801054.
@@ -489,8 +573,8 @@ Changes for the 5.25 release (the cctools-675 release):
 Changes for the 5.25 release (the cctools-673 release):
 - Changed the sources so the arm stuff is not in the open source version.
   Radar bug #5326431.
-  - Changed the Makefile to #ifndef __OPEN_SOURCE__ out the arm files
-  - Added #ifndef __OPEN_SOURCE__ to the following files to bracket arm code:
+  - Changed the Makefile to #ifndef __OPEN_SOURCE__
+  - Added #ifndef __OPEN_SOURCE__
     main.c, ofile_print.c, otool.h and arm_disasm.c .
 
 Changes for the 5.24 release (the cctools-665 release):
