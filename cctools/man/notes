@@ -1,0 +1,844 @@
+TODO:
+- Add -v description to checksyms.
+- The 4.4bsd a.out(5) man page is wrong for Rhapsody.
+
+Changes for the 5.33 release (the cctools-838 release):
+- Change the otool(1) man age to indicate that -q is the default.  Radar bug
+  #9801054.
+
+Changes for the 5.32 release (the cctools-830 release):
+- Added the -G option to the otool(1) man pages. Radar bug #11498575.
+
+Changes for the 5.31 release (the cctools-825 release):
+- Added the -q and -Q options to the as(1) and otool(1) man pages. Radar bug
+  #11139995.
+
+Changes for the 5.31 release (the cctools-824 release):
+- Changed the Makefile to not install the ld_classic(1) man page.  Radar bug
+  #10708500.
+
+Changes for the 5.30 release (the cctools-816 release):
+- Changed the Makefile to install the lipo(1) and strings(1) man page for the
+  install_os_tools target.  Radar bug #10428485.
+
+Changes for the 5.27 release (the cctools-796 release):
+- Updated the -L option to otool(1) to include the share library ID.  Radar bug
+  #7885069.
+- Added the -arch option to pagestuff(1).  Radar bug #8379048.
+
+Changes for the 5.27 release (the cctools-782 release):
+- Added the -U option to nm(1).  Radar bug #7761111.
+- Added an ALSO SEE to the otool(1) man page that listed install_name_tool(1),
+  dyld(1) and libtool(1).  Radar bug #7531315. 
+
+Changes for the 5.27 release (the cctools-773 release):
+- Changed the description of otool(1)'s -X flag.  Radar bug #7328418.
+
+Changes for the 5.27 release (the cctools-765 release):
+- Moved the install location of motc(1) back to /usr/local/efi/share/man .
+  Radar bug #7117645.
+
+Changes for the 5.27 release (the cctools-761 release):
+- Moved the install location of motc(1) into /usr/share/man. Radar bug #7038602.
+
+Changes for the 5.27 release (the cctools-758 release):
+- Fixed the strings(1) man page for the -arch option and removed the comment
+  about -arch all being the default.  Radar bug #6945015.
+
+Changes for the 5.27 release (the cctools-751 release):
+- Fixed the typo of embed -> embedded in the codesign_allocate(1) manpage.
+  Radar bug #5859182.
+- Fixed the arch(3) man page for the prototype for NXFindBestFatArch() where
+  it incorrectly had unsigned long where it should have been uint32_t.
+  Radar bug #4717379.
+
+Changes for the 5.26 release (the cctools-750 release):
+- Added the -rpath, -add_rpath and -delete_rpath options to
+  install_name_tool(1).  Radar bug #5684850.
+
+Changes for the 5.25 release (the cctools-724 release):
+- Updated the getsegbyname.3 man page to reference the use of
+  _dyld_get_image_vmaddr_slide(0) with executable linked with -pie.
+  Radar bug #6194728.
+
+Changes for the 5.25 release (the cctools-720 release):
+- Fixed a typo on the libtool.1 man page. Added a comma after library in the
+  -install_name description.  Radar bug #4574762.
+
+Changes for the 5.25 release (the cctools-717 release):
+- Added the -d filename option to the mtoc(1) man page. Radar bug #6211642.
+
+Changes for the 5.25 release (the cctools-705 release):
+- Removed man pages for cmpshlib.1, mkshlib.1, dylibprof.1, atom.1, and file.1.
+
+Changes for the 5.25 release (the cctools-701 release):
+- Added the -align option to the mtoc(1) man page.
+
+Changes for the 5.25 release (the cctools-688 release):
+- Added the -section_alignment option to the mtoc(1) man page.
+
+Changes for the 5.25 release (the cctools-681 release):
+- Added the -A option to the codesign_allocate(1) man page.  Radar bug #5681427.
+- Added the mtoc(1) man page.  Radar bug #5536661.
+
+Changes for the 5.25 release (the cctools-676 release):
+- Fixed typos on the libtool.1 man page. Changed "ror" to "For" and added a
+  comma after library in the -compatibility_version description.  Radar bug
+  #4574762.
+- Changed the BUGS section of the libtool.1 man page to reflect the current
+  behavior of out of date table of contents.  Radar bug #4708229.
+- Fixed a type of "effected" to be "affected" on the nmedit.1 man page.
+  Radar bug #5068920.
+- Fixed the typo of "architecutre" to be "architecture" on the libtool.1 man
+  page.  Radar bug #5160229.
+
+Changes for the 5.24 release (the cctools-663 release):
+- Change the "SEE ALSO" line on the as(1) man page for the reference to the
+  assebler manual.  Radar but #5143784.
+
+Changes for the 5.24 release (the cctools-647 release):
+- Changed the Makefile to not install dyld_debug.3 if OLD_DYLD_STUFF is not
+  defined.  Radar bug #4734305.
+
+Changes for the 5.24 release (the cctools-635 release):
+- Added the -verify_arch to the lipo(1) man page.  Radar bug #4496521.
+- Updated the strings(1) man page to mention the use of the archive member
+  syntax for filenames.  Radar bug #4172811.
+
+Changes for the 5.24 release (the cctools-629 release):
+- Added a description that CPU subtypes get combined to the ld_classic(1) man
+  page.  Radar bug #3820769.
+- Added an example of how to create a stub library to the strip(1) man page.
+  Radar bug #4399175.
+- Added the -arch option to the strip(1) man page.  Radar bug #4470756.
+- Added the -arch option to the strings(1) man page.  Radar bug #4416906.
+- Fixed a typo in the ld_classic man page.  Where "When creating a output file"
+  should have been "When creating an output file".  Radar bug #4099445.
+- Updated the ld_classic(1) man page to only document the 32-bit linker.
+
+Changes for the 5.24 release (the cctools-627 release):
+- As part of the port to unify otool(1) and otool64(1) the otool64(1) man page
+  was removed and the Makefile was updated.  Radar bug #3903136.
+
+Changes for the 5.24 release (the cctools-626 release):
+- Added the man page codesign_allocate(1).  Radar bug #4588023.
+
+Changes for the 5.24 release (the cctools-623 release):
+- Changed ld.1 to be ld_classic.1 and did the needed edits in the man page
+  for the name change.  Also changed the name in the Makefile. Radar bug
+  #4606627.
+
+Changes for the 5.22 release (the cctools-590.38.3 release):
+- Add a new -arch_blank option to lipo(1). Radar bug #4473483.
+
+Changes for the 5.22 release (the cctools-590.37.2 release):
+- Fix two typos in the ld(1) man page. Radar bug #4099445.
+
+Changes for the 5.22 release (the cctools-590.31.1 release):
+- Added support for the x86_64 architecture.  Radar bug #4345090.
+
+Changes for the 5.21 release (the cctools-590.37 release):
+- Added ld(1)'s -t option to the libtool(1) man page.  Radar bug #4213190.
+
+Changes for the 5.21 release (the cctools-590.32 release):
+- Updated the description of the -l flag on the ld(1) man page to include
+  the LD_LIBRARY_PATH environment variable.  Radar bug #4314159.
+
+Changes for the 5.21 release (the cctools-590.31 release):
+- Added the description for -no_uuid to the strip(1) man page.  Radar bug
+  #4415536.
+- Added the description for -no_uuid to the ld(1) man page and the -no_uuid to
+  the libtool(1) man page.  Radar bug #4415529.
+
+Changes for the 5.19 release (the cctools-590.12 release):
+- Added the description for -allow_stack_execute to the ld(1) man page and
+  updated the -segprot description.  Radar bug #4281171.
+
+Changes for the 5.19 release (the cctools-590.7 release):
+- Documented new -macosx_version_min flag for ld and libtool.
+  Radar bug #4195253
+
+Changes for the 5.19 release (the cctools-590.5 release):
+- Added the description for -Sp to the ld(1) man page and the -Sp flag to the
+  libtool(1) man page.
+
+Changes for the 5.19 release (the cctools-590.4 release):
+- Changed references in the man pages from "fat" to "universal".  Changes made
+  in ld.1, libtool.1, lipo.1, nm.1, nmedit.1, otool.1, size.1, arch.3,
+  cmpshlib.1, file.1, gprof.1, indr.1, kld.3, mkshlib.1, redo_prebinding.3 and
+  rld.3 . Radar bug #4171207.
+
+Changes for the 5.19 release (the cctools-590 release):
+- Fixed some typos in the ld(1) man page. Radar bug #4099445.
+
+Changes for the 5.18 release (the cctools-589 release):
+- Added support for the CPU_SUBTYPE_PENTIUM_4 cpusubtype.  Radar bug #4115802
+  - Added an entry in table for pentium4 on the arch(3) man page.
+
+Changes for the 5.18 release (the cctools-580 release):
+- Fixed the reference path to the assembler manual on the as(1) man page.
+  Radar bug #4088403.
+- Updated the ld(1) man page to say MACOSX_DEPLOYMENT_TARGET defaults to 10.4
+  for the i386 architecture and 10.1 otherwise.  Radar bug #4081062.
+
+Changes for the 5.17 release (the cctools-576 release):
+- Picked up changes to ld(1) man page noting 64-bit differences. Radar bug
+  #3853561.
+
+Changes for the 5.17 release (the cctools-575 release):
+- Added a note in the as(1) and ld(1) man pages for -force_cpusubtype_ALL that
+  this is the default for x86 architecures.  Radar bug #4002758 and #4002756.
+
+Changes for the 5.17 release (the cctools-572 release):
+- Removed the references to  VAX and Mips from the lipo(1) man page. Radar bug
+  #4007112.
+
+Changes for the 5.17 release (the cctools-567 release):
+- Added a man page for otool64(1) with just sources the otool(1) man page.
+  Radar bug #3954720.
+
+Changes for the 5.17 release (the cctools-561 release):
+- Updates the description of the -prebind flag on the ld(1) man page to note the
+  output is not prebound when MACOSX_DEPLOYMENT_TARGET >= 10.4 Also added the
+  description of the environment variable LD_SPLITSEGS_NEW_LIBRARIES as well
+  as updated a few places that talked about 10.3 .  Radar bug #3924730.
+
+Changes for the 5.17 release (the cctools-556 release):
+- Added the description of the -syslibroot flag to the ld(1) man page and added
+  to the list of ld(1) flags on the libtool(1) man page.  Radar bug #3886145.
+
+Changes for the 5.17 release (the cctools-552 release):
+- Added the description of the -q flag to ranlib(1) on the libtool(1) man page
+  that ar(1) uses for UNIX standard conformance.  Radar bug #3762136.
+- Fixed the SYNOPSIS of the nm(1) man page to include all options.  Radar bug
+  #3856321.
+- Added the descriptions of the -A, -P and -t options to the nm(1) man page.
+  Radar bug #3652346.
+- Added the descriptions of the -t and -n options to the strings(1) man page.
+  Radar bug #3644256.
+- Added the description of the "--" option to the strings(1) man page.  Radar
+  bug #3571788.
+
+Changes for the 5.16 release (the cctools-531 release):
+- Removed the -mc68000 and -mc68010 options from as man page.  Radar bug
+  #3704760.
+
+Changes for the 5.16 release (the cctools-526 release):
+- Added the description of the -V flag to the libtool(1) man page.  Radar bug
+  #3738616.
+
+Changes for the 5.16 release (the cctools-524 release):
+- Changed the Makefile to use OLD_DYLD_STUFF instead of DYLD_STUFF to work
+  around Radar bug #3675086.
+
+Changes for the 5.16 release (the cctools-520 release):
+- Added the description of the -v flag to the ld(1) man page.  Radar bug
+  #3557760.
+- Changed the reference to kmodload in kld.3 to kextload. Radar bug #3633604.
+- Fixed typos in the ld(1) man page. Radar bug #3545222.
+- Fixed the ld(1) man page where it had "is is is".  Radar bug #3483062.
+- Removed the reference to atom(1) in the ld(1) man page.  Radar bug #3478502.
+- Added a missing  period after "specified" in the install_name_tool man page.
+  Radar bug #3501918.
+- Added the following line to ld(1)'s -sectorder description:
+     Lines that start with # are ignored and treated as comments.
+  Radar bug #3360823.
+- Added the -executable_path to the libtool(1) man page.  Radar bug #3489733.
+
+Changes for the 5.16 release (the cctools-519 release):
+- Once again changed the Makefile to try to make installsrc to always install
+  all of the files.
+
+Changes for the 5.16 release (the cctools-518 release):
+- Changed the Makefile for installsrc to always install all of the files.
+
+Changes for the 5.16 release (the cctools-513 release):
+- Changed the Makefile so that it only installs the following files for releases
+  Panther and older:
+	/usr/share/man/man1/dyld.1
+	/usr/share/man/man3/dyld.3
+	/usr/share/man/man3/NSModule.3
+	/usr/share/man/man3/NSObjectFileImage.3
+	/usr/local/man/man3/NSObjectFileImage_priv.3
+  Radar bug #3639836.
+
+Changes for the 5.16 release (the cctools-509 release):
+- Changed the dyld.1 man page for the description of
+  DYLD_FALLBACK_FRAMEWORK_PATH to add a return in the source for the long
+  line so it would not get a verification error.  This messes up the formatting
+  a bit.
+- Fixed a problem with the NSModule.3 man page and the formating of the
+  description of NSLINKMODULE_OPTION_TRAILING_PHYS_NAME which was on the .TP
+  line and needed to be on a line starting with .B .  This was getting a
+  verification error.
+
+Changes for the 5.16 release (the cctools-507 release):
+- Fix a bug in the Makefile that was not installing the notes file for make
+  installsrc . 
+
+Changes for the 5.16 release (the cctools-504 release):
+- Removed some extra text in the ld(1) man page after the
+  -twolevel_namespace_hints description that looked like it was part of the
+  the description -private_bundle at one point.
+
+Changes for the 5.16 release (the cctools-501 release):
+- Updated the ld(1) man page and remove the paragraph before the -dead_strip
+  option.  Radar bug #2284500
+
+Changes for the 5.16 release (the cctools-500 release):
+- Added the -dead_strip and -no_dead_strip_inits_and_terms options to the
+  ld(1) and libtool(1) man pages.  Radar bug #2284500.
+
+Changes for the 5.14 release (the cctools-499.4 release):
+- Updated the arch.3 man page to include an entry for the interim ppc64 file
+  format.  Radar bug #3562133 and #3562232.
+
+Changes for the 5.14 release (the cctools-497 release):
+- Added the -prebind_allow_overlap to the libtool(1) man page.  Radar bug
+  #3452484.
+
+Changes for the 5.14 release (the cctools-496 release):
+- Added a comment to the NSModule(3) for NSLinkModule to say if you want gdb to
+  be able to debug your module, when calling NSLinkModule you should pass the
+  image path as the module name.  Radar bug #3408768.
+
+Changes for the 5.13.2 release (the cctools-495.3 release):
+- Updated the redo_prebinding(1) man page to add a descriptions of the new
+  options: -u unprebind, -s write to standard output and -seg1addr to set the
+  address of shared library.  Radar bug #3176679.
+- Updated the redo_prebinding(1) man page to add a description of the new
+  unprebind(3) routine.  Radar bug #3176679.
+
+Changes for the 5.13 release (the cctools-495 release):
+- Updated the description of ld(1)'s -headerpad option to reflect the default
+  size for -prebind is now 3 times instead of 6 times the size of the
+  LC_PREBOUND_DYLIB load commands.  Radar bug #3410151.
+
+Changes for the 5.13 release (the cctools-494 release):
+- Updated the description of ld(1)'s -headerpad option to reflect the default
+  size for -prebind is 6 times the size of the LC_PREBOUND_DYLIB load commands.
+  Radar bug #3410151.
+
+Changes for the 5.13 release (the cctools-488 release):
+- Fixed the ld(1) man page when the description -weak_framework got incorrectly
+  inserted in the middle of the description of -framework.  Radar bug #3375695.
+
+Changes for the 5.13 release (the cctools-486 release):
+- Added the description for DYLD_PRINT_LIBRARIES_POST_LAUNCH to dyld.1 . Radar
+  bug #3342354.
+
+Changes for the 5.13 release (the cctools-483 release):
+- Change the libtool(1) man page to indicate that -m is also passed to the
+  linker.  Radar bug #3305123.
+
+Changes for the 5.13 release (the cctools-481 release):
+- Added the new man page NSObjectFileImage_priv.3 for the SPI
+  NSFindSectionAndOffsetInObjectFileImage() and changed the Makefile to install
+  the new man page.  Radar bug #3318440.
+
+Changes for the 5.12 release (the cctools-479 release):
+- Added the description for the -executable_path to ld.1 . Radar bug #3278995.
+
+Changes for the 5.12 release (the cctools-477 release):
+- Picked up the changes to kld.3 for the changes to the interfaces.  Radar bug
+  #3270588.
+
+Changes for the 5.12 release (the cctools-475 release):
+- Added the description for the -static_branch_prediction_Y_bit
+  and -static_branch_prediction_AT_bits to as.1 .  Radar bug #3265334.
+- Added a table entry for ppc970 to arch.3 . Radar bug #3265334.
+
+Changes for the 5.12 release (the cctools-472 release):
+- Updated the as.1 man page:
+  - Added the description for -V
+  - Removed obsolete description for -k
+  - Added a note about -static causing the .text directive to not include the
+    pure_instructions section attribute.
+  - Updated the paths used for the assemblers.
+  - Changed the the description of -force_cpusubtype_ALL
+  - Added the description for -no_ppc601
+
+Changes for the 5.12 release (the cctools-470 release):
+- Added the description for -c to strip.1 .  Radar bug #3235093.
+- Added the description for -search_paths_first to ld.1 and cleaned up some
+  formatting errors when the -weak-l was added.  Also added -search_paths_first
+  to libtool(1) . Radar bug #3176974.
+
+Changes for the 5.12 release (the cctools-469 release):
+- Added the description for -weak-l, -weak_library and weak_framework to ld.1 
+  and libtool(1) .  Radar bug #3069758.
+
+Changes for the 5.12 release (the cctools-466 release):
+- Added the description for -undefined define_a_way to ld.1 .
+  Radar bug #3216770.
+- Added the description for -undefined dynamic_lookup to ld.1 .
+  Radar bug #3210803.
+
+Changes for the 5.12 release (the cctools-464 release):
+- Added description for the SPI NSHasModInitObjectFileImage() to
+  NSObjectFileImage.3 .  Radar bug #3196951.
+
+Changes for the 5.12 release (the cctools-463 release):
+- Added description for the API NSGetSectionDataInObjectFileImage() to
+  NSObjectFileImage.3 .  Radar bug #3194204.
+
+Changes for the 5.12 release (the cctools-462 release):
+- Added a description for the new NSLinkModule() option
+  NSLINKMODULE_OPTION_TRAILING_PHYS_NAME.  Radar bug #3190599.
+
+Changes for the 5.12 release (the cctools-461 release):
+- Added a description for the new NSLinkModule() option
+  NSLINKMODULE_OPTION_DONT_CALL_MOD_INIT_ROUTINES.  Radar bug #3183011.
+
+Changes for the 5.12 release (the cctools-460 release):
+- Added descriptions for the following API's :
+    NSSymbolDefinitionCountInObjectFileImage
+    NSSymbolDefinitionNameInObjectFileImage
+    NSSymbolReferenceCountInObjectFileImage
+    NSSymbolReferenceNameInObjectFileImage
+    NSIsSymbolDefinedInObjectFileImage
+  to NSObjectFileImage.3 .  Radar bug #3179011.
+- Added the description for NSCreateObjectFileImageFromMemory() to
+  to NSObjectFileImage.3 .  Radar bug #3131622.
+
+Changes for the 5.12 release (the cctools-456 release):
+- Picked up the libsyminfo.3 man page. Radar bug #3145742.
+
+Changes for the 5.12 release (the cctools-451 release):
+- Fixed the libtool(1) man page so "libcc_dyanmic.a" is "libcc_dynamic.a".
+  radar bug #2890498.
+
+Changes for the 5.12 release (the cctools-450 release):
+- Changed the ld(1) man page to use 4K for the i386 as well as the PowerPC in
+  the places it talks about the target pagesize.
+
+Changes for the 5.12 release (the cctools-449 release):
+- Added the following item to gprof(1)'s SEE ALSO section:
+    dyld(1) and the DYLD_IMAGE_SUFFIX environment variable
+  Radar bug #2572028.
+
+Changes for the 5.12 release (the cctools-448 release):
+- Added the description of _dyld_get_image_header_containing_address() to the
+  dyld(3) man page. Radar bug #2967928.
+
+Changes for the 5.12 release (the cctools-447 release):
+- Added the description of _dyld_all_twolevel_modules_prebound() to the dyld(3)
+  man page. Radar bug #3055372.
+- Added the description for the -noprebind_all_twolevel_modules flag to the
+  ld(1) man page.  Radar bug #3055372.
+
+Changes for the 5.11 release (the cctools-446 release):
+- Added the -x flag to the libtool(1) man page.  Radar bug #3088301.
+
+Changes for the 5.11 release (the cctools-445 release):
+- Fixed ld(1) and libtool(1) regarding version numbers. They claimed that all
+  components of version numbers must be non-zero and positive, but this is only
+  true for the first component of each version number. Other components may be
+  zero.
+
+Changes for the 5.11 release (the cctools-444 release):
+- Added the descriptions of the -exported_symbols_list and
+  -unexported_symbols_list options to the ld(1) man page.  Radar bug #3083844.
+- Added the -exported_symbols_list , and -unexported_symbols_list flags
+  to the libtool(1) man page.  Radar bug #3083844.
+- Picked up the reformated arch.3 man page.  Radar bug #2903710.
+
+Changes for the 5.11 release (the cctools-443 release):
+- Added the descriptions of the -single_module and -multi_module options to the
+  ld(1) man page.  Radar bug #3080780.
+- Added the -single_module, -multi_module, -no_arch_warnings, and -u flags
+  to the libtool(1) man page.  Radar bug #3080780.
+
+Changes for the 5.11 release (the cctools-442 release):
+- Fixed the ld(1) man page to use CALL_ON_LOAD not the obsolete
+  CALL_ON_MODULE_BIND.  Radar bug #3078181.
+
+Changes for the 5.11 release (the cctools-439 release):
+- Added the description of install_name() to the redo_prebinding(3) man page.
+  Radar bug #3065586.
+- Changed the description of needs_redo_prebinding() on the redo_prebinding(3)
+  man page to note that it checks all archs if allow_missing_archs is zero.
+  Radar bug #3065577.
+- Removed the description of DYLD_MEM_PROTECT from the dyld(1) man page as
+  currently NXProtectZone() no longer works.  Radar bug #3035901.
+
+Changes for the 5.10 release (the cctools-421 release):
+- Added the discription of the -nofixprebinding flag to the ld(1) man page.
+  Radar bug #2941669.
+- Picked up the changes to seg_addr_table(1) man page the new -relayout_nonsplit
+  option.  Radar bug #2935630.
+
+Changes for the 5.10 release (the cctools-420 release):
+- Added the missing discription of the -arch flag to the size(1) man page.
+  Radar bug #2934869.
+- Added the -M option to the libtool(1) man page.  Radar bug #2935497.
+- Changed the description of the constant NOT_PREBINDABLE on the
+  redo_prebinding(3) man page to include "or statically linked" to indicate
+  that it will be returned for statically linked binaries.  Radar bug #2934831.
+
+Changes for the 5.10 release (the cctools-418 release):
+- Changed the Makefile to not install the nlist.3 man page.  Radar bug #2928583.
+
+Changes for the 5.10 release (the cctools-416 release):
+- Adde the description of -m option to the otool(1) man page.  Radar bug
+  #2904708.
+
+Changes for the 5.10 release (the cctools-414 release):
+- Changed the dyld.1 man page to be more clear about wha the otool -L option
+  does.  Radar bug #2710374.
+
+Changes for the 5.10 release (the cctools-412 release):
+- Fixed the description of -private_bundle on the ld(1) man page.  Radar bug
+  #2887260.
+- Added the description of the -sect_diff_relocs flag to the ld man page.
+  Radar bug #2870529.
+- Fixed some spelling errors in the ld man page.  Radar bug #2854516.
+- Fixed some spelling errors in the dylibprof man page.  Radar bug #2854501.
+- Fixed some spelling errors in the dyld man page.  Radar bug #2854497.
+- Fixed some spelling errors in the nmedit man page.  Radar bug #2854539.
+
+Changes for the 5.10 release (the cctools-411 release):
+- Updated the seg_addr_table(1) man page with default address dependent on the
+  environment variable MACOSX_DEPLOYMENT_TARGET and the -allocate_flat flag.
+  Radar bug #2848945.
+
+Changes for the 5.10 release (the cctools-409 release):
+- Added the discription of DYLD_NO_FIX_PREBINDING to the dyld man page.  Radar
+  bug #2870411.
+- Fixed a spelling error in man page for ld. Radar bug #2775049.
+- Fixed a spelling error in man page for libtool. Radar bug #2856089.
+
+Changes for the 5.10 release (the cctools-407 release):
+- Changed the description of -run_init_lazily in ld(1) to say it was obsolete.
+
+Changes for the 5.10 release (the cctools-402 release):
+- Changed "it's" to "its" on the nmedit man page.  Radar bug #2420515.
+
+Changes for the 5.10 release (the cctools-400 release):
+- Added the discription of the new throttle parameter to the redo_prebinding()
+ API on the redo_prebinding(3) man page.  Radar bug #2850642.
+
+Changes for the 5.10 release (the cctools-397 release):
+- Added the discription of -multiply_defined_unused to the ld(1) man page and
+  add it to the libtool(1) man page.  Radar bug #2835152.
+- Added the discription of MACOSX_DEPLOYMENT_TARGET to the ld(1) man page.
+  Radar bug #2830042.
+- Added _NSGetExecutablePath() to NSModule(3).  Radar bug #2432816.
+
+Changes for the 5.10 release (the cctools-396 release):
+- Added the discription of the new allow_missing_architectures parameter to the
+  redo_prebinding() API on the redo_prebinding(3) man page.  Radar bug #2809673.
+- Added the discription of the -f flag for ranlib(1) to the libtool(1) man page.
+  Radar bug #2814831.
+- Added the discription of the -weak_reference_mismatches flag to the ld(1)
+  man page.
+
+Changes for the 5.10 release (the cctools-395 release):
+- Changed the as(1) man page reference to the correct place
+  /Developer/Documentation/DeveloperTools/Assembler for the assembler manual.
+  Radar bug #2803486.
+  
+Changes for the 5.10 release (the cctools-394 release):
+- Added the description of LC_FORCE_NO_PREBIND to the ld(1) man page.
+- Changed the reference of a.out(5) to Mach-O(5) on the stab(5) man page.
+- Changed the .Os macros in nlist(3), stab(5), ranlib(5) to use Darwin
+  (Radar bug #2813834).
+
+Changes for the 5.10 release (the cctools-393 release):
+- Changed the Makefile from installing the the rld(3) man page.  Removed the
+  references to rld from the nmedit(1) and strip(1) man pages.  Radar bug
+  #2784528
+
+Changes for the 5.10 release (the cctools-392 release):
+- Added the missing -o flag to the nmedit(1) man page.
+- Fixed the NSObjectFileImage(3) that had a .if not a .fi before the
+  .SH "FUTURE SYNOPSIS" line.
+
+Changes for the 5.10 release (the cctools-391 release):
+- Picked up and updated the Mach-O(5), ranlib(5), stab(5) and nlist(3) man
+  pages.  Radar bug #2793998.
+
+Changes for the 5.10 release (the cctools-390 release):
+- Added the install_name_tool(1) man page.
+
+Changes for the 5.10 release (the cctools-389 release):
+- Added the description for the -D flag to the otool(1) man page.
+- Added the description for the -prebind_all_twolevel_modules flag and
+  -headerpad_max_install_names flag to the ld(1) man page.  Also added then
+  to the libtool(1) man page.
+
+Changes for the 5.10 release (the cctools-387 release):
+- Added the NSADDIMAGE_OPTION_MATCH_FILENAME_BY_INSTALLNAME option to
+  NSAddImage() in NSModule(3).
+- Added the -seg_addr_table_filename to libtool(1), ld(1), redo_prebinding(1),
+  checksyms(1) and check_dylib(1).
+
+Changes for the 5.10 release (the cctools-386 release):
+- Updated the redo_prebinding(1) and redo_prebinding(3) man pages for the new
+  options, functions and parameters.  Radar bug #2575205 and #2729976.
+
+Changes for the 5.10 release (the cctools-385 release):
+- Fixed the seg_addr_table(1) man page to have the correct default values
+  (0x70000000 and 0x80000000) for split addresses.
+- Fixed a typo in redo_prebinding(1) where executable_path was excutable_path.
+- Added a decription for DYLD_TRACE to the dyld(1) man page.
+
+Changes for the 5.9 release (the cctools-383 release):
+- Added a comment in NSModule(3) about NSLookupSymbolInImage() and
+  NSIsSymbolNameDefinedInImage() and force flat namespace.  Radar bug #2731330,
+- Added a description of -H to the otool(1) mand page.
+
+Changes for the 5.9 release (the cctools-380 release):
+- Added the -twolevel_namespace_hints option to ld(1) and libtool(1).  Radar bug
+  #2735266.
+
+Changes for the 5.9 release (the cctools-373 release):
+- Changed the ld(1) man page to indicate -twolevel_namespace is now the default.
+
+Changes for the 5.9 release (the cctools-371 release):
+- Picked up the -update_overlaps flag in the seg_addr_table.1 man page.
+
+Changes for the 5.9 release (the cctools-370 release):
+- Added the -nomultidefs flag to the ld(1) and libtool(1) man page.  Also added
+  some missing ld(1) flags to the libtool(1) man page.
+
+Changes for the 5.9 release (the cctools-369 release):
+- Picked up the additions of kld_load_basefile_from_memory() and
+  kld_load_from_memory in kld.3 .
+
+Changes for the 5.9 release (the cctools-367 release):
+- Added the -sub_library option and updated the comments in the ld(1) man page.
+- Added the -sub_library option to the libtool(1) man page.
+
+Changes for the 5.9 release (the cctools-365 release):
+- Added NSAddImage(), NSLookupSymbolInImage() and NSIsSymbolNameDefinedInImage()
+  and their options to NSModule(3).  Radar bug #2689833.
+
+Changes for the 5.9 release (the cctools-364 release):
+- Added the -prebind_allow_overlap option to the ld(1) man page.
+
+Changes for the 5.9 release (the cctools-363 release):
+- Changed the libtool man page to note if -arch_only is specified with a
+  specific cpusubtype other than the family cpusubtype it does not use the
+  ld(1) -force_cpusubtype_ALL flag and passes the -arch_only argument to ld(1)
+  as the -arch flag so that the output is to be tagged with that cpusubtype.
+
+Changes for the 5.9 release (the cctools-361 release):
+- Added the redo_prebinding(3) man page.
+- Updated the ld(1) and dyld(1) man pages for two-level namespaces.
+- Updated the ld(1) man page for references to 2000 hex which should have been
+  1000 for the PowerPC and 2000 hex for i386.
+
+Changes for the 5.9 release (the cctools-360 release):
+- Added the descriptions for the -e option to redo_prebinding(1).
+
+Changes for the 5.8 release (the cctools-357 release):
+- Added support for the CPU_SUBTYPE_POWERPC_7450 in arch.3. Radar bug #2599869.
+
+Changes for the 5.8 release (the cctools-353 release):
+- Added the descriptions for NSIsSymbolNameDefinedWithHint() and
+  NSLookupAndBindSymbolWithHint() to NSModule.3.  And added the description
+  of _dyld_lookup_and_bind_with_hint() to dyld.3 .  Radar bug #2571272.
+
+Changes for the 5.8 release (the cctools-350 release):
+- Added the description for DYLD_NEW_LOCAL_SHARED_REGIONS to the dyld(1) man
+  page.  Radar bug #2567132.
+
+Changes for the 5.8 release (the cctools-349 release):
+- Added the -Y flag to the libtool(1) man page.
+
+Changes for the 5.8 release (the cctools-348 release):
+- Added a description to then nmedit(1) man page about what happens when both
+  -s and -R options are specified.  Radar bug #2555491.
+
+Changes for the 5.8 release (the cctools-347 release):
+- Added the description of _dyld_register_func_for_remove_image to dyld.3 and
+  many other missing functions.  Radar bug #2553324.
+- Added the decription of NSAddLibraryWithSearching() to NSModule.3 . Radar
+  bug #2535633.
+
+Changes for the 5.8 release (the cctools-346 release):
+- Added decriptions of the RC_TRACE_* environment variables to the ld(1)
+  man page along with -final_output.  Also added -final_output to the libtool(1)
+  man page.  Radar bug #2550094.
+
+Changes for the 5.8 release (the cctools-345 release):
+- Added the explination of exit code 3 for redo_prebinding.1 which is for the
+  specific case when the dependent libraries are out of date with respect to
+  each other.  Radar bug #2544407.
+
+Changes for the 5.8 release (the cctools-342 release):
+- Added the -allowable_client and -client_name flags to the ld.1 man page as
+  well as adding -allowable_client to the libtool.1 man page.  Radar bug
+  #2533649.
+
+Changes for the 5.8 release (the cctools-341 release):
+- Added the kld.3 man page.  Radar bug #2523649.
+- Moved rld.3l to rld.3.  Radar bug #2505760.
+- Updated -run_init_lazily to include module init routines.  Radar bug #2502941.
+
+Changes for the 5.7 release (the cctools-334 release):
+- Removed the mention of checksyms(l) checking for path names of dynamic
+  libraries.
+- Added the -run_init_lazily flag to ld(1) and libtool(1).  Radar bug #2490396.
+
+Changes for the 5.7 release (the cctools-332 release):
+- Added the -disablewarnings options to the seg_addr_table(1) man page.
+  (Radar bug #2482327).
+
+Changes for the 5.7 release (the cctools-330 release):
+- Changed the references to /MacOSX/Library to be /Library in dyld.1 and ld.1
+  for the layout changes in Kodiak1C.  Radar bug #2477862.
+
+Changes for the 5.7 release (the cctools-329 release):
+- Added the NSModule.3 and NSObjectFileImage.3 man pages as well as updated
+  dyld_debug.3 with _dyld_debug_task_from_core() for Radar bug #2469604.
+
+Changes for the 5.7 release (the cctools-327 release):
+- Changed the references to /Local to be /MacOSX in dyld.1 and ld.1 for the
+  new directory layout changes for post-DP4.  Also changed seg_addr_table.1 to
+  reference /AppleInternal not /Local.
+
+Changes for the 5.6 release (the cctools-323 release):
+- Change the check_install_name(l) man page to check_dylib(l) and updated it.
+
+Changes for the 5.6 release (the cctools-322 release):
+- Added the check_install_name(l) man page.
+- Fixed the end.3 man page to be ".so man3/get_end.3" not ".so man3/get_end"
+  the ".3" got dropped.  Radar bug #2448020.
+
+Changes for the 5.6 release (the cctools-321 release):
+- Added the description of fixed region lines to seg_addr_table(l).
+- Picked up Rolie's edited dyld.1 man page again.  Radar 2438996 and 2392392.
+
+Changes for the 5.6 release (the cctools-320 release):
+- Updated the ld(1) and libtool(1) man pages with the -umbrella option.
+  Radar bug 2443212.
+
+Changes for the 5.6 release (the cctools-319 release):
+- Picked up Rolie's edited dyld.1 man page.  Radar 2438996.
+
+Changes for the 5.5 release (the cctools-315 release):
+- Removed the sentences in the libtool man page about incompatiblies with the
+  Rhapsody Developer releases.
+
+Changes for the 5.5 release (the cctools-314 release):
+- Added DYLD_ABORT_MULTIPLE_INITS to the dyld.1 man page.  Radar bug #2423143.
+- Changed where nmedit gets installed from /usr/local/bin to /usr/bin so the
+  man page now gets installed in /usr/share/man/man1.  Radar bug #2396595.
+
+Changes for the 5.5 release (the cctools-310 release):
+- Added the -Sn, -Si, -S and -X flags to the libtool man page.
+
+Changes for the 5.5 release (the cctools-307 release):
+- Added the -Si and -Sn options to ld.1. Radar bug #2410704.
+- Added support for the CPU_SUBTYPE_POWERPC_7400 in arch.3. Radar bug #2397523.
+
+Changes for the 5.4 release (the cctools-306.1 release):
+- Picked up the changes to as.1 from Matt Rollefson (Rollie) to change the 
+  references to "Rhapsody" to "MacOS X". Radar bug #2399294.
+
+Changes for the 5.4 release (the cctools-303 release):
+- Picked up the dyld.1 man page edited from Tech Pubs. Radar bug #2366767.
+- Added the -x option to suppress gmon.order to the gprof.1 man page.
+- Updated the nmedit man page to reflect the change to process all
+  architectures in the file.  Radar bug #2367598.  The change to nmedit was
+  done in cctools-300.
+
+Changes for the 5.4 release (the cctools-300 release):
+- Fixed a typo in the dyld.1 man page where "effect" should have been "affect".
+  Radar bug #2366750.
+- Added the -init argument to libtool(1) and ld(1).
+- Fixed a typo in the arch.3 man page where "pcc" should have been "ppc".
+  Radar bug #2366781.
+
+Changes for the 5.3 release (the cctools-294 release):
+- Added _dyld_image_containing_address to the dyld(3) man page.
+- Updated the libtool man page to include -noall_load and the missing linker
+  flags.  Radar bug #2324061.
+
+Changes for the 5.3 release (the cctools-289 release):
+- Added the -p option to the nmedit man page.
+- Moved the local man pages to /usr/local/share/man and changed them all to
+  man1 from manl.
+
+Changes for the 5.3 release, MacOS X bring up (the cctools-282 release):
+- Changed the Makefile to allow for RC_OS=macos for MacOS X builds.
+
+Changes for the 5.2 release (the cctools-278 release):
+- Moved rld.3 to rld.3l, part of Radar 2449999.
+
+Changes for the 5.2 release (the cctools-274 release):
+- Added a checksyms(l) man page.
+- Added the -R filename option to strip(1) and nmedit(l).  Radar bug #2235926.
+- Removed the i586SX subtype from the arch.3 man page and added the new intel
+  x86 subtypes. Radar bug #2231830.
+
+Changes for the 5.2 release (the cctools-271 release):
+- Added the strip -o option to the man page.
+
+Changes for the 5.2 release (the cctools-267 release):
+- Added the getsegbyname.3 man page.
+- Added the getsectbyname.3 man page.
+- Added getsectbynamefromheader.3 as:
+    .so man3/getsectbyname.3
+- Added getsectdata.3 as:
+    .so man3/getsectbyname.3
+- Added getsectdatafromheader.3 as:
+    .so man3/getsectbyname.3
+- Added the get_end(3) man page.
+- Added the end.3 man page as:
+	.so man3/get_end
+- Updated ld(1) to change the default of -read_only_relocs to error.
+- Updated the libtool(1) man page include the -T and -L options.
+- Updated the dylibprof(1) man page to remove the root console stuff and update
+  the bootstrap.conf stuff that now works.
+
+Changes for the 5.1 release (the cctools-260 release):
+- Added -c to all the install commands in the Makefile.
+
+Changes for the 5.1 release (the cctools-252 release):
+- Added the default fallback paths to the dyld.1 man page.
+
+Changes for the 5.1 release (the cctools-250 release):
+- Picked up and updated arch.3 .
+- Changed the man path to install the man pages directly in /usr/share/man .
+- Copied the Copyright from OpenBSD on to gprof and strings man pages.
+- No longer install atom.1 for RC_OS=teflon.
+- Updated the man pages to use Apple instead of NeXT.
+
+Changes for the 5.1 release (the cctools-247 release):
+- Added MKDIRS if code to the Makefile to build native on Rhapsody.
+- Changed the Makefile to use gnutar instead of tar because it works on Rhapsody
+  where tar does not.
+- Updated the dylibprof.1 man page to reflect the change of path of
+  profileServer to /usr/libexec .
+- Changed the local man path to /usr/local/man5.1 .
+
+Changes for the 5.0 release (the cctools-235 release):
+- Changed the Makefile to not install ar.1 and file.1 for teflon.
+
+Changes for the 5.0 release (the cctools-224 release):
+- Fixed the Makefile to include dyld.1.
+
+Changes for the 4.0 release (the cctools-167 release):
+- The following man pages were edited by Jean Ostrem and copied here:
+    cmpdylib.1 ld.1 lipo.1 strings.1 strip.1
+- The following man pages were edited by Terry Donoghue:
+    ar.1
+    as.1
+    atom.1
+    cmpshlib.l
+    file.1
+    libtool.1
+    mkshlib.l
+    nm.1
+    otool.1
+    rld.3
+    size.1
+  of those the following were changed and copied into here:
+    as.1
+    cmpshlib.l
+    libtool.1
+    mkshlib.l
+    otool.1

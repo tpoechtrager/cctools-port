@@ -1,0 +1,3106 @@
+To Do:
+- Add the -prebind_allow_overlap and  -prebind_all_two_level_modules to libtool
+  see Radar bug 3417137.
+- Change to Doug's approach to relayout, namely something like reserving the
+  last 10% of the load region for new dylibs and then evenly spacing the
+  existing dylibs in the other 90% (for split libs).  See email of 11/6/2000.
+- Have cmpdylib check Objc info Tracker bug #78124.
+- Fix a bug in strip on line 1105 where it uses missing_reloc_symbols when it
+  could have been set otherwise and does not print the next line.
+- Maybe add fat support for segedit(1)
+
+Changes for the 5.33 release (the cctools-839 release):
+- Changed the Makefile so that strip(1)'s use of <mach-o/prune_trie.h> and
+  libprunetrie.a so that it comes from DT_TOOLCHAIN_DIR.  Radar bug #12296255.
+
+Changes for the 5.32 release (the cctools-835 release):
+- Fixed a bug in strip(1) when the input was a .o file containg
+  LC_FUNCTION_STARTS load command. The code in get_starting_syminfo_offset() in
+  strip.c did not look for the load command which can be the start of the
+  symbolic offset in the file.  Radar bug #11913911.
+
+Changes for the 5.32 release (the cctools-833 release):
+- Changed strip(1) to always use ld -r on ARM .o files to rename thumb symbols
+  so they don't get stripped.  Radar bug #11795809.
+
+Changes for the 5.32 release (the cctools-830 release):
+- Fixed a bug in nmedit(1) when the input was a .o file containg a
+  LC_DATA_IN_CODE load command. The code in get_starting_syminfo_offset() in
+  strip.c did not look for the load command which can be the start of the
+  symbolic offset in the file.  Radar bug #11554503.
+- Fixed a bug in libtool(1) when run as ranlib(1) to not update the table of
+  contents if the input archive's table of content's member name is not using
+  the extended long name format and we create an table of contents with a 
+  extended long name format (or vice a versa).  Radar bug #10399314.
+
+Changes for the 5.31 release (the cctools-827 release):
+- Added #ifdef guards for LTO_SUPPORT in lipo.c . Radar bug #11296366.
+
+Changes for the 5.31 release (the cctools-825 release):
+- Fixed the full strip case with -no_uuid that was not stripping the LC_UUID
+  load command.  A call to strip_LC_UUID_commands() was added to strip_object()
+  in strip.c for the full strip case.  Radar bug #11136733.
+
+Changes for the 5.31 release (the cctools-824 release):
+- Removed the creation of the link to /usr/local/bin/nmedit from
+  $(DSTROOT)$(LOCBINDIR)/nmedit in the Makefile.  Radar bug #10688477.
+- Fixed a bunch of places in libtool(1) that was using 32-bit variables to hold
+  offsets and sizes.  Radar bug #10645295.
+
+Changes for the 5.30 release (the cctools-822 release):
+- The "low risk fix to strip(1)" below in cctools-821 for Radar bug #10718585
+  breaks striping .o files with dwarf debug info.  Because the input file has
+  an "ld -r" run on it so it is not the original input file.  That change has
+  been backed out.
+- The correct fix for strip(1) in dealing with code signed binaries is to
+  added up the sizes of the output and input parts in the right order.  So the
+  code in strip_object() has been updated to do this.  Radar bug #10709632.
+
+Changes for the 5.30 release (the cctools-821 release):
+- Made a low risk fix to strip(1) to fix bugs when stripping objects with
+  code signature data.  The problem is that the code in strip_object() that is
+  calculating object->input_sym_info_size is incorrect as it is not adding the
+  elements up in their order and rounding the size for elements that are aligned
+  like the code signature info. So as a low risk fix code was added in
+  dyld_order() in checkout.c in libstuff that records the size of the symbolic
+  information. Then in strip_object() it simply overwrites the previously
+  incorrectly calculated value for object->input_sym_info_size with that.
+  Radar bug #10718585.
+- Fixed a bug in codesign_allocate(1) that was incorrectly using the value of
+  sizeof(struct mach_header) for a 64-bit binary when testing if there was 
+  enough room to add the load command.  Radar bug #10652697.
+- Updated the code in pagestuff(1) to have parts for the dyld info and correctly
+  handle dylib stubs who's section contents do not appear in the binary.
+
+Changes for the 5.30 release (the cctools-820 release):
+- Removed the use of vers_string(1) from the Makefile. Radar bug #10596469.
+  - Updated libtool.c to print "Apple Inc." not "Apple Computer, Inc." and the
+    comment where apple_version[] comes from.
+  - Added a reference to apple_version[] in checksyms.c, cmpdylib.c, lipo.c,
+    size.c, strings.c, nm.c, redo_prebinding.c, seg_addr_table.c, check_dylib.c 
+    codesign_allocate.c, ctf_insert.c, seg_hack.c, install_name_tool.c, indr.c,
+    strip.c and pagestuff.c.
+
+Changes for the 5.30 release (the cctools-818 release):
+- Fixed strip(1) to account for the size of the function starts data when the
+  binary does not have a dynamic symbol table command.  It should have
+  conditionalized on having a dynamic symbol table command but just the load
+  command that has the data.  Radar bug #10506809.
+
+Changes for the 5.30 release (the cctools-816 release):
+- Changed ctf_insert(1) to allow a static binary with a dynamic symbol table
+  load command that has local relocation entries.  Radar bug #10405248.
+
+Changes for the 5.30 release (the cctools-815 release):
+- Added the os_tools_install target in the Makefile that only builds lipo(1)
+  and strings(1).  Radar bug #10391158.
+
+Changes for the 5.30 release (the cctools-814 release):
+- Changed strip(1) to use "ld -r" on 32-bit objects now that the blocking
+  bug in ld(1) is fixed.  Radar bug #7076828.
+- Added support for new load commands LC_MAIN, LC_DATA_IN_CODE,
+  LC_SOURCE_VERSION and LC_DYLIB_CODE_SIGN_DRS.
+  - Updated install_name_tool.c, pagestuff.c, redo_prebinding.c, strip.c,
+    codesign_allocate.c, ctf_insert.c, indr.c and inout.c .
+  Radar bug #10290817.
+- Fixed ctf_insert(1) to correctly handle the LC_FUNCTION_STARTS load command
+  and update it and move its data.  Radar bug #10171548.
+
+Changes for the 5.30 release (the cctools-811 release):
+- Changed the Makefile setting CXX to use c++ not g++.  Radar bug #10057952.
+
+Changes for the 5.30 release (the cctools-809 release):
+- Changed lipo(1) to determine the architecture of bitcode files, including
+  as archive members.  Radar bug #9087924.
+
+Changes for the 5.30 release (the cctools-808 release):
+- Fixed a bug in create_library() in the loop that adjusted the ranlib structs
+  ran_off was using the incorrect index value for:
+    archs[0].toc_ranlibs[i].ran_off = archs[0].members[i].input_member_offset;
+  which should have been:
+    archs[0].toc_ranlibs[i].ran_off = archs[0].members[j].input_member_offset;
+  Radar bug #9830754.
+
+Changes for the 5.29 release (the cctools-805 release):
+- Changed create_library() in libtool.c to check the new ofile bad_toc field
+  and cause it to create a new library when this happens.  Radar bug #9475790.
+
+Changes for the 5.29 release (the cctools-803 release):
+- Changed libtool.c when running as ranlib(1) to attempt to update the table
+  of contents in place for the common case for thin archives.  And removed the
+  the time stamp checking for the "nop" ranlib case, which now ends up with just
+  "touching" the file and adjusting the timestamps.  Radar bug #9354605.
+  - Factored out existing code into new routines get_target_byte_sex() and
+    put_toc_member().
+  - Changed process() and removed the time stamp checking for the "nop" ranlib
+    case.
+  - Added the input_member_offset field to the struct member and added code to
+    set its value in add_member().
+  - Changed create_library() to take an ofile which is non-NULL if run as
+    ranlib(1) and a thin archive.
+  - Added code in create_library() to update the table of contents in place.
+    And code to only "touch", write the SARMAG, if the table of contents is
+    the same.  This code has to use the input_member_offset in cases that the
+    thin input archive would not be same as produced by libtool(1) but still
+    has member offsets at acceptable alignments.
+
+Changes for the 5.29 release (the cctools-802 release):
+- Fixed a problem with the change to libtool(1) for Radar bug #9354501.  It was
+  not setting toc_uptodate to TRUE and was not doing this only when
+  cmd_flags.ranlib == TRUE.  Radar bug #9418154.
+
+Changes for the 5.29 release (the cctools-801 release):
+- Changed process() in libtool.c to check that the table of contents was up to
+  date based on the file's time stamp and the table of contents time stamp for
+  archive files.  Then if it ranlib(1) being run do nothing if it is up to date.
+  Radar bug #9354501.
+- Fixed a bug in the error handling of pagestuff(1) when used with the -arch
+  argument but missing an argument for which page.  Radar bug #8979851.
+
+Changes for the 5.29 release (the cctools-800.3 release):
+- Added support for armv7[fsk] to print_arch() in lipo.c .  Radar bug #8987684.
+
+Changes for the 5.28 release (the cctools-798 release):
+- Added this line to the Makefile:
+    CXX = $(shell xcrun -find -sdk $(SDKROOT) g++)
+  so that it uses the appropriate tool to link device-side code.  Radar bug
+  #8684965.
+
+Changes for the 5.28 release (the cctools-797 release):
+- Added support for LC_DYLD_ENVIRONMENT in segedit.c .  Radar bug #8653976.
+
+Changes for the 5.28 release (the cctools-796 release):
+- Added checks in strings(1) to better protect against crashes if it is handed
+  a malformed file.  Radar bug #8599283.
+- Added the -arch option to pagestuff(1).  Radar bug #8379048.
+
+Changes for the 5.28 release (the cctools-795 release):
+- Changed ctf_insert(1) to allow the LC_FUNCTION_STARTS load command.  The
+  change was in ctf_insert() in ctf_insert.c to remove the test for
+  object->func_starts_info_cmd != NULL .  Radar bug #8490836.
+
+Changes for the 5.28 release (the cctools-793 release):
+- Fixed a problem in nm(1) not checking that a symbol is not undefined before
+  checking that is a [symbol resolver] symbol.  Radar bug #8429570.
+
+Changes for the 5.28 release (the cctools-792 release):
+- Fixed more problems with incorrect support for LC_FUNCTION_STARTS.  There were
+  missing output_func_start_info_data and output_func_start_info_data_size
+  fields in the struct object that should have been used.  Updated the code in
+  codesign_allocate.c, indr.c, inout.c, install_name_tool.c, redo_prebinding.c
+  and strip.c which was incorrectly using output_split_info_data and
+  output_split_info_data_size two use the new fields.  Radar bug #8401082. 
+
+Changes for the 5.28 release (the cctools-790 release):
+- Fixed problems with the incorrect support for LC_FUNCTION_STARTS.  Radar bug
+  #8274584.
+  - Updated setup_code_signature() and setup_code_signature() in
+    codesign_allocate.c .
+  - Updated ctf_insert() in ctf_insert.c to treat objects with function starts
+    info as an error and not allowed for static binaries.
+  - Updated translate_dylib() in indr.c .
+  - Updated setup_object_symbolic_info() in inout.c .
+  - Updated setup_object_symbolic_info() and update_load_commands() in
+    install_name_tool.c .
+  - Updated build_new_symbol_table() in and update_load_commands() in
+    redo_prebinding.c .
+  - Updated strip_object(), strip_LC_UUID_commands() and
+    strip_LC_CODE_SIGNATURE_commands() in strip.c
+
+Changes for the 5.28 release (the cctools-787 release):
+- Changed libtool(1) and added testing the environment variable ZERO_AR_DATE to
+  set the ar date to zero to allow testing and comparing things for exact binary
+  equality.  Radar bug #7919021.
+- Changed lipo(1) to attempt to stop a crash if the file can't be paged in after
+  it has been successfully mapped.  Added a second fstat(2) call in 
+  process_input_file(1) just before the first bytes of the mapped file are
+  referenced, and then checked that it has the same size and mod time of the
+  first stat.  Radar bug #8087586.
+- Added support in nm(1) for symbols marked with N_SYMBOL_RESOLVER so that they
+  are printed with [symbol resolver].  This change is in print_mach_symbols()
+  in nm.c .  Radar bug #7901954.
+
+Changes for the 5.28 release (the cctools-784 release):
+- Fixed the -arch_only flag in libtool(1) for arm so that each subtype is
+  treated as separate architecture. Radar bug #7864127.
+
+Changes for the 5.28 release (the cctools-782 release):
+- Added the -U option to nm(1) to not print undefined symbols. Radar bug
+  #7761111.
+- Changed nm(1)'s -m printing to support 'weak symbol automatically hidden' in
+  print_mach_symbols() in nm.c.  Radar bug #5021217.
+
+Changes for the 5.28 release (the cctools-781 release):
+- Changed codesign_allocate(1) to allow it to be used on any Mach-O file.
+  Radar bug #7689781.
+- Added the program ctf_insert(1) to add a (__CTF,__ctf) section to a statically
+  linked Mach-O file.  Radar bug #7016839.
+- Added support for LC_LOAD_UPWARD_DYLIB in update_load_commands() in
+  install_name_tool.c, in nm() in nm.c and in replace_sections() in segedit.c .
+  Radar bug #7659206.
+
+Changes for the 5.28 release (the cctools-780 release):
+- Changed trunc() to trnc() in libtool.c and removed -fno-builtin-trunc from the
+  Makefile.
+- Improved the error checking in the redo_prebinding code so that
+  contents_pointer_for_vmaddr() checks to make sure the pointer is not in the
+  object's headers or link edit information.  Radar bug #6081358.
+
+Changes for the 5.28 release (the cctools-779 release):
+- Fixed bugs in install_name_tool.c in parsing -change and -rpath. Radar bug
+  #7477104.
+
+Changes for the 5.28 release (the cctools-777 release):
+- Changed round() to rnd() and stuff/round.h to stuff/rnd.h in all files and
+  removed -fno-builtin-round from the Makefile.  Radar bug #7475139.
+- Changed the Makefile to use -Os for OFLAG.  Radar bug #7475093.
+- Change contents_pointer_for_vmaddr() in redo_prebinding.c to ignore segments
+  with a zero vmaddr since these are unmapped segments.  Radar bug #7467115.
+
+Changes for the 5.28 release (the cctools-776 release):
+- Improved the error checking in the redo_prebinding code so that
+  contents_pointer_for_vmaddr() checks to make sure the pointer is in the
+  section's contents of the segment.  Checks also added to libstuff's
+  check_Mach_O() in ofile.c to make sure that sections are contained in
+  their segments.  Radar bug #6081358.
+
+Changes for the 5.27 release (the cctools-773 release):
+- Fixed a typo in two lipo(1) error messages where "it's" should have been
+  "its".  Radar bug 7362293.
+
+Changes for the 5.27 release (the cctools-772 release):
+- Fixed a bug in lipo(1) with the -extract option in main() in the loop that
+  was removing those thin files not marked for extraction where the inner loop
+  was looping once to many times.  Radar bug #7255585.
+
+Changes for the 5.27 release (the cctools-768 release):
+- Fixed a bug in checksyms() that was not verifying read-only-relocs in 64-bit
+  binaries.  The routine check_dynamic_binary() had a typo where LC_SEGMENT
+  should have been LC_SEGMENT_64.  Also changed checksyms() to not call
+  check_dynamic_binary() if the filetype is MH_KEXT_BUNDLE.  Radar bug #7236271.
+
+Changes for the 5.27 release (the cctools-762 release):
+- Changed the Makefile to set CC when when SDKROOT is set.  Radar bug #7078805.
+
+Changes for the 5.27 release (the cctools-760 release):
+- Changed the lipo(1) so the the armv7 stuff is a no longer
+  #ifndef __OPEN_SOURCE__ Radar bug #7016121.
+
+Changes for the 5.27 release (the cctools-759 release):
+- Changed check_dynamic_binary() in checksyms.c to allow read-only relocs in
+  CPU_TYPE_ARM files in any segment with a section name of "__symbol_stub" or
+  "__stub_helper" or section type of S_SYMBOL_STUBS.  Radar bug #6958263.
+- Changed the Makefile to add -isysroot $(SDKROOT) to compile and link lines
+  when SDKROOT is set.  Radar bug #6965029.
+
+Changes for the 5.27 release (the cctools-757 release):
+- Fixed problems with pagestuff.c that caused it to crash when run on 64-bit
+  Mach-O files. Radar bug #6871695.
+
+Changes for the 5.27 release (the cctools-756 release):
+- Changed libtool.c, redo_prebinding.c and strip.c to prefix the commands they
+  run with the path to the executable.  Radar bug #6821441.
+
+Changes for the 5.27 release (the cctools-753 release):
+- Fixed a warning about 'inew_nextdefsym' defined but not used by adding an
+  #if defined(TRIE_SUPPORT) && !defined(NMEDIT) around the definition and
+  #ifdef TRIE_SUPPORT around the use.
+
+Changes for the 5.27 release (the cctools-752 release):
+- Ported to build with clang.
+  - Changed Makefile to work around bugs 6761248, 6765807 and 6756912.
+  - Fixed two if() statements at the edit_symtab() in strip.c that incorrectly
+    had ';' after them.
+  - Fixed warnings about extra tokens at end of #endif directive in lipo.c
+    by putting them in a comment.
+
+Changes for the 5.27 release (the cctools-751 release):
+- Fixed a typo in the usage message of install_name_tool(1) where it was using
+  -rpaths that should have been -rpath.  Radar bug #6707169.
+
+Changes for the 5.26 release (the cctools-750 release):
+- Fixed problems with libtool(1) if it is run on an archive with llvm bit code
+  files. Radar bug #6654890.
+- Changed nm(1) to print information from llvm bit code files.  Radar bug
+  #6067110.
+- Changed strip(1) to produce an error when attempted to be run on an MH_DSYM
+  file.  Radar bug #6569909.
+- Added the -rpath, -add_rpath and -delete_rpath options to install_name_tool(1)
+  to change, and and delete the paths in LC_RPATH load commands.  Radar bug
+  #5684850.
+- Changed install_name_tool(1)'s error message when the program needs to be
+  relinked to suggest the use of -headerpad or -headerpad_max_install_names .
+  Rdar bug #6632968.
+
+Changes for the 5.26 release (the cctools-748 release):
+- Fixed a problem in codesign_allocate(1) where it could produce a value for
+  the filesize field of the LC_SEGMENT_64 for the __LINKEDIT segment that was
+  too large.  The problem was in setup_code_signature() in codesign_allocate.c
+  where it was using and expression of "X += Y - Z" where X was a 64 bit
+  unsigned value and Y and Z were 32 bit unsigned values and Z was greater than
+  Y. This casued the expressing become a large positive number rather than a
+  small negative number.  The fix was to simply change it to two statements,
+  X += Y and X -= Z;  Radar bug #6591303.
+- Fixed a problem in segedit(1) that caused it to crash when replacing a section
+  in a 64-bit Mach-O file.  The routne replace_sections() in segedit.c was
+  incorrectly using mhp->ncmds in two place when it should have been using
+  mh_ncmds .
+
+Changes for the 5.26 release (the cctools-743 release):
+- Fixed the handling of LC_REEXPORT_DYLIB in redo_prebinding.c so that libraries
+  with this load command are treated as sub images.  The change was in
+  setup_sub_images() to add a two case lables for LC_REEXPORT_DYLIB and the
+  code to match up the dylib_name in the dependents list and add them to the
+  sub_images if not already there.  Radar bug #6555215.
+
+Changes for the 5.26 release (the cctools-738 release):
+- Removed the code and files for the old ProjectBuilder interface including the
+  use of mig(1) in the Makefile.  The files make.defs make_defs.h were removed
+  and the code in libtool.c had the code with these old interfaces removed.
+  Radar bug #6457206.
+
+Changes for the 5.26 release (the cctools-735 release):
+- Changed strip(1) so it only calls prune_trie() when we are removing global
+  symbols as is done with default stripping of a dyld executable or with the
+  -s or -R options.  Radar bug #6476423.
+
+Changes for the 5.26 release (the cctools-734 release):
+- Fixed a problem in strip_LC_UUID_commands() routine that was not updating the
+  object->dyld_info pointer.  Radar bug #6478235.
+
+Changes for the 5.26 release (the cctools-733 release):
+- Added support in strip(1) to update the exports in the compressed LINKEDIT
+  information (trie data structure) when stripping a file that contains the
+  info.  Radar bug #6257854.
+
+Changes for the 5.26 release (the cctools-725 release):
+- Added support for new compressed LINKEDIT information. Radar bug #6232822.
+  - Changed strip(1), codesign_allocate(1) and install_name_tool(1) to copy
+    dyld_info in the input to the output.
+- Changed check_dynamic_binary() in checksyms.c to allow read-only relocs in
+  CPU_TYPE_I386 files in any segment with a section name of "__symbol_stub" or
+  "__stub_helper".
+
+Changes for the 5.26 release (the cctools-714 release):
+- Changed lipo(1) to handle zero sized regular files specially since mmap(2)
+  will not.  Radar bug #6169510.
+- Changed libtool(1) to create separate fat archs for all ARM cpusubtypes. The
+  Changes were in add_member() two places.  One for matching the existing
+  archs[] and one for adding a new archs[].  Radar bug #6155212.
+
+Changes for the 5.26 release (the cctools-713 release):
+- Changed lipo(1) so when the call to mmap() fails in process_input_file() it
+  now calls system_fatal().  Radar bug #6147708.
+
+Changes for the 5.26 release (the cctools-712 release):
+- Fixed a bug in codesign_allocate(1) if is used on a fat file with 
+  LC_CODE_SIGNATURE load commands and not all fat archs are specified with the
+  -a options.  The bug was in setup_code_signature() where when it did not find
+  a matching -a option it attempted to adjust the object->input_sym_info_size
+  which already had been done.  Radar bug #6128288.
+
+Changes for the 5.26 release (the cctools-710 release):
+- Fixed lipo(1)'s -i option to know about armv7. Radar bug 4545225.
+
+Changes for the 5.26 release (the cctools-709 release):
+- Added support for CPU_SUBTYPE_ARM_ALL to lipo -info command. Radar bug 6025863
+- Fixed a bug in libtool(1)'s producing a table of contents for LTO.  The loop
+  to size the table of contents was using the same outer loop variable in
+  make_table_of_contents().  Radar bug #6064634.
+
+Changes for the 5.26 release (the cctools-708 release):
+- Changed libtool(1) to use use the ar long string format for the __.SYMDEF
+  table of contents member so it will produce archive member offsets after
+  that that are 8 byte aligned.
+- Changed strip(1) to not produce an empty string table (but still include the
+  pad) for 64-bit objects to work around Radar bug 6048484.
+
+Changes for the 5.26 release (the cctools-707 release):
+- Fixed a bug it the change to strip(1) to always run ld -r on 64-bit
+  MH_OBJECT files.  The second place where it was calling make_ld_r_object() was
+  missing a test for object->mh_filetype == MH_OBJECT.
+
+Changes for the 5.26 release (the cctools-706 release):
+- Fixed a bug in checksyms(1) that an MH_DYLIB_STUB filetype would incorrectly
+  get a "malformed dynamic library (no LC_ID_DYLIB command)" error.  Radar bug
+  #6035486.
+- Changed strip(1) to always run ld -r on 64-bit MH_OBJECT files and then
+  always keep all the resulting symbols.  This still has problems because
+  the unified linker does not strip symbols not in its -exported_symbols_list
+  file. Radar bug #5829662.
+- Fixed a bug in codesign_allocate(1) for 64-bit objects it did not correctly
+  extend the __LINKEDIT segment.  Radar bug #6000731.
+
+Changes for the 5.26 release (the cctools-705 release):
+- Removed the old ar.c, file.c, atom.c, check_hints.c, dylib_pcsampler.c,
+  kern_tool.c and main.c sources and references to them in the Makefile.
+- Added the private -l flag to strip(1) to do the "ld -r" even with the known
+  bugs in the unified linker.
+- Ported checksyms(1) and segedit(1) to work with 64-bit binaries.
+- Ported all programs to run on 64-bit hosts.  Radar bug #6022298.
+  - Changed the unsigned long type of nremove_symbols and nsave_symbols in
+    strip.c to a uint32_t .   And narchs in strip_file(), ld_r_narchs in
+    make_ld_r_object.
+  - Changed the unsigned long type of narchs in main() in indr.c to a uint32_t .
+  - Changed the unsigned long type of table_size in main() in checksyms.c to a
+    uint32_t .
+  - Changed the unsigned long type of temp in main() in libtool.c to a
+    uint32_t .
+  - Changed seg_addr_table.c use of unsigned long types to uint32_t types and
+    its use of long types to int32_t types.  And changed %lu format strings to
+    %u.
+
+Changes for the 5.26 release (the cctools-704 release):
+- Changed redo_prebinding(1) so the zeroing out the UUID and the code signature
+  data only happens with -u.  Radar bug #5984993.
+
+Changes for the 5.26 release (the cctools-703 release):
+- Ported libtool(1) to build as a 64-bit program.  Radar bug #5780008.
+  - Changed two places that used SWAP_LONG to SWAP_INT.
+  - Changed so the table of contents in now built with a new toc struct and
+    tocs field in the arch struct.  And the toc_ranlibs field is now only used
+    for writing to the file.
+  - Changed all uses of unsigned long to uint32_t and updated printf format
+    characters as needed.
+  - Also changed to use mmap() instead of map_fd().
+
+Changes for the 5.26 release (the cctools-702 release):
+- Changed checksyms(1) to allow the local symbol created by strip(1) for the
+  fix to 5614542.  The fix was in checksyms() in checksyms.c to test for the
+  symbol name "radr://5614542" and not count that as a local symbol or stab.
+  Radar bug #5938033.
+
+Changes for the 5.26 release (the cctools-701 release):
+- Fixed a bug in install_name_tool(1) that was crashing when trying to print
+  an error as it did not test for which mach header to use.  The fix was in
+  update_load_commands() to add a test of the 32-bit mach header pointer and if
+  NULL use the 64-bit mach header pointer. Radar bug 5932327.
+- Changed the needs_redo_prebinding() API to use the allow_missing_architecture
+  parameter so the check only applys to the slice requested isn't prebound.
+  The change was in process_archs() in redo_prebinding.c to test the
+  cputype of the file being processed against arch_cant_be_missing and if not
+  the same just continue.  Radar bug #4701556.
+- Changed strip(1) to avoid creating a file with an indirect symbol table entry
+  with an index of zero into the symbol table.  This is due to a work around in
+  the dynamic linker for a bug it is working around that was in the old classic 
+  static linker.  The change was in strip_symtab() in strip.c add a local symbol
+  if there are no local symbols and there are indirect symbols.  Radar bug
+  #5614542.
+
+Changes for the 5.26 release (the cctools-700 release):
+- Removed the #include <objc/zone.h> from redo_prebinding.c. Radar bug #5911680.
+- Changed redo_prebinding(1) -u to zero out the UUID and the code signature
+  data.  Radar bug #5631467.
+- Rewrote the -arch_blank implementation in lipo(1) so it handles all known
+  arch flags. Radar bug #5547634.
+
+Changes for the 5.26 release (the cctools-699 release):
+- Backed out the changes for radar bug #3751608 which added code to
+  redo_prebinding.c which sets a default value for __dyld section contents.
+  Radar bug #5902653.
+- Changed codesign_allocate(1) work with MH_OBJECT file types. Radar bug
+  #5545465.
+  - Changed setup_code_signature():
+    - Changed the check for the flags having MH_DYLDLINK to also allow a
+      file type of MH_OBJECT and updated the error message for that check.
+    - Added a check for MH_OBJECT and in that case used the object file size
+      for the "link edit end" to be used for the code sign data offset.
+    - Changed two places where to check for object->seg_linkedit64 != NULL is
+      now needed because the code can't assume the object has a link edit
+      segment.
+  - Also fixed a warning in main() where it needed a cast to (char *) for the
+    assignment of the value returned by get_arch_name_from_types().
+
+Changes for the 5.25 release (the cctools-698 release):
+- Added support for LLVM bitcode files to libtool(1).  Radar bug #5712460.
+  It was added undef the ifdef LTO_SUPPORT and can be disabled by setting the
+  LTO Makefile macro to nothing instead of its default -DLTO_SUPPORT .
+  - Changed the Makefile and added the LTO macro defined to -DLTO_SUPPORT to
+    enable LLVM bitcode file support.
+  - Added support for LLVM bitcode files to libtool.c :
+    - Added the lto field to the member struct.
+    - Changed process():
+      - To check the ofile->lto field for archives and if not NULL also call
+        add_member().
+      - Added a check for the ofile's file_type being OFILE_LLVM_BITCODE and so
+	call add_member().  Added error if the program is ranlib(1).
+    - Changed add_member():
+      - to set the size of OFILE_LLVM_BITCODE files.
+      - added checks when ofile->lto is not NULL and when -arch_only is
+        specified and the arch does not match to return
+      - added code when ofile->lto is not NULL and to select the matching
+        archs[] if any.
+      - added code when ofile->lto is not NULL to set the archs[].arch_flag of
+	a newly allocated archs[]
+      - added code when ofile->lto is not NULL to set the arch->arch_flag of
+	and existing arch if not set.
+      - added code when file->file_type is OFILE_LLVM_BITCODE to set the
+	member fields.
+      - added code when ofile->lto is not NULL to copy the lto field to the
+	member struct and set the object_byte_sex field.
+    - Changed make_table_of_contents():
+      - Added code when member->lto != NULL to count the toc symbols from
+	the lto module then add them to the table of contents.
+
+Changes for the 5.25 release (the cctools-694 release):
+- Fixed a bug in strip(1) where it was crashing when stripping an MH_PRELOAD
+  filetype because the code is dereferencing a pointer to the dynamic symbol
+  table in get_starting_syminfo_offset() in strip.c.  The fix was to test
+  object->dyst for not being NULL before using it.  Radar bug #5834516.
+
+Changes for the 5.25 release (the cctools-692 release):
+- Updated strip(1) to support binaries that use lazy dylibs. Radar bug #5828589.
+
+Changes for the 5.25 release (the cctools-688 release):
+- Maded changes for the new LC_LAZY_LOAD_DYLIB load command. Radar bug #5760930.
+  - Added case labels for LC_LAZY_LOAD_DYLIB in update_load_commands() in
+    install_name_tool.c in two places.
+  - Added testing for LC_LAZY_LOAD_DYLIB in lc->cmd in two places in nm() in
+    nm.c .
+
+Changes for the 5.25 release (the cctools-681 release):
+- Removed all __OPEN_SOURCE__ references in Makefile, notes, lipo.c, nm.c,
+  redo_prebinding.c and strip.c .
+- Added the -A option to codesign_allocate(1) to accept numeric architecture
+  specifications.  Radar bug #5681427.
+- Changed codesign_allocate to be a member of com.apple.tool.codesign_allocate .
+  This is done by adding the new Info.plist file into the binary as part of the
+  (__TEXT,__info_plist) section with a -sectcreate option on the link line
+  in the Makefile.  Radar bug #5681503.
+
+Changes for the 5.25 release (the cctools-679.1 release):
+- Because of the bugs in ld(1), 5675774 and 5658046, the change to strip 
+  dwarf for 5343015 has to be backed out.  The change is to simply #ifdef
+  NOTDEF the test of has_dwarf and the call to make_ld_r_object() in
+  strip_symtab().  Radar bug #5660086.
+
+Changes for the 5.25 release (the cctools-679 release):
+- Fixed a problem with the change made for Radar bug #5008421 where it would
+  crash if doing a full strip on a file without a dynamic symbol table.
+  The new code in strip_object() to account for the input symbolic info
+  size needed to test that the dynamic symbol table pointer load command was
+  not NULL.  Radar bug #5588769.
+
+Changes for the 5.25 release (the cctools-677 release):
+- Changed the Makefile to not use -Wno-long-double and -no-cpp-precomp .
+  Radar bug #5563553.
+
+Changes for the 5.25 release (the cctools-676 release):
+- Changed it so ranlib(1) would not overwrite a file that is not writable when
+  running in UNIX standard conformance mode (the default).  The change was to
+  libtool.c in create_library() to add a check before it calls unlink(2).
+  Radar bug #4242330.
+- Added -fno-builtin-trunc to the Makefile to removed a warning when compiling
+  libtool.c .
+- Fixed a problem in lipo(1)'s -extract_family when used on a fat file with
+  multiple cpusubtypes.  The fix was in an if() statement in create_fat() at the
+  end where the if() before the seek() needed to also check nthin_files > 1 or
+  extract_family_flag == FALSE.  Radar bug #4695968.
+- Fixed the spelling of 'malformed' in redo_prebinding error messages.
+  Radar bug #5188349.
+
+Changes for the 5.25 release (the cctools-675 release):
+- Fixed strip(1) to correctly do a full symbol strip and set the offsets to the
+  indirect symbol table and local relocation enties.  The changes were to factor
+  out finding the starting offset of the symbolic info from strip_object() into
+  a new routine get_starting_syminfo_offset() and fixed the code in
+  strip_object() for the full symbol strip case to correctly account for the
+  symbolic info size and set the output offset to the local relocation enties
+  and indirect symbol table.  Radar bug #5008421.
+- Changed strip(1) to strip DWARF debugging info from object files.  Radar bug
+  #5343015.
+  - Added a new routine make_ld_r_object() that is passed the info for the
+    current object file, writes that to a temporary file, runs "ld -r" plus the
+    specified stripping option creating a second temporary file, reads that file
+    in and replaces the object file contents with that and resets the variables
+    pointing to the symbol, string and indirect tables.  The new ld_r_ofile
+    field in the struct object from "stuff/breakout.h" is set in
+    make_ld_r_object() so later free_archs() can call ofile_unmap() on it.
+  - Changed strip_symtab() to see if the current object is an MH_OBJECT filetype
+    and -S or -x is specified and the object has DWARF debugging sections to
+    strip and if so calls the new routine make_ld_r_object().
+  - Moved the local variables from strip_object for the symbol, string and
+    indirect tables to file level statics so that the can be reset by the new
+    routine make_ld_r_object().  And removed them as parameters to
+    strip_symtab().
+  - Changed the call to breakout() in strip_file() to save its ofile struct
+    pointer return value so ofile_unmap() can later be called to clean up the
+    space for the mapped object.
+- Changed redo_prebinding to not put LC_PREBOUND_DYLIB commands in prebound
+  images if MACOSX_DEPLOYMENT_TARGET is 10.4 or later.  The change was in
+  update_load_commands() in redo_prebinding.c to test that if it is not
+  not unprebinding and the target greater than 10.4 it returns before finishing
+  up and updateing the LC_PREBOUND_DYLIB commands.
+
+Changes for the 5.25 release (the cctools-673 release):
+- Changed the sources so the arm stuff is not in the open source version.
+  Radar bug #5326431.
+  - Changed the Makefile to build with -D__OPEN_SOURCE__ with $(OPEN)
+  - Added #ifndef __OPEN_SOURCE__ to the following files to bracket arm code:
+    lipo.c, nm.c, redo_prebinding.c and strip.c
+
+Changes for the 5.25 release (the cctools-667.3 release):
+- Changed codesign_allocate(1) to never update the LC_ID_DYLIB timestamp.
+  The change is in process() in codesign_allocate.c to set the
+  dont_update_LC_ID_DYLIB_timestamp field in the arch struct to TRUE.
+  Radar bug #5374218.
+
+Changes for the 5.25 release (the cctools-667 release):
+- Fixed two problems with the change below to strip(1) for Radar bug #5207629.
+  - The new routine strip_LC_CODE_SIGNATURE_commands() should have tested the
+    object's mh field to know which of seg_linkedit or seg_linkedit64 to use
+    to reset the fileoff.
+  - The object's output_code_sig_data field should not have been set when the
+    cflags was specified.
+
+Changes for the 5.25 release (the cctools-666 release):
+- Changed strip(1) with the -c option to always remove any LC_CODE_SIGNATURE
+  load command and signature data from the output.  The new routine
+  strip_LC_CODE_SIGNATURE_commands() was added and it is called just after
+  accounting for the signature data size in the input file and not accounting
+  for it in the output file when the -c flag is specified.  Radar bug #5207629.
+
+Changes for the 5.25 release (the cctools-664 release):
+- Fixed a problem with the changes below to libtool(1) for Radar bug #5132019.
+  When used in ranlib(1) on more than one file it would get an internal error
+  in final_output_flush() on the second file as the last block from the first
+  file was not cleared from the list.  The fix was to set output_blocks to NULL.
+  Radar bug #5169741.
+
+Changes for the 5.25 release (the cctools-663 release):
+- Changed the code in checksyms.c, seg_addr_table.c and redo_prebinding.c for
+  the new get_macosx_deployment_target() interface.  Radar bug #5132019.
+- Changed libtool(1) to make it not make the machine unresponsive when building
+  large static libraries.  Radar bug #5052598.
+  1) Added the output_flush() and supporting code from ld_classic(1) and
+     modified create_library() to use it.
+  2) Added a call to fcntl() with the flag F_NOCACHE on the output file.
+  3) Added a call to vm_msync() with the flag VM_SYNC_DEACTIVATE on the
+     input object file's memory after copying to output buffer.
+
+Changes for the 5.24 release (the cctools-661 release):
+- Changed strip(1) to change LC_ID_DYLIB timestamp in unprebound dylibs.
+  The change was in strip_object() in strip.c . Radar bug #5093170.
+
+Changes for the 5.24 release (the cctools-656 release):
+- Fixed codesign_allocate(l) as it was not updated to deal with 64-bit Mach-O
+  files that may or may not have padding after the indirect symbol table.  This
+  was the same change that was made to strip in Radar bug #4759112 but that
+  same change did not make it into codesign_allocate(1).  The approach that is
+  used is to use the input_indirectsym_pad field in the object struct as the
+  amount to pad in the output file instead of trying to round the offset.
+  Radar bug #5047066.
+
+Changes for the 5.24 release (the cctools-655 release)
+- Fixed a bug in strip(1) with the -no_uuid option when it is used on a file
+  that has a LC_SEGMENT_SPLIT_INFO load command.  In the routine
+  strip_LC_UUID_commands() it was not resetting the pointer to the
+  split_info_cmd.  Radar bug #5033393.
+
+Changes for the 5.24 release (the cctools-654 release)
+- Changed libtool(1) to prepend the value of -syslibroot to all absolute paths
+  of the -L flags if they exist in main() in libtool.c.  Radar bug #5029099.
+
+Changes for the 5.24 release (the cctools-653 release):
+- Updated install_name_tool(1), nm(1), redo_prebinding(1) and segedit(1) to
+  handle the LC_REEXPORT_DYLIB load command.  Radar bug #4986624.
+
+Changes for the 5.24 release (the cctools-648 release):
+- Changed the check in lipo(1) for the nfat_arch being too large so the check
+  does not overflow and later cause a crash.  Radar bug #4860769.
+
+Changes for the 5.24 release (the cctools-647 release):
+- Changed codesign_allocate.c to use CPU_SUBTYPE_MASK to mask out the capability
+  bits from the cpusubtype on comparisons. Radar bug #4849153.
+
+Changes for the 5.24 release (the cctools-644 release):
+- Fixed problems with the error handling code of the libredo_prebinding API.
+  The local varaibles used in the error handling needed to be declared volatile
+  so that there were not trashed by the longjmp().  The ofile variable was
+  getting set to NULL so the call to ofile_unmap() was not getting done and
+  leaking memory (which in turn caused the file descriptor to not actually get
+  closed leaking a file descriptor as well).  Radar bug #4800981.
+- Changed lipo(1) adding code for the CPU_SUBTYPE_VEO_3 and CPU_SUBTYPE_VEO_4
+  cpusubtypes.  Radar bug #4799550.
+
+Changes for the 5.24 release (the cctools-643 release):
+- Changed strip(1) so strip -X on an x86_64 .o file should do nothing.
+  The change was in strip_symtab() for local symbols to check if the file is
+  CPU_TYPE_X86_64 and the -X flag is used and if so keep all the local symbols.
+  Radar bug #4800628.
+- Ported cmpdylib(1) to work with 64-bit Mach-O dylibs including ones without
+  a table of contents.  Radar bug #4040804.
+
+Changes for the 5.24 release (the cctools-642 release):
+- Changed needs_redo_prebinding() in redo_prebinding.c to return NOT_PREBOUND
+  instead of PREBINDING_UPTODATE when the Mach-O file only contains 64-bit
+  Mach-O files.  A new boolean variable, seen_a_non_64_bit, was added and
+  initialized to FALSE.  Then in process_arch() if a 32-bit Mach-O is seen it
+  set to true.  Then in needs_redo_prebinding() if PREBINDING_UPTODATE would
+  have been returned and seen_a_non_64_bit is FALSE, NOT_PREBOUND is returned
+  instead.  Radar bug #4788385.
+- Fixed a problem with unprebind(3) in libredo_prebinding.a where it was calling
+  update_external_relocs() even when the binary was marked with MH_CANONICAL.
+  Radar bug #4786099.
+
+Changes for the 5.24 release (the cctools-640 release):
+- Changed lipo.c, strip.c, libtool.c, and indr.c to use CPU_SUBTYPE_MASK to
+  mask out the capability bits from the cpusubtype on comparisons. Radar bug
+  #4754462.
+
+Changes for the 5.24 release (the cctools-639 release):
+- Changed how strip(1) deals with 64-bit Mach-O files that may or may not have
+  padding after the indirect symbol table. The approach now is to use the
+  input_indirectsym_pad field in the object struct as the amount to pad in the
+  output file instead of trying to round the offset.  Radar bug #4759112.
+
+Changes for the 5.24 release (the cctools-637 release):
+- Changed strip(1), inout(1), and codesign_allocate(1) to deal with the 64-bit
+  Mach-O files that may or may not have padding after the indirect symbol table.
+  The change was to use the new input_indirectsym_pad field instead of always
+  rounding the size of the input indirect symbol table to 8 bytes.  And then
+  adjust the output_sym_info_size and everything else to deal with padding the
+  indirect symbol table on output if needed.  Radar bug #4747408.
+
+Changes for the 5.24 release (the cctools-637 release):
+- Changed strip(1), inout(1), codesign_allocate(1), and redo_prebinding(3) to
+  deal with 64-bit Mach-O files with an odd number of indirect symbol table
+  entries.  The code was changed to round the size or offset as needed in a
+  number of places.  Radar bug #4737991.
+- Fixed a bug in strip(1) when creating a shared library stub and not saving
+  all the symbols used by the indirect symbol table entries.  In
+  check_indirect_symtab() in symbols.c it was trying to update the non-lazy
+  symbol pointers to the value of the symbol causing a memory smasher.  This
+  happened because the offset to the section was set to 0 since its contents
+  are to be stripped.  This casused the pointer to the contents to point to the
+  beginning of the object file.  The fix is to not update the contents if we
+  are creating a shared library stub since it is to be stripped.  Radar bug
+  #4742051.
+- Changed strip(1) to deal with N_SECT symbols with the N_WEAK_DEF the same for
+  both 32-bit and 64-bit Mach-O files.  The change was to remove a test of 
+  object->mh64 != NULL in strip_symtab() in strip.c.  Radar bug #4732639.
+- Fixed libtool(1) to check n_sect values of N_SECT symbols and issue an error
+  if they are NO_SECT or out of range.  Radar bug #4739572.
+- Added the printing of the alignment of common symbols to nm(1) when the -m
+  option is used.  Radar bug #4597166.
+
+Changes for the 5.24 release (the cctools-635 release):
+- Added the -verify_arch <arch_type> ... option to lipo(1).  Radar bug #4496521.
+- Changed strings(1) so that if it is used with a filename with parenthesis in
+  the name it first checks to see if there's a filename that's an exact match.
+  And if so it uses that, otherwise falls back to the member syntax.  The change
+  was in main() in strings.c to stat(2) argv[i] and set a new boolean
+  use_member_syntax when calling ofile_process().  Radar bug #4172811.
+
+Changes for the 5.24 release (the cctools-634 release):
+- Updated programs to handle the LC_SEGMENT_SPLIT_INFO command and its block of
+  data. Radar bug #4695477.
+  - Updated pagestuff(1) to include a new Mach-O part, MP_SPLIT_INFO, and the
+    code and do the needed printing.  Also updated it to deal with code
+    signature data.
+  - Updated the inout.c to work with objects with split info data.  Also fixed
+    it to work with code signature data and fixed a cast for the indirect
+    symbol table now needing to be a uint32_t *.
+  - Updated codesign_allocate(1) to work with objects with split info data.
+  - Changed strip_object() in strip.c to set the output_split_info_data and
+    output_split_info_data_size fields and account for the size of the split
+    info data in the object's input_sym_info_size and output_sym_info_size
+    fields.  Also set the data offset of the split info command for output.
+  - Changed build_new_symbol_table() in redo_prebinding.c to account for the
+    size of the split info data in its local variable sym_info_size and
+    set output_split_info_data and output_split_info_data_size fields.  And
+    changed update_load_commands() in redo_prebinding.c to update the pointer
+    to the split info load command.
+  - Changed translate_dylib() in indr.c to account for the size of the split
+    info data, and to reset the offset to it at the end of the routine.  Also
+    changed the code to use the mh_cputype, mh_cpusubtype and mh_filetype
+    fields of the object struct.
+  - Changed setup_object_symbolic_info() in install_name_tool.c to account for
+    the size of the split info data.  And changed update_load_commands() in
+    install_name_tool.c to update the pointer to the split info load command.
+    Also fixed update_load_commands() and added the missing break statements.
+  - Fixed inout.c, strip.c, redo_prebinding.c, indr.c and install_name_tool.c
+    to set the output_code_sig_data and output_code_sig_data_size fields.
+
+Changes for the 5.24 release (the cctools-633 release):
+- Ported the code for libredo_prebinding.a in redo_prebinding.c to be compiled
+  for 64-bit hosts.  Note that the code only has been changed to work on 64-bit
+  hosts and the operation on 64-bit binaries is unchanged (which is they are
+  left untouched).  Radar bug #4407440.
+  - Changed the macro U_ABS to use int32_t and uint32_t types.
+  - Changed get_arch_long() and set_arch_long() to use int32_t and uint32_t
+    types and SWAP_INT().
+  - Changed the types of the static variables new_dylib_address and
+    old_dylib_address to uint32_t.
+  - Changed strip.c, indr.c and codesign_allocate.c to deal with the change of
+    type for indirect symbols to uint32_t * when ported to 64-bit.
+- Fixed a typo in seg_addr_table.c .  Radar bug #4677855.
+
+Changes for the 5.24 release (the cctools-631 release):
+- Changed libtool(1) to only execute ld(1) and execute ld64(1) based on the
+  -arch flag.  The change was to create_dynamic_shared_library() in libtool.c
+  Radar bug #4682470.
+
+Changes for the 5.24 release (the cctools-629 release):
+- Fixed a bug in the codesign_allocate(1) tool that was not updating the vmsize
+  of the __LINKEDIT segment.  The fix was in setup_code_signature() in
+  codesign_allocate.c . Radar bug #4666308.
+- Changed strip(1) so strip -R on an x86_64 .o file should do nothing.
+  The change was in strip_symtab() after checking the Rflag to check if the
+  file is CPU_TYPE_X86_64 and if so don't remove the symbols in the
+  remove_symbols list.  Then at the end of the routine the check to missing
+  symbols in the remove_symbols is not done if the file is CPU_TYPE_X86_64.
+  Radar bug #4568747.
+
+Changes for the 5.24 release (the cctools-628 release):
+- Changed strip_object() in strip.c to not do anything to stub dylibs which have
+  no load commands.  Radar bug #4511628.
+
+Changes for the 5.24 release (the cctools-626 release):
+- Made changes to support code signature data in Mach-O files.  Radar bug
+  #4588023.
+  - Updated the inout.c example tool to work with 64-bit object files and
+    objects with code signature data.
+  - Created the codesign_allocate(1) tool and updated the Makefile to build and
+    install it.
+  - Changed strip_object() in strip.c to set account for the size of the code
+    signature data in the object's input_sym_info_size and output_sym_info_size
+    fields.  And update the data offset of the code signature data.  And at the
+    end of the routine a warning is printed if the object has a code signature
+    saying the operation will invalidate it.
+  - Changed build_new_symbol_table() in redo_prebinding.c to account for the
+    size of the code signature data in its local variable sym_info_size.  And
+    changed update_load_commands() in redo_prebinding.c to update the pointer
+    to the code signature load command.
+  - Changed translate_dylib() in indr.c to account for the size of the code
+    signature data, and to reset the offset to it at the end of the routine.
+  - Changed setup_object_symbolic_info() in install_name_tool.c to account for
+    the size of the code signature data.  And changed update_load_commands() in
+    install_name_tool.c to update the pointer  to the code signature load
+    command.
+
+Changes for the 5.23 release (the cctools-618 release)
+- Changed checksyms(1) to not check for prebound files when
+  MACOSX_DEPLOYMENT_TARGET >= 10.4 . The change was in check_dynamic_binary()
+  in checksym.c to test the value returned by get_macosx_deployment_target().
+  Radar bug #4110782.
+
+Changes for the 5.23 release (the cctools-617 release)
+- Changed create_fat() in lipo(1) to not set the timestamp of the output file
+  if it contains archives.  Radar bug #4492604.
+
+Changes for the 5.23 release (the cctools-616 release)
+- Changed lipo(1) to special case ppc, ppc64, i386 and x86_64 architectures and
+  to assume a segment alignment of 12.  Changes were made in get_align() and
+  get_align_64() in lipo.c . Radar bug #4178258.
+- Ported pagestuff(1) to work with 64-bit Mach-O's.  Radar bug #4375624.
+- Added the needed code in for nmedit(1) in strip.c in check_object_relocs() to
+  handle making global coalesced symbol in 64-bit Mach-O's private.  Basically
+  it is the same as the 32-bit case but with quad sized relocation entries and
+  64-bit values.  Radar bug #4414533.
+
+Changes for the 5.23 release (the cctools-612 release)
+- Changed strip(1) so strip -x on an x86_64 .o file should do nothing.
+  The change was in strip_symtab() for local symbols to check if the file is
+  CPU_TYPE_X86_64 and the -x flag is used and if so keep all the local symbols.
+  Radar bug #4541291.
+
+Changes for the 5.23 release taken from cctools-590.23.6 (the cctools-610 
+release):
+- Fixed a bug in the redo_prebinding code where it would call chmod(2) and
+  chown(2) unnecessarily when no output_file is specified.  The fix was in
+  unprebind() in redo_prebinding.c to remove the else clause of the
+  if(output_file != NULL && outbuf == NULL) so the chmod() and chown() are not
+  called on the file_name parameter.  Radar bug #4503724.
+- Fixed a leak in the redo_prebinding code where error_message_buffer is not
+  freed when system_error() is called.  The fix is in unprebind() in
+  redo_prebinding.c after the first call to cleanup().  It checks to see if
+  error_message_buffer is not NULL and if so calls free() on it.  Radar Bug
+  #4503576.
+
+Changes for the 5.22 release (the cctools-590.41.4 release):
+- Change the previous fix to not reference the reserved1 field when fixing up
+  indirect symbols in the non-lazy symbol pointer section. Radar bug #4522347.
+
+Changes for the 5.22 release (the cctools-590.41.3 release):
+- Fixed nmedit(1) so that it sets the value of symbol pointers when it changes
+  the indirect symbol table entries for them into INDIRECT_SYMBOL_LOCAL.  The
+  change was in check_indirect_symtab() in symbols.c and a bit of code was added
+  to take the n_value from the symbol table entry swap it if needed and write
+  into the section contents for that symbol pointer.  The additional parameters
+  contents and host_byte_sex were added to the routine and pass from the two
+  places it was called.  Radar bug #4514531.
+
+Changes for the 5.22 release (the cctools-590.41.2 release):
+- When stripping coalesced symbols from 64-bit files, only save symbols which
+  are used as weak definitions. Radar bug #4487972.
+
+Changes for the 5.22 release (the cctools-590.40.1 release):
+- Ignore multiple -syslibroot flags if they specify the same argument. Radar
+  bug #4354876.
+
+Changes for the 5.22 release (the cctools-590.38.3 release):
+- Fix a typo for 64-bit code in an error case in strip(1) which would cause it
+  to crash. Radar bug #4502835.
+- Add a new -arch_blank option to lipo(1). Radar bug #4473483.
+
+Changes for the 5.22 release (the cctools-590.38.2 release):
+- Don't convert external relocation entries to internal ones when looking at
+  x86-64 relocation entries in nmedit(1). Radar bug #4497429.
+
+Changes for the 5.22 release (the cctools-590.34.1 release):
+- Revert the 4-byte alignment change in lipo from the previous release. Radar
+  bug #4428605.
+
+Changes for the 5.22 release (the cctools-590.31.4 release):
+- Modified lipo to only require 4-byte alignment for load commands. Radar bug
+  #4428605.
+- Added x86_64 support to the relocation entry functions in misc/reloc.c, used
+  by strip and other tools. Radar bug #4430570.
+- Fix a typo in mach-o/reloc.h. Radar bug #3754196.
+
+Changes for the 5.21 release (the cctools-590.40 release):
+- Fixed a bug in pagestuff(1) where it would crash if it was processing a Mach-O
+  file with no LC_SYMTAB command.  It crashed in print_symbols() because it
+  lacked a check for fp->st not being NULL.  The fix was to add a check for
+  fp->st being NULL and just returning in that case.  Radar bug #4495141.
+
+Changes for the 5.21 release (the cctools-590.37 release):
+- Changed check_indirect_symtab() in strip.c so that nmedit(1) and strip(1)
+  would allow an indirect symbol table entry to just have INDIRECT_SYMBOL_ABS
+  as well as (INDIRECT_SYMBOL_LOCAL | INDIRECT_SYMBOL_ABS).  This is because
+  ld(1) puts this out in some cases.  Radar bug #4461173.
+- Added passing ld(1)'s -t flag through libtool(1).  Radar bug #4213190.
+
+Changes for the 5.21 release (the cctools-590.35 release):
+- Added a warning to nmedit(1) when it sees a global coalesced symbol to say it
+  can't make global coalesced symbols into a static symbols and suggest the use
+  of ld(1)'s -exported_symbols_list option for a final linked images.  The
+  change was in strip.c in edit_symtab() to add the warning an a boolean to
+  only print it once.  Radar bug #4269492.
+- Changed seg_hack so it doesn't affect debug sections.  Radar bug #4421656.
+
+Changes for the 5.21 release (the cctools-590.34 release):
+- Make 'nm: no name list' a warning, not an error.  Radar bug #4421611.
+
+Changes for the 5.21 release (the cctools-590.32 release):
+- Change edit_symtab in strip.c to handle the different format
+  of the DWARF debug map.  Add new functions cmp_bsearch_global and
+  cmp_bsearch_global_64.  Radar bug #4421583.
+
+Changes for the 5.21 release (the cctools-590.31 release):
+- Added the -no_uuid flag to strip(1) to remove LC_UUID load commands.  Radar
+  bug #4415536.
+- Added the -no_uuid flag to libtool(1) to pass on to ld(1).  Radar bug
+  #4415529.
+
+Changes for the 5.20 release (the cctools-590.20 release):
+- Removed the warnings when building. Radar bug #4340147.
+  - Added -fno-builtin-round to the Makefile.
+  - Changed the local variable p to a char * in print_symbols() in nm.c .
+  - Changed the cast of argument 3 of the call to bootstrap_look_up() to
+    (unsigned int *) in tellProjectBuilder() in libtool.c .
+- Fixed a bug in redo_prebinding in the support for new i386 self (dyld)
+  modifiying code stubs.  The problem was with calculation for the new
+  displacement of the jmp instruction for non-prebound undefined symbols not
+  taking in to account that the symbol is also being slid.  The fix was in
+  update_self_modifying_stubs() in redo_prebinding.c code.  Radar bug #4335281.
+
+Changes for the 5.19 release (the cctools-590.18 release):
+- Fixed a bug in nmedit(1) when it tried to change a global coalesced symbol
+  into a static and did not get the r_symbolnum for relocation entries set
+  correctly.  The fix is in check_object_relocs() in strip.c where an extra
+  check was needed of relocs[k].r_extern == 1 before updating the r_symbolnum
+  field with the new symbol index.  Radar bug #4318688.
+
+Changes for the 5.19 release (the cctools-590.17 release):
+- Fixed a bug in strip(1) if there is more than one non-lazy pointer section
+  with the same indirect symbol that is being stripped.  The fix was in 
+  check_indirect_symtab() in strip.c that needed to have a new made_local
+  boolean and not always set saves[index] = -1 because that would cause the
+  sections after the first one with this symbol not to be updated.  Radar bug
+  #4316021.
+
+Changes for the 5.19 release (the cctools-590.10 release):
+- Added support for new i386 self (dyld) modifiying code stubs in the 
+  redo_prebinding.c code.  Radar bug #4202415.
+  - Added the new routine update_self_modifying_stubs() to set the JMP
+    instruction values.
+  - Changed process_arch() to call the new update_self_modifying_stubs().
+  - Added the new routine reset_self_modifying_stubs() to set the self modifying
+    stubs section back to halt instructions.
+  - Changed unprebind_arch() to call the new reset_self_modifying_stubs().
+
+Changes for the 5.19 release (the cctools-590.7 release):
+- Changed libtool(1) to pass the new -macosx_version_min flag to ld.  Radar
+  bug #4195253
+
+Changes for the 5.18 release (the cctools-590.5 release):
+- Added the N_OSO stab entry to stabnames[] array in nm.c to print the new
+  stab.  Radar bug #4202462.
+- Added passing the -Sp flag from libtool(1) to ld(1).  Radar bug #4202462.
+
+Changes for the 5.18 release (and SUTiCambridge) (the cctools-590 release):
+- Added a call to update_dyld_section() in unprebind_arch() in
+  redo_prebinding.c to set the (__DATA,__dyld) section contents to a
+  canonical value.  Radar bug #4126660.
+- In reset_symbol_pointers() in redo_prebinding.c added a conditional resetting
+  symbol pointers defined in the image.  The conditional is if either the
+  MH_WEAK_DEFINES or MH_BINDS_TO_WEAK flags are present then the symbol pointer
+  is set back to zero or to the value for lazy binding and assumed that if
+  the symbol is defined it is being used from the image.  This is because the
+  Tiger dyld when prebinding may set the symbol pointer to an address in another
+  image even if the symbol is defined in the image being prebound.  Radar bug
+  #4126666.
+
+Changes for the 5.18 release (and SUTiAtlanta) (the cctools-588 release):
+- Added more code in build_new_symbol_table() in redo_prebinding.c for fix up
+  the FCS Tiger dyld prebinding problem with stabs that are in the AppKit well
+  enough to allow the Software Update patching that uses the undo prebinding 
+  operation to work. Radar bug #4113681.
+  - If the module table gets updated when unprebinding with the change below and
+    that adjustment is not the same as the vmslide then the N_STSYM and N_SO
+    stabs are corrected.
+
+Changes for the 5.18 release (and in SUTiAtlanta) (the cctools-587 release):
+- Added code build_new_symbol_table() in redo_prebinding.c to fix up the FCS
+  Tiger dyld prebinding problems well enough to allow the Software Update
+  patching that uses the undo prebinding operation to work.  Radar bug #4108651.
+  - When updating the module table when unprebinding code was added to calculate
+    the value to adjust the objc_module_info_addr entries from the difference
+    between the the address of the (__OBJC,__module_info) section and the module
+    table entry with the lowest objc_module_info_addr value.
+  - Code was added at the end of the routine to set the n_value of absolute
+    global symbols that start with ".objc" or end with ".eh" to zero.
+- Changed process_archs() in redo_prebinding.c to set 
+  arch->dont_update_LC_ID_DYLIB_timestamp to TRUE for 64-bit archs so their
+  time stamps don't get changed.  Radar bug #4105452.
+
+Changes for the 5.18 release (the cctools-583 release):
+- Changed the Makefile so that when RC_XBS is set to YES then the compiler
+  options -MD and -dependency-file as well as the md(1) program are not used.
+  Radar bug #4029936.
+
+Changes for the 5.18 release (the cctools-580 release):
+- Changed it so that the default for MACOSX_DEPLOYMENT_TARGET is 10.4 for i386.
+  Radar bug #4081062.
+  - Changed the call to get_macosx_deployment_target() in unprebind_arch() in
+    redo_prebinding.c to pass the additional cputype parameter from the arch's
+    cputype.
+  - Changed the call to get_macosx_deployment_target() in main() in
+    seg_addr_table.c to pass the additional cputype parameter as CPU_TYPE_ANY.
+
+Changes for the 5.17 release (the cctools-577 release):
+- Fixed a bug in the libredo_prebinding code that caused it to report an error
+  when there was a relocation entry at the very end of a segment.  The problem
+  was in contents_pointer_for_vmaddr() in redo_prebinding.c where it was using
+  < when it should have been using <= in checking to see which segment a vmaddr
+  is in.  Radar bug #4054854.
+
+Changes for the 5.17 release (the cctools-572 release):
+- Changed nm(1) when the -P option is used to print a 0 for the size.  Radar
+  bug #3652346.
+
+Changes for the 5.17 release (the cctools-566 release):
+- Ported strings(1) to work with 64-bit object files.  Radar bug #3943477.
+- Fixed another problem with nmedit(1) and fat files with 64-bit Mach-O dylibs
+  that have no modules.  The variable new_nextrefsyms was not being reset for
+  the next arch being processed if it had no modules.  This is now done in
+  edit_symtab() just after new_ntoc is reset.  Radar bug #3949527.
+
+Changes for the 5.17 release (the cctools-565 release):
+- Fixed a problem with nmedit(1) with -p option and 64-bit Mach-O object files
+  that caused it to crash.  The problem was in edit_symtab() in strip.c where
+  it was incorrectly using the variable changed_globals not changed_globals64.
+  Radar bug #3945219.
+
+Changes for the 5.17 release (the cctools-564 release):
+- Fixed a problem with nmedit(1) and fat files with 64-bit Mach-O dylibs that
+  have no modules.  The variable new_ntocs was not being reset for the next arch
+  being processed if it had no modules.  This is now done in edit_symtab() just
+  after new_nmodtab is reset.  Radar bug #3940965.
+
+Changes for the 5.17 release (the cctools-563 release):
+- Changed the code in redo_prebinding.c which sets a default values for the
+  first two pointers in the (__DATA,__dyld) section, the routine
+  update_dyld_section() was changed to use constant values.  Also a missing
+  error check was added and calls to set_arch_long() to correctly deal with
+  cross bytesex and alignment issues. Radar bug #3828403.
+
+Changes for the 5.17 release (the cctools-562 release):
+- Ported the install_name_tool(1) to work with 64-bit Mach-O files.  Radar bug
+  #3930775.
+
+Changes for the 5.17 release (the cctools-561 release):
+- Fixed a problem with the code for nmedit(1) that could not deal with a dylib
+  without a module table.  The fix was in edit_symtab() in strip.c to test for
+  the number of modules being zero as well as it being a dylib.  Radar bug
+  #3926028.
+
+Changes for the 5.17 release (the cctools-560 release):
+- Changed strip(1) to call realpath(3) on arguments to allow it to work with
+  symlinks. Radar bug #3889109.
+
+Changes for the 5.17 release (the cctools-559 release):
+- Changed the printing in nm(1) with the -A option to add a space after the ':'
+  is printed for the file name. Radar bug #3652346.
+- Fixed a problem with strip(1) -c which was not correctingly setting the 
+  filetype to MH_DYLIB_STUB.  This was caused by the changes to the 64-bit
+  port and the fix was in strip_object() to set object->mh->filetype or
+  object->mh64->filetype as well as object->mh_filetype.  Radar bug #3909472.
+- Fixed a problem with the change for Radar bug #3766901 that was causing extra
+  newlines in strings(1) output to be printed.  The fix was in ofile_find() in
+  strings.c by only printing the +1 size of the string when it was at the end
+  of the buffer and the last character was not a '\n' .  Radar bug #3907726.
+
+Changes for the 5.17 release (the cctools-558 release):
+- Changed seg_addr_table(1) avoid outputing libraries when they are built
+  nonsplit but are listed as split in the table.  This situation happens when
+  B&I moves libraries to the split region from the nonsplit region, but then
+  they fail to build.  Radar bug #3903547.
+
+Changes for the 5.17 release (the cctools-557 release):
+- Removed support for the INTERIM_PPC64.  The changes were to remove the
+  #ifdef INTERIM_PPC64 source changes in lipo.c and strip.c .  Radar bug
+  #3600419.
+- Ported the size(1) command to work with 64-bit Mach-O files.  Radar bug
+  #3900014.
+
+Changes for the 5.17 release (the cctools-556 release):
+- For ranlib(1) with the -q option, used by ar(1) for UNIX standard conformance,
+  a warning about an "empty library: XXX (no table of contents added)" must not
+  be printed.  Again the change was in create_library() in libtool.c . Radar
+  bug #3893339.
+- For ranlib(1) with the -q option, used by ar(1) for UNIX standard conformance,
+  changed it not to change the file if there are no table of contents entries.
+  The change was in create_library() in libtool.c .  Radar bug #3893392.
+- Added the -syslibroot <argument> option as another way to specifiy NEXT_ROOT
+  in libtool(1).  Radar bug #3886145.
+
+Changes for the 5.17 release (the cctools-554 release):
+- Fixed a bug with the strings(1) -a option printing the last string at the end
+  of a section.  The fix was in ofile_find() in strings.c by adding "+1" to the
+  argument of printf()'s string size format.  Radar bug #3766901.
+- Changed strip(1) to handled filenames with paths lengths near PATH_MAX.
+  Radar bug #3878381.
+- Made more changes to nm(1) for UNIX standard conformance.  Radar bug #3878451.
+  - Added "--" to be the same as "-" and treat all remaining arguments as
+    file names.  Change in main() in nm.c.
+  - Changed nm(1) to print the file name before the output with -A just like
+    the -o option.
+  - Changed nm(1) with the -P option to use hex as the default.  Change in
+    main() to the initialization of cmd_flags.format .
+- For ranlib(1) with the -q option, used by ar(1) for UNIX standard conformance,
+  changed it to not print the warning about creating a library with no symbols
+  in the table of contents. The change was in create_library() in libtool.c .
+  Radar bug #3878332.
+
+Changes for the 5.17 release (the cctools-553 release):
+- Fixed a bug in nmedit(1) for 64-bit Mach-O files that was causing it to
+  incorrectly produce an error about bad n_sect values.  The fix was in
+  edit_symtab() in strip.c where LC_SEGMENT was used when LC_SEGMENT_64 should
+  have been used.  Radar bug #3880780.
+- Changed seg_addr_table(1) for enhancements for 10.4 prebinding.  Radar bug
+  #3871826
+  - Only round addresses to the nearest page.
+  - Only output split addresses.
+  - Refrain from outputting the next debug and the next flat address to assign.
+  - Allow addresses to be in the full 256 mb range (0x90000000 - 0x0x9fffffff).
+- Changed redo_prebinding.c to ignore 64-bit Mach-O files and leave them
+  unchanged.  Radar bug #3877703.
+
+Changes for the 5.17 release (the cctools-552 release):
+- Added the 'q' option to ranlib(1) to do nothing if a fat file would be
+  created as the output file.  This is used by ar(1) for UNIX standard
+  conformance.  Radar bug #3762136.
+- Added the 'f' option to the usage line for nm(1).  Radar bug #3856321.
+- Added the UNIX standard conformance flags -P, -A and -t to nm(1).  Radar
+  bug #3652346.
+- Added the -n number and -t format options to strings(1).  Radar bug #3644256.
+- Added the "--" option to strings(1) to treat all argument after this as file
+  names.  Radar bug #3571788.
+- Changed strip(1) to not write over a non-writeable file when in UNIX standard
+  conformance mode and produce an error instead.  The change was in strip_file()
+  in strip.c to call the new libstuff routine get_unix_standard_mode() and if
+  TRUE call access(2) for W_OK to see if we can write on the file. Radar bug
+  #3852702.
+
+Changes for the 5.17 release (the cctools-551 release):
+- Fixed a bug in the -u option for redo_prebinding(1) that cause it to not set
+  the MH_ALLMODSBOUND flag.  The fix was in unprebind_arch() after the call to
+  update_load_commands() to re-read the value of the mach header flags it had
+  in the local variable mh_flags.  Radar bug #3851599.
+- Fixed a bug in print_mach_symbols() in nm.c that was causing a crash when the
+  -m option was used because it was using ofile->mh64 when ofile->mh was not
+  NULL.
+
+Changes for the 5.17 release (the cctools-550 release):
+- Changed nm.c to handle both 64-bit and 32-bit binaries.  Changed the Makefile
+  back to the cctools-528 Makefile since there are no longer any *64(1) tools
+  built in this directory.  Radar bug #3859090.
+- Changed seg_addr_table(1) to ignore 64-bit files.  The changes were in 
+  sizes_and_addresses() and get_seg1addr() in seg_addr_table.c to simply return
+  if ofile->mh is NULL.  Radar bug #3861276.
+- Changed the constant CPU_IS64BIT in libtool.c to CPU_ARCH_ABI64.
+  Radar bug #3806447.
+- Fixed a warning in build_new_symbol_table() in redo_prebinding.c that the
+  variables new_symbols64 and new_symbols may be used uninitialized.
+
+Changes for the 5.17 release (the cctools-548 release):
+- Fixed a bug in strip(1) in strip_object() for 64-bit Mach-O binaries that
+  caused it to not correctly update the indirect symbol table entries.  There
+  was an incorrect cast in setting up the pointer to the section_64 struct where
+  it was using "struct segment_command" where it should have been
+  "struct segment_command_64".  Also there was an incorrect check of 
+  object->seg_linkedit that should have been object->seg_linkedit64.
+  Radar bug #3848104.
+
+Changes for the 5.17 release (the cctools-547 release):
+- Changed the code in redo_prebinding.c to not crash when presented with a
+  64-bit Mach-O binary.  The APIs except redo_prebinding(3) should now handle 
+  binaries with 64-bit Mach-O binaries.  There is not yet support for actually
+  redoing the prebinding on a 64-bit Mach-O binary.  Radar bug #3851599.
+
+Changes for the 5.17 release (the cctools-545 release):
+- Fixed a bug in strip_object() in strip.c for 64-bit Mach-O files that
+  incorrectly had the size on the indirect symbol table entries as 8 byte
+  sizeof(long long) in two places.  This is an index into the symbol table and
+  is 4 bytes in both 64-bit Mach-O files and 32-bit Mach-O files.
+  Radar bug #3836060.
+
+Changes for the 5.17 release (the cctools-542 release):
+- Fixed 64-bit math bug in strip when computing the size of the __LINKEDIT
+  segment. Radar bug #3831401.
+
+Changes for the 5.17 release (the cctools-541 release):
+- Fixed a bug in strip_symtab() in strip.c that was not correctly copying the
+  undefined symbols out for both 32-bit and 64-bit Mach-O files.  Radar bug
+  #3829545.
+
+Changes for the 5.17 release (the cctools-540 release):
+- Fixed a bug in strip_symtab() in strip.c that was using the value of a
+  symbol's n_sect value before checking that it was in the valid range.
+  Radar bug #3829149.
+
+Changes for the 5.17 release (the cctools-539 release):
+- Changed strip(1) to support 32-bit & 64-bit binaries.  Radar bug #3812858.
+  - Changed the code in strip.c to to test the mach header field, mh for
+    NULL, to see which type of object it has and then added/modified the code
+    to deal with both.
+
+Changes for the 5.17 release (the cctools-537 release):
+- Changed the redo_prebinding(3) API to return REDO_PREBINDING_SUCCESS any time
+  a new file is created.  Radar bug #3818477.
+- Fixed a problem with libtool/ranlib that was causing it to increase the size
+  of archive member's long names each time it was run.  The fix was in
+  add_member() to first trim the long name size to not include any trailing '\0'
+  before rounding the size up.  Radar bug #3817546.
+
+Changes for the 5.17 release (the cctools-534 release):
+- Changed libtool to call ld64 for CPU_IS64BIT architectures.  Radar
+  bug #3807911
+- Fixed lipo(1)'s -info and -detailed_info options to handle 64-bit Mach-O
+  files.  Radar bug #3793539.
+- Changed libtool.c to force using long archive names and pad them with the
+  rounding needed to get members on 8 byte offsets.  This is needed because the
+  struct ar_hdr is not a multiple of 8 bytes.  Radar bug #3808740.
+
+Changes for the 5.17 release (the cctools-533 release):
+- Changes to support 32-bit & 64-bit tools in the same binary.  Radar bug
+  #3793394.
+  - Changed the Makefile to only build libtool and no longer build libtool64 .
+  - In libtool.c, changed the struct member, to have both 32-bit and 64-bit
+    mach header pointers and array section pointers.  And changed all the code
+    to test the mach header field, mh for NULL, to see which type of object
+    it has and then added/modified the code to deal with both.  Also changed
+    all rounding to 8 from 4 so members end up on a 8-byte boundary.
+  - Changed the code in nm.c to use the swap_nlist_t and the swap_dylib_module_t
+    new macros from "stuff/target_arch.h".  And added one ifdef ARCH64 to use
+    the ofile->dylib_module64 .  Also added an 
+  - In process() and in print_mach_symbols() in nm.c added a new ofile_mh local
+    variable and added a new ifdef ARCH64 to set it to ofile->mh64 or ofile->mh.
+    And changed places where it used ofile->mh to ofile_mh.
+- Changed strip.c and segedit.c to initialize the variable progname and declare
+  it to be a __private_extern__ to avoid having a common private extern be
+  created when built with gcc-3.5.
+- Changed the used of NXZone* APIs to malloc_zone* APIs in redo_prebinding.c.
+  Radar bug #3461591.
+
+Changes for the 5.17 release (the cctools-532 release):
+- Fixed some problems with the Makefile and building libredo_prebinding.a when
+  the support for 64-bit tools was first added.
+
+Changes for the 5.17 release (the cctools-531 release):
+- Made more changes to support 64-bit tools. Radar bug #3600431.
+  - Changed the Makefile to build a libtool64 command and create a link to
+    it for ranlib64.
+  - Changed the libtool.c sources to build a libtool64 by changeing the uses
+    of structs and constants that are different for 64-bit files to the
+    typedefs in "stuff/target_arch.h".
+- Made some changes to the changes in redo_prebinding.c in cctools-530 so that
+  it does not compile with warnings.  And changed some of the comments to me
+  more accurate.
+
+Changes for the 5.17 release (the cctools-530 release):
+- Added code to redo_prebinding.c which sets a default value for
+  __dyld section contents. Radar bug #3751608.
+
+Changes for the 5.17 release (the cctools-529 release):
+- Made changes to support 64-bit tools. Radar bug #3600431.
+  - Changed the Makefile to build the tools using a sub-directory for the
+    objects and building both 32-bit and 64-bit tools.  Things are no longer
+    built with -DINTERIM_PPC64 and the 64-bit tools are built with -DARCH64 and 
+    linked with libstuff64 .
+  - Made changes to build an nm64 by changing the uses of structs, constants
+    and names that are different for 64-bit files to the typedefs in
+    "stuff/target_arch.h".
+  - In some places that used nlist symbols this was changed to the new type
+    in "stuff/symbol.h" to struct symbol.  Which contains a name, an indr_name
+    and an nlist_t.
+
+Changes for the 5.17 release (the cctools-528.6 release):
+- Change the code in nmedit that checks for relocation entries of
+  global coalesced symbols to allow pcrel being 0 or 1.  This works as
+  we are not moving the instruction and the pc value added in does not
+  change.  Needed for x86 compilers after -1800 (3.3-based), and
+  eventually necessary for 3.5-based x86 compilers. Radar bug #3806356.
+
+Changes for the 5.17 release (the cctools-528.5 release):
+- Fixed a problem with seg_addr_table(1) when it detects overlaps in both the
+  read write and read only portions of a split address.  However it only will
+  zero out the portion that has the overlap.  Later in seg_addr_table there is
+  a check to determine if the address has been zeroed out and should have a new
+  address assigned.  This check only looks at the read only portion of the
+  address to decide if it should assign a new address.  The result of this bug
+  is a library with a read only address that is non zero and a read write
+  address that is non zero.  The fix is in main.c in the update and
+  update_overlaps code.  Radar bug #3767036.
+- Fixed unprebind's processing of nonprebound dylibs to allow it to 
+  properly handle relocation entries.  Radar bug #3652989.
+
+Changes for the 5.17 release (the cctools-527 release):
+- Fixed a problem with the change for Radar #3738616 in that the checksyms(l)
+  needs to have a what(1) string.  The Makefile was changed to put both the
+  what(1) string and the apple_version[] info in vers.c . Radar bug #3746707.
+
+Changes for the 5.17 release (the cctools-526 release):
+- Added the -V flag to libtool(1) to print the version.  Changed the Makefile
+  to produce the same version info in vers.c as is done for ld(1).  Radar bug
+  #3738616.
+- Fixed warnings for the changes in mach-o headers for types changing from
+  unsigned long to uint32_t and from long to int32_t.  Radar bug #3744082.
+  - Changed a number of uses of "%lu" to "%u" and "%ld to "%d" in lipo.c,
+    size.c, nm.c, checksyms.c, cmpdylib.c and redo_prebinding.c .
+
+Changes for the 5.16 release (the cctools-524 release):
+- Fixed a bug in strip(1) that when used on the dynamic linker with no options,
+  to strip all symbols, it crashed.  The fix was in strip_object() in strip.c to
+  change it to make it call strip_symtab() when the file is an MH_DYLINKER.
+  Radar bug #3697374.
+
+Changes for the 5.16 release (the cctools-520 release):
+- Fixed a bug in strip(1) that when used on a dynamic library with no options,
+  to strip all symbols, it produced a malformed file that had bad offsets
+  to various tables.  The fix was in strip_object() in strip.c to change it to
+  make it call strip_symtab() when the file is an MH_DYLIB.  Radar bug #3641669.
+- Changed libtool(1) that printed "Logging for Build & Integration] Used static 
+  library" to print the realpath() name of the file name.  Radar bug #3585834.
+- Changed libtool(1) to take -executable_path as a linker flag.  Radar bug
+  #3489733.
+- Changed libtool(1) and ranlib(1) to not generate warnings about multiple 
+  archive members defining the same symbol.  This is was done by adding the
+  boolean parameter library_warnings to the function check_sort_ranlibs() in
+  libtool.c and always passing this a FALSE.  This matches the way it is done
+  in writeout() in libstuff.  Radar bug #3653845 .
+
+Changes for the 5.16 release (the cctools-512 release):
+- Changed the two calls to writeout_to_mem() in redo_prebinding.c to pass the
+  new enum bool * seen_archive parameter (it is not used in this code however).
+  See the notes in libstuff for this, as it is part of the fix for Radar bug
+  #3645280.
+
+Changes for the 5.16 release (the cctools-509 release):
+- Added #ifdef INTERIM_PPC64 to the source changes to support the interim ppc64
+  file format.  And added -DINTERIM_PPC64 to the Makefile.
+
+Changes for the 5.16 release (the cctools-500 release):
+- Added in nm(1) when -m is specified printing "[no dead strip] " for symbols
+  with the N_NO_DEAD_STRIP bit set.  This change is in print_mach_symbols() in
+  nm.c .  Radar bug #2284500.
+- Changed libtool(1) to take -dead_strip and -no_dead_strip_inits_and_terms
+  as linker flags.  Radar bug #2284500.
+
+Changes for the 5.16 release (the cctools-499.1 release):
+- Added support for the interim ppc64 file format. Radar bug #3562133 and
+  #3562232.
+  - Updated lipo.c to know about CPU_TYPE_POWERPC64 in print_arch() and
+    print_cputype().
+  - Updated strip_object() in strip.c so the stride for symbol pointers is set
+    8 when arch_flag.cputype == CPU_TYPE_POWERPC64 and 4 otherwise.
+
+Changes for the 5.14 release (the cctools-497 release):
+- Added passing the -prebind_allow_overlap from libtool(1) to ld(1).  Radar bug
+  #3452484.
+
+Changes for the 5.14 release (the cctools-496 release):
+- Fixed a bug that caused the seg_addr_table(1) tool to reserves more space
+  than necessary for flat dylibs.  Radar bug #3440884.
+
+Changes for the 5.13.2 release (the cctools-495.3 release):
+- Added a -u option to redo_prebinding(1) and the unprebind(3) API to allow
+  binaries to be "unprebound".  Unprebound binaries are identified by the
+  MH_PREBINDABLE flag.  The unprebind operation will remove all
+  LC_PREBOUND_DYLIB load commands, set LC_LOAD_DYLIB load command's timestamps
+  to zero, slide dynamic libraries to address 0x0, set prebound symbols' symtab
+  entries to be of type N_UNDF and address zero, resets lazy symbol pointers to
+  their original values as specified in their corresponding relocation entries,
+  sets non-lazy symbol pointers to zero, and sets two-level hints to zero.  If
+  a dynamic library has all two-level namespace modules bound, the unprebound
+  binary will also have the MH_ALLMODSBOUND flag set (because this fact is lost
+  when the LC_PREBOUND_DYLIB commands are removed).  It is also 
+  possible to unprebind non-prebound dylibs, executables, and bundles.  
+  These files do not gain the MH_PREBINDABLE flag, however they will have 
+  their dependent library timestamps and versions zeroed, and their hints 
+  table will be zeroed as well.  As unprebind is intended to produce a 
+  canonical Mach-O, all unprebound binaries are identified with the 
+  MH_CANONICAL flag.  Radar bug #3176679.
+- Added a -s option to redo_prebinding(1).  If -s is specified, the resulting
+  output file will be written to standard output, rather than to an output file.
+  Radar bug #3176679.
+- Added a -seg1addr option to redo_prebinding(1).  If -seg1addr is specified,
+  the next command-line argument should be a valid hexadecimal address.  
+  redo_prebinding(1) will then slide the input dynamic library to this address.
+  This option does not apply when -u, -seg_addr_table or
+  -seg_addr_table_filename are specified.
+- Modified the redo_prebinding code to support reprebinding of unprebound
+  binaries.  This included recognizing binaries with MH_PREBINDABLE as opposed
+  to MH_PREBOUND as binaries acceptable for reprebinding, using the
+  MH_ALLMODSBOUND flag (or lack thereof) to determine if all two-level namespace
+  modules should be bound for input binaries with MH_PREBINDABLE, and changing
+  the type of the input symbols to N_PBUD if the type was read in as N_UNDF and
+  the file has MH_PREBINDABLE set in setup_initial_undefined_list() (this is
+  because these symbols can be assumed to have been prebound symbols prior to
+  the file being unprebound, and these symbols must be treated as prebound
+  during the reprebinding process).  Radar bug #3176679.
+
+Changes for the 5.13 release (the cctools-493 release):
+- Fixed a bug in the redo_prebinding code that was incorrectly checking that an
+  executable does not have any extra LC_PREBOUND_DYLIB load commands for
+  libraries that don't exist.  This can cause an error if an indirectly
+  referenced dylib's install name changes.  This is not needed since
+  update_load_commands() will recreate the LC_PREBOUND_DYLIB load commands for
+  the indirectly referenced dynamic libraries.  Including both adding and
+  removing ones as needed to match the libraries on the system.  Radar bug
+  #3408696.
+
+Changes for the 5.13 release (the cctools-492 release):
+- Changed the seg_addr_table(1) tool to assign addresses for _debug and _profile
+  libraries addresses to start at 0x40000000 through lower addresses.  Radar
+  bug #3360593.
+- Fixed a bug in the seg_addr_table(1) tool where the bounds checking in
+  next_flat_seg1addr was not entirely correct.  The fix is two places in
+  next_flat_seg1addr() in seg_addr_table.c . Radar bug #3359505.
+
+Changes for the 5.13 release (the cctools-483 release):
+- Fixed a bug in libtool(1)'s handling of -weak_framework and -weak_library
+  flags.  The code in the routine process() in libtool.c needed the same check
+  for -framework to avoid thinking the flag as a file name and trying to open
+  it.  Radar bug #3318491.
+- Changed libtool(1) to pass the -m flag on to the linker.  Radar bug #3305123.
+
+Changes for the 5.12 release (the cctools-474 release):
+- Fixed a bug in redo_prebinding that was leaking memory if the
+  allow_missing_architectures parameter was used and the fat file did not
+  contain an architecture.  The fix was in load_library() in 4 places it
+  checks to see if the missing architecure is allowed to be missing and it now
+  unmap's the ofile before returning.  Radar bug #3144803.
+
+Changes for the 5.12 release (the cctools-472 release):
+- Fixed a bug in seg_addr_table(1) when run with -relayout the <<< Next split
+  address to assign >>> isn't getting set properly.  The fix in in main() to add
+  relayout == FALSE to the if() condition for the code that loops and updates
+  the NEXT_SPLIT_ADDRESS_TO_ASSIGN.  Radar bug #3245958.
+
+Changes for the 5.12 release (the cctools-470 release):
+- Added the -c option to strip(1) to strip the section contents of a dynamic
+  shared library and create a stub library.  Radar bug #3235093.
+- Changed install_name_tool(1) to not change MH_DYLIB_STUB filetypes.  
+  Radar bug #3235093.
+- Added the flag -search_paths_first to cause -lx flags to search each path
+  for .dylib then .a before searching next path to libtool(1).  Radar bug
+  #3176974.
+  - Added the enum bool variable search_paths_first to the cmd_flags struct and
+    code to parse out the option, set variable and add it to the ldflags[] in
+    main() .
+  - The new static routines search_paths_for_lname() and search_path_for_lname()
+    were added.
+  - In file_name_from_l_flag() a test of the new search_paths_first variable is
+    done and if TRUE then search_paths_for_lname() is called.
+
+Changes for the 5.12 release (the cctools-469 release):
+- Added support for the -weak-lx, -weak_library and -weak_framework flags to
+  libtool(1).  Radar bug #3069758.
+- Fixed a bug seg_addr_table(1) in next_flat_seg1addr() where the variable i
+  was previously changed to unsigned.  The second loop uses this varaiable as
+  signed and thus this change was causing the loop to never terminate.  Radar
+  bug 3225931.
+
+Changes for the 5.12 release (the cctools-466 release):
+- Fixed a bug in libtool(1) for the -static option that caused it to crash if
+  the objects contained no symbols to put in the table of contents.  Radar bug
+  #3217471.
+- Fixed the incorrect casts on the comparison of the nlist struct's n_strx field
+  where the value being compared to was casted to a long.  The correct fix was
+  to cast n_strx to an unsigned long.
+- Changed print_mach_symbols() in nm.c to print "(dynamically looked up)" for
+  the library ordinal DYNAMIC_LOOKUP_ORDINAL which are looked up dynamically
+  with flat namespace semantics in two-level namespace images.  Radar bug
+  #3210803.
+- Changed get_primary_lib() in redo_prebinding.c to check for the library
+  ordinal DYNAMIC_LOOKUP_ORDINAL and return NULL.  Radar bug #3210803.
+
+Changes for the 5.12 release (the cctools-464 release):
+- Made changes to build cleanly with gcc3.3
+  - Removed -Wno-precomp from the Makefile
+  - Fixed warnings for "comparison between signed and unsigned" in lipo.c,
+    size.c, strings.c, nm.c, libtool.c, checksyms.c, indr.c, strip.c, segedit.c,
+    kern_tool.c, cmpdylib.c, dylib_pcsampler.c, pagestuff.c, redo_prebinding.c,
+    seg_addr_table.c, check_dylib.c, seg_hack.c and install_name_tool.c.
+
+Changes for the 5.12 release (the cctools-463 release):
+- Added support for MH_DYLIB_STUB libraries.  Radar bug #3193744.
+  - Added the testing for MH_DYLIB_STUB along with MH_DYLIB in add_member()
+    in libtool.c .
+  - Added the testing for MH_DYLIB_STUB along with MH_DYLIB in
+    translate_object() in indr.c in the error check.
+  - Added a case for MH_DYLIB_STUB in type_buf() in file.c (note this is the
+    old file(1) command and is no longer used).
+  - Added the testing for MH_DYLIB_STUB along with MH_DYLIB in check_dylib()
+    in cmpdylib.c in 2 places.
+  - Added the testing for MH_DYLIB_STUB along with MH_DYLIB in checksyms() and
+    in check_dynamic_binary() in checksyms.c in 3 places in all.
+  - Added the testing for MH_DYLIB_STUB along with MH_DYLIB in check_hints.c .
+
+Changes for the 5.12 release (the cctools-461 release):
+- Fixed a bug in install_name_tool(1) that caused it to crash when the new
+  load commands were smaller than the old load commands.  Radar bug #3161586.
+
+Changes for the 5.12 release (the cctools-456 release):
+- Fixed a bug in the redo_prebinding code when the allow_missing_architectures
+  parameter to the redo_prebinding() API is non-zero.  In the routine
+  load_library() an extra check is needed to not cause an error if we are
+  allowing missing architectures.  The case where this happens is when there
+  is a fat file that the architecture we don't care about depends on a library
+  in another fat file but the time stamps for the libraries don't match.
+  Radar bug #3144552.
+
+Changes for the 5.12 release (the cctools-455 release):
+- Fixed a bug in the redo_prebinding code in the routine link_library_module()
+  in redo_prebinding.c.  The problem was that when a reference to a private
+  extern was found only the module containing it was marked linked.  A call
+  to link_library_module() for that module was needed to pull in its
+  dependencies and get those modules marked as LINKED.  Radar bug #3126383.
+
+Changes for the 5.12 release (the cctools-454 release):
+- Fixed a bug where seg_addr_table doesn't catch when an address is assigned in
+  the "alternate" area.  seg_addr_table(1) was using the wrong constant to
+  check the validity of newly assigned addresses, the fix is to use the correct
+  constant.  Radar bug #3138181.
+
+Changes for the 5.12 release (the cctools-452 release):
+- Fixed the bug fix done for Radar bug #3124262 below in the redo_prebinding
+  code. The copied code from the above loop was wrong as it changed this:
+                   if(libs[i].module_states[j] == LINKED)
+  to this:
+                   if(libs[j].module_states[k] == LINKED ||
+                      (prebind_all_twolevel_modules == TRUE &&
+                       (libs[j].ofile->mh->flags & MH_TWOLEVEL) ==
+                                MH_TWOLEVEL))
+  which should have been this:
+                   if(libs[i].module_states[j] == LINKED ||
+                      (prebind_all_twolevel_modules == TRUE &&
+                       (libs[i].ofile->mh->flags & MH_TWOLEVEL) ==
+                                MH_TWOLEVEL))
+  which used the correct index variables.  Radar bug #3133589.
+
+Changes for the 5.12 release (the cctools-451 release):
+- Fixed a bug in the redo_prebinding code that did not set the all the bits
+  in the linked_modules bit vector for any new LC_PREBOUND_DYLIB load commands
+  when prebind_all_twolevel_modules was TRUE.  Radar bug #3124262.
+
+Changes for the 5.12 release (the cctools-448 release):
+- Added an entry stabnames[] array in nm.c for N_OPT that is emitted with
+  gcc2_compiled and in gcc source.  Radar bug #3104328.
+
+Changes for the 5.12 release (the cctools-447 release):
+- Fixed a bug in add_member() in libtool.c when get_arch_family_from_cputype()
+  returns NULL.
+
+Changes for the 5.11 release (the cctools-446 release):
+- Added passing -x from libtool to ld.  Radar bug #3088301.
+
+Changes for the 5.11 release (the cctools-444 release):
+- Added passing -exported_symbols_list & -unexported_symbols_list from libtool
+  to ld.  Radar bug #3083844.
+- Factored out some of the symbol list stuff out of strip.c into libstuff so
+  ld(1)'s -exported_symbols_list and -unexported_symbols_list options can use
+  it.  Radar bug #3083844.
+
+Changes for the 5.11 release (the cctools-443 release):
+- Added passing -single_module & -multi_module from libtool to ld.  Also added
+  passing -u flags.  Radar #3080780.
+
+Changes for the 5.11 release (the cctools-440 release):
+- Fixed the warnings about extra tokens at end of #endif directive in
+  check_hints.c, strip.c and make_defs.h (Radar bug #3072042).
+
+Changes for the 5.11 release (the cctools-439 release):
+- Made the needed changes to lipo.c for VEO support.  Radar bug #3068161.
+- Added the install_name() API to redo_prebinding.c . Radar bug #3065586.
+- Changed needs_redo_prebinding() in redo_prebinding.c to check all archs if
+  allow_missing_archs is zero.  Radar bug #3065577.
+- Added parsing out -no_arch_warnings to libtool(1), which is then ignored,
+  so it can be passed to it.  Radar bug #3064819.
+
+Changes for the 5.11 release (the cctools-437 release):
+- Backed out Radar bug #2922145 and changed the Makefile back to only create
+  only -dynamic compiled libredo_prebinding.a. Radar bug #3000895.
+- Add support in nm(1) for printing the new stab entries for Radar bug #2940311
+  which should be:
+	N_PARAMS	0x86
+	N_VERSION	0x88
+	N_OLEVEL	0x8A
+  Also needed to fix a couple of places that did not check the N_STAB being zero
+  before checking the N_TYPE bits to be N_INDR (which N_OLEVEL has).
+  Radar bug #3000792.
+- Fixed a bug in setup_symbol_list() in strip.c in the code that removes
+  duplicates from the list.  The second loop limit needed to loop for one
+  less.  Radar bug #2962899.
+
+Changes for the 5.10 release (the cctools-435 release):
+- Fixed bugs in the libredo_prebinding API's of object_file_type() and
+  get_prebind_cksums() that were not calling setjmp() to set up for handling
+  of errors.  Radar bug #2992414.
+- Changed redo_prebinding to not attempt to redo the prebinding on any file
+  that has a resource fork.  The test is made deep in the code just before it
+  would actually do the work.  It is done this way to not mess up the other
+  options like -i that is trying to ignore non-Mach-O files, etc.  Radar bug
+  #2987656.
+
+Changes for the 5.10 release (the cctools-434 release):
+- Changed nmedit -p to not change the indirect table entries to
+  INDIRECT_SYMBOL_LOCAL since the symbols are still global.  Radar bug 2986703.
+
+Changes for the 5.10 release (the cctools-432 release):
+- Changed libtool(1) when the -static option is in effect to not put a dynamic
+  library file into the static library it is creating.  This can happen if a
+  libx.a file is really a dynamic library and someone is using -lx when creating
+  a static library.  The change is in add_member() in libtool.c.  Radar bug
+  #2970223.
+
+Changes for the 5.10 release (the cctools-430 release):
+- Changed the experimental code in nmedit that changes global coalesced symbols
+  into statics to do very limited relocation.  It can do VANILLA long sized
+  non-pcrel relocation.  It does not correctly convert it to a scattered
+  relocation entry when it should.
+
+Changes for the 5.10 release (the cctools-429 release):
+- Fixes a bug with the experiment in cctools-428 that was changing global
+  coalesced symbols into statics.  A static symbol can't be a weak_definition
+  and ld(1) catches this as an error.  So in edit_symtab() just after it cleared
+  the N_EXT bit it also clears the N_WEAK_DEF bit.
+
+Changes for the 5.10 release (the cctools-428 release):
+- As an experiment changed nmedit(1) when using the -s option on an MH_OBJECT
+  file change change global coalesced symbols into statics.  Then if there are
+  external relocation entries to just turn them into local entries without
+  knowing if they should be scattered relocation entries.  Radar bug #2957909.
+
+Changes for the 5.10 release (the cctools-427 release):
+- Changed nmedit(1) -p to also change global coalesced symbols into private
+  externs.  The change was in edit_symtab() in strip.c.  Radar bug #2956057.
+
+Changes for the 5.10 release (the cctools-422 release):
+- Changed strip_symtab() in strip.c to strip local symbols in sections that have
+  the S_ATTR_STRIP_SYMS section attribute in files linked for dyld.  Radar bug
+  #2945659.
+
+Changes for the 5.10 release (the cctools-421 release):
+- Fixed a bug in the redo_prebinding(3) API where the internal static variable
+  check_if_needed was not reset in reset_statics().  Radar bug #2933102.
+- Picked up the changes to seg_addr_table(1) for the new -relayout_nonsplit
+  option.  Radar bug #2935630.
+
+Changes for the 5.10 release (the cctools-420 release):
+- Added the -M flag to libtool to passing through to ld(1).  Radar bug #2935497.
+- Changed what the needs_redo_prebinding() API and the redo_prebinding() API
+  (when the only_if_needed parameter is non-zero) returns for statically linked
+  executables.  In this case needs_redo_prebinding() now returns NOT_PREBINDABLE
+  and redo_prebinding() returns REDO_PREBINDING_NOT_NEEDED.  Radar bug #2934831.
+
+Changes for the 5.10 release (the cctools-417 release):
+- Changed the Makefile to create both a -static compiled and a -dynamic
+  compiled libredo_prebinding.{dylib,a} pair.  Radar bug #2922145.
+
+Changes for the 5.10 release (the cctools-416 release):
+- Changed print_mach_symbols() in nm.c to also print "weak" for symbols with
+  the N_WEAK_DEF bit set.  Removed the code to test for sections with the
+  S_ATTR_WEAK_DEFS attribute. Radar bug #2919646.
+- Fixed a problem with redo_prebinding updating the LC_ID_DYLIB time_stamp for
+  archs that were missing.  This is done in build_new_symbol_table() by setting
+  the new dont_update_LC_ID_DYLIB_time_stamp field.  Radar bug #2914003.
+
+Changes for the 5.10 release (the cctools-415 release):
+- Changed redo_prebinding(1) to detect when an executable was built with the
+  -prebind_all_twolevel_modules and then bind all twolevel modules on output.
+  Radar bug #2909518.
+- Added pass the -ObjC flag from libtool to ld.
+
+Changes for the 5.10 release (the cctools-414 release):
+- Changed print_mach_symbols() in nm.c to also print "weak" for symbols in a
+  section with the S_ATTR_WEAK_DEFS attribute.  Radar bug #2898558.
+- Changed seg_addr_table(1)'s default adresses for Mac OS X 10.2 to be
+  0x8fe00000 not 0x7fe00000.  Radar bug #2897418.
+- Added the new routine check_for_extra_LC_PREBOUND_DYLIB() in redo_prebinding.c
+  and a call to it in process_arch().  This is done to match dyld's checking
+  for extra LC_PREBOUND_DYLIB commands an not use the prebinding.  Radar bug
+  #2894021.
+- Fixed the arguments to the fprintf() call on line 762 in redo_prebinding.c .
+
+Changes for the 5.10 release (the cctools-413 release):
+- Changed seg_addr_table(1)'s default adresses for Mac OS X 10.2 to be
+  0x7fe00000 not 0x7ffc0000.
+
+Changes for the 5.10 release (the cctools-412 release):
+- Fixed a problem with the redo_prebinding(3) library routine when it is passed
+  zero for the slide_to_address parameter.  The static variable dylib_vmslide
+  did not get reset in reset_statics() like it should.  Radar bug #2882844.
+- Changed seg_addr_table() to not cause an error when the project that builds
+  a library can't be found in the -update or -update_overlaps mode.  This was
+  done by passing a new no_error_if_missing parameter to get_image_file_name()
+  which pass it down to get_symfile_for_dylib() and get_dstfile_for_dylib().
+  Radar bug #2882324.
+- Fixed a bug in strings(1) that was passing the process_non_objects to
+  ofile_process() as FALSE when it should have been TRUE.  Radar bug #2868578.
+
+Changes for the 5.10 release (the cctools-411 release):
+- Changed seg_addr_table(1)'s default adresses for Mac OS X 10.2 to be based on
+  the value MACOSX_DEPLOYMENT_TARGET.  Also added the flag -allocate_flat
+  with the increasing or decreasing argument to allow the flat libraries to be
+  allocated in decreasing addresses.  Radar bug #2848945.
+
+Changes for the 5.10 release (the cctools-406 release):
+- Changed dependent_libs(3) to work for MH_BUNDLE type objects. Radar bug
+  #2862297.
+
+Changes for the 5.10 release (the cctools-405 release):
+- Changed the implementation of the fix to strip below slightly.  The code to
+  check if a local private extern was on the save list was moved ahead of
+  other checks in strip_symtab().  This is needed to avoid an error saying the
+  symbols names listed in save file was not in the object file.
+
+Changes for the 5.10 release (the cctools-404 release):
+- Changed strip(1) to fix the problem with the fix to strip private externs
+  that were turned into statics which was Radar bug #2853161.  This change
+  caused some private extern coalesced symbols used through indirect symbols
+  not to be saved.  The fix was to copy the code to check for coalesced symbols
+  used by indirect symbols into the local symbol if case.  Then as it turned out
+  some other non-coalesced local symbols were being used via indirect symbols
+  so the test for the symbol being coalesced was removed and only the test for
+  using it through an indirect symbol remains.  The new Radar bug is 2860291.
+- Changed weak_module to be static in redo_prebinding.c.  Radar bug #2859919.
+
+Changes for the 5.10 release (the cctools-403 release):
+- Changed the all target in the Makefile to also depend on lib_ofiles so
+  everything gets built by default.
+
+Changes for the 5.10 release (the cctools-402 release):
+- Changed strip(1) to strip private externs that were turned into statics that
+  are in a dynamic library that are not referenced by a module other than where
+  the symbols is defined.  Radar bug #2853161.
+
+Changes for the 5.10 release (the cctools-400 release):
+- Changed the Makefile back to again use the -dependency-file with gcc.
+- Changed seg_addr_table to not generate errors about table entries that do not
+  exist when -update or -update_overlapps are specified.  Radar bug #2848667.
+- Changed check_syms to not check dynamic shared library addresses.  The code
+  in check_dylib() was ifdef'ed out.  Radar bug #2847857.
+- Fixed a bug in the change to strip that stripped coalesced symbols that are
+  not used with an indirect symbol table entry by default. Radar bug #2689894.
+  The problem is that the setting of output_indirect_symtab was not done for the
+  strip (not NMEDIT case) when it was moved up.  Radar bug #2851013.
+- Added the new throttle parameter to the redo_prebinding() API to allow it to
+  be used used for prebinding on demand to throttle back its I/O when running
+  in the back ground.  Radar bug #2850642.
+- Changed indr.c, strip.c, seg_hack and install_name_tool to add the new
+  throttle parameter to writeout().  Radar bug #2850642.
+
+Changes for the 5.10 release (the cctools-399 release):
+- Changed seg_addr_table(1) in the -update or -update_overlapps case to not
+  check that non-zero addresses in the table match the addresses in the dynamic
+  library file.  Radar bug #2841199.
+
+Changes for the 5.10 release (the cctools-398 release):
+- Changed redo_prebinding to check if the library has already been loaded via
+  the dev,ino pair from stat(2).  This change is in load_library() and the
+  fields dev,ino have been added to the lib struct.
+
+Changes for the 5.10 release (the cctools-397 release):
+- Added the new allow_missing_architectures parameter to the 
+  needs_redo_prebinding() API.  Radar bug #2836068.
+- Added the -multiply_defined_unused flag to libtool.  Radar bug #2835152.
+
+Changes for the 5.10 release (the cctools-396 release):
+- Changed seg_addr_table(1) to not use the SYMROOT file when -update is used.
+  Radar bug #2826945.
+- Added passing the -weak_reference_mismatches flag from libtool to ld.
+- Added the new allow_missing_architectures parameter to the redo_prebinding()
+  API in <mach-o/redo_prebinding.h>. Radar bug #2809673.
+
+  In API redo_prebinding() the new allow_missing_architectures parameter gets
+  set into the static variable arch_cant_be_missing.
+
+  In load_library() where it checks for missing architectures it tests the
+  static variable arch_cant_be_missing for non-zero and compares it to the
+  arch_flag.cputype.  If set and it does not match load_library() was changed
+  to return FALSE (previously void) else it returns TRUE.
+
+  In load_archs_libraries() and load_dependent_libraries() which calls
+  load_library() if load_library() returns FALSE these two calls also return
+  FALSE.
+
+  Then in process_archs() if load_archs_libraries() and
+  load_dependent_libraries() return FALSE it calls to setup the symbolic info,
+  build a new symbol table and swap the symbol table for output before
+  returning.
+ 
+  The routines setup_symbolic_info() and build_new_symbol_table() both had a
+  new boolean prameter missing_arch.  And if missing_arch is passed as TRUE it
+  just setups up the info or builds the new symbol table without updating the
+  prebinding info.
+
+- Added the -f flag to ranlib so that it warns when it creates a fat archive
+  that ar(1) will not be able to operate on.  This is used by ar(1) with the
+  -s option when it runs ranlib. Radar bug #2814831.
+- Changed the use of N_WEAK_SYM to N_WEAK_REF in nm.c and redo_prebinding.c.
+- Changed the Makefile to not use the -dependency-file with gcc as well as
+  mwccppc.
+
+Changes for the 5.10 release (the cctools-395 release):
+- Fixed a bug in redo_prebinding that was checking for symbols being overridden
+  where it should have ignored two-level namespace libraries. Added checks in
+  check_dylibs_for_definition() and check_dylibs_for_reference().
+
+Changes for the 5.10 release (the cctools-394 release):
+- Fixed a bug in redo_prebinding that should not have been checking for symbols
+  being overridden in two-level namespace images.  The change was in
+  process_arch() adding a check before the call to
+  check_for_dylib_override_symbols().
+- Changed strip to strip coalesced symbols that are not used with an indirect
+  symbol table entry by default. Radar bug #2689894.
+- Updated redo_prebinding to support weak linking. Radar bug #2803414.
+
+Changes for the 5.10 release (the cctools-393 release):
+- Changed nm(1)'s -m option to print "weak external" for symbols with the
+  N_WEAK_SYM bit set.
+- Made the changes to support the LC_LOAD_WEAK_DYLIB varient of the
+  LC_LOAD_DYLIB load command.  The following files were effected check_hints.c,
+  install_name_tool.c, nm.c, redo_prebinding.c and segedit.c.
+
+  Note: the changes to redo_prebinding.c to support redoing the prebinding when
+  a weak library is missing or a weak symbol is missing is not done yet.
+
+Changes for the 5.10 release (the cctools-392 release):
+- Changed the calls to ofile_process() in size.c, strings.c, nm.c and
+  kern_tool.c to pass TRUE for the new use_member_syntax parameter.  Radar bug
+  #2730127.
+- Changed the calls to ofile_process() in checksyms.c, cmpdylib.c,
+  seg_addr_table.c and check_dylib.c to pass FALSE for the new use_member_syntax
+  parameter.  Radar bug #2730127.
+
+Changes for the 5.10 release (the cctools-390 release):
+- Added the command install_name_tool(1).
+- Fixed some bugs in the update_load_commands() routine of redo_prebinding.c .
+  The first was the missing check of the section flags against S_ZEROFILL when
+  determining the low_fileoff.  The others where in not resetting all of the
+  pointers into the load_commands at the end of the routine.
+
+Changes for the 5.10 release (the cctools-389 release):
+- Updated the inout.c example tool to work correctly with all the tables of
+  a dynamic library.
+- Added the -prebind_all_twolevel_modules and the -headerpad_max_install_names
+  options to libtool.
+- Fixed a bug with the checking of the LIBRARY_ORDINAL in redo_prebinding that
+  was causing a crash when SELF_LIBRARY_ORDINAL (0) was used in a malformed
+  executable.  Radar bug #2787021.
+
+Changes for the 5.10 release (the cctools-387 release):
+- Changed check_dylib to not check the -install_name argument of the dylib if
+  the dylib starts with @executable_path.
+- Added the -seg_addr_table_filename <file_system_path> option to libtool,
+  redo_prebinding, checksyms and check_dylib.  For check_dylib this flag is
+  required.
+- Fixed a grammatical error in redo_prebinding.c where "overridden" should have
+  been used where "overridded" was used.   Radar bug #2764926.
+
+Changes for the 5.10 release (the cctools-386 release):
+- Changed the breakout() calls in strip.c, indr.c and seg_hack.c to pass FALSE
+  as the value for the new calculate_input_prebind_cksum parameter and always
+  set the prebind checksum to zero (if any) on output.
+- Added the -z option to redo_prebinding(1) to zero out the prebind check sum.
+- Changed all the breakout() calls in redo_prebinding.c to pass the appropate
+  value for the new calculate_input_prebind_cksum parameter.
+
+Changes for the 5.10 release (the cctools-385 release):
+- Fixed a bug in the parsing of the -segs_read_only_addr and
+  -segs_read_write_addr options to seg_addr_table.c that was missing a leading
+  '-'.
+- Changed redo_prebinding(1) to add the -seg_addr_table option to allow it to
+  relocate a dynamic library to a new prefered address.  Many changes to the
+  code were made to support this. Radar bug #2575205 and #2729976.
+
+  Added the routine object_file_type().
+
+  Added the only_if_needed boolean parameter to the redo_prebinding(3) library.
+
+  Changed the return type of the redo_prebinding(3) library API to be an enum.
+
+  Removed the comment about the slide_to_address parameter of the
+  redo_prebinding(3) library API not being supported.
+
+  Added the expected_address parameter to the needs_redo_prebinding(3) library
+  API.
+
+  Changed libredo_prebinding.a from an object file to an archive.
+
+Changes for the 5.9 release (the cctools-380 release):
+- Added the -twolevel_namespace_hints option to libtool.  Radar bug #2735266.
+
+Changes for the 5.9 release (the cctools-379 release):
+- Fixed pagestuff(1) to know about the hints table.
+
+Changes for the 5.9 release (the cctools-372 release):
+- Picked up the changes to seg_addr_table(1) for the new -update_overlaps
+  option.
+
+Changes for the 5.9 release (the cctools-371 release):
+- Fixed "uptodate" to be "up to date" in redo_prebinding.c.  Radar bug #2711451.
+- Fixed a bug in redo_prebinding(1) that was not testing the value of arch_hints
+  for NULL before using it in build_new_symbol_table() in redo_prebinding.c
+  before using it.  So for images without hints it would crash.
+
+Changes for the 5.9 release (the cctools-370 release):
+- Added support for updating the hints table to redo_prebinding.
+
+  Changed swap_arch_for_output() for swapping hints on output.
+
+  Change build_new_symbol_table() in redo_prebinding.c to also update
+  the hints table with its call to lookup_symbol().  Changed the various
+  lookup_symbol*() routines to take a pointer to a isub_image and itoc to
+  fill in if not NULL.
+
+  Changed build_new_symbol_table() to account for hints in the sym_info_size.
+
+  Added variables arch_hints and arch_nhints to redo_prebinding.c and cleared
+  them in reset_statics() and set and swapped them in setup_symbolic_info().
+
+- Changed strip_object() in strip.c to set the object's output_hints field and
+  to reset the object's hints_cmd->offset field.  Also to adjust the
+  input_sym_info_size and output_sym_info_size fields with the size of the
+  hints.
+- Changed build_new_symbol_table() in redo_prebinding.c to know about the
+  hints table as in strip above.
+- Changed translate_dylib() in indr.c to know about INDIRECT_SYMBOL_LOCAL and
+  INDIRECT_SYMBOL_ABS.  And to know about prebound undefined symbols (N_PBUD).
+  Also made the same changes as in strip noted above for hints.
+
+Changes for the 5.9 release (the cctools-369.3 release):
+- Fixed a bug in check_symbolic_info_tables() in redo_prebinding.c in its
+  checking for bad LIBRARY_ORDINAL that needed to make sure the symbol was not
+  a N_STAB before checking it.
+
+Changes for the 5.9 release (the cctools-369 release):
+- Fixed redo_prebinding which had the same problem as dyld that was fixed in
+  cctools-366 with undefined symbol references from two-level images where
+  the definition of the symbol is in a sub-framework of a flat namespace
+  umbrella framework that would come up undefined.   The fixes were in
+  load_archs_libraries() and load_dependent_libraries() for counting the
+  dependent libraries no longer being conditional on the image being
+  MH_TWOLEVEL.  And in load_dependent_libraries() so the call to
+  setup_sub_images() is also longer conditional on if the image is MH_TWOLEVEL.
+
+Changes for the 5.9 release (the cctools-367 release):
+- Added support for sub-libraries like sub-umbrellas to redo_prebinding.
+  Radar bug #2697458.
+
+  Added the following field to the lib struct:
+    char *library_name; 
+  and changed the of the following field from umbrella_name_size to:
+    unsigned long name_size;    
+  for use both by umbrella_name and library_name.  The code was changed to use
+  the new field name.
+
+  Changed load_archs_libraries() and load_library() to set the library_name
+  field from the return value of guess_short_name().
+
+  Changed print_two_level_info() to print the library_name in the various lists.
+
+  Changed setup_sub_images()'s header comments to include sub-libraries and
+  added code to deal with sub-libraries like sub-umbrellas.
+- Added the -sub_library flag to libtool.  Radar bug #2697458.
+
+Changes for the 5.9 release (the cctools-363 release):
+- Changed libtool so that if -arch_only is specified with a specific cpusubtype
+  other than the family cpusubtype it does not use -force_cpusubtype_ALL and
+  passes the -arch_only argument to ld(1) as the -arch flag so that the output
+  is to be tagged with that cpusubtype.
+
+Changes for the 5.9 release (the cctools-362 release):
+- Fixed a bug in redo_prebinding.c in main() where the mask it uses to get
+  the mode from the stat mode should be 07777 not 06777 so the sticky bit
+  gets set.
+- Added progname to file.c as the changes to libstuff needs it (this is the
+  Openstep version of file).
+- Fixed the same bug in load_dependent_libraries() as in dyld in
+  redo_prebinding.c that was only calling setup_umbrella_images() if the library
+  was a MH_TWOLEVEL.  This needed to call setup_umbrella_images() for all
+  libraries as it is possible that a sub-framework of an umbrella library is
+  flat and the umbrella library is two-level.  In that case other images could
+  have two-level namespace references recorded to the umbrella library for
+  symbols defined in the flat sub-framework.
+
+Changes for the 5.9 release (the cctools-360 release):
+- Added the -e option to redo_prebinding(1) to take the executable_path.
+- Changed the code in redo_prebinding to be ifdef'ed with LIBRARY_API for the
+  API in Radar bug #2604014.
+
+Changes for the 5.9 release (the cctools-359 release):
+- Changed libtool(1) to pass -multiply_defined <treatment> to the linker.
+- Made a great number of changes to redo_prebinding(1) so it would support
+  two-level namespace images.
+- Fixed a bug in redo_prebinding(1) that would overwrite the output_file with
+  a partially written file if the filesystem fills up.  Radar bug #2639352.
+- Added code in nm.c to deal with the library ordinal being EXECUTABLE_ORDINAL.
+- Changed checksyms(1) to open the default segment address table if none is
+  specified via a -seg_addr_table argument.
+- Added -Wno-long-double to shutup the compiler for
+  <architecture/m88k/fp_regs.h>.
+
+Changes for the 5.8 release (the cctools-357 release):
+- Added support for the CPU_SUBTYPE_POWERPC_7450 in lipo.c. Radar bug #2599869.
+- Fixed a bug in seg_addr_table(1) when the -update option was used that it
+  did not preserve the non-zero addresses in the table.  Instead it changed the
+  non-zero entries to the values in the libraries were built with.  Radar bug
+  #2575214.
+
+Changes for the 5.8 release (the cctools-356 release):
+- Changed the algorithm in seg_addr_table(1) for split libraries to add in the
+  rounding factor (0x10000) before calling round().
+
+Changes for the 5.8 release (the cctools-355 release):
+- Fixed a bug in strip that needed to save local symbols that were private
+  extern symbols that were in COALESCED sections.  Radar bug #2584111.
+
+Changes for the 5.8 release (the cctools-354 release):
+- Fixed a bug in libtool(1) when using -filelist that did not allocate the
+  correct amount of memory due to a '*' needing to be a '+' on lines 388 and
+  on 390.
+
+Changes for the 5.8 release (the cctools-352 release):
+- Fixed yet another bug with nmedit(1) that did not set the fields nlocalsym and
+  nextdefsym to zero before incrementing them.
+
+Changes for the 5.8 release (the cctools-351 release):
+- Fixed a bug in nmedit(1) that did not swap the correct module table.
+- Fixed a bug with nm(1) dealing with a dynamic library that had bad iextdefsym
+  or nextdefsym fields of a dylib_module which caused it to crash.
+
+Changes for the 5.8 release (the cctools-350 release):
+- Fixed a bug in seg_addr_table(1) where the -disablewarnings flag did not
+  disable the split overlap messages.
+
+Changes for the 5.8 release (the cctools-349 release):
+- Added passing -Y through from libtool to ld.
+
+Changes for the 5.8 release (the cctools-348 release):
+- Changed nmedit to remove duplicate names in the -s file so it does not
+  later complain that a symbol did not appear in the input file.
+
+Changes for the 5.8 release (the cctools-347 release):
+- Fixed a bug in the handing of -final_output on the command line of libtool.
+
+Changes for the 5.8 release (the cctools-346 release):
+- Added the -final_output flag to libtool to pass along to ld(1).
+
+Changes for the 5.8 release (the cctools-345 release):
+- Changed redo_prebinding -c so that it also checks the installed dynamic
+  library against the file it is running against for the correct time
+  stamp.  Radar bug #2541232.
+- Fixed a bug in redo_prebinding that did not correctly exit when an
+  executable's dependent libraries were out of date.  Radar bug #2544407.
+- Fixed a bug in redo_prebinding that did not correctly redo the relocation
+  for split libraries as it was not based on the -seg_read_write_address as it
+  should have been for split libraries.  Radar bug #2544599.
+- Fixed a bug in seg_addr_table(1) that caused it to crash as it was doing
+  a memset on a malloc()'ed memory larger than was allocated.  Also fixed
+  a bug that was not allocating enough layout_info structs. Radar bug #2540744.
+
+Changes for the 5.8 release (the cctools-344 release):
+- Changed nm(1) -m to print the name of the libraries undefined symbols are
+  bound from when MH_TWOLEVEL is in the header.  Radar bug #2538835.
+
+Changes for the 5.8 release (the cctools-342 release):
+- Added parsing the -flatname_space and -twolevel_namespace options and 
+  -allowable_client option to libtool(1).  Radar bug #2533649.
+- Changed seg_addr_table(1) in its checking of sorted flat libraries for
+  overlaps so that when checking the next flat address to be assigned it checks
+  that the next address is also greater than the start of the as well as less
+  than the end of the region and that the region is not a fixed region.
+  Radar bug #2531831.
+
+Changes for the 5.8 release (the cctools-341 release):
+- Changed setup_symbol_list() in strip.c to allocate and stuff in an extra
+  newline in the symbol list file so that files that end without a new line
+  work.  Radar bug #2520711.
+- Added the tool seg_hack to change the names of Mach-O segments for use by KLD.
+  Radar bug #2523649.
+- Changed nmedit to not change global coalesced symbols into statics and changed
+  strip not not strip global coalesced symbols.  Radar bug #2503670.
+  Also made a fix to this to because if a coalesced symbol were listed in the
+  -s file it complained that the symbol was not in the input.
+
+Changes for the 5.7 release (the cctools-337 release):
+- Changed seg_addr_table(1) to use 0x70000000 as the default segs_read_only_addr
+  and 0x80000000 as the seg_read_write_addr.  Also added two entries in
+  sorted_flat_layout_info so that next_flat_seg1addr() will step over these
+  areas.  Radar bug #2496843.
+- Added a check in edit_symtab() in strip.c (for nmedit) that checks to see
+  that the N_FUN name is not NULL.  This prevents a error message about a
+  missing ':' in the stab name of a N_FUN when the name is NULL.  The compiler
+  emits this as the end of the function stab.  Radar bug #2495413.
+
+Changes for the 5.7 release (the cctools-336 release):
+- Added code in libtool.c that did not place N_SECT symbols marked with the
+  attribute NO_TOC into the table of contents.  Radar bug #2494286.
+
+Changes for the 5.7 release (the cctools-334 release):
+- Changed checksyms(l) to not generate an error if a segment address table is
+  used and the library is not found in it.  As the B&I tools will add it
+  automaticly.  Also removed all checks for paths and use guess_short_name().
+  Also changed guess_short_name()'s has_suffix argument to return a pointer
+  to the suffix so checksyms could check for "_debug".  This effected
+  seg_addr_table(l)'s and ld(1)'s guess_short_name() call too.  Radar bug
+  #2490411.
+- Changed seg_addr_table(l) to not use the factor for allocating the size of
+  split libraries.  Also added some checking so that only the first 128meg of
+  a 256meg split segment is allocated.  Radar bug #2490413.
+- Added the -run_init_lazily flag to libtool. Radar bug #2490396.
+
+Changes for the 5.7 release (the cctools-333 release):
+- Fixed a bug introduced with the changes to strip.c to allow nmedit to work
+  on shared libraries.  It produced bad output files for fat files as it was
+  free()'ing data structures to be written out.  Radar bug #2484851.
+
+Changes for the 5.7 release (the cctools-332 release):
+- Added the -disablewarnings flag to seg_addr_table(1).  This flag is also
+  passed to the various routines used in libstuff (Radar bug #2482327).
+- Fixed a bug in seg_addr_table(1) where -update did not ignore the fixed and
+  next entries which caused address assigned for -update to be very messed up
+  (Radar bug #2482327).
+- Major changes to strip.c to allow nmedit to work on dynamic shared libraries.
+  Also fixes to nmedit so that the symbol table was in the right order after
+  symbols were change to statics.  Other changes in dyld and ld are also needed
+  for this change (Radar bug #2420307).
+
+Changes for the 5.7 release (the cctools-330 release):
+- Changed the call to netname_look_up() in check_for_ProjectBuilder() in
+  libtool.c to bootstrap_look_up() when __OPENSTEP__ and
+  __GONZO_BUNSEN_BEAKER__ is not defined (Radar bug #2473864).
+
+Changes for the 5.7 release (the cctools-329 release):
+- Fixed a bug in the command line parsing of the strings command where if you
+  gave it any argument it would think there were also files listed on the
+  command line so it would never parse standard input if "strings -4 < file"
+  was used (Radar bug #2459126).
+- Added code in seg_addr_table.c to not assign addresses over the maximum
+  intel user space address.  Radar bug #2418080.
+- Removed the core.c file from this directory since the new API to create a
+  task from a core file was added.  Radar bug #2155790.
+- Changed libtool to pass -whatsloaded to ld(1).  Radar bug #2469803.
+- Fixed a bug in seg_addr_table when in update mode an new flat entry with a
+  zero address in the table (and a non-matching address in the file) is to be
+  updated and there are existing entries with the same short name.  To solve
+  this a new field current_entry was added to the layout_info struct for
+  sizes_and_addresses() to use.  It is set to the current seg_addr_table entry
+  before calling ofile_process() which will call sizes_and_addresses().  Then
+  sizes_and_addresses() can tell if the current entry has a zero address not to
+  generate the warning message about the ofile not having the correct seg1addr.
+  Radar bug #2469876.
+- Fixed a bug in seg_addr_table in sizes_and_addresses() where it was updating
+  the layout_info->seg1addr after it printed an error message that the seg1addr
+  did not match.  That error message also did not print the architecture.  This
+  problem then caused a later error message to think that the original file had
+  the wrong address.  Radar bug #2469876.
+- Fixed a bug in libtool/ranlib that did not deal with zero length archive
+  members that had long names and used 4.4BSD extended format #1.  The code in
+  libtool in two places was subtracting the size of the name from the member
+  size which had already been done by the ofile routines.  Radar bug #2460604.
+- Changed checksyms(l) to allow debug symbols in libraries and frameworks with
+  _debug suffixes.  Radar bug #2469760.
+- Changed strip.c to allow '\r' as well as '\n' in the strip list file.  Radar
+  bug #2458346.
+
+Changes for the 5.7 release (the cctools-327 release):
+- Changed checksyms(l) to used "/AppleInternal" going forward and only use
+  "/Local" when __GONZO_BUNSEN_BEAKER__ is defined for older builds (DP3, PR2,
+  etc).
+
+Changes for the 5.6 release (the cctools-324 release):
+- Fixed a bug in seg_addr_table(l) so that it checks all entries in the table
+  against all other entries for overlaps.
+- Fixed a bug in seg_addr_table(l) so that -checkonly does not check entries
+  with 0 addresses.
+- Fixed a bug in seg_addr_table(l) in its next_flat_seg1addr() not correctly
+  stepping over the fixed regions.
+- Fixed a bug in seg_addr_table(l) in reporting the correct line in checking
+  for overlap with fixes regions (the have the same "install_name") so the new
+  routine search_seg_addr_table_for_fixed() was added.
+
+Changes for the 5.6 release (the cctools-323 release):
+- Fixed a bug in redo_prebinding(1) that did not correctly mark the module with
+  the shared library initialization routine as linked in cases where the module
+  was not directly referenced.  This could cause the shared library
+  initialization routine not to be called.  Radar bug #2450931.
+- Added passing -arch_errors_fatal from libtool(1) to ld(1).
+- Changed the check_install_name(l) tool to be check_dylib(l) to preform
+  a series of checks on a dynamic library as per B&I's request.
+- Changed seg_addr_table(1) to not fall back an try to open the install_name
+  if a -release option was specified.  As this is the way B&I intends to use
+  the tool.  Also added the -checkonly option.
+- Removed the ifdef's that avoided calling find_dylib_in_root() as the bug
+  in there that was missing an fts_close() is fixed.
+
+Changes for the 5.6 release (the cctools-322 release):
+- Added ifdef'ed for __SPACE__ and created a macro SYSTEM_LIBRARY in checksyms.c
+  in preparation for the directory changes. /System/Library changing to
+  /MacOSX/System.
+- Created the check_install_name(l) tool for B&I to check the a dynamic library
+  is installed in its $(DSTROOT) in its -install_name.
+
+Changes for the 5.6 release (the cctools-321 release):
+- Picked up Chris Kane's changes to checksyms(l) to not check for objcunique
+  sections.  Radar bug #2448096.
+- Added overlap checking to seg_addr_table(l) and support for fixed regions.
+  Currently there are bugs in fts(3) so its used is ifdef'ed out with
+  ifdef NO_BUGS_IN_FTS which means that the DSTROOT file is searched for but
+  not the SYMROOT file.
+
+Changes for the 5.6 release (the cctools-320 release):
+- Fixed a bug in libtool to not passing -arch_multiple when fat files are in the
+  input files to ld when -arch_only is passed to libtool.
+- Added the -dylib_file option to libtool.
+- Added the -umbrella option to libtool.  Radar bug #2443212.
+
+Changes for the 5.6 release (the cctools-319 release):
+- Removed the check for execute bits in a dynamic library in checksyms(l).
+- Added the -seg_addr_table option and the LD_SEG_ADDR_TABLE environment
+  variables as alternate ways to check the address of shared libraries in
+  checksyms(l).
+- Created the seg_addr_table(1) program to layout and update a segment address
+  table for use when building dynamic libraries.
+
+Changes for the 5.5 release (the cctools-315 release):
+- Removed the installing of the bom file as this has not been used since
+  NeXTstep 2.1.
+
+Changes for the 5.5 release (the cctools-314 release):
+- Changed where nmedit gets installed from /usr/local/bin to /usr/bin.  Radar
+  bug #2396595.
+
+Changes for the 5.5 release (the cctools-310 release):
+- Added passing the -Sn, -Si, -S, -X flags from libtool to ld.
+
+Changes for the 5.5 release (the cctools-307 release):
+- Added two private options for nm. -b name and -iN to print the N_BINCL symbols
+  from the 'name' include file starting at index N not printing the file#'s.
+  This was used to track down differences in stabs.  Radar bug #2410704.
+- Fixed a bug in nmedit(l) (and strip(1)) that did not process the -arch flags
+  as arch family flags.  Radar bug #2405763.
+- Added the the STAB types: N_BNSYM, N_ENSYM, N_BINCL, N_EINCL and N_EXCL to
+  the table in nm for printing. Radar bug #2410704.
+- Added support for the CPU_SUBTYPE_POWERPC_7400 in lipo.c.  Radar bug #2397523.
+
+Changes for the 5.4 release (the cctools-303 release):
+- Changed libtool so that the message that about creating a library with an
+  empty table of contents is calling warning() not error() as it is a warning
+  message.  Also added "define global symbols" to the end of the message "(no
+  object file members in the library define global symbols)".
+- Changed a message in checksyms(l) to use "Build & Integration" and not
+  "release control".  Radar bug #2377929.
+
+Changes the 5.4 release (the cctools-300 release):
+- Fixed a bug in nmedit(1) when using -R and processing more than one
+  architecture it printed an error stating "more than one symbol" for a symbol
+  listed in the -R file appeared in the input file.  Radar bug #2367598.
+- Changed nmedit(l) to strip all arch's when no -arch flags are specified to
+  match the behavoir of strip(1).  Radar bug #2367598.
+- Added the "-init <symbol_name>" argument to libtool to be passed through to
+  ld(1) for the dynamic shared library initialization routine symbol
+
+Changes the 5.4 release (the cctools-296 release):
+- Added the -v (verification flag) to checksyms to print out a single line for
+  each type of error checksyms finds.  Also added hacks #ifdef'ed
+  ALLOW_MACOSX_PR1_PATHS to allow all MacOS X PR1 paths.
+
+Changes the 5.3 release (the cctools-292 release):
+- Added some braces to get rid of the warning message from the egcs compiler
+  "warning: suggest explicit braces to avoid ambiguous `else'".  This was done
+  to cmpdylib.c .
+- Changed the return type of main() in redo_prebinding.c, pagestuff.c,
+  dylib_pcsampler.c, cmpdylib.c, kern_tool.c, segedit.c, strip.c, indr.c,
+  checksyms.c, libtool.c, nm.c, strings.c, size.c and lipo.c from void to int to
+  remove a warning from the egcs compiler.  Also changed the exit() calls at the
+  end to return()'s.
+
+Changes the 5.3 release (the cctools-290 release):
+- Fixed a bug in nmedit in the code that was added to support the -p flag.
+
+Changes the 5.3 release (the cctools-289 release):
+- Added the -p flag to nmedit to change symbols into private externs rather
+  than static.
+
+Changes the 5.3 release (the cctools-288 release):
+- Changed nmedit(l) to change the indirect symbol table entries for global
+  symbols it makes static.  The indirect symbols are changed to
+  INDIRECT_SYMBOL_LOCAL or INDIRECT_SYMBOL_ABS.  This problem showed up in
+  using nmedit for the work around with the egcs compiler and C++ RTTI common
+  data in a dynamic shared library.
+- Added passing -whyload through libtool to ld.
+- Changed some type and casts to make strip.c compile with the MetroWerks
+  compiler.
+- Changed the message printed when the environment variable RC_TRACE_ARCHIVES
+  is set from: "RC_TRACE_ARCHIVES archive_name" to: "[Logging for Build &
+  Integration] Used static archive: archive_name".  Radar bug #2310273.
+
+Changes for the the 5.3 release (the cctools-285 release):
+- Fixed a bug in libtool(1) that was not using NEXT_ROOT when set to expand
+  -l flags.
+- Added printing a line like "RC_TRACE_ARCHIVES archive_name", where
+  archive_name is a archive being put into the output of libtool(1) -static.
+  This is done when the environment variable RC_TRACE_ARCHIVES is set.
+  Radar bug #2303376.
+- Removed the #ifdef NeXT from atom.c .
+- Fixed a bug in ranlib (aka libtool) where when dealing with multiple symbols
+  defined in the same members, it trys to only print each table of contents
+  entry once by marking the symbol by changing the sign on the ran_off field.
+  There were two missing casts on two comparisons because the ran_off is
+  unsigned.
+- Fixed a bug in strip in strip_symtab() where when it was walking the reference
+  table looking for symbols not yet listed as saved it would added them to the
+  changes[] array without testing to see it it already added them to the
+  changes[] array.  This happens because a symbol may be referenced by more the
+  one module in dynamic shared library.  This showed up when the CoreGraphics
+  framework was stripped with the -s option and undefined symbols were not
+  expicitedly listed.  This caused the code in strip to allocate more new
+  undefined symbols maps than it filled it.  The extra maps were garbage and
+  caused the module table in the CoreGraphics to be updated wrong which caused
+  the static linker to generate the malformed object error:
+	ilocalsym field plus nlocalsym field of module table entry 1 past the
+	end of the symbol table
+
+Changes for the 5.3 release, MacOS X bring up (the cctools-282 release):
+- Added libtool to the Metrowerks source target.
+- Changed host_self() and task_self() to mach_host_self() and mach_task_self()
+  for MacOS X.  Also included "stuff/openstep_mach.h" for macros to allow it
+  to still build on Openstep.  Also changed ifdef's __SLICK__ to __OPENSTEP__.
+- Ifdef'ed __MACH30__ make.defs for mach_port_t vs mach_port.  Also ifdef'ed out
+  netname_look_up() call and #include <servers/netname.h> for __MACH30__ in
+  libtool.c (these are not yet in the SDK).
+- Changed the Makefile to allow for RC_OS=macos for MacOS X builds.
+- Added a few casts in places to get it to compile with the MetroWerks compiler
+  without -relax_pointers.
+- Changed the Makefile to nolonger compile checksyms with -static.  When linking
+  with -static the MetroWerks compiler uses -framework System which is not
+  leagal with ld(1) and -static.
+- Changed arch_flag_processed = FALSE; to arch_flag_processed = NULL; in
+  translate_input() in indr.c so it would compile with the MetroWerks compiler.
+
+Changes for the 5.2 release (the cctools-281 release):
+- Changed redo_prebinding to exit with a error code of 3 if the dependent
+  libraries are out of date.  Radar bug #2259447.
+
+Changes for the 5.2 release (the cctools-280 release):
+- Changed libtool to pass the -F and -L flags to objcunique.  Radar bug #2257931.
+
+Changes for the 5.2 release (the cctools-276 release):
+- The fix in cctools-275 was using the variable "changes" after it was free'ed.
+  Move the free() past the last use.
+
+Changes for the 5.2 release (the cctools-275 release):
+- Made a fix to strip when stripping a dynamic shared library.  If a symbol is
+  to be stripped and it was defined in a module and also referenced in another
+  module, it was correctly changed to an undefined symbol but incorrecly left
+  in the table of contents. Radar bug #2239280.
+
+Changes for the 5.2 release (the cctools-274 release):
+- Added the -R option to nmedit to provide a list of symbols to turn into 
+  static symbols.  If -R is specified and no -s is specified all symbols except
+  those in the -R file are "saved" and not turned into static symbols.
+  Radar bug #2235926.
+- Added the -R option to strip to provide a list of symbols to strip.  Also
+  changed the list of symbols to allow comment lines starting with '#' and to
+  trim leading and trailing blanks.  Radar bug #2235926.
+- Removed uses of CPU_SUBTYPE_586SX in lipo.c and added support for the new
+  intel subtypes. Radar bug #2231830.
+
+Changes for the 5.2 release (the cctools-271 release):
+- Fixed it so libtool -static would not warn about -L and -l flags as these
+  are valid flags with -static.
+
+Changes for the 5.2 release (the cctools-269 release):
+- Backed off checking libtool -dynamic and -static flags as hard errors to
+  allow builds to work.
+
+Changes for the 5.2 release (the cctools-267 release):
+- The -b flag for checksyms(l) is now the default to check for prebinding and
+  read_only_relocs.  Radar bug #2227469.
+- Fixed a bug in nm(1) with -o that did not print a ':' after the module name
+  and before the symbol name.  Radar bug #2227852.
+- Fixed a bug in libtool that incorrectly put -framework flags in ld flags and
+  not treat it like a file.  This caused -l and -framework to get out of order.
+  Radar bug #2227863.
+- Added the core program to test dyld debug intefaces from a core file.  This
+  program is not built as part of the install target.  It requires a
+  libdyld/debug.c compiled with -DCORE.
+- Added code to checksyms to allow blank lines in the dylib table.  Radar bug
+  #2227872.
+- Added all the suport needed for the 4.4BSD extended format #1 to nm, size,
+  strip, indr, inout, redo_prebinding, checksyms and lipo.  Radar bug #1670513.
+- Added the -L and -T flags to libtools and ranlib to support or truncate long
+  archive names.  Added all the suport needed for the 4.4BSD extended format #1
+  for long names.  The default is now -L (use long names).  Radar bug #1670513.
+- Make libtool -static treat flags for -dynamic as errors.  Also cleaned up
+  and corrected other flag checking.  Radar bug #2227885.
+
+Changes for the 5.1 release (the cctools-261 release):
+- Updated lipo's printing of supported POWERPC subtypes. Radar bug #2213821.
+- Fixed a bug in link_library_module() in redo_prebinding.c that did not check
+  if the symbol found that might be multiply defined was in a module that was
+  not in the UNLINKED state before saying it was multiply defined.
+  Radar bug #2213249.
+
+Changes for the 5.1 release (the cctools-260 release):
+- Added -c to all the install commands in the Makefile.
+- Added /Local/Library/Frameworks as a conventional path for frameworks.
+- Changed "it's" to "its" in checksyms messages.
+
+Changes for the 5.1 release (the cctools-258 release):
+- Changed checksyms to know about /usr/lib/java again.  There are two sets of
+  java dylibs and this path should have not been removed.
+
+Changes for the 5.1 release (the cctools-257 release):
+- Changed checksyms to reflect the new Java paths.  Previously was /usr/lib/java
+  now is /System/Library/Frameworks/JavaVM.framework/Libraries .
+
+Changes for the 5.1 release (the cctools-256 release):
+- Added /usr/lib/java as a conventional path for libraries in checksyms.
+  Radar bug #2005914.
+
+Changes for the 5.1 release (the cctools-253 release):
+- Made checksyms check prebinding, read-only relocs and objcunique.  Currently
+  enabled only when -b is specified.
+- Fixed a bug in checksyms that was not correctly checking for N_FUN stabs.
+- Changed the Makefile to only create the needed dst directories.
+- Changed checksyms to match the new directory layout for Preimer.
+
+Changes for the 5.1 release (the cctools-249 release):
+- Added the ppc relocation to redo_prebinding.
+- Fixed a bug in redo_prebinding in update_load_commands() when an executable
+  had LC_PREBOUND_DYLIB commands for dylibs that it did not have LC_LOAD_DYLIB
+  commands (this was run into because of a bug in ld with $NEXT_ROOT set).  The
+  fix is to toss all LC_PREBOUND_DYLIB except the ones that have matching
+  LC_LOAD_DYLIB commands.
+- Changed redo_prebinding and libtool to look for objcunique in /usr/bin rather
+  in /bin.
+- Fixed a bug where nm -n on Rhapsody did not sort correctly.  The bug was in
+  the compare function that was returning 1 or 0 for less and greater when it
+  should have been 1 or -1.
+
+Changes for the 5.1 release (the cctools-247 release):
+- Fixed a bug in libtool.c in check_sort_ranlibs() where the unsigned value
+  on lin 1952 was being checked for < 0.  A cast to int was added.
+- Added MKDIRS if code to the Makefile to build native on Rhapsody.
+- Changed the Makefile to use gnutar instead of tar because it works on Rhapsody
+  where tar does not.
+- Changed the Makefile to install non-local binaries in /usr/bin for RC_OS
+  teflon and in /bin for RC_OS nextstep (Radar 1673496).
+- Changed the code ifdef __TEFLON__ to ifndef __SLICK__ (where __TEFLON__ will
+  nolonger be defined for Rhapsody builds) so the default builds will be native
+  Rhapsody builds.  The changes were to file.c, libtool.c, lipo.c and segedit.c.
+
+Changes for the 5.0 release (the cctools-245 release):
+- Fixed symbolic links from /usr/bin/strip   to ../../bin/strip
+		       from /usr/bin/strings to ../../bin/strings
+		       from /usr/bin/size    to ../../bin/size
+		       from /usr/bin/nm      to ../../bin/nm
+  (Radar 1672088).
+
+Changes for the 5.0 release (the cctools-243 release):
+- Added symbolic links from /usr/bin/strip   to $(DSTROOT)/bin/strip
+		       from /usr/bin/strings to $(DSTROOT)/bin/strings
+		       from /usr/bin/size    to $(DSTROOT)/bin/size
+		       from /usr/bin/nm      to $(DSTROOT)/bin/nm
+  (Radar 1672088).
+
+Changes for the 5.0 release (the cctools-240 release):
+- Changed so that atom only gets installed for OS=nextstep because it used the
+  encumbered <gnu/a.out.h>.
+
+Changes for the 5.0 release (the cctools-235 release):
+- Added an ifdef(ppc) in four places to atom.c to remove some warnings.
+- Replace the comments with the OpenBSD comments in nm.c, size.c and strings.c.
+- Removed building ar and file when $(RC_OS) is "teflon".  These commands will
+  are in there own directories one level up based on the OpenBSD versions.
+
+Changes for the 5.0 release (the cctools-224 release):
+- Changed including <ranlib.h> to <mach-o/ranlib.h> which uses unsigned long
+  instead of off_t (64 bits on Teflon).
+
+Changes for the 5.0 release (cctools-216 release):
+- Changed building checksyms to link staticly.  Still does not build in Teflon
+  as it needs -lc_static which is currently missing.
+
+Changes for the 5.0 release (cctools-215 release):
+- Made a hack in the Makefile to not build checksyms for teflon because it needs
+  -lsys because RC wants it built to run on 3.3 machines.
+
+Changes for the 4.2 and 5.0 releases (cctools-213 and cctools-209.4  release):
+- Added ignoring -pg to libtool.
+
+Changes for the 5.0 release (cctools-210 release):
+- Changed m98k to ppc.
+
+Changes for the 4.2 and 4.1 patch releases (cctools-207 release):
+- Added -noall_load and -all_load to libtool.  The compiler driver with the
+  option -dynamiclib will call libtool with the -noall_load option by default.
+  This is to avoid pulling all of libcc_dynamic.a in which can't be done in
+  all cases as it could produce a undefined reference to __DTOR_LIST__.
+
+Changes for the 4.0 release (cctools-202 release):
+- Changed libtool to ignore -g[gdb,codeview,stab][number] flags (bug #67597).
+
+Changes for the 4.0 release (cctools-199 release):
+- Fixed a problem in redo_prebinding(1) with setting the file's owner and group
+  introduced in cctools-196 (bug #65646).
+
+Changes for the 4.0 release (cctools-197 release):
+- Added -image_base flag to libtool as synonym for -seg1addr (bug #65273).
+
+Changes for the 4.0 release (cctools-196 release):
+- Fixed a problem in redo_prebinding(1) which was not setting the file's owner
+  and group (bug #65137).
+
+Changes for the 4.0 release (cctools-192 release):
+- Changed redo_prebinding(1) to only run /bin/objcunique when it redoes the
+  prebinding.  This was causing /bin/objcunique to fail when run on non-Mach-O
+  files in checking modes (bug #63509).
+- Changed redo_prebinding(1) to call chmod(2) to set back the original modes so
+  setuid and setgid bits get set (bug #63448).
+
+Changes for the 4.0 release (cctools-188 release):
+- Fixed a bug in redo_prebinding where it did not correctly swap the fat files
+  it created.  The call to swap_arch_for_output() was done only once and not
+  once per architecture in the fat file (bug #62267).
+- Fixed a bug in lipo -extract where it would not extract anything except the
+  first architecture in the fat file (bug #62145).
+
+Changes for the 4.0 release (cctools-187 release):
+- Added a check to checksyms to make sure dynamic libraries have some execute
+  bits set (bug #61511).
+- Fixed a bug in redo_prebinding in the function update_load_commands() when
+  the load commands had to be rewritten the pointers to the load commands for
+  the symtab and dysymtab commands needed to be reset (bug #61735).
+- Fixed the spelling of "compatibility" (was "compaiblity") in cmpdylib error
+  message (bug #61697).
+- Fixed a bug in redo_prebinding in the function build_new_symbol_table() where
+	    arch_nmodtab * sizeof(struct dylib_module *) +
+  should have been:
+	    arch_nmodtab * sizeof(struct dylib_module) +
+  That is the size of the struct not the size of a pointer (bug #61735).
+- Changed calling /bin/objcunique to always pass -prebind in redo_prebinding
+  and libtool (bug #61735).
+
+Changes for the 4.0 release (cctools-186 release):
+- Added passing "-r root_dir" to /bin/objcunique in redo_prebinding.
+- Removed the built in table to checksyms and use ~rc/Data/DylibTable by default
+  (bug #61427).
+- Fixed a bug in nm(1) with the undocumented value difference option (-v) which
+  has to be used with -n and -s.  The problem was the test for no selected
+  symbols needed to be moved to the outer if statement (bug #61341).
+
+Changes for the 4.0 release (cctools-185 release):
+- Added running /bin/objcunique if -prebind or LD_PREBIND is set in libtool
+  (bug #61230).
+- Fixed a bug in checksyms as it parsed out "/usr/lib" before
+  "/usr/lib/NextPrinter" so it thought the name of the libFaxD library was 
+  "NextPrinter/libFaxD" not "libFaxD" as it should have been (bug #61231).
+- Added table entries to checksyms for (bug #61231):
+    { 0x1f000000, "InterfaceBuilder" },
+    { 0x20000000, "AppTest" },
+    { 0x21000000, "libRK" },
+    { 0x22000000, "libRKC" },
+    { 0x23000000, "libcanna" },
+- Added the directory  "/usr/canna/dylib" for libRK, libRKC, and libcanna
+  to checksyms (bug #61231).
+- Made a hack to checksyms(l) that allows MH_DYLIB's and MH_FVMLIB's to have
+  stabs as long as it does not have N_FUN symbols (stabs for functions)
+  (bug #61231).
+- Fixed a bug in redo_prebinding(1) which did not deal with indrect symbols
+  INDIRECT_SYMBOL_LOCAL which were local symbols that were striped (bug #61232).
+- Fixed a bug in redo_prebinding(1) which did not return the correct status
+  if an input file was mallformed and fatal_arch() was called from checkout()
+  or breakout().  The fix was to copy in the fatal_arch.c code and change
+  the exit() call in fatal_arch to switch off check_for_non_prebound (-p) and
+  exit(0) or exit(2) otherwise (bug #61232).
+
+Changes for the 4.0 release (cctools-183 release):
+- Added the -dylib_table argument to checksyms.
+- Changed checksyms to default to arch all if no -arch's are specified.
+- Finished the redo_prebinding command and added it to cctools (bug #60110).
+- Added an entry in the checksyms table for EOControl at address 0x1e000000.
+
+Changes for the 4.0 release (cctools-182 release):
+- Added an entry in the checksyms table for libFaxD at address 0x1d000000.
+  Added the directory /usr/lib/NextPrinter/ to be an allowed path.
+- Added an entry in the checksyms table for libMallocDebug at address 0.
+
+Changes for the 4.0 release (cctools-181 release):
+- Fixed a typo in the Makefile that made pagestuff from lipo.private.o
+  (bug #59715).
+
+Changes for the 4.0 release (cctools-176 release):
+- Fixed a bug in checksyms that did not deal with profile suffixed dylibs.
+  Also added entries in the table for Message and libkeymap (bug #)
+- Fixed a bug in strip in stripping objects with prebound undefined symbols
+  (bug #58405).
+
+Changes for the 4.0 release (cctools-175 release):
+- Changed the Makefile to ld -r builds because private externs were causing
+  prebinding to fail because of overlap.
+
+Changes for the 4.0 release (cctools-173 release):
+- Added passing -arch_multiple to ld from libtool when running for more than
+  one architecture.  Also always pass -arch flag because even if the objects
+  are thin dylib1.o maybe fat or of a different architecture.
+- Updated strip to know about prebound undefined symbols so it would strip
+  objects with such symbols correctly.
+
+Changes for the 4.0 release (cctools-172 release):
+- Fixed a bug in nm that was not selecting prebound undefined symbols as
+  undefined symbols when -u was used.
+
+Changes for the 4.0 release (cctools-168 release):
+- Wrote the program pagestuff to replace pageSymbols.
+- Fixed a typo in lipo "architecure" changed to "architecture" (bug #55959).
+- Change the version numbers of dynamic library to the form X[.Y[.Z]] to match
+  how next does versioning of it's projects.  This effected libtool(1), ld(1),
+  otool(1), dyld, libstuff(version_number.c) and man pages for ld and libtool
+  bug #55627).  In here the changes were in libtool.c .
+
+Changes for the 4.0 PR1 release (the cctools-166.9 and cctools-168 releases):
+- Checksyms by default should have been non-verbose.  The errors messages in
+  check_dylib() should have only been produced when the -d (detail) flag was
+  on (bug #55648).
+
+Changes for the 4.0 PR1 release (the cctools-166.8 and cctools-168 releases):
+- Updated checksyms to know about NIInterface, EOAccess, EOInterface, NeXTApps
+  and NIAccess.  As well as changed the /LocalLibrary/Frameworks/ path to
+  /NextLibrary/PrivateFrameworks/ (bug #55414).  Also now build this -static.
+- Fixed bug #55337 in libtool(1) that parsed -read_only_relocs as
+  -read-only-relocs.
+- Fixed bug #55334 in checksyms(l) which did not check for the Versions
+  directory correctly because of a copy and paste error.  Also all dylib errors
+  are now fatal.
+
+Changes for the 4.0 release (cctools-167 release):
+- Fixed bug #53766 in file(1) which incorrectly reported some fat files
+  malformed.  The bug was in type_buf() where it was looping the load commands
+  checking for non-stripped and the test to end the loop if looking past the
+  end of the buffer was in the wrong place.  This caused the varaible ifile to
+  get trashed when the symbol_table command was swapped and then the reads on
+  that file descriptor failed.
+
+Changes for the 4.0 PR1 release (the cctools-166.1 and cctools-167 releases):
+- Fixed a bug in libtool for creating static libraries that did not set the
+  toc time and mod time based on the time of the file system that the library
+  was created on.  To do this it involved changing create_library() to record
+  where the ar_date's of the toc archive headers were and rewriting them after
+  the file was closed when it is first created using the mod time from the file
+  system (bug #52612).
+
+Changes for the 4.0 release (the cctools-165 release):
+- Added passing -read-only-relocs through from libtool to ld.
+
+Changes for the 4.0 release (the cctools-164 release):
+- Fixed a bug in nm when -o is used on a dynamic library it did not print the
+  name of the module on the line.
+
+Changes for the 4.0 release (the cctools-161 release):
+- Added an undocumented -v flag to nm(1) to be used with -n and -s to print the
+  difference of the values of symbols.
+- Changed Foundation's address in checksyms to 0x18000000.
+
+Changes for the 4.0 release (the cctools-160 release):
+- Update checksyms for dylib checking:
+     checks names for these forms:
+	/NextLibrary/Frameworks/AppKit.framework/Versions/A/Appkit
+	/LocalLibrary/Frameworks/AppKit.framework/Versions/A/Appkit
+	/lib/libsys_s.A.dylib
+     checks for correct addresses
+     checks for compatibility and current version being set
+  Currently the error condition is commented out but the checking and printing
+  of the error is done.  This is waiting on the corresponding changes in the
+  app Makefiles.
+
+Changes for the 4.0 release (the cctools-158 release):
+- Changed the spelling of dynamicly to dynamically in file(1) (bug #51635).
+
+Changes for the 4.0 release (the cctools-156 release):
+- Fixed a bug in indr introduced by fixing the bug in stripping objects compiled
+  with -dynamic.  The indr code did not deal with -dynamic objects either and
+  had to be updated with what writeout() was doing when it had an object with
+  a dynamic symbol table command.
+
+Changes for the 4.0 release (the cctools-154 release):
+- Fixed a bug in checksyms that did not ignore non-object files.  The call to
+  ofile_process() had process_non_objects FALSE when it should have been TRUE.
+- To fixed a bug in stripping .o files compiled dynamic.  The test in
+  strip_object() needed to be changed to based on if there was a dynamic symbol
+  table command in the object not on if it had MH_DYLDLINK in the mach header.
+  Then the starting offset of the link edit info need to be based on the lowest
+  offset if there wasn't a seg link edit command.  Also a change was made in
+  libstuff's writeout.c
+- Wrote a first cut at cmpdylib that compares global symbols and version 
+  numbers.
+- Added support for stripping defined externals that appear as indirect symbol
+  table entries in non-lazy pointer sections.  Strip uses the values
+  INDIRECT_SYMBOL_LOCAL and INDIRECT_SYMBOL_ABS to represent the symbols that
+  are defined that were stripped.  The static link editor marks defined external
+  symbols in the n_desc field with REFERENCED_DYNAMICALLY and the new -r flag
+  saves these symbols.  For executables that use the dynamic linker and are
+  stripped with no options the default is the same as -u -r.
+  saves these symbols.  For executables that use the dynamic linker 
+- Picked up kern_tool.
+- Added to nm(1) printing of [referenced dynamically] for REFERENCED_DYNAMICALLY
+  marked external symbols with -m.
+
+Changes for the 4.0 release (the cctools-152 release):
+- Fixed a problem with indr for dylibs with symbols listed in the indr list
+  that are undefined in the library.  In this case the undefined symbol does
+  not get it's name changed to include an '_'.
+- Added -arch_only to libtool.
+
+Changes for the 4.0 release (the cctools-150 release):
+- Added the -i option to strip(1) to ignore symbols in the -s file that are not
+  in the objects being stripped.
+- Added -arch_indr to indr(l).
+- Added passing -F and -framework ld(1) options through for libtool -dynamic.
+- Changed how libtool -dynamic handles dependent dynamic shared libraries and
+  does not use the architectures contained in them to determine which
+  architectures are part of output.
+- Changed checksyms to allow non-stab symbols in MH_DYLDLINK files.
+
+Changes for the 4.0 release (the cctools-149 release):
+- Added passing the -filelist list[,dirname] option through to ld (bug #50779).
+
+Changes for the 4.0 release (the cctools-148 release):
+- Added -extract_family to lipo to extract all architectures in that family.
+  It creates a thin or fat file (bug #47499).
+- Removed the hack in checksyms to not check dylinker files now that the
+  dynamic linker can be installed stripped.
+
+Changes for the 4.0 release (the cctools-147 release):
+- Fixed a bug strip -x -S when a private extern was present it was not treated
+  as a global.  This worked with -x but not with both -S and -x.
+- Fixed a bug in nm that did not print dylibs symbol tables of the a different
+  byte sex correctly.  select_symbols() was causing double swapping if called
+  more than once.
+
+Changes for the 4.0 release (the cctools-146 release):
+- Fixed a problem with the bug fix in strip that did not update relocation
+  entries correctly if there are paired relocation entries.  The bug fix did
+  not acount for the relocation entry being a scattered relocation entry.  This
+  problem was also in indr.
+
+Changes for the 4.0 release (the cctools-145 release):
+- Fixed bugs in size, strings and checksyms when the dylib "flat" argument was
+  added it was switch.
+- Fixed a bug in strip when striping a dylib and a defined symbol is being
+  stripped and changed into an undefined symbol the undefined symbols were not
+  sorted by name.
+- Fixed a TODO in strip when attempting to strip a private extern symbol in a
+  dylib that had reference table entries to it.  This is treated as an error as
+  the static link editor relocated to these symbols and they can't be stripped.
+- Added support in indr(l) for dylibs.
+- Fixed a bug in strip that did not update relocation entries correctly if there
+  are paired relocation entries.
+
+Changes for the 4.0 release (the cctools-143 release):
+- Added support in nm for printing the symbols of dylib modules and a -f (flat)
+  switch for getting symbols as one Mach-O file.
+- Added passing the "-U symbol", "-i_defined:_indr", "-undefined warning" flags
+  through libtool to ld.  Also allowed no files if flags for sections from files
+  or indirect symbols are present. 
+
+Changes for the 4.0 release (the cctools-141 release):
+- Added the ld flag -no_arch_warnings for libtool -dynamic which prevents
+  warnings for files which don't have the correct architecture for the -arch
+  flag.
+- Fixed the spelling of "compatibility" in the compatibility_version for dylibs.
+
+Changes for the 4.0 release (the cctools-140 release):
+- Added MH_BUNDLE to file(1).
+
+Changes for the 4.0 release (the cctools-136 release):
+- Fixed a bug in strip where with no options on dyld causes it to core dump.
+  The change was to strip_object() in the case of no options if the input file
+  has dynamic symbol table  and local relocation entries keep those relocation
+  entries on output.
+
+Changes for the 4.0 release (the cctools-134 release):
+- Fixed a bug in strip that showed up when striping a 3.2 object that did not
+  have the symbols in the 3.3 order.  The problem was the relocation entries
+  did not get updated correctly because the saves[] array was not updated with
+  the output symbol index after the symbols were ordered.
+- Fixed a bug in strip that did not update N_INDR symbols correctly because it
+  did not account for the string of the indirect symbol indexed by n_value.
+  This bug was introduced in cctools-127 when strip was changed to handle
+  objects with the dynamic symbol table information.  So it is not in the
+  cctool-119 strip that is in the 3.2hp release (bug #44817).
+
+Changes for the 4.0 release (the cctools-133 release):
+- Fixed Makefile to do the mig stuff for libtool in a read-only SRCROOT.
+- Fixed a problem in strip for cross byte sex striping when the dynamic
+  symbol table info is present.  In strip.c the problem was the new symbolic
+  tables were not swapped to the target byte sex.  And in writeout.c in libstuff
+  the problem was that parts of the headers were used after they were swapped.
+
+Changes for the 4.0 release (the cctools-132 release):
+- Made libtool(1) with -dynamic ProjectBuilder aware and send it doing 
+  messages (part of bug #40745).
+
+Changes for the 4.0 release (the cctools-131 release):
+- Changed strip to treat non-external private externs as global symbols and
+  save them with -x or in the -s list file.
+- Added "(was a private external)" to nm -m's printing non-external private
+  externs.
+
+Changes for the 3.3 release (the cctools-129 release):
+- Fixed a bug in strip where it was free()'ing the new_* data structures it
+  created.
+
+Changes for the 3.3 release (the cctools-128 release):
+- Fixed a bug strip in strip_object() where it was using object->dyst->nextrel
+  without checking that object->dyst could be NULL.
+
+Changes for the 3.3 release (the cctools-127 release):
+- Major changes to strip.c to allow it to operate on objects with the dynamic
+  symbol table layouts.  strip(1) now operates on MH_DYLIB files.
+- nmedit(l) works with objects with the dynamic symbol table layouts but does
+  not re-group globals turned into statics with local symbols.  It also does
+  not operate on MH_DYLIB files.
+- Fixed checksyms -r to not exit non-zero if there are no stabs.
+
+Changes for the 3.3 release (the cctools-126 release):
+- Changed strip -s <list> when processing an archive report errors in symbols
+  not in <list> for each member but rather for the whole archive.
+
+Changes for the 3.3 release (the cctools-125 release):
+- Added -force_cpusubtype_ALL for libtool's -dynamic execution of ld(1).
+
+Changes for the 3.3 release (the cctools-124 release):
+- Added a temporary hack to checksyms(1) to not check MH_DYLINKER files.
+- Added a temporary error message in segedit.c: "current limitation, can't
+  process files with LC_DYSYMTAB load command".
+- Added a temporary error message in libstuff to check_object() in checkout.c
+  to print the error "current limitation, can't process files with LC_DYSYMTAB
+  load command" so that strip(1), nmedit(1) and indr(l) for now print a
+  reasonable message when such a file is used.
+- Added -dynamic to libtool to allow building dynamic shared libraries.
+
+Changes for the 3.3 release (the cctools-119 release):
+- Picked up the changes for lipo with respect to the sparc target.
+
+Changes for the 3.3 release (the cctools-118 release):
+- Fixed a bug that crashed strip when doing a strip -S on a library and a member
+  had no symbol table command.  The bug was in writeout.c in libstuff at line
+  490 where it indirected thought the pointer to the symbol table command
+  without checking if it was NULL.
+
+Changes for the 3.3 release (the cctools-116 release):
+- Fixed a bug in nmedit that cleared the N_EXT bit from N_INDR symbols which it
+  shouldn't have.
+
+Changes for the 3.3 release (the cctools-115 release):
+- Fixed a bug in lipo(1) that did not preserve set uid, set gid and sticky text
+  file premision bits (bug #40266).
+
+Changes for the 3.3 release (the cctools-109 release):
+- Fixed a bug in strip(1) when multiple files were listed to strip it would
+  fail with "can't create output file:****  (File exists)" where **** was blank
+  or it cored dumped.  This was because the variable output_file was not
+  correcly reset to NULL after it was free'ed.  The fix was to move the 
+  free(output_file) into the else clause that also did the makestr() call and
+  also set output_file to NULL after the free().  This is in strip.c in 
+  strip_file() at the end of the routine.
+
+Changes for the 3.3 release (the cctools-102 release):
+- Integrated in the hppa support.
+different misc/lipo.c (integrated for cctools-102)
+     Using cctoolshppa-37. Has hppa cpu stuff in it.
+different misc/nm.c (integrated for cctools-102)
+     Using cctoolshppa-37.  Only comment typo change.
+
+Changes for the 3.3 release (the cctools-100 release):
+- First major round of changes for the new shlib stuff.
+  1) In nm support for .private_extern directive with -m to print
+     "private external".
+- Fixed a bug where strip with the -S and -x ignored -x (bug #36206)
+- Added the "-o output" option to strip (bug #36252)
+
+Changes for the 3.1 release (the cctools-22 release):
+- Changed file to print out architecture for Mach-O file that were not fat and
+  changed lipo -i to print architectures on one line (bug #31882).
+- Added printing for these  (bug #32553):
+    { "any",	CPU_TYPE_ANY,	  CPU_SUBTYPE_MULTIPLE },
+    { "little",	CPU_TYPE_ANY,	  CPU_SUBTYPE_LITTLE_ENDIAN },
+    { "big",	CPU_TYPE_ANY,	  CPU_SUBTYPE_BIG_ENDIAN },
+
+Changes for the 3.1 release (the cctools-21 release):
+- Changed in lipo when "-arch i386 a.out" was used by the compiler and a.out
+  turns out to be an i486 subtype lipo treated this as a hard error. A safe
+  fix to this was made to remove the cpusubtype compare in check_arch() which
+  matches what it does for archives.
+
+Changes for the 3.1 release (the cctools-20 release):
+- Put back -O in the Makefile (previously was removed because of m88k builds -O 
+  could't be used on lipo.c because of a bug, this is now a non-issue).
+- Added cross bytesex support for segedit(1) (still no fat support).
+
+Changes for the 3.1 release (the cctools-17 release):
+- Change made to strip to only generate a warning message when it encounters a
+  non-object file an not stop processing other files (bug #23144).
+
+Changes for the 3.1 release (the cctools-16 release):
+- Fixed a bug in libtool when stat_buf.st_gid is a negitive value it was casted
+  to an unsigned int and sprintf()'ed with %o into a field that was expected to
+  have only enough characters for a short (not a sign extended short).  The fix
+  was to cast to a unsigned short (bug #30995).
+
+Changes for the 3.1 release (the cctools-14 release):
+- Removed the archive checking of subtype in check_archive() for lipo.
+
+Changes for the 3.1 release (the cctools-13 release):
+- Added the m98k (PowerPC) architecture (lipo only change).
+
+Changes for the 3.1 release (the cctools-10 release):
+- Changed the way the date is set on the output file when creating the output
+  file with -c to only set the it to the oldest input date when an input file
+  has an archive in it.
+- Changed the handling of the cpusubtypes to support this design:
+    The design allows each architecture family (m68k, m88k, i386) to have a
+    cpusubtype that will run on all implementations of that architecture and
+    have cpusubtypes that will run only on specific implementations of an
+    architecture.  The design also gives the programmer the option to force the
+    cpusubtype indicating all implementations (at build time with a flag) when
+    using instructions that are implementation specific leaving it up to the
+    program to runtime select the correct code to execute.
+  The library creation tools (libtool and ranlib) operation in this design:
+    When a library creation tool creates libraries objects of the same
+    cputype and differing cpusubtypes it will create at most one library for
+    each cputype and not a separate library in a fat file for each of the unique
+    cputype and cpusubtype pairs.  The resulting cpusubtype for each library
+    will be the _ALL cpusubtype for that cputype.  The goal is the library
+    implementor should be strongly encouraged to create one library that
+    chooses optimum code to run at run time rather than at link time.
+
+Changes for the 3.1 release (the cctools-9 release):
+- Added to lipo when the -info or -detailed_info is specified printing of
+  architecture type for non-fat files (bug #29465).
+
+Changes for the 3.1 release (the cctools-8 release):
+- Changed the default for strip when no -arch flag is present to strip all
+  archs (demanded by the NRW group).
+- Removed ebadexec as the OS group has taken it over.
+- Changed the checking in add_member() to only look at the cputype and not at
+  both the cputype and cpusubtype (this will change as the correct handling of
+  the cpusubtype is implemented).
+
+Changes for the 3.1 release (the cctools-6 release):
+- Moved segedit(1) from misc3.0 directory to here (misc) and added error
+  recognition for fat files and cross bytesex Mach-O files (and cleaned up
+  -Wall warning messages).
+- Moved ebadexec(1) from misc3.0 directory to here (misc) and added error
+  recognition for fat files (and cleaned up -Wall warning messages).
+- Moved atom(1) from misc3.0 directory to here (misc) and cleaned up -Wall
+  warning messages.
+- Moved ar(1) from misc3.0 directory to here (misc) and added error recognition 
+  for fat files (and cleaned up -Wall warning messages).
+- Added fat and cross bytesex support for file(1).
+- Fixed a bug in strip(l) that did not round the size of the string table to
+  a multiple of 4 bytes.  This caused the object file to have odd sizes in some
+  cases and produce trashed archives.
+
+Changes for the 3.1 release (the cctools-5 release):
+- Created a new version of indr(l), strip(1) and nmedit(l) that handles fat
+  files and cross byte sex.  The new strip(1) handles libraries and does not
+  treat already stripped objects as errors.
+- Fixed a bug in libtool/ranlib that caused it to create the library even when
+  there were errors.  This is no longer done.  If there is an error then the
+  library is not created (or the table of contents is not recreated).
+- Fixed a bug that caused problems in ranlib when an archive with a that
+  contained both fat objects with multiple archives and non-object files was
+  given as input.  The "correct" thing to do in this case in not known (which
+  architecture archive the non-object file is to reside in in the output).  So
+  this case is flagged as an error.
+
+Changes for the 3.1 release (the cctools-4 release):
+- Changed the arch name of ix86 to i386 in lipo.c
+- Fixed a bug in libtool that caused it to crash when sprintf() was used and
+  placed it's trailing '\0' past the end of the buffer.
+
+Changes for the 3.1 release (the cctools-3 release):
+- Changed CPU_TYPE_I80x86 to CPU_TYPE_I386 in lipo.c
+
+Changes for the 3.0 release (the -56 compiler release):
+- Changed print_argstrings() in otool.c to handle a core files that have more
+  than just one '\0' after the long 0 on the top of the stack (bug #19645).
+
+Changes for the 3.0 release (the -52 compiler release):
+- Added LC_PREPAGE.  Just the string "LC_PREPAGE" and the cmdsize printed in
+  otool.
+- Fixed a bug where libtool was not setting the S_IFREG bits in the toc_mode.
+
+Changes for the 3.0 release (the -53 compiler release):
+- Changed STACK_ADDR to USRSTACK from <bsd/m68k/vmparam.h> .
+
+Changes for the 3.0 release (the -51 compiler release):
+- Changed otool to print the m88k thread flavors for te new thread_status.h.
+- Changed otool when looping through archives so not to complain when getting
+  a short read on an archive header when an archive was passed to 4 bytes and
+  the extra 2 bytes of padding was read as an archive header.
+
+Changes for the 3.0 release (the -50 compiler release):
+- Changed the instructions f[sd]sqrtx for operands FPm,FPn and FPm to f[sd]sqrt
+  (without the trailing 'x').  This was just wrong (but the moto opcode is
+  inconsistant with all others in this case).
+- Added an nm(1) that knows about fat files.
+
+Changes for the 3.0 release (the -49 compiler release):
+- Changed where the 3.1 tools get installed, they now get installed in
+  /usr/local/bin3.1 with there usual names (no 3.1 suffix).
+- Fixed the printing of operands for the i860 to use external relocation
+  entries correctly.
+- Added the LC_FVMFILE to otool.
+- Changed the Makefile to meet the RC api.
+- Set this directory up for the 3.1 release (fat tools and 88k and ix86 tools).
