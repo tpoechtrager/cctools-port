@@ -30,7 +30,8 @@
 
 #include <vector>
 #include <map>
-#include <ext/hash_map>
+#include <unordered_map>
+#include <unordered_set>
 
 #include "ld.hpp"
 #include "dtrace_dof.h"
@@ -103,20 +104,14 @@ Atom::Atom(File& f, const char* n,  const uint8_t* content, uint64_t sz)
 
 
 
-class CStringEquals
-{
-public:
-	bool operator()(const char* left, const char* right) const { return (strcmp(left, right) == 0); }
-};
-
 struct DTraceProbeInfo {
 	DTraceProbeInfo(const ld::Atom* a, uint32_t o, const char* n) : atom(a), offset(o), probeName(n) {}
 	const ld::Atom*					atom;
 	uint32_t						offset;
 	const char*						probeName;
 };
-typedef __gnu_cxx::hash_map<const char*, std::vector<DTraceProbeInfo>, __gnu_cxx::hash<const char*>, CStringEquals>	ProviderToProbes;
-typedef	__gnu_cxx::hash_set<const char*, __gnu_cxx::hash<const char*>, CStringEquals>  CStringSet;
+typedef std::unordered_map<const char*, std::vector<DTraceProbeInfo>, CStringHash, CStringEquals>	ProviderToProbes;
+typedef	std::unordered_set<const char*, CStringHash, CStringEquals>  CStringSet;
 
 
 

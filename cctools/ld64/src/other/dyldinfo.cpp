@@ -33,8 +33,9 @@
 
 #include <vector>
 #include <set>
-#include <ext/hash_set>
+#include <unordered_set>
 
+#include "configure.h"
 #include "MachOFileAbstraction.hpp"
 #include "Architectures.hpp"
 #include "MachOTrie.hpp"
@@ -86,14 +87,6 @@ private:
 	typedef typename A::P::E				E;
 	typedef typename A::P::uint_t			pint_t;
 	
-	class CStringEquals
-	{
-	public:
-		bool operator()(const char* left, const char* right) const { return (strcmp(left, right) == 0); }
-	};
-
-	typedef __gnu_cxx::hash_set<const char*, __gnu_cxx::hash<const char*>, CStringEquals>  StringSet;
-
 												DyldInfoPrinter(const uint8_t* fileContent, uint32_t fileLength, const char* path, bool printArch);
 	void										printRebaseInfo();
 	void										printRebaseInfoOpcodes();
@@ -1271,26 +1264,43 @@ void DyldInfoPrinter<A>::printExportInfo()
 		parseTrie(start, end, list);
 		//std::sort(list.begin(), list.end(), SortExportsByAddress());
 		for (std::vector<mach_o::trie::Entry>::iterator it=list.begin(); it != list.end(); ++it) {
-			if ( it->flags & EXPORT_SYMBOL_FLAGS_REEXPORT ) {
+			const bool reExport = (it->flags & EXPORT_SYMBOL_FLAGS_REEXPORT);
+			const bool weakDef = (it->flags & EXPORT_SYMBOL_FLAGS_WEAK_DEFINITION);
+			const bool threadLocal = ((it->flags & EXPORT_SYMBOL_FLAGS_KIND_MASK) == EXPORT_SYMBOL_FLAGS_KIND_THREAD_LOCAL);
+			const bool resolver = (it->flags & EXPORT_SYMBOL_FLAGS_STUB_AND_RESOLVER);
+			if ( reExport )
+				printf("[re-export] ");
+			else
+				printf("0x%08llX  ", fBaseAddress+it->address);
+			printf("%s", it->name);
+			if ( weakDef || threadLocal || resolver ) {
+				bool needComma = false;
+				printf(" [");
+				if ( weakDef ) {
+					printf("weak_def");
+					needComma = true;
+				}
+				if ( threadLocal ) {
+					if ( needComma ) 
+						printf(", ");
+					printf("per-thread");
+					needComma = true;
+				}
+				if ( resolver ) {
+					if ( needComma ) 
+						printf(", ");
+					printf("resolver=0x%08llX", it->other);
+					needComma = true;
+				}
+				printf("]");
+			}
+			if ( reExport ) {
 				if ( it->importName[0] == '\0' )
-					fprintf(stdout, "[re-export] %s from dylib=%llu\n", it->name, it->other);
+					printf(" (from %s)", fDylibs[it->other - 1]);
 				else
-					fprintf(stdout, "[re-export] %s from dylib=%llu named=%s\n", it->name, it->other, it->importName);
+					printf(" (%s from %s)", it->importName, fDylibs[it->other - 1]);
 			}
-			else {
-				const char* flags = "";
-				if ( it->flags & EXPORT_SYMBOL_FLAGS_WEAK_DEFINITION )
-					flags = "[weak_def] ";
-				else if ( (it->flags & EXPORT_SYMBOL_FLAGS_KIND_MASK) == EXPORT_SYMBOL_FLAGS_KIND_THREAD_LOCAL )
-					flags = "[per-thread] ";
-				if ( it->flags & EXPORT_SYMBOL_FLAGS_STUB_AND_RESOLVER ) {
-					flags = "[resolver] ";
-					fprintf(stdout, "0x%08llX  %s%s (resolver=0x%08llX)\n", fBaseAddress+it->address, flags, it->name, it->other);
-				}
-				else {
-					fprintf(stdout, "0x%08llX  %s%s\n", fBaseAddress+it->address, flags, it->name);
-				}
-			}
+			printf("\n");
 		}
 	}
 }
@@ -2178,19 +2188,20 @@ int main(int argc, const char* argv[])
 					else if ( strcmp(arch, "x86_64") == 0 )
 						sPreferredArch = CPU_TYPE_X86_64;
 					else {
-						const char* archName = argv[++i];
-						if ( archName == NULL )
+						if ( arch == NULL )
 							throw "-arch missing architecture name";
 						bool found = false;
 						for (const ArchInfo* t=archInfoArray; t->archName != NULL; ++t) {
-							if ( strcmp(t->archName,archName) == 0 ) {
+							if ( strcmp(t->archName,arch) == 0 ) {
 								sPreferredArch = t->cpuType;
 								if ( t->isSubType )
 									sPreferredSubArch = t->cpuSubType;
+								found = true;
+								break;
 							}
 						}
 						if ( !found )
-							throwf("unknown architecture %s", archName);
+							throwf("unknown architecture %s", arch);
 					}
 				}
 				else if ( strcmp(arg, "-rebase") == 0 ) {

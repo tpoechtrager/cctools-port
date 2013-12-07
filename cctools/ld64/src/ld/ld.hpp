@@ -789,6 +789,20 @@ public:
 
 
 
+	
+// utility classes for using std::unordered_map with c-strings
+struct CStringHash {
+	size_t operator()(const char* __s) const {
+		size_t __h = 0;
+		for ( ; *__s; ++__s)
+			__h = 5 * __h + *__s;
+		return __h;
+	};
+};
+struct CStringEquals
+{
+	bool operator()(const char* left, const char* right) const { return (strcmp(left, right) == 0); }
+};
 
 
 

@@ -28,6 +28,8 @@
 #include <sys/stat.h>
 #include <sys/mman.h>
 #include <sys/sysctl.h>
+#include <sys/param.h>
+#include <sys/mount.h>
 #include <fcntl.h>
 #include <errno.h>
 #include <limits.h>
@@ -48,8 +50,7 @@
 #include <vector>
 #include <list>
 #include <algorithm>
-#include <ext/hash_map>
-#include <ext/hash_set>
+#include <unordered_set>
 
 #include <CommonCrypto/CommonDigest.h>
 #include <AvailabilityMacros.h>
@@ -873,8 +874,8 @@ void OutputFile::rangeCheckAbsolute32(int64_t displacement, ld::Internal& state,
 		//  .long _foo + 0x40000000
 		// so if _foo lays out to 0xC0000100, the first is ok, but the second is not.  
 		if ( (_options.architecture() == CPU_TYPE_ARM) || (_options.architecture() == CPU_TYPE_I386) ) {
-			// Unlikely userland code does funky stuff like this, so warn for them, but not warn for -preload
-			if ( _options.outputKind() != Options::kPreload ) {
+			// Unlikely userland code does funky stuff like this, so warn for them, but not warn for -preload or -static
+			if ( (_options.outputKind() != Options::kPreload) && (_options.outputKind() != Options::kStaticExecutable) ) {
 				warning("32-bit absolute address out of range (0x%08llX max is 4GB): from %s + 0x%08X (0x%08llX) to 0x%08llX", 
 						displacement, atom->name(), fixup->offsetInAtom, atom->finalAddress(), displacement);
 			}
@@ -1431,8 +1432,8 @@ void OutputFile::applyFixUps(ld::Internal& state, uint64_t mhAddress, const ld::
 					uint32_t nextDisp = (j1 << 13) | (j2 << 11) | imm11;
 					uint32_t firstDisp = (s << 10) | imm10;
 					newInstruction = instruction | (nextDisp << 16) | firstDisp;
-					//warning("s=%d, j1=%d, j2=%d, imm10=0x%0X, imm11=0x%0X, opcode=0x%08X, first=0x%04X, next=0x%04X, new=0x%08X, disp=0x%llX for %s to %s\n",
-					//	s, j1, j2, imm10, imm11, opcode, firstDisp, nextDisp, newInstruction, delta, inAtom->getDisplayName(), ref->getTarget().getDisplayName());
+					//warning("s=%d, j1=%d, j2=%d, imm10=0x%0X, imm11=0x%0X, instruction=0x%08X, first=0x%04X, next=0x%04X, new=0x%08X, disp=0x%llX for %s to %s\n",
+					//	s, j1, j2, imm10, imm11, instruction, firstDisp, nextDisp, newInstruction, delta, atom->name(), toTarget->name());
 					set32LE(fixUpLocation, newInstruction);				
 				}
 				else {
@@ -1601,9 +1602,9 @@ void OutputFile::writeAtoms(ld::Internal& state, uint8_t* wholeBuffer)
 			}
 			catch (const char* msg) {
 				if ( atom->file() != NULL )
-					throwf("%s in %s from %s", msg, atom->name(), atom->file()->path());
+					throwf("%s in '%s' from %s", msg, atom->name(), atom->file()->path());
 				else
-					throwf("%s in %s", msg, atom->name());
+					throwf("%s in '%s'", msg, atom->name());
 			}
 		}
 	}
@@ -1687,28 +1688,67 @@ void OutputFile::writeOutputFile(ld::Internal& state)
 	// And it means we don't have to truncate the file when done writing (in case new is smaller than old)
 	// Lastly, only delete existing file if it is a normal file (e.g. not /dev/null).
 	struct stat stat_buf;
-	bool outputIsRegularFile = true;
+	bool outputIsRegularFile = false;
+	bool outputIsMappableFile = false;
 	if ( stat(_options.outputFilePath(), &stat_buf) != -1 ) {
 		if (stat_buf.st_mode & S_IFREG) {
-			(void)unlink(_options.outputFilePath());
-		} else {
+			outputIsRegularFile = true;
+			// <rdar://problem/12264302> Don't use mmap on non-hfs volumes
+#if 0
+			struct statfs fsInfo;
+			if ( statfs(_options.outputFilePath(), &fsInfo) != -1 ) {
+				if ( strcmp(fsInfo.f_fstypename, "hfs") == 0) {
+					(void)unlink(_options.outputFilePath());
+					outputIsMappableFile = true;
+				}
+			}
+			else {
+#endif
+				outputIsMappableFile = false;
+#if 0
+			}
+#endif
+		} 
+		else {
 			outputIsRegularFile = false;
 		}
 	}
-
+	else {
+		// special files (pipes, devices, etc) must already exist
+		outputIsRegularFile = true;
+		// output file does not exist yet
+		char dirPath[PATH_MAX];
+		strcpy(dirPath, _options.outputFilePath());
+		char* end = strrchr(dirPath, '/');
+		if ( end != NULL ) {
+			end[1] = '\0';
+#if 0
+			struct statfs fsInfo;
+			if ( statfs(dirPath, &fsInfo) != -1 ) {
+				if ( strcmp(fsInfo.f_fstypename, "hfs") == 0) {
+					outputIsMappableFile = true;
+				}
+			}
+#endif
+		}
+	}
+	
+	//fprintf(stderr, "outputIsMappableFile=%d, outputIsRegularFile=%d, path=%s\n", outputIsMappableFile, outputIsRegularFile, _options.outputFilePath());
+	
 	int fd;
 	// Construct a temporary path of the form {outputFilePath}.ld_XXXXXX
 	const char filenameTemplate[] = ".ld_XXXXXX";
 	char tmpOutput[PATH_MAX];
 	uint8_t *wholeBuffer;
-	if (outputIsRegularFile) {
+	if ( outputIsRegularFile && outputIsMappableFile ) {
 		strcpy(tmpOutput, _options.outputFilePath());
 		// If the path is too long to add a suffix for a temporary name then
 		// just fall back to using the output path. 
 		if (strlen(tmpOutput)+strlen(filenameTemplate) < PATH_MAX) {
 			strcat(tmpOutput, filenameTemplate);
 			fd = mkstemp(tmpOutput);
-		} else {
+		} 
+		else {
 			fd = open(tmpOutput, O_RDWR|O_CREAT, permissions);
 		}
 		if ( fd == -1 ) 
@@ -1718,8 +1758,12 @@ void OutputFile::writeOutputFile(ld::Internal& state)
 		wholeBuffer = (uint8_t *)mmap(NULL, _fileSize, PROT_WRITE|PROT_READ, MAP_SHARED, fd, 0);
 		if ( wholeBuffer == MAP_FAILED )
 			throwf("can't create buffer of %llu bytes for output", _fileSize);
-	} else {
-		fd = open(_options.outputFilePath(), O_WRONLY);
+	} 
+	else {
+		if ( outputIsRegularFile )
+			fd = open(_options.outputFilePath(),  O_RDWR|O_CREAT, permissions);
+		else
+			fd = open(_options.outputFilePath(),  O_WRONLY);
 		if ( fd == -1 ) 
 			throwf("can't open output file for writing: %s, errno=%d", _options.outputFilePath(), errno);
 		// try to allocate buffer for entire output file content
@@ -1740,7 +1784,7 @@ void OutputFile::writeOutputFile(ld::Internal& state)
 	if ( _options.UUIDMode() == Options::kUUIDContent )
 		computeContentUUID(state, wholeBuffer);
 
-	if (outputIsRegularFile) {
+	if ( outputIsRegularFile && outputIsMappableFile ) {
 		if ( ::chmod(tmpOutput, permissions) == -1 ) {
 			unlink(tmpOutput);
 			throwf("can't set permissions on output file: %s, errno=%d", tmpOutput, errno);
@@ -1749,7 +1793,8 @@ void OutputFile::writeOutputFile(ld::Internal& state)
 			unlink(tmpOutput);
 			throwf("can't move output file in place, errno=%d", errno);
 		}
-	} else {
+	} 
+	else {
 		if ( ::write(fd, wholeBuffer, _fileSize) == -1 ) {
 			throwf("can't write to output file: %s, errno=%d", _options.outputFilePath(), errno);
 		}
@@ -1853,6 +1898,10 @@ void OutputFile::buildSymbolTable(ld::Internal& state)
 			if ( atom->symbolTableInclusion() == ld::Atom::symbolTableNotIn ) {
 				continue;  // don't add to symbol table
 			}
+			if ( (atom->symbolTableInclusion() == ld::Atom::symbolTableInWithRandomAutoStripLabel) 
+				&& (_options.outputKind() != Options::kObjectFile) ) {
+				continue;  // don't add to symbol table
+			}
 			
 			if ( (atom->definition() == ld::Atom::definitionTentative) && (_options.outputKind() == Options::kObjectFile) ) {
 				if ( _options.makeTentativeDefinitionsReal() ) {
@@ -1865,7 +1914,7 @@ void OutputFile::buildSymbolTable(ld::Internal& state)
 				}
 				continue;
 			}
-			
+
 			switch ( atom->scope() ) {
 				case ld::Atom::scopeTranslationUnit:
 					if ( _options.keepLocalSymbol(atom->name()) ) {	
@@ -2341,9 +2390,13 @@ int OutputFile::compressedOrdinalForAtom(const ld::Atom* target)
 
 	// regular ordinal
 	const ld::dylib::File* dylib = dynamic_cast<const ld::dylib::File*>(target->file());
-	if ( dylib != NULL )
-		return _dylibToOrdinal[dylib]; 
-
+	if ( dylib != NULL ) {
+		std::map<const ld::dylib::File*, int>::iterator pos = _dylibToOrdinal.find(dylib);
+		if ( pos != _dylibToOrdinal.end() )
+			return pos->second;
+		assert(0 && "dylib not assigned ordinal");
+	}
+	
 	// handle undefined dynamic_lookup
 	if ( _options.undefinedTreatment() == Options::kUndefinedDynamicLookup )
 		return BIND_SPECIAL_DYLIB_FLAT_LOOKUP;
@@ -2378,6 +2431,8 @@ bool OutputFile::isPcRelStore(ld::Fixup::Kind kind)
 		case ld::Fixup::kindStoreTargetAddressX86PCRel32:
 		case ld::Fixup::kindStoreTargetAddressX86PCRel32GOTLoad:
 		case ld::Fixup::kindStoreTargetAddressX86PCRel32GOTLoadNowLEA:
+		case ld::Fixup::kindStoreTargetAddressX86PCRel32TLVLoad:
+		case ld::Fixup::kindStoreTargetAddressX86PCRel32TLVLoadNowLEA:
 		case ld::Fixup::kindStoreTargetAddressARMBranch24:
 		case ld::Fixup::kindStoreTargetAddressThumbBranch22:
 		case ld::Fixup::kindStoreTargetAddressARMLoad12:
@@ -2963,7 +3018,8 @@ void OutputFile::addClassicRelocs(ld::Internal& state, ld::Internal::FinalSectio
 					// reference to global weak def needs weak binding in dynamic images
 					if ( (target->combine() == ld::Atom::combineByName) 
 						&& (target->definition() == ld::Atom::definitionRegular)
-						&& (_options.outputKind() != Options::kStaticExecutable) ) {
+						&& (_options.outputKind() != Options::kStaticExecutable)
+						&& (_options.outputKind() != Options::kPreload) ) {
 						needsExternReloc = true;
 					}
 					else if ( _options.outputKind() == Options::kDynamicExecutable ) {
@@ -3301,6 +3357,9 @@ void OutputFile::writeMapFile(ld::Internal& state)
 					char buffer[4096];
 					const ld::Atom* atom = *ait;
 					const char* name = atom->name();
+					// don't add auto-stripped aliases to .map file
+					if ( (atom->size() == 0) && (atom->symbolTableInclusion() == ld::Atom::symbolTableNotInFinalLinkedImages) )
+						continue;
 					if ( atom->contentType() == ld::Atom::typeCString ) {
 						strcpy(buffer, "literal string: ");
 						strlcat(buffer, (char*)atom->rawContentPointer(), 4096);
@@ -3367,12 +3426,6 @@ public:
 };
 
 
-class CStringEquals
-{
-public:
-	bool operator()(const char* left, const char* right) const { return (strcmp(left, right) == 0); }
-};
-
 const char* OutputFile::assureFullPath(const char* path)
 {
 	if ( path[0] == '/' )
@@ -3408,11 +3461,19 @@ void OutputFile::synthesizeDebugNotes(ld::Internal& state)
 				continue;
 			if ( atom->symbolTableInclusion() == ld::Atom::symbolTableNotInFinalLinkedImages )
 				continue;
+			if ( atom->symbolTableInclusion() == ld::Atom::symbolTableInWithRandomAutoStripLabel )
+				continue;
 			// no stabs for absolute symbols
 			if ( atom->definition() == ld::Atom::definitionAbsolute ) 
 				continue;
 			// no stabs for .eh atoms
 			if ( atom->contentType() == ld::Atom::typeCFI )
+				continue;
+			// no stabs for string literal atoms
+			if ( atom->contentType() == ld::Atom::typeCString )
+				continue;
+			// no stabs for kernel dtrace probes
+			if ( (_options.outputKind() == Options::kStaticExecutable) && (strncmp(atom->name(), "__dtrace_probe$", 15) == 0) )
 				continue;
 			const ld::File* file = atom->file();
 			if ( file != NULL ) {
@@ -3450,7 +3511,7 @@ void OutputFile::synthesizeDebugNotes(ld::Internal& state)
 	const char* filename = NULL;
 	bool wroteStartSO = false;
 	state.stabs.reserve(atomsNeedingDebugNotes.size()*4);
-	__gnu_cxx::hash_set<const char*, __gnu_cxx::hash<const char*>, CStringEquals>  seenFiles;
+	std::unordered_set<const char*, CStringHash, CStringEquals>  seenFiles;
 	for (std::vector<const ld::Atom*>::iterator it=atomsNeedingDebugNotes.begin(); it != atomsNeedingDebugNotes.end(); it++) {
 		const ld::Atom* atom = *it;
 		const ld::File* atomFile = atom->file();

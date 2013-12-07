@@ -83,7 +83,7 @@ void doPass(const Options& opts, ld::Internal& state)
 		return;
 
 	// move all zero fill atoms that >1MB in size to a new __huge section
-	ld::Internal::FinalSection* hugeSection = state.getFinalSection(ld::Section("__DATA", "__huge", ld::Section::typeZeroFill));
+	ld::Internal::FinalSection* hugeSection = state.getFinalSection(*new ld::Section("__DATA", "__huge", ld::Section::typeZeroFill));
 	for (std::vector<ld::Internal::FinalSection*>::iterator sit=state.sections.begin(); sit != state.sections.end(); ++sit) {
 		ld::Internal::FinalSection* sect = *sit;
 		if ( sect == hugeSection )

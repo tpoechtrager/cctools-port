@@ -31,6 +31,7 @@
 
 #include <vector>
 #include <map>
+#include <unordered_map>
 
 #include "ld.hpp"
 #include "order.h"
@@ -82,11 +83,7 @@ private:
 		const Layout&	_layout;
 	};
 				
-	class CStringEquals {
-	public:
-		bool operator()(const char* left, const char* right) const { return (strcmp(left, right) == 0); }
-	};
-	typedef __gnu_cxx::hash_map<const char*, const ld::Atom*, __gnu_cxx::hash<const char*>, CStringEquals> NameToAtom;
+	typedef std::unordered_map<const char*, const ld::Atom*, CStringHash, CStringEquals> NameToAtom;
 	
 	typedef std::map<const ld::Atom*, const ld::Atom*> AtomToAtom;
 	

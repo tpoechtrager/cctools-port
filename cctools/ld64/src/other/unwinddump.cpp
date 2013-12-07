@@ -33,7 +33,7 @@
 
 #include <vector>
 #include <set>
-#include <ext/hash_set>
+#include <unordered_set>
 
 
 #include "MachOFileAbstraction.hpp"
@@ -71,14 +71,6 @@ private:
 	typedef typename A::P::E				E;
 	typedef typename A::P::uint_t			pint_t;
 	
-	class CStringEquals
-	{
-	public:
-		bool operator()(const char* left, const char* right) const { return (strcmp(left, right) == 0); }
-	};
-
-	typedef __gnu_cxx::hash_set<const char*, __gnu_cxx::hash<const char*>, CStringEquals>  StringSet;
-
 												UnwindPrinter(const uint8_t* fileContent, uint32_t fileLength, 
 																const char* path, bool showFunctionNames);
 	bool										findUnwindSection();

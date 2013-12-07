@@ -976,11 +976,11 @@ void ExportInfoAtom<A>::encode() const
 		uint64_t flags = (atom->contentType() == ld::Atom::typeTLV) ? EXPORT_SYMBOL_FLAGS_KIND_THREAD_LOCAL : EXPORT_SYMBOL_FLAGS_KIND_REGULAR;
 		uint64_t other = 0;
 		uint64_t address = atom->finalAddress() - imageBaseAddress;
-		if ( (atom->definition() == ld::Atom::definitionRegular) && (atom->combine() == ld::Atom::combineByName) )
-			flags |= EXPORT_SYMBOL_FLAGS_WEAK_DEFINITION;
 		if ( atom->definition() == ld::Atom::definitionProxy ) {
 			entry.name = atom->name();
 			entry.flags = flags | EXPORT_SYMBOL_FLAGS_REEXPORT;
+			if ( atom->combine() == ld::Atom::combineByName )
+				entry.flags |= EXPORT_SYMBOL_FLAGS_WEAK_DEFINITION;
 			entry.other = this->_writer.compressedOrdinalForAtom(atom);
 			if ( entry.other == BIND_SPECIAL_DYLIB_SELF ) {
 				warning("not adding explict export for symbol %s because it is already re-exported from dylib %s", entry.name, atom->file()->path());
@@ -1006,6 +1006,8 @@ void ExportInfoAtom<A>::encode() const
 			//fprintf(stderr, "re-export %s from lib %llu as %s\n", entry.importName, entry.other, entry.name);
 		}
 		else {
+			if ( (atom->definition() == ld::Atom::definitionRegular) && (atom->combine() == ld::Atom::combineByName) )
+				flags |= EXPORT_SYMBOL_FLAGS_WEAK_DEFINITION;
 			if ( atom->isThumb() )
 				address |= 1;
 			if ( atom->contentType() == ld::Atom::typeResolver ) {

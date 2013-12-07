@@ -33,8 +33,8 @@
 #include <vector>
 #include <set>
 #include <algorithm>
-#include <ext/hash_map>
-#include <ext/hash_set>
+#include <unordered_map>
+#include <unordered_set>
 
 #include "Architectures.hpp"
 #include "MachOFileAbstraction.hpp"
@@ -178,14 +178,17 @@ private:
 	friend class ExportAtom<A>;
 	friend class ImportAtom<A>;
 
-	class CStringEquals
-	{
-	public:
-		bool operator()(const char* left, const char* right) const { return (strcmp(left, right) == 0); }
+	struct CStringHash {
+		std::size_t operator()(const char* __s) const {
+			unsigned long __h = 0;
+			for ( ; *__s; ++__s)
+				__h = 5 * __h + *__s;
+			return size_t(__h);
+		};
 	};
 	struct AtomAndWeak { ld::Atom* atom; bool weakDef; bool tlv; pint_t address; };
-	typedef __gnu_cxx::hash_map<const char*, AtomAndWeak, __gnu_cxx::hash<const char*>, CStringEquals> NameToAtomMap;
-	typedef __gnu_cxx::hash_set<const char*, __gnu_cxx::hash<const char*>, CStringEquals>  NameSet;
+	typedef std::unordered_map<const char*, AtomAndWeak, ld::CStringHash, ld::CStringEquals> NameToAtomMap;
+	typedef std::unordered_set<const char*, CStringHash, ld::CStringEquals>  NameSet;
 
 	struct Dependent { const char* path; File<A>* dylib; bool reExport; };
 
@@ -506,14 +509,14 @@ void File<A>::buildExportHashTableFromSymbolTable(const macho_dysymtab_command<P
 		if ( _s_logHashtable ) fprintf(stderr, "ld: building hashtable of %u toc entries for %s\n", dynamicInfo->nextdefsym(), this->path());
 		const macho_nlist<P>* start = &symbolTable[dynamicInfo->iextdefsym()];
 		const macho_nlist<P>* end = &start[dynamicInfo->nextdefsym()];
-		_atoms.resize(dynamicInfo->nextdefsym()); // set initial bucket count
+		_atoms.reserve(dynamicInfo->nextdefsym()); // set initial bucket count
 		for (const macho_nlist<P>* sym=start; sym < end; ++sym) {
 			this->addSymbol(&strings[sym->n_strx()], (sym->n_desc() & N_WEAK_DEF) != 0, false, sym->n_value());
 		}
 	}
 	else {
 		int32_t count = dynamicInfo->ntoc();
-		_atoms.resize(count); // set initial bucket count
+		_atoms.reserve(count); // set initial bucket count
 		if ( _s_logHashtable ) fprintf(stderr, "ld: building hashtable of %u entries for %s\n", count, this->path());
 		const struct dylib_table_of_contents* toc = (dylib_table_of_contents*)(fileContent + dynamicInfo->tocoff());
 		for (int32_t i = 0; i < count; ++i) {
@@ -569,9 +572,6 @@ void File<A>::addDyldFastStub()
 template <typename A>
 void File<A>::addSymbol(const char* name, bool weakDef, bool tlv, pint_t address)
 {
-	if ( weakDef ) {
-		assert(_hasWeakExports);
-	}
 	//fprintf(stderr, "addSymbol() %s\n", name);
 	// symbols that start with $ld$ are meta-data to the static linker
 	// <rdar://problem/5182537> need way for ld and dyld to see different exported symbols in a dylib
@@ -700,7 +700,7 @@ bool File<A>::containsOrReExports(const char* name, bool* weakDef, bool* tlv, pi
 	if ( _ignoreExports.count(name) != 0 )
 		return false;
 
-// check myself
+	// check myself
 	typename NameToAtomMap::iterator pos = _atoms.find(name);
 	if ( pos != _atoms.end() ) {
 		*weakDef = pos->second.weakDef;

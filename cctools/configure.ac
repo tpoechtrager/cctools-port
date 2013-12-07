@@ -9,6 +9,7 @@ AC_ARG_PROGRAM
 #force compiler to clang
 CC=clang
 CXX=clang++
+CXXFLAGS=-stdlib=libc++
 CPP="clang -E"
 
 AM_INIT_AUTOMAKE([1.10 no-define no-dist-gzip dist-bzip2 tar-ustar])
@@ -35,19 +36,6 @@ AM_PROG_AS([clang])
 AC_CHECK_TOOL([HOST_RANLIB], [ranlib], :)
 AC_CHECK_TOOL([HOST_AR], [ar], :)
 
-#detect buggy unistd.h contains __block.
-buggy_unistd=`grep "\*__block," /usr/include/unistd.h`
-if test "$buggy_unistd"; then
-  echo "==========================================="
-  echo "Buggy unistd.h found"
-  echo "\"__block\" is a reserved word of clang compiler for blocks support."
-  echo "Please replace \"__block\" in /usr/include/unistd.h to \"__libc_block\""
-  echo "==========================================="
-  exit
-fi
-
-
-AC_CHECK_HEADERS([llvm-c/lto.h], [], [AC_MSG_ERROR([*** lto.h not found, Please install llvm dev packages according to your system])])
 AC_CHECK_HEADERS([openssl/md5.h], [], [AC_MSG_ERROR([*** md5.h not found, Please install ssl dev packages according to your system])])
 AC_CHECK_HEADERS([uuid/uuid.h], [], [AC_MSG_ERROR([*** uuid.h not found, Please install uuid dev packages according to your system])])
 

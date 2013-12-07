@@ -49,8 +49,6 @@
 #include <vector>
 #include <list>
 #include <algorithm>
-#include <ext/hash_map>
-#include <ext/hash_set>
 #include <dlfcn.h>
 #include <AvailabilityMacros.h>
 
@@ -483,7 +481,7 @@ ld::dylib::File* InputFiles::findDylib(const char* installPath, const char* from
 				throwf("indirect dylib at %s is not a dylib", info.path);
 		}
 		catch (const char* msg) {
-			throwf("in %s, %s", info.path, msg);
+			throwf("in '%s', %s", info.path, msg);
 		}
 	}
 }
@@ -674,7 +672,7 @@ InputFiles::InputFiles(Options& opts, const char** archName)
  : _totalObjectSize(0), _totalArchiveSize(0), 
    _totalObjectLoaded(0), _totalArchivesLoaded(0), _totalDylibsLoaded(0),
 	_options(opts), _bundleLoader(NULL), 
-	_allDirectDylibsLoaded(false), _inferredArch(false), _fileMonitor(-1),
+	_allDirectDylibsLoaded(false), _inferredArch(false),
 	_exception(NULL)
 {
 //	fStartCreateReadersTime = mach_absolute_time();
@@ -882,7 +880,9 @@ ld::File* InputFiles::addDylib(ld::dylib::File* reader, const Options::FileInfo&
 	// update stats
 	_totalDylibsLoaded++;
 
-    _searchLibraries.push_back(LibraryInfo(reader));
+	// just add direct libraries to search-first list
+	if ( !_allDirectDylibsLoaded ) 
+		_searchLibraries.push_back(LibraryInfo(reader));
 	return reader;
 }
 
@@ -1070,11 +1070,8 @@ void InputFiles::forEachInitialAtom(ld::File::AtomHandler& handler)
 bool InputFiles::searchLibraries(const char* name, bool searchDylibs, bool searchArchives, bool dataSymbolOnly, ld::File::AtomHandler& handler) const
 {
 	// Check each input library.
-    std::vector<LibraryInfo>::const_iterator libIterator = _searchLibraries.begin();
-    
-    
-    while (libIterator != _searchLibraries.end()) {
-        LibraryInfo lib = *libIterator;
+    for (std::vector<LibraryInfo>::const_iterator it=_searchLibraries.begin(); it != _searchLibraries.end(); ++it) {
+        LibraryInfo lib = *it;
         if (lib.isDylib()) {
             if (searchDylibs) {
                 ld::dylib::File *dylibFile = lib.dylib();
@@ -1112,7 +1109,6 @@ bool InputFiles::searchLibraries(const char* name, bool searchDylibs, bool searc
                 }
             }
         }
-        libIterator++;
     }
 
 	// search indirect dylibs

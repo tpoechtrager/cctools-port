@@ -1,14 +1,14 @@
 # CCTOOLS Linux Port #
 
-Current Version: 845 + ld64-134.9  
+Current Version: 845 + ld64-136  
 Originally ported by cjacker from the [ios-toolchain-for-linux](https://code.google.com/p/ios-toolchain-based-on-clang-for-linux/) project.
 
 ## INSTALLATION ##
 
 Make sure you have the following installed on your Linux box:
 
-`Clang 3.2+`, `llvm-devel`, `automake`, `autogen`, `libtool`,
- `libuuid-devel` and `openssl-devel`.
+`Clang 3.2+`, `libc++-devel`, `llvm-devel`, `automake`, `autogen`,..
+ `libtool`, `libuuid-devel` and `openssl-devel`.
 
 Then type:
 

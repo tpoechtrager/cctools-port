@@ -21,6 +21,7 @@
  * @APPLE_LICENSE_HEADER_END@
  */
 
+#include <unistd.h>
 
 //
 // blob - generic extensible binary blob frame

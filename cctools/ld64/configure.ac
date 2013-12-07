@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.68])
-AC_INIT(ld64, 134.9, http://www.i-soft.com.cn)
+AC_INIT(ld64, 136, http://www.i-soft.com.cn)
 AC_CANONICAL_BUILD
 AC_CANONICAL_HOST
 AC_CANONICAL_TARGET

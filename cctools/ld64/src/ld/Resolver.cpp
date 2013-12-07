@@ -47,8 +47,6 @@
 #include <vector>
 #include <list>
 #include <algorithm>
-#include <ext/hash_map>
-#include <ext/hash_set>
 #include <dlfcn.h>
 #include <AvailabilityMacros.h>
 
@@ -131,6 +129,10 @@ public:
 	virtual ld::Atom::UnwindInfo::iterator	endUnwind() const	{ return NULL; }
 	virtual ld::Atom::LineInfo::iterator	beginLineInfo() const { return  NULL; }
 	virtual ld::Atom::LineInfo::iterator	endLineInfo() const { return NULL; }
+
+	void									setFinalAliasOf() const {
+												(const_cast<AliasAtom*>(this))->setAttributesFromAtom(_aliasOf);
+											}
 															
 private:
 	const char*							_name;
@@ -456,7 +458,8 @@ void Resolver::doAtom(const ld::Atom& atom)
 
 	// work around for kernel that uses 'l' labels in assembly code
 	if ( (atom.symbolTableInclusion() == ld::Atom::symbolTableNotInFinalLinkedImages) 
-			&& (atom.name()[0] == 'l') && (_options.outputKind() == Options::kStaticExecutable) )
+			&& (atom.name()[0] == 'l') && (_options.outputKind() == Options::kStaticExecutable) 
+			&& (strncmp(atom.name(), "ltmp", 4) != 0) )
 		(const_cast<ld::Atom*>(&atom))->setSymbolTableInclusion(ld::Atom::symbolTableIn);
 
 
@@ -469,7 +472,8 @@ void Resolver::doAtom(const ld::Atom& atom)
 			const std::vector<Options::AliasPair>& aliases = _options.cmdLineAliases();
 			for (std::vector<Options::AliasPair>::const_iterator it=aliases.begin(); it != aliases.end(); ++it) {
 				if ( strcmp(it->realName, atom.name()) == 0 ) {
-					const ld::Atom* alias = new AliasAtom(atom, it->alias);
+					const AliasAtom* alias = new AliasAtom(atom, it->alias);
+					_aliasesFromCmdLine.push_back(alias);
 					this->doAtom(*alias);
 				}
 			}
@@ -1109,6 +1113,10 @@ void Resolver::checkUndefines(bool force)
 					else if ( _options.hasReExportList() && _options.shouldReExport(name) ) {
 						fprintf(stderr, "     -reexported_symbols_list command line option\n");
 					}
+					else if ( (_options.outputKind() == Options::kDynamicExecutable)
+							&& (_options.entryName() != NULL) && (strcmp(name, _options.entryName()) == 0) ) {
+						fprintf(stderr, "     implicit entry/start for main executable\n");
+					}
 					else {
 						bool isInitialUndefine = false;
 						for (Options::UndefinesIterator uit=_options.initialUndefinesBegin(); uit != _options.initialUndefinesEnd(); ++uit) {
@@ -1286,7 +1294,7 @@ void Resolver::fillInInternalState()
 	
 	// <rdar://problem/7783918> make sure there is a __text section so that codesigning works
 	if ( (_options.outputKind() == Options::kDynamicLibrary) || (_options.outputKind() == Options::kDynamicBundle) )
-		_internal.getFinalSection(ld::Section("__TEXT", "__text", ld::Section::typeCode));
+		_internal.getFinalSection(*new ld::Section("__TEXT", "__text", ld::Section::typeCode));
 }
 
 void Resolver::fillInEntryPoint()
@@ -1346,10 +1354,17 @@ void Resolver::linkTimeOptimize()
 	// some atoms might have been optimized way (marked coalesced), remove them
 	this->removeCoalescedAwayAtoms();
 
-	// run through all atoms again and make sure newly codegened atoms have refernces bound
+	// run through all atoms again and make sure newly codegened atoms have references bound
 	for (std::vector<const ld::Atom*>::const_iterator it=_atoms.begin(); it != _atoms.end(); ++it) 
 		this->convertReferencesToIndirect(**it);
 
+	// adjust section of any new
+	for (std::vector<const AliasAtom*>::const_iterator it=_aliasesFromCmdLine.begin(); it != _aliasesFromCmdLine.end(); ++it) {
+		const AliasAtom* aliasAtom = *it;
+		// update fields in AliasAtom to match newly constructed mach-o atom
+		aliasAtom->setFinalAliasOf();
+	}
+	
 	// resolve new undefines (e.g calls to _malloc and _memcpy that llvm compiler conjures up)
 	for(std::vector<const char*>::iterator uit = additionalUndefines.begin(); uit != additionalUndefines.end(); ++uit) {
 		const char *targetName = *uit;
@@ -1367,6 +1382,18 @@ void Resolver::linkTimeOptimize()
 		}
 		// and re-compute dead code
 		this->deadStripOptimize(true);
+	}
+	
+	// <rdar://problem/12386559> if -exported_symbols_list on command line, re-force scope
+	if ( _options.hasExportMaskList() ) {
+		for (std::vector<const ld::Atom*>::const_iterator it=_atoms.begin(); it != _atoms.end(); ++it) {
+			const ld::Atom* atom = *it;
+			if ( atom->scope() == ld::Atom::scopeGlobal ) {
+				if ( !_options.shouldExport(atom->name()) ) {
+					(const_cast<ld::Atom*>(atom))->setScope(ld::Atom::scopeLinkageUnit);
+				}
+			}
+		}
 	}
 	
 	if ( _options.outputKind() == Options::kObjectFile ) {

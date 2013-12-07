@@ -818,6 +818,8 @@ template <typename A>
 const uint8_t* Atom<A>::contentPointer() const
 {
 	const macho_section<P>* sct = this->sect().machoSection();
+	if ( this->_objAddress > sct->addr() + sct->size() )
+		throwf("malformed .o file, symbol has address 0x%0llX which is outside range of its section", (uint64_t)this->_objAddress);
 	uint32_t fileOffset = sct->offset() - sct->addr() + this->_objAddress;
 	return this->sect().file().fileContent()+fileOffset;
 }
@@ -1904,6 +1906,15 @@ int Parser<A>::symbolIndexSorter(void* extra, const void* l, const void* r)
 			}
 		}
 		// two symbols in same section, means one is an alias
+		// if one is ltmp*, make it an alias (sort first)
+		const char* leftName  = parser->nameFromSymbol(leftSym);
+		const char* rightName = parser->nameFromSymbol(rightSym);
+		bool leftIsTmp  = strncmp(leftName,  "ltmp", 4);
+		bool rightIsTmp = strncmp(rightName, "ltmp", 4);
+		if ( leftIsTmp != rightIsTmp ) {
+			return (rightIsTmp ? -1 : 1);
+		}
+		
 		// if only one is global, make the other an alias (sort first)
 		if ( (leftSym.n_type() & N_EXT) != (rightSym.n_type() & N_EXT) ) {
 			if ( (rightSym.n_type() & N_EXT) != 0 )
@@ -1911,8 +1922,8 @@ int Parser<A>::symbolIndexSorter(void* extra, const void* l, const void* r)
 			else
 				return 1;
 		}
-		// if both are global, make alphabetically last one be the alias
-		return ( strcmp(parser->nameFromSymbol(rightSym), parser->nameFromSymbol(leftSym)) );
+		// if both are global, sort alphabetically. earlier one will be the alias
+		return ( strcmp(rightName, leftName) );
 	}
 	else if ( result < 0 )
 		return -1;
@@ -1955,12 +1966,14 @@ void Parser<A>::makeSortedSymbolsArray(uint32_t array[], const uint32_t sectionA
 	ParserAndSectionsArray extra = { this, sectionArray };
 	::qsort_r_local(array, _symbolsInSections, sizeof(uint32_t), &extra, &symbolIndexSorter);
 	
+
 	// look for two symbols at same address
 	_overlappingSymbols = false;
 	for (unsigned int i=1; i < _symbolsInSections; ++i) {
 		if ( symbolFromIndex(array[i-1]).n_value() == symbolFromIndex(array[i]).n_value() ) {
 			//fprintf(stderr, "overlapping symbols at 0x%08llX\n", symbolFromIndex(array[i-1]).n_value());
 			_overlappingSymbols = true;
+			break;
 		}
 	}
 
@@ -2985,7 +2998,7 @@ void Parser<A>::parseDebugInfo()
 		_file->_debugInfoKind = ld::relocatable::File::kDebugInfoNone;
 		return;
 	}
-	if ( (tuName != NULL) && (tuName[1] == '/') ) {
+	if ( (tuName != NULL) && (tuName[0] == '/') ) {
 		_file->_dwarfTranslationUnitPath = tuName;
 	}
 	else if ( (tuDir != NULL) && (tuName != NULL) ) {
@@ -5676,7 +5689,7 @@ bool Section<arm>::addRelocFixup(class Parser<arm>& parser, const macho_relocati
 				displacement += 4;
 				// If the instruction was blx, force the low 2 bits to be clear
 				dstAddr = srcAddr + displacement;
-				if ((instruction & 0xF8000000) == 0xE8000000)
+				if ((instruction & 0xD0000000) == 0xC0000000)
 					dstAddr &= 0xFFFFFFFC;
 
 				if ( reloc->r_extern() ) {
@@ -5824,6 +5837,8 @@ bool Section<arm>::addRelocFixup(class Parser<arm>& parser, const macho_relocati
 				if ( sreloc->r_length() != 2 )
 					throw "bad length for ARM_RELOC_VANILLA";
 				target.atom = parser.findAtomByAddress(sreloc->r_value());
+				if ( target.atom == NULL )
+					throwf("bad r_value (0x%08X) for ARM_RELOC_VANILLA\n", sreloc->r_value());
 				contentValue = LittleEndian::get32(*fixUpPtr);
 				target.addend = contentValue - target.atom->_objAddress;
 				if ( target.atom->isThumb() )

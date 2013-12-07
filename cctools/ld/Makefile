@@ -197,18 +197,18 @@ AWK = gawk
 CC = clang
 CCAS = clang
 CCASDEPMODE = depmode=gcc3
-CCASFLAGS = -g -O2
+CCASFLAGS =  -DLTO_SUPPORT=1 
 CCDEPMODE = depmode=gcc3
-CFLAGS = -g -O2
+CFLAGS =  -DLTO_SUPPORT=1 
 CPP = clang -E
 CPPFLAGS = 
 CRYPT_LIBS = -lcrypto
 CXX = clang++
 CXXCPP = clang++ -E
 CXXDEPMODE = depmode=gcc3
-CXXFLAGS = -g -O2
+CXXFLAGS = -stdlib=libc++
 CYGPATH_W = echo
-DEFS = -DPACKAGE_NAME=\"cctools\" -DPACKAGE_TARNAME=\"cctools\" -DPACKAGE_VERSION=\"845\" -DPACKAGE_STRING=\"cctools\ 845\" -DPACKAGE_BUGREPORT=\"cjacker@gmail.com\" -DPACKAGE_URL=\"\" -DSTDC_HEADERS=1 -DHAVE_SYS_TYPES_H=1 -DHAVE_SYS_STAT_H=1 -DHAVE_STDLIB_H=1 -DHAVE_STRING_H=1 -DHAVE_MEMORY_H=1 -DHAVE_STRINGS_H=1 -DHAVE_INTTYPES_H=1 -DHAVE_STDINT_H=1 -DHAVE_UNISTD_H=1 -DHAVE_DLFCN_H=1 -DLT_OBJDIR=\".libs/\" -DHAVE_LLVM_C_LTO_H=1 -DHAVE_OPENSSL_MD5_H=1 -DHAVE_UUID_UUID_H=1 -DEMULATED_HOST_CPU_TYPE=16777223 -DEMULATED_HOST_CPU_SUBTYPE=3 -D__STDC_LIMIT_MACROS=1 -D__STDC_CONSTANT_MACROS=1
+DEFS = -DPACKAGE_NAME=\"cctools\" -DPACKAGE_TARNAME=\"cctools\" -DPACKAGE_VERSION=\"845\" -DPACKAGE_STRING=\"cctools\ 845\" -DPACKAGE_BUGREPORT=\"cjacker@gmail.com\" -DPACKAGE_URL=\"\" -DSTDC_HEADERS=1 -DHAVE_SYS_TYPES_H=1 -DHAVE_SYS_STAT_H=1 -DHAVE_STDLIB_H=1 -DHAVE_STRING_H=1 -DHAVE_MEMORY_H=1 -DHAVE_STRINGS_H=1 -DHAVE_INTTYPES_H=1 -DHAVE_STDINT_H=1 -DHAVE_UNISTD_H=1 -DHAVE_DLFCN_H=1 -DLT_OBJDIR=\".libs/\" -DHAVE_OPENSSL_MD5_H=1 -DHAVE_UUID_UUID_H=1 -DEMULATED_HOST_CPU_TYPE=16777223 -DEMULATED_HOST_CPU_SUBTYPE=3 -D__STDC_LIMIT_MACROS=1 -D__STDC_CONSTANT_MACROS=1
 DEPDIR = .deps
 DLLTOOL = false
 DL_LIBS = -ldl
@@ -232,7 +232,7 @@ INSTALL_PROGRAM = ${INSTALL}
 INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
 LD = /usr/bin/ld -m elf_x86_64
-LDFLAGS = 
+LDFLAGS =  -L/opt/other/llvm/lib -lLTO 
 LD_CLASSIC = 
 LIBOBJS = 
 LIBS = 
@@ -241,7 +241,7 @@ LIPO =
 LN_S = ln -s
 LTLIBOBJS = 
 LTO_DEFS = -DLTO_SUPPORT=1
-LTO_LIBS = -L/opt/lib -lLTO
+LTO_LIBS = -L/opt/other/llvm/lib -lLTO
 MAINT = #
 MAKEINFO = ${SHELL} /home/thomas/development/cctools_merge/cctools/missing makeinfo
 MANIFEST_TOOL = :
@@ -316,7 +316,7 @@ mandir = ${datarootdir}/man
 mkdir_p = $(MKDIR_P)
 oldincludedir = /usr/include
 pdfdir = ${docdir}
-prefix = /home/thomas/development/cctools_merge/cctools/tmp
+prefix = /usr/local
 program_transform_name = s,x,x,
 psdir = ${docdir}
 sbindir = ${exec_prefix}/sbin

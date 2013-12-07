@@ -30,7 +30,6 @@
 
 #include <vector>
 #include <map>
-#include <ext/hash_map>
 
 #include "ld.hpp"
 #include "got.h"
@@ -111,6 +110,15 @@ static bool gotFixup(const Options& opts, ld::Internal& internal, const ld::Atom
 				// cannot do LEA optimization for flat-namespace
 				if ( opts.nameSpace() != Options::kTwoLevelNameSpace ) 
 					*optimizable = false;
+			}
+			else if ( targetOfGOT->scope() == ld::Atom::scopeLinkageUnit) {
+				// <rdar://problem/12379969> don't do optimization if target is in custom segment
+				if ( opts.sharedRegionEligible() ) {
+					const char* segName = targetOfGOT->section().segmentName();
+					if ( (strcmp(segName, "__TEXT") != 0) && (strcmp(segName, "__DATA") != 0) ) {
+						*optimizable = false;
+					}
+				}
 			}
 			return true;
 		case ld::Fixup::kindStoreX86PCRel32GOT:

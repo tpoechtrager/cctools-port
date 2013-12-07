@@ -103,11 +103,7 @@ private:
 	static void					parseWorkerThread(InputFiles *inputFiles);
 	void						startThread(void (*threadFunc)(InputFiles *)) const;
 
-	class CStringEquals {
-	public:
-		bool operator()(const char* left, const char* right) const { return (strcmp(left, right) == 0); }
-	};
-	typedef __gnu_cxx::hash_map<const char*, ld::dylib::File*, __gnu_cxx::hash<const char*>, CStringEquals>	InstallNameToDylib;
+	typedef std::unordered_map<const char*, ld::dylib::File*, CStringHash, CStringEquals>	InstallNameToDylib;
 
 	const Options&				_options;
 	std::vector<ld::File*>		_inputFiles;
@@ -117,7 +113,6 @@ private:
 	ld::dylib::File*			_bundleLoader;
 	bool						_allDirectDylibsLoaded;
 	bool						_inferredArch;
-    int                       _fileMonitor;
     struct strcompclass {
         bool operator() (const char *a, const char *b) const { return ::strcmp(a, b) < 0; }
     };
