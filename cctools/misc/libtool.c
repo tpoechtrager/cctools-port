@@ -1365,6 +1365,7 @@ void)
 			    }
 			}
 		    }
+#ifdef LTO_SUPPORT
 		    else if(ofiles[i].arch_type == OFILE_Mach_O ||
 		            ofiles[i].arch_type == OFILE_LLVM_BITCODE){
 			if(cmd_flags.ranlib == TRUE){
@@ -1376,6 +1377,7 @@ void)
 			else
 			    add_member(ofiles + i);
 		    }
+#endif /* LTO_SUPPORT */
 		    else if(ofiles[i].arch_type == OFILE_UNKNOWN){
 			if(cmd_flags.ranlib == TRUE){
 			    error("for architecture: %s file: %s is not an "
