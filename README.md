@@ -8,7 +8,7 @@ Originally ported by cjacker from the [ios-toolchain-for-linux](https://code.goo
 Make sure you have the following installed on your Linux box:
 
 `Clang 3.2+`, `llvm-devel`, `automake`, `autogen`,  
-`libtool`, `libuuid-devel` and `openssl-devel`.
+`libtool`, `uuid-devel` and `openssl-devel`.
 
 Then type:
 
