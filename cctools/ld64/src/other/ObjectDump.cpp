@@ -1132,10 +1132,12 @@ static ld::relocatable::File* createReader(const char* path)
 	if ( objResult != NULL )
 		return objResult;
 
+#ifdef LTO_SUPPORT
 	// see if it is an llvm object file
 	objResult = lto::parse(p, fileLen, path, stat_buf.st_mtime, ld::File::Ordinal::NullOrdinal(), sPreferredArch, sPreferredSubArch, false);
 	if ( objResult != NULL ) 
 		return objResult;
+#endif /* LTO_SUPPORT */
 
 	throwf("not a mach-o object file: %s", path);
 #else

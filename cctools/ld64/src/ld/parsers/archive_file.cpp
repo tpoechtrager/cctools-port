@@ -91,8 +91,10 @@ public:
 private:
 	static bool										validMachOFile(const uint8_t* fileContent, uint64_t fileLength, 
 																	const mach_o::relocatable::ParserOptions& opts);
+#ifdef LTO_SUPPORT
 	static bool										validLTOFile(const uint8_t* fileContent, uint64_t fileLength, 
 																	const mach_o::relocatable::ParserOptions& opts);
+#endif /* LTO_SUPPORT */
 	static cpu_type_t								architecture();
 
 	class Entry : ar_hdr
@@ -236,11 +238,13 @@ bool File<A>::validMachOFile(const uint8_t* fileContent, uint64_t fileLength, co
 	return mach_o::relocatable::isObjectFile(fileContent, fileLength, opts);
 }
 
+#ifdef LTO_SUPPORT
 template <typename A>
 bool File<A>::validLTOFile(const uint8_t* fileContent, uint64_t fileLength, const mach_o::relocatable::ParserOptions& opts)
 {
 	return lto::isObjectFile(fileContent, fileLength, opts.architecture, opts.subType);
 }
+#endif /* LTO_SUPPORT */
 
 
 
@@ -261,7 +265,11 @@ bool File<A>::validFile(const uint8_t* fileContent, uint64_t fileLength, const m
 		if ( (p==start) && ((strcmp(memberName, SYMDEF_SORTED) == 0) || (strcmp(memberName, SYMDEF) == 0)) )
 			continue;
 		// archive is valid if first .o file is valid
-		return (validMachOFile(p->content(), p->contentSize(), opts) || validLTOFile(p->content(), p->contentSize(), opts));
+		return (validMachOFile(p->content(), p->contentSize(), opts)
+#ifdef LTO_SUPPORT
+             || validLTOFile(p->content(), p->contentSize(), opts)
+#endif /* LTO_SUPPORT */
+        );
 	}	
 	// empty archive
 	return true;
@@ -382,6 +390,7 @@ typename File<A>::MemberState& File<A>::makeObjectFileForMember(const Entry* mem
 			_instantiatedEntries[member] = state;
 			return _instantiatedEntries[member];
 		}
+#ifdef LTO_SUPPORT
 		// see if member is llvm bitcode file
 		result = lto::parse(member->content(), member->contentSize(), 
 								mPath, member->modificationTime(), ordinal, 
@@ -391,6 +400,7 @@ typename File<A>::MemberState& File<A>::makeObjectFileForMember(const Entry* mem
 			_instantiatedEntries[member] = state;
 			return _instantiatedEntries[member];
 		}
+#endif /* LTO_SUPPORT */
 			
 		throwf("archive member '%s' with length %d is not mach-o or llvm bitcode", memberName, member->contentSize());
 	}
