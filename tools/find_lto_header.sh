@@ -14,6 +14,7 @@ function try()
         echo -n "-L$LLVM_LIB_DIR -lLTO " > tmp/ldflags
         echo -n "-DLTO_SUPPORT=1 " > tmp/cflags
         echo -n "-DLTO_SUPPORT=1 " > tmp/cxxflags
+        echo -n "$LLVM_LIB_DIR" > tmp/ldpath
         exit 0
     fi
 }

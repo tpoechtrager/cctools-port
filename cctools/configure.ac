@@ -13,6 +13,7 @@ CXX=clang++
 CFLAGS="`cat tmp/cflags 2>/dev/null` -O3"
 CXXFLAGS="`cat tmp/libcxx-conf 2>/dev/null || echo -stdlib=libc++` `cat tmp/cxxflags 2>/dev/null` -O3"
 LDFLAGS="`cat tmp/ldflags 2>/dev/null`"
+export LD_LIBRARY_PATH="`cat tmp/ldpath 2>/dev/null`"
 
 CPP="clang -E"
 
@@ -248,28 +249,6 @@ AC_SUBST(CRYPT_LIBS)
 
 AC_C_BIGENDIAN([AC_SUBST([ENDIAN_FLAG],[-D__BIG_ENDIAN__=1])],
 			[AC_SUBST([ENDIAN_FLAG],[-D__LITTLE_ENDIAN__=1])])
-
-#compile ld_classic or not. only for 32bit.
-LD_CLASSIC=""
-cat > conftest.c <<EOF
-#if defined(__x86_64__) || (!defined(__i386__) && defined(__LP64__))
-host_address=64
-#else
-host_address=32
-#endif
-EOF
-OSBIT=`${CC-cc} -E conftest.c | grep host_address=`
-rm -f conftest.c
-
-if test "$OSBIT" = "host_address=32"; then
-AC_MSG_NOTICE(["Your system is 32bit, enable ld_classic build"])
-LD_CLASSIC="ld"
-else
-AC_MSG_NOTICE(["Your system is 64bit, disable ld_classic"])
-fi
-
-AC_SUBST([LD_CLASSIC], [$LD_CLASSIC])
-
 
 AC_CONFIG_FILES([Makefile libstuff/Makefile])
 AC_CONFIG_FILES([ar/Makefile])
