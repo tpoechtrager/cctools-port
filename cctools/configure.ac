@@ -9,7 +9,11 @@ AC_ARG_PROGRAM
 #force compiler to clang
 CC=clang
 CXX=clang++
-CXXFLAGS=-stdlib=libc++
+
+CFLAGS="`cat tmp/cflags 2>/dev/null` -O3"
+CXXFLAGS="`cat tmp/libcxx-conf 2>/dev/null || echo -stdlib=libc++` `cat tmp/cxxflags 2>/dev/null` -O3"
+LDFLAGS="`cat tmp/ldflags 2>/dev/null`"
+
 CPP="clang -E"
 
 AM_INIT_AUTOMAKE([1.10 no-define no-dist-gzip dist-bzip2 tar-ustar])
@@ -244,32 +248,6 @@ AC_SUBST(CRYPT_LIBS)
 
 AC_C_BIGENDIAN([AC_SUBST([ENDIAN_FLAG],[-D__BIG_ENDIAN__=1])],
 			[AC_SUBST([ENDIAN_FLAG],[-D__LITTLE_ENDIAN__=1])])
-
-# Check LTO
-AC_CHECK_PROG(HAVE_LLVM_CONFIG, llvm-config, true, false)
-
-if test "x$HAVE_LLVM_CONFIG" = "xfalse"; then
-        AC_CHECK_PROG(HAVE_LLVM_CONFIG_32, llvm-config-3.2, true, false)
-        if test "x$HAVE_LLVM_CONFIG_32" = "xfalse"; then
-                AC_MSG_ERROR([llvm-config or llvm-config-3.2 not found on your system,please install related packages])
-        else
-	        LLVM_LIBDIR=`llvm-config-3.2 --libdir`
-        	if test -f $LLVM_LIBDIR/libLTO.so;then
-                	LTO_LIBS="-L`llvm-config-3.2 --libdir` -lLTO"
-                	LTO_DEFS="-DLTO_SUPPORT=1"
-        	fi
-        fi
-else
-        LLVM_LIBDIR=`llvm-config --libdir`
-        if test -f $LLVM_LIBDIR/libLTO.so;then
-                LTO_LIBS="-L`llvm-config --libdir` -lLTO"
-                LTO_DEFS="-DLTO_SUPPORT=1"
-        fi
-fi
-
-
-AC_SUBST(LTO_LIBS)
-AC_SUBST(LTO_DEFS)
 
 #compile ld_classic or not. only for 32bit.
 LD_CLASSIC=""
