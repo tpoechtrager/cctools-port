@@ -2900,9 +2900,11 @@ void Options::buildSearchPaths(int argc, const char* argv[])
 			fprintf(stderr, "configured to support archs: %s\n", ALL_SUPPORTED_ARCHS);
 			 // if only -v specified, exit cleanly
 			 if ( argc == 2 ) {
+#ifdef LTO_SUPPORT
 				const char* ltoVers = lto::version();
 				if ( ltoVers != NULL )
 					fprintf(stderr, "LTO support using: %s\n", ltoVers);
+#endif /* LTO_SUPPORT */
 				exit(0);
 			}
 		}

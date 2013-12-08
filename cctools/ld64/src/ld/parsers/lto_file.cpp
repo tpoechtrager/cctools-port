@@ -22,6 +22,8 @@
  * @APPLE_LICENSE_HEADER_END@
  */
 
+#ifdef LTO_SUPPORT
+
 #ifndef __LTO_READER_H__
 #define __LTO_READER_H__
 
@@ -877,3 +879,4 @@ bool optimize(  const std::vector<const ld::Atom*>&	allAtoms,
 
 #endif
 
+#endif /* LTO SUPPORT */
