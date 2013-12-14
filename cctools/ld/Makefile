@@ -84,7 +84,10 @@ subdir = ld
 DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am \
 	$(top_srcdir)/depcomp
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/configure.ac
+am__aclocal_m4_deps = $(top_srcdir)/m4/libtool.m4 \
+	$(top_srcdir)/m4/ltoptions.m4 $(top_srcdir)/m4/ltsugar.m4 \
+	$(top_srcdir)/m4/ltversion.m4 $(top_srcdir)/m4/lt~obsolete.m4 \
+	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 mkinstalldirs = $(install_sh) -d
@@ -185,30 +188,30 @@ am__define_uniq_tagged_files = \
 ETAGS = etags
 CTAGS = ctags
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
-ACLOCAL = ${SHELL} /home/thomas/development/cctools_merge/cctools/missing aclocal-1.13
+ACLOCAL = ${SHELL} /data/development/cctools_merge/cctools/missing aclocal-1.13
 AMTAR = $${TAR-tar}
 AM_DEFAULT_VERBOSITY = 1
 AR = ar
 ASLIBEXECDIR = ${libexecdir}/as
-AUTOCONF = ${SHELL} /home/thomas/development/cctools_merge/cctools/missing autoconf
-AUTOHEADER = ${SHELL} /home/thomas/development/cctools_merge/cctools/missing autoheader
-AUTOMAKE = ${SHELL} /home/thomas/development/cctools_merge/cctools/missing automake-1.13
+AUTOCONF = ${SHELL} /data/development/cctools_merge/cctools/missing autoconf
+AUTOHEADER = ${SHELL} /data/development/cctools_merge/cctools/missing autoheader
+AUTOMAKE = ${SHELL} /data/development/cctools_merge/cctools/missing automake-1.13
 AWK = gawk
 CC = clang
 CCAS = clang
 CCASDEPMODE = depmode=gcc3
-CCASFLAGS = -g -O2
+CCASFLAGS = -DLTO_SUPPORT=1  -O3
 CCDEPMODE = depmode=gcc3
-CFLAGS = -g -O2
+CFLAGS = -DLTO_SUPPORT=1  -O3
 CPP = clang -E
 CPPFLAGS = 
 CRYPT_LIBS = -lcrypto
 CXX = clang++
 CXXCPP = clang++ -E
 CXXDEPMODE = depmode=gcc3
-CXXFLAGS = -g -O2
+CXXFLAGS = -DLTO_SUPPORT=1  -O3
 CYGPATH_W = echo
-DEFS = -DPACKAGE_NAME=\"cctools\" -DPACKAGE_TARNAME=\"cctools\" -DPACKAGE_VERSION=\"845\" -DPACKAGE_STRING=\"cctools\ 845\" -DPACKAGE_BUGREPORT=\"cjacker@gmail.com\" -DPACKAGE_URL=\"\" -DSTDC_HEADERS=1 -DHAVE_SYS_TYPES_H=1 -DHAVE_SYS_STAT_H=1 -DHAVE_STDLIB_H=1 -DHAVE_STRING_H=1 -DHAVE_MEMORY_H=1 -DHAVE_STRINGS_H=1 -DHAVE_INTTYPES_H=1 -DHAVE_STDINT_H=1 -DHAVE_UNISTD_H=1 -DHAVE_DLFCN_H=1 -DLT_OBJDIR=\".libs/\" -DHAVE_LLVM_C_LTO_H=1 -DHAVE_OPENSSL_MD5_H=1 -DHAVE_UUID_UUID_H=1 -DEMULATED_HOST_CPU_TYPE=16777223 -DEMULATED_HOST_CPU_SUBTYPE=3 -D__STDC_LIMIT_MACROS=1 -D__STDC_CONSTANT_MACROS=1
+DEFS = -DPACKAGE_NAME=\"cctools\" -DPACKAGE_TARNAME=\"cctools\" -DPACKAGE_VERSION=\"845\" -DPACKAGE_STRING=\"cctools\ 845\" -DPACKAGE_BUGREPORT=\"cjacker@gmail.com\" -DPACKAGE_URL=\"\" -DSTDC_HEADERS=1 -DHAVE_SYS_TYPES_H=1 -DHAVE_SYS_STAT_H=1 -DHAVE_STDLIB_H=1 -DHAVE_STRING_H=1 -DHAVE_MEMORY_H=1 -DHAVE_STRINGS_H=1 -DHAVE_INTTYPES_H=1 -DHAVE_STDINT_H=1 -DHAVE_UNISTD_H=1 -DHAVE_DLFCN_H=1 -DLT_OBJDIR=\".libs/\" -DHAVE_OPENSSL_MD5_H=1 -DHAVE_UUID_UUID_H=1 -DEMULATED_HOST_CPU_TYPE=16777223 -DEMULATED_HOST_CPU_SUBTYPE=3 -D__STDC_LIMIT_MACROS=1 -D__STDC_CONSTANT_MACROS=1
 DEPDIR = .deps
 DLLTOOL = false
 DL_LIBS = -ldl
@@ -222,8 +225,6 @@ ENDIAN_FLAG = -D__LITTLE_ENDIAN__=1
 EXEEXT = 
 FGREP = /bin/grep -F
 GREP = /bin/grep
-HAVE_LLVM_CONFIG = true
-HAVE_LLVM_CONFIG_32 = 
 HOST_AR = ar
 HOST_RANLIB = ranlib
 INSTALL = /usr/bin/install -c
@@ -232,18 +233,15 @@ INSTALL_PROGRAM = ${INSTALL}
 INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
 LD = /usr/bin/ld -m elf_x86_64
-LDFLAGS = 
-LD_CLASSIC = 
+LDFLAGS = -L/opt/other/llvm/lib -lLTO 
 LIBOBJS = 
 LIBS = 
 LIBTOOL = $(SHELL) $(top_builddir)/libtool
 LIPO = 
 LN_S = ln -s
 LTLIBOBJS = 
-LTO_DEFS = -DLTO_SUPPORT=1
-LTO_LIBS = -L/opt/lib -lLTO
 MAINT = #
-MAKEINFO = ${SHELL} /home/thomas/development/cctools_merge/cctools/missing makeinfo
+MAKEINFO = ${SHELL} /data/development/cctools_merge/cctools/missing makeinfo
 MANIFEST_TOOL = :
 MKDIR_P = /bin/mkdir -p
 NM = /usr/bin/nm -B
@@ -273,10 +271,10 @@ STRIP = strip
 UUID_LIBS = -luuid
 VERSION = 845
 WARNINGS =  -Wall -Wno-long-long -Wno-import -Wno-format -Wno-deprecated -Wno-unused-variable -Wno-unused-private-field -Wno-unused-function -Wno-objc-root-class -Wno-deprecated-objc-isa-usage -Wno-invalid-offsetof -Wno-int-conversion
-abs_builddir = /home/thomas/development/cctools_merge/cctools/ld
-abs_srcdir = /home/thomas/development/cctools_merge/cctools/ld
-abs_top_builddir = /home/thomas/development/cctools_merge/cctools
-abs_top_srcdir = /home/thomas/development/cctools_merge/cctools
+abs_builddir = /data/development/cctools_merge/cctools/ld
+abs_srcdir = /data/development/cctools_merge/cctools/ld
+abs_top_builddir = /data/development/cctools_merge/cctools
+abs_top_srcdir = /data/development/cctools_merge/cctools
 ac_ct_AR = ar
 ac_ct_CC = clang
 ac_ct_CXX = 
@@ -307,7 +305,7 @@ host_vendor = unknown
 htmldir = ${docdir}
 includedir = ${prefix}/include
 infodir = ${datarootdir}/info
-install_sh = ${SHELL} /home/thomas/development/cctools_merge/cctools/install-sh
+install_sh = ${SHELL} /data/development/cctools_merge/cctools/install-sh
 libdir = ${exec_prefix}/lib
 libexecdir = ${exec_prefix}/libexec
 localedir = ${datarootdir}/locale
@@ -316,7 +314,7 @@ mandir = ${datarootdir}/man
 mkdir_p = $(MKDIR_P)
 oldincludedir = /usr/include
 pdfdir = ${docdir}
-prefix = /home/thomas/development/cctools_merge/cctools/tmp
+prefix = /usr/local
 program_transform_name = s,x,x,
 psdir = ${docdir}
 sbindir = ${exec_prefix}/sbin

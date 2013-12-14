@@ -9,6 +9,12 @@ AC_ARG_PROGRAM
 #force compiler to clang
 CC=clang
 CXX=clang++
+
+CFLAGS="`cat tmp/cflags 2>/dev/null` -O3"
+CXXFLAGS="`cat tmp/cxxflags 2>/dev/null` -O3"
+LDFLAGS="`cat tmp/ldflags 2>/dev/null`"
+export LD_LIBRARY_PATH="`cat tmp/ldpath 2>/dev/null`"
+
 CPP="clang -E"
 
 AM_INIT_AUTOMAKE([1.10 no-define no-dist-gzip dist-bzip2 tar-ustar])
@@ -35,19 +41,6 @@ AM_PROG_AS([clang])
 AC_CHECK_TOOL([HOST_RANLIB], [ranlib], :)
 AC_CHECK_TOOL([HOST_AR], [ar], :)
 
-#detect buggy unistd.h contains __block.
-buggy_unistd=`grep "\*__block," /usr/include/unistd.h`
-if test "$buggy_unistd"; then
-  echo "==========================================="
-  echo "Buggy unistd.h found"
-  echo "\"__block\" is a reserved word of clang compiler for blocks support."
-  echo "Please replace \"__block\" in /usr/include/unistd.h to \"__libc_block\""
-  echo "==========================================="
-  exit
-fi
-
-
-AC_CHECK_HEADERS([llvm-c/lto.h], [], [AC_MSG_ERROR([*** lto.h not found, Please install llvm dev packages according to your system])])
 AC_CHECK_HEADERS([openssl/md5.h], [], [AC_MSG_ERROR([*** md5.h not found, Please install ssl dev packages according to your system])])
 AC_CHECK_HEADERS([uuid/uuid.h], [], [AC_MSG_ERROR([*** uuid.h not found, Please install uuid dev packages according to your system])])
 
@@ -256,54 +249,6 @@ AC_SUBST(CRYPT_LIBS)
 
 AC_C_BIGENDIAN([AC_SUBST([ENDIAN_FLAG],[-D__BIG_ENDIAN__=1])],
 			[AC_SUBST([ENDIAN_FLAG],[-D__LITTLE_ENDIAN__=1])])
-
-# Check LTO
-AC_CHECK_PROG(HAVE_LLVM_CONFIG, llvm-config, true, false)
-
-if test "x$HAVE_LLVM_CONFIG" = "xfalse"; then
-        AC_CHECK_PROG(HAVE_LLVM_CONFIG_32, llvm-config-3.2, true, false)
-        if test "x$HAVE_LLVM_CONFIG_32" = "xfalse"; then
-                AC_MSG_ERROR([llvm-config or llvm-config-3.2 not found on your system,please install related packages])
-        else
-	        LLVM_LIBDIR=`llvm-config-3.2 --libdir`
-        	if test -f $LLVM_LIBDIR/libLTO.so;then
-                	LTO_LIBS="-L`llvm-config-3.2 --libdir` -lLTO"
-                	LTO_DEFS="-DLTO_SUPPORT=1"
-        	fi
-        fi
-else
-        LLVM_LIBDIR=`llvm-config --libdir`
-        if test -f $LLVM_LIBDIR/libLTO.so;then
-                LTO_LIBS="-L`llvm-config --libdir` -lLTO"
-                LTO_DEFS="-DLTO_SUPPORT=1"
-        fi
-fi
-
-
-AC_SUBST(LTO_LIBS)
-AC_SUBST(LTO_DEFS)
-
-#compile ld_classic or not. only for 32bit.
-LD_CLASSIC=""
-cat > conftest.c <<EOF
-#if defined(__x86_64__) || (!defined(__i386__) && defined(__LP64__))
-host_address=64
-#else
-host_address=32
-#endif
-EOF
-OSBIT=`${CC-cc} -E conftest.c | grep host_address=`
-rm -f conftest.c
-
-if test "$OSBIT" = "host_address=32"; then
-AC_MSG_NOTICE(["Your system is 32bit, enable ld_classic build"])
-LD_CLASSIC="ld"
-else
-AC_MSG_NOTICE(["Your system is 64bit, disable ld_classic"])
-fi
-
-AC_SUBST([LD_CLASSIC], [$LD_CLASSIC])
-
 
 AC_CONFIG_FILES([Makefile libstuff/Makefile])
 AC_CONFIG_FILES([ar/Makefile])
