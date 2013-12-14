@@ -161,11 +161,19 @@ char *str)
 	    p = allocate(bufsize);
 	    _NSGetExecutablePath(p, &bufsize);
 	}
-	prefix = realpath(p, resolved_name);
-	p = rindex(prefix, '/');
-	if(p != NULL)
-	    p[1] = '\0';
-
+	if (*p){
+		prefix = realpath(p, resolved_name);
+		if (prefix){
+			p = rindex(prefix, '/');
+			if(p != NULL)
+				p[1] = '\0';
+		} else{
+			goto invalid;
+		}
+	} else{
+		invalid:;
+		prefix = "";
+	}
     //NOTE, here we add a target alias to command str;
 	return(makestr(prefix, PROGRAM_PREFIX, str, NULL));
 }
