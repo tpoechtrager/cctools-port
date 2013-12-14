@@ -96,7 +96,9 @@
 
 #define	BYTE_ORDER	__DARWIN_BYTE_ORDER
 
+#ifndef __FreeBSD__
 #include <sys/_endian.h>
+#endif /* !__FreeBSD__ */
 
 #endif /* defined(KERNEL) || (!defined(_POSIX_C_SOURCE) || defined(_DARWIN_C_SOURCE)) */
 #endif /* !_I386__ENDIAN_H_ */

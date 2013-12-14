@@ -28,6 +28,9 @@
 /*
  * Copyright 1995 NeXT Computer, Inc. All rights reserved.
  */
+#ifdef __FreeBSD__
+#include_next <machine/endian.h>
+#else
 #ifndef _BSD_MACHINE_ENDIAN_H_
 #define _BSD_MACHINE_ENDIAN_H_
 
@@ -42,3 +45,4 @@
 #endif
 
 #endif /* _BSD_MACHINE_ENDIAN_H_ */
+#endif /* __FreeBSD__ */

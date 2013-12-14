@@ -37,7 +37,9 @@
 #include <errno.h>
 #include <limits.h>
 #include <unistd.h>
+#ifndef __FreeBSD__
 #include <execinfo.h>
+#endif /* __FreeBSD__ */
 #include <mach/mach_time.h>
 #include <mach/vm_statistics.h>
 #include <mach/mach_init.h>
@@ -754,6 +756,7 @@ int main(int argc, const char* argv[])
 // implement assert() function to print out a backtrace before aborting
 void __assert_rtn(const char* func, const char* file, int line, const char* failedexpr)
 {
+#ifndef __FreeBSD__
     Snapshot *snapshot = Snapshot::globalSnapshot;
     
     snapshot->setSnapshotMode(Snapshot::SNAPSHOT_DEBUG);
@@ -779,6 +782,7 @@ void __assert_rtn(const char* func, const char* file, int line, const char* fail
 		snapshot->recordAssertionMessage("%d  %p  %s + %ld\n", i, callStack[i], symboName, offset);
 	}
     fprintf(stderr, "A linker snapshot was created at:\n\t%s\n", snapshot->rootDir());
+#endif /* __FreeBSD__ */
 	fprintf(stderr, "ld: Assertion failed: (%s), function %s, file %s, line %d.\n", failedexpr, func, file, line);
 	exit(1);
 }

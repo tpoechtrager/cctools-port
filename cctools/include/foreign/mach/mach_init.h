@@ -110,6 +110,9 @@ extern	vm_size_t	vm_page_size;
 extern	vm_size_t	vm_page_mask;
 extern	int		vm_page_shift;
 
+#undef trunc_page
+#undef round_page
+
 #define trunc_page(x)	((x) & (~(vm_page_size - 1)))
 #define round_page(x)	trunc_page((x) + (vm_page_size - 1))
 
