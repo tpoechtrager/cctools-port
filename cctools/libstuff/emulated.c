@@ -18,7 +18,7 @@ int _NSGetExecutablePath(char *path, unsigned int *size)
 {
    int bufsize = *size;
    int ret_size;
-   ret_size = readlink("/proc/self/exe", path, bufsize);
+   ret_size = readlink("/proc/self/exe", path, bufsize-1);
    if (ret_size != -1)
    {
         *size = ret_size;
