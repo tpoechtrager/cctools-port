@@ -20,7 +20,11 @@ const char ldVersionString[] = "134.9\n";
 
 void __assert_rtn(const char *func, const char *file, int line, const char *msg)
 {
+#ifdef __FreeBSD__
+    __assert(msg, file, line, func);
+#else
     __assert(msg, file, line);
+#endif /* __FreeBSD__ */
 }
 
 

@@ -3,7 +3,6 @@
  * threading implementation.  This file contains a VERY thin wrapper over the
  * Windows and POSIX mutex APIs.
  */
-
 #ifndef __LIBOBJC_LOCK_H_INCLUDED__
 #define __LIBOBJC_LOCK_H_INCLUDED__
 #ifdef WIN32
@@ -22,11 +21,19 @@ typedef HANDLE mutex_t;
 typedef pthread_mutex_t mutex_t;
 // If this pthread implementation has a static initializer for recursive
 // mutexes, use that, otherwise fall back to the portable version
+#ifdef __APPLE__
+/* evil portability hack */
+/*
+#endif
 #	ifdef PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP
 #		define INIT_LOCK(x) x = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP
 #	elif defined(PTHREAD_RECURSIVE_MUTEX_INITIALIZER)
 #		define INIT_LOCK(x) x = PTHREAD_RECURSIVE_MUTEX_INITIALIZER
 #	else
+#ifdef __APPLE__
+*/
+#endif /* __APPLE__ */
+#if 1
 #		define INIT_LOCK(x) init_recursive_mutex(&(x))
 
 static inline void init_recursive_mutex(pthread_mutex_t *x)

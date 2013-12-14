@@ -14,6 +14,7 @@ CFLAGS="`cat tmp/cflags 2>/dev/null` -O3"
 CXXFLAGS="`cat tmp/cxxflags 2>/dev/null` -O3"
 LDFLAGS="`cat tmp/ldflags 2>/dev/null`"
 export LD_LIBRARY_PATH="`cat tmp/ldpath 2>/dev/null`"
+export C_INCLUDE_PATH="$C_INCLUDE_PATH:/usr/local/include"
 
 CPP="clang -E"
 
@@ -58,7 +59,7 @@ case $target_cpu in
         AC_DEFINE(EMULATED_HOST_CPU_TYPE, 7, [Emulated CPU type])
         AC_DEFINE(EMULATED_HOST_CPU_SUBTYPE, 10, [Emulated CPU subtype])
     ;;
-     x86_64)
+     x86_64|amd64)
         AC_DEFINE(EMULATED_HOST_CPU_TYPE, 16777223, [Emulated CPU type])
         AC_DEFINE(EMULATED_HOST_CPU_SUBTYPE, 3, [Emulated CPU subtype])
     ;;

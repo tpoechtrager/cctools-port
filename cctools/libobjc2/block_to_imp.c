@@ -12,7 +12,6 @@
 #include "lock.h"
 #include "visibility.h"
 
-
 /* QNX needs a special header for asprintf() */
 #ifdef __QNXNTO__
 #include <nbutil.h>

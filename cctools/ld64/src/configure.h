@@ -32,6 +32,8 @@ extern "C" {
 
 #define HW_NCPU      3
 #define CTL_HW      6
+
+#undef ARG_MAX
 #define ARG_MAX       131072
 
 #endif

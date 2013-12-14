@@ -1,3 +1,6 @@
+#ifdef __APPLE__
+#include_next <sys/attr.h>
+#else
 #ifndef _SYS_ATTR_H_
 #define _SYS_ATTR_H_
 
@@ -23,3 +26,5 @@ struct attrlist {
 int    getattrlist(const char*,void*,void*,size_t,unsigned int);
 
 #endif
+
+#endif /* __APPLE__ */

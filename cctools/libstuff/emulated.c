@@ -1,3 +1,4 @@
+#ifndef __APPLE__
 #include <mach/mach.h>
 #include <mach/mach_error.h>
 #include <stdlib.h>
@@ -5,7 +6,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/mman.h>
-#include <sys/attr.h>
+//#include <sys/attr.h>
 #include <errno.h>
 #include <inttypes.h>
 #include <mach/mach_time.h>
@@ -316,3 +317,4 @@ strlcpy(char *dst, const char *src, size_t siz)
         return(s - src - 1);        /* count does not include NUL */
 }
 
+#endif /* __APPLE__ */
