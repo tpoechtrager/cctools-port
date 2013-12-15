@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+test -n "$DISABLE_LTO_SUPPORT" && rm -rf tmp
+
 ../tools/find_lto_header.sh || echo "llvm-devel seems not to be installed - disabling LTO support"
 
 grep -n "__block," /usr/include/unistd.h &>/dev/null
