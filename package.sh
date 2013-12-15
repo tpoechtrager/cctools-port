@@ -1,12 +1,29 @@
 #!/usr/bin/env bash
 
-dir=`pwd`
-packagetmp=`mktemp -d`
-cp -r . $packagetmp || exit $?
-pushd $packagetmp >/dev/null
-./cleanup.sh 2>/dev/null
-rm -rf .git 2>/dev/null
-rm cctools*.tar.* 2>/dev/null
-tar -pczf $dir/cctools-XXX-ld64-XXX.tar.gz * || exit $?
-popd >/dev/null
-rm -rf $packagetmp || exit $?
+set -ex
+
+DIR=`pwd`
+PACKAGETMP=`mktemp -d`
+
+REVHASH=`git rev-parse --short HEAD`
+CCTOOLSVER=`cat README.md | grep "Current Version: " | awk '{print $3}'`
+LD64VER=`cat README.md | grep "Current Version: " | awk '{print $5}'`
+
+PACKAGE=cctools-${CCTOOLSVER}-${LD64VER}_$REVHASH
+
+mkdir $PACKAGETMP/$PACKAGE
+cp -r . $PACKAGETMP/$PACKAGE
+
+pushd $PACKAGETMP &>/dev/null
+
+pushd $PACKAGE &>/dev/null
+rm -rf .git
+rm -f cctools*.tar.*
+rm -f package.sh
+popd &>/dev/null
+
+XZ_OPT=-9 tar cJf $DIR/$PACKAGE.tar.xz *
+
+popd &>/dev/null
+
+rm -rf $PACKAGETMP
