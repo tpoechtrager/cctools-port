@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+test -n "$DISABLE_LTO_SUPPORT" && exit 0
+
 function try()
 {
     LLVM_CONFIG="llvm-config$1"

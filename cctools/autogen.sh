@@ -2,6 +2,8 @@
 
 # set -x
 
+test -n "$DISABLE_LTO_SUPPORT" && rm -rf tmp
+
 ../tools/find_lto_header.sh || echo "llvm-devel seems not to be installed - disabling LTO support"
 
 echo "#include <vector>"|clang++ -stdlib=libc++ -xc++ -c -S -o- - &>/dev/null
