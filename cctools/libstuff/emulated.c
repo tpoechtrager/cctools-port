@@ -14,8 +14,21 @@
 #include <mach/host_info.h>
 #include <sys/time.h>
 
+#ifdef __FreeBSD__
+#include <sys/sysctl.h>
+#endif
+
 int _NSGetExecutablePath(char *path, unsigned int *size)
 {
+#ifdef __FreeBSD__
+   int mib[4];
+   mib[0] = CTL_KERN;
+   mib[1] = KERN_PROC;
+   mib[2] = KERN_PROC_PATHNAME;
+   mib[3] = -1;
+   size_t cb = *size;
+   return sysctl(mib, 4, path, &cb, NULL, 0);
+#else
    int bufsize = *size;
    int ret_size;
    ret_size = readlink("/proc/self/exe", path, bufsize-1);
@@ -27,6 +40,7 @@ int _NSGetExecutablePath(char *path, unsigned int *size)
    }
    else
     return -1;
+#endif
 }
 
 kern_return_t mach_timebase_info( mach_timebase_info_t info) {

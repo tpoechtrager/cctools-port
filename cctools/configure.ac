@@ -10,9 +10,9 @@ AC_ARG_PROGRAM
 CC=clang
 CXX=clang++
 
-CFLAGS="`cat tmp/cflags 2>/dev/null` -O3"
-CXXFLAGS="`cat tmp/cxxflags 2>/dev/null` -O3"
-LDFLAGS="`cat tmp/ldflags 2>/dev/null`"
+CFLAGS="$CFLAGS `cat tmp/cflags 2>/dev/null` -O3"
+CXXFLAGS="$CXXFLAGS `cat tmp/cxxflags 2>/dev/null` -O3"
+LDFLAGS="$LDFLAGS -L/usr/local/lib `cat tmp/ldflags 2>/dev/null`"
 export LD_LIBRARY_PATH="`cat tmp/ldpath 2>/dev/null`"
 export C_INCLUDE_PATH="$C_INCLUDE_PATH:/usr/local/include"
 

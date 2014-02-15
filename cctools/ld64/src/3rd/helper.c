@@ -13,6 +13,11 @@
 #include <mach/host_info.h>
 #include <sys/time.h>
 #include <assert.h>
+ 
+#ifdef __FreeBSD__
+#include <sys/sysctl.h>
+#endif
+
 #include "helper.h"
 
 const char ldVersionString[] = "134.9\n";
@@ -27,22 +32,29 @@ void __assert_rtn(const char *func, const char *file, int line, const char *msg)
 #endif /* __FreeBSD__ */
 }
 
-
 int _NSGetExecutablePath(char *path, unsigned int *size)
 {
+#ifdef __FreeBSD__
+   int mib[4];
+   mib[0] = CTL_KERN;
+   mib[1] = KERN_PROC;
+   mib[2] = KERN_PROC_PATHNAME;
+   mib[3] = -1;
+   size_t cb = *size;
+   return sysctl(mib, 4, path, &cb, NULL, 0);
+#else
    int bufsize = *size;
    int ret_size;
-   char *localpath = (char*)malloc(bufsize);
-   bzero(localpath,bufsize);
-   ret_size = readlink("/proc/self/exe", localpath, bufsize);
+   ret_size = readlink("/proc/self/exe", path, bufsize-1);
    if (ret_size != -1)
    {
         *size = ret_size;
-        strcpy(path,localpath);
+        path[ret_size]=0;
         return 0;
    }
    else
     return -1;
+#endif
 }
 
 int _dyld_find_unwind_sections(void* i, struct dyld_unwind_sections* sec)

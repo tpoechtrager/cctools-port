@@ -28,6 +28,7 @@
 #define __LTO_READER_H__
 
 #include <stdlib.h>
+#include <pthread.h>
 #include <sys/param.h>
 #include <sys/fcntl.h>
 #include <sys/stat.h>
