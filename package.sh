@@ -20,6 +20,7 @@ pushd $PACKAGE &>/dev/null
 rm -rf .git
 rm -f cctools*.tar.*
 rm -f package.sh
+rm -f .gitignore
 popd &>/dev/null
 
 XZ_OPT=-9 tar cJf $DIR/$PACKAGE.tar.xz *
