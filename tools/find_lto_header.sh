@@ -27,4 +27,9 @@ try "-3.3"
 try "-3.4"
 try "-3.5"
 
+try "32"
+try "33"
+try "34"
+try "35"
+
 exit 1
