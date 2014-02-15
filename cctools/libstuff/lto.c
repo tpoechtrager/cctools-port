@@ -26,6 +26,79 @@ static uint32_t (*lto_get_num_symbols)(void *mod) = NULL;
 static lto_symbol_attributes (*lto_get_sym_attr)(void *mod, uint32_t n) = NULL;
 static char * (*lto_get_sym_name)(void *mod, uint32_t n) = NULL;
 
+#ifndef __APPLE__
+static char *liblto_dirs[] = {
+    "/usr/lib/llvm/lib",
+    "/usr/lib/llvm-3.5/lib",
+    "/usr/lib/llvm-3.4/lib",
+    "/usr/lib/llvm-3.3/lib",
+    "/usr/lib/llvm-3.2/lib",
+    "/usr/lib/llvm-3.1/lib",
+    NULL
+};
+
+static void *load_liblto()
+{
+    /*
+     * Try to load it normally first,
+     * maybe libLTO.so is even in a known place.
+     */
+
+    void *h = dlopen("libLTO.so", RTLD_NOW);
+    char *p, *path;
+    int i;
+
+    if(h)
+        return h;
+
+    /*
+     * Now try the hardcoded paths from above.
+     */
+
+    for(i = 0; liblto_dirs[i] != NULL; i++){
+        char liblto[MAXPATHLEN];
+        snprintf(liblto, sizeof(liblto), "%s/libLTO.so", liblto_dirs);
+
+        if((h = dlopen(liblto, RTLD_NOW)))
+            return h;
+    }
+
+    /*
+     * Locate the path of the clang binary and try to load
+     * <clangpath>/../lib/libLTO.so.
+     */
+
+    path = getenv("PATH");
+
+    if(!path) return NULL;
+    path = strdup(path);
+    if(!path) return NULL;
+
+    p = strtok(path, ":");
+
+    while(p != NULL){
+        char clangbin[MAXPATHLEN];
+        struct stat st;
+        snprintf(clangbin, sizeof(clangbin), "%s/clang", p);
+
+        if(stat(clangbin, &st) == 0 && access(clangbin, F_OK|X_OK) == 0){
+            char liblto[MAXPATHLEN];
+            snprintf(liblto, sizeof(liblto), "%s/../lib/libLTO.so", p);
+
+            if((h = dlopen(liblto, RTLD_NOW))){
+                free(path);
+                return h;
+            }
+        }
+
+        p = strtok(NULL, ":");
+    }
+
+    free(path);
+    return NULL;
+}
+#endif /* ! __APPLE__ */
+
 /*
  * is_llvm_bitcode() is passed an ofile struct pointer and a pointer and size
  * of some part of the ofile.  If it is an llvm bit code it returns 1 and
@@ -106,19 +179,32 @@ void **pmod) /* maybe NULL */
 		_NSGetExecutablePath(p, &bufsize);
 	    }
 	    prefix = realpath(p, resolved_name);
-	    p = rindex(prefix, '/');
+	    p = (prefix ? rindex(prefix, '/') : NULL);
 	    if(p != NULL)
 		p[1] = '\0';
-	    lto_path = makestr(prefix, "../lib/libLTO.so", NULL);
+#ifdef __APPLE__
+           lto_path = makestr(prefix, "../lib/libLTO.dylib", NULL);
 
 	    lto_handle = dlopen(lto_path, RTLD_NOW);
 	    if(lto_handle == NULL){
 		free(lto_path);
 		lto_path = NULL;
-		lto_handle = dlopen("/usr/lib/llvm/libLTO.so", RTLD_NOW);
+		lto_handle = dlopen("/Applications/Xcode.app/Contents/"
+				    "Developer/Toolchains/XcodeDefault."
+				    "xctoolchain/usr/lib/libLTO.dylib",
+				    RTLD_NOW);
 	    }
 	    if(lto_handle == NULL)
 		return(0);
+#else
+	    lto_path = NULL;
+	    lto_handle = load_liblto();
+	    if(lto_handle == NULL)
+	    {
+		fprintf(stderr, "cannot find or load libLTO.so\n");
+		return(0);
+	    }
+#endif /* __APPLE__ */
 
 	    lto_is_object = dlsym(lto_handle,
 				  "lto_module_is_object_file_in_memory");
