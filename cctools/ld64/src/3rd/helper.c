@@ -41,7 +41,10 @@ int _NSGetExecutablePath(char *path, unsigned int *size)
    mib[2] = KERN_PROC_PATHNAME;
    mib[3] = -1;
    size_t cb = *size;
-   return sysctl(mib, 4, path, &cb, NULL, 0);
+   if (sysctl(mib, 4, path, &cb, NULL, 0) != 0)
+    return -1;
+   *size = cb;
+   return 0;
 #else
    int bufsize = *size;
    int ret_size;
