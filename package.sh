@@ -3,7 +3,7 @@
 set -ex
 
 DIR=`pwd`
-PACKAGETMP=`mktemp -d`
+PACKAGETMP=`mktemp -d /tmp/XXXXXXXX`
 
 REVHASH=`git rev-parse --short HEAD`
 CCTOOLSVER=`cat README.md | grep "Current Version: " | awk '{print $3}'`
@@ -23,7 +23,7 @@ rm -f package.sh
 rm -f .gitignore
 popd &>/dev/null
 
-XZ_OPT=-9 tar cJf $DIR/$PACKAGE.tar.xz *
+tar -cf - * | xz -9 -c - > $DIR/$PACKAGE.tar.xz
 
 popd &>/dev/null
 

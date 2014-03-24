@@ -14,7 +14,7 @@
 #include <sys/time.h>
 #include <assert.h>
  
-#ifdef __FreeBSD__
+#if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
 #include <sys/sysctl.h>
 #endif
 
@@ -27,6 +27,8 @@ void __assert_rtn(const char *func, const char *file, int line, const char *msg)
 {
 #ifdef __FreeBSD__
     __assert(msg, file, line, func);
+#elif defined(__NetBSD__) || defined(__OpenBSD__)
+    __assert(msg, line, file);
 #else
     __assert(msg, file, line);
 #endif /* __FreeBSD__ */

@@ -25,7 +25,7 @@
  * 
  * @APPLE_OSREFERENCE_LICENSE_HEADER_END@
  */
-#ifdef __FreeBSD__
+#if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
 #include_next <machine/_limits.h>
 #else
 #ifndef _BSD_MACHINE__LIMITS_H_
@@ -42,4 +42,4 @@
 #endif
 
 #endif /* _BSD_MACHINE__LIMITS_H_ */
-#endif /* __FreeBSD__ */
+#endif /* __FreeBSD__ || __NetBSD__ || __OpenBSD__ */

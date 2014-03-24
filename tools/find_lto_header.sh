@@ -26,6 +26,7 @@ try "-3.2"
 try "-3.3"
 try "-3.4"
 try "-3.5"
+try "-devel"
 
 try "32"
 try "33"

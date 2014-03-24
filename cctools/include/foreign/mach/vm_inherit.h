@@ -72,7 +72,11 @@
  *	vm_inherit_t	inheritance codes.
  */
 
-typedef unsigned int		vm_inherit_t;	/* might want to change this */
+#if defined(__NetBSD__) || defined(__OpenBSD__)
+typedef  int                vm_inherit_t;   /* might want to change this */
+#else
+typedef unsigned int        vm_inherit_t;   /* might want to change this */
+#endif /* __NetBSD__ || __OpenBSD__ */
 
 /*
  *	Enumeration of valid values for vm_inherit_t.

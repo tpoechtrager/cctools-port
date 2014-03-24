@@ -10,11 +10,13 @@ AC_ARG_PROGRAM
 CC=clang
 CXX=clang++
 
-CFLAGS="$CFLAGS `cat tmp/cflags 2>/dev/null` -O3"
-CXXFLAGS="$CXXFLAGS `cat tmp/libcxx-conf 2>/dev/null || echo -stdlib=libc++` `cat tmp/cxxflags 2>/dev/null` -O3"
+CFLAGS="$CFLAGS `cat tmp/cflags 2>/dev/null`"
+CFLAGS="$CFLAGS -isystem /usr/local/include -isystem /usr/pkg/include -O3"
+CXXFLAGS="$CXXFLAGS `cat tmp/libcxx-conf 2>/dev/null || echo -stdlib=libc++` `cat tmp/cxxflags 2>/dev/null`"
+CXXFLAGS="$CXXFLAGS -isystem /usr/local/include -isystem /usr/pkg/include -O3"
+
 LDFLAGS="$LDFLAGS -L/usr/local/lib `cat tmp/ldflags 2>/dev/null`"
 export LD_LIBRARY_PATH="`cat tmp/ldpath 2>/dev/null`"
-export C_INCLUDE_PATH="$C_INCLUDE_PATH:/usr/local/include"
 
 CPP="clang -E"
 
@@ -225,6 +227,17 @@ AC_COMPILE_IFELSE(
 )
 CFLAGS=$ORIGCFLAGS
 
+ORIGCFLAGS=$CFLAGS
+CFLAGS="$CFLAGS -Wno-char-subscripts"
+AC_MSG_CHECKING([if -Wno-char-subscripts is supported])
+AC_COMPILE_IFELSE(
+   [AC_LANG_SOURCE([[const char hw[] = "Hello, World\n";]])],
+   [WARNINGS="$WARNINGS -Wno-char-subscripts"
+    AC_MSG_RESULT([yes])],
+   [AC_MSG_RESULT([no])]  
+)  
+CFLAGS=$ORIGCFLAGS
+
 AC_SUBST([WARNINGS], [$WARNINGS])
 
 
@@ -250,6 +263,8 @@ AC_SUBST(CRYPT_LIBS)
 
 AC_C_BIGENDIAN([AC_SUBST([ENDIAN_FLAG],[-D__BIG_ENDIAN__=1])],
 			[AC_SUBST([ENDIAN_FLAG],[-D__LITTLE_ENDIAN__=1])])
+
+AC_CHECK_FUNCS([strmode])
 
 AC_CONFIG_FILES([Makefile libstuff/Makefile])
 AC_CONFIG_FILES([ar/Makefile])
