@@ -32,6 +32,7 @@
 #include <fts.h>
 #endif
 #include <sys/errno.h>
+#include <errno.h>
 #include "stuff/bool.h"
 #include "stuff/SymLoc.h"
 #include "stuff/ofile.h"

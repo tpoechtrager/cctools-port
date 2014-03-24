@@ -25,7 +25,7 @@
  * 
  * @APPLE_OSREFERENCE_LICENSE_HEADER_END@
  */
-#ifdef __FreeBSD__
+#if defined(__FreeBSD__)
 #include_next <machine/_types.h>
 #else
 #ifndef _BSD_MACHINE__TYPES_H_

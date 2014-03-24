@@ -88,6 +88,7 @@ typedef int		vm_prot_t;
  *	The default protection for newly-created virtual memory
  */
 
+#undef VM_PROT_DEFAULT
 #define VM_PROT_DEFAULT	(VM_PROT_READ|VM_PROT_WRITE)
 
 /*
