@@ -17,7 +17,8 @@ export LD_LIBRARY_PATH="`cat tmp/ldpath 2>/dev/null`"
 
 CPP="clang -E"
 
-AM_INIT_AUTOMAKE([1.10 no-define no-dist-gzip dist-bzip2 tar-ustar])
+# FIXME 'subdir-objects' breaks dependency tracking
+AM_INIT_AUTOMAKE([1.10 no-define no-dist-gzip dist-bzip2 tar-ustar subdir-objects no-dependencies])
 
 AC_CONFIG_MACRO_DIR([m4])
 AM_MAINTAINER_MODE
