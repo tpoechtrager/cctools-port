@@ -59,6 +59,8 @@
 #include <servers/bootstrap.h>
 #endif
 
+int asprintf(char **strp, const char *fmt, ...); /* port */
+
 /*
  * This is used internally to build the table of contents.
  */
@@ -1774,8 +1776,20 @@ struct ofile *ofile)
 	    if(cmd_flags.arch_only_flag.name != NULL){
 		if(cmd_flags.arch_only_flag.cputype != ofile->mh_cputype)
 		    return;
-		if(cmd_flags.arch_only_flag.cputype == CPU_TYPE_ARM){
+		if(cmd_flags.arch_only_flag.cputype == CPU_TYPE_ARM ||
+		   cmd_flags.arch_only_flag.cputype == CPU_TYPE_X86_64){
 		    if(cmd_flags.arch_only_flag.cpusubtype !=
+							ofile->mh_cpusubtype)
+			return;
+		}
+		if(cmd_flags.arch_only_flag.cputype == CPU_TYPE_ARM64){
+		    if(cmd_flags.arch_only_flag.cpusubtype ==
+		       CPU_SUBTYPE_ARM64_ALL){
+			if(ofile->mh_cpusubtype != CPU_SUBTYPE_ARM64_ALL &&
+			   ofile->mh_cpusubtype != CPU_SUBTYPE_ARM64_V8)
+			    return;
+		    }
+		    else if(cmd_flags.arch_only_flag.cpusubtype !=
 							ofile->mh_cpusubtype)
 			return;
 		}
@@ -1783,9 +1797,21 @@ struct ofile *ofile)
 
 	    for( ; i < narchs; i++){
 		if(archs[i].arch_flag.cputype == ofile->mh_cputype){
-		    if(archs[i].arch_flag.cputype == CPU_TYPE_ARM &&
+		    if((archs[i].arch_flag.cputype == CPU_TYPE_ARM ||
+		        archs[i].arch_flag.cputype == CPU_TYPE_X86_64) &&
 		       archs[i].arch_flag.cpusubtype != ofile->mh_cpusubtype)
 			continue;
+		    if(cmd_flags.arch_only_flag.cputype == CPU_TYPE_ARM64){
+			if(cmd_flags.arch_only_flag.cpusubtype ==
+			   CPU_SUBTYPE_ARM64_ALL){
+			    if(ofile->mh_cpusubtype != CPU_SUBTYPE_ARM64_ALL &&
+			       ofile->mh_cpusubtype != CPU_SUBTYPE_ARM64_V8)
+				continue;
+			}
+			else if(cmd_flags.arch_only_flag.cpusubtype !=
+							ofile->mh_cpusubtype)
+			    continue;
+		    }
 		    break;
 		}
 	    }
@@ -1796,15 +1822,44 @@ struct ofile *ofile)
 	     * If -arch_only is specified then only add this file if it matches
 	     * the architecture specified.
 	     */
-	    if(cmd_flags.arch_only_flag.name != NULL &&
-	       cmd_flags.arch_only_flag.cputype != ofile->lto_cputype)
-		return;
+	    if(cmd_flags.arch_only_flag.name != NULL){
+		if(cmd_flags.arch_only_flag.cputype != ofile->lto_cputype)
+		    return;
+		if(cmd_flags.arch_only_flag.cputype == CPU_TYPE_ARM ||
+		   cmd_flags.arch_only_flag.cputype == CPU_TYPE_X86_64){
+		    if(cmd_flags.arch_only_flag.cpusubtype !=
+							ofile->lto_cpusubtype)
+			return;
+		}
+		if(cmd_flags.arch_only_flag.cputype == CPU_TYPE_ARM64){
+		    if(cmd_flags.arch_only_flag.cpusubtype ==
+		       CPU_SUBTYPE_ARM64_ALL){
+			if(ofile->lto_cpusubtype != CPU_SUBTYPE_ARM64_ALL &&
+			   ofile->lto_cpusubtype != CPU_SUBTYPE_ARM64_V8)
+			    return;
+		    }
+		    else if(cmd_flags.arch_only_flag.cpusubtype !=
+							ofile->lto_cpusubtype)
+			return;
+		}
+	    }
 
 	    for( ; i < narchs; i++){
 		if(archs[i].arch_flag.cputype == ofile->lto_cputype){
-		    if(archs[i].arch_flag.cputype == CPU_TYPE_ARM &&
+		    if((archs[i].arch_flag.cputype == CPU_TYPE_ARM ||
+		        archs[i].arch_flag.cputype == CPU_TYPE_X86_64) &&
 		       archs[i].arch_flag.cpusubtype != ofile->lto_cpusubtype)
 			continue;
+		    if(cmd_flags.arch_only_flag.cputype == CPU_TYPE_ARM64){
+			if(cmd_flags.arch_only_flag.cpusubtype ==
+			   CPU_SUBTYPE_ARM64_ALL &&
+			   (ofile->lto_cpusubtype != CPU_SUBTYPE_ARM64_ALL &&
+			    ofile->lto_cpusubtype != CPU_SUBTYPE_ARM64_V8))
+			    continue;
+			else if(cmd_flags.arch_only_flag.cpusubtype !=
+							ofile->lto_cpusubtype)
+			    continue;
+		    }
 		    break;
 		}
 	    }
@@ -1818,7 +1873,9 @@ struct ofile *ofile)
 	    memset(archs + narchs, '\0', sizeof(struct arch));
 	    if(ofile->mh != NULL ||
 	       ofile->mh64 != NULL){
-		if(ofile->mh_cputype == CPU_TYPE_ARM){
+		if(ofile->mh_cputype == CPU_TYPE_ARM ||
+		   ofile->mh_cputype == CPU_TYPE_ARM64 ||
+		   ofile->mh_cputype == CPU_TYPE_X86_64){
 		    archs[narchs].arch_flag.name = (char *)
 			get_arch_name_from_types(
 				ofile->mh_cputype, ofile->mh_cpusubtype);
@@ -1831,10 +1888,12 @@ struct ofile *ofile)
 		    if(family_arch_flag != NULL)
 			archs[narchs].arch_flag = *family_arch_flag;
 		}
-	}
+	    }
 #ifdef LTO_SUPPORT
 	    else if(ofile->lto != NULL){
-		if(ofile->lto_cputype == CPU_TYPE_ARM){
+		if(ofile->lto_cputype == CPU_TYPE_ARM ||
+		   ofile->lto_cputype == CPU_TYPE_ARM64 ||
+		   ofile->lto_cputype == CPU_TYPE_X86_64){
 		    archs[narchs].arch_flag.name = (char *)
 			get_arch_name_from_types(
 				ofile->lto_cputype, ofile->lto_cpusubtype);
@@ -3231,7 +3290,33 @@ char *output)
 		add_execute_list(cmd_flags.ldflags[j]);
 	    for(j = 0; j < cmd_flags.nLdirs; j++)
 		add_execute_list(cmd_flags.Ldirs[j]);
-	    add_execute_list("-ldylib1.o");
+
+            // Support using libtool on a systems without the SDK in '/'. This
+            // works because the shims that are included in 10.9 and forwards
+            // automatically inject SDKROOT into the environment of the actual
+            // tools. See <rdar://problem/14264125>.
+            const char *sdkroot = getenv("SDKROOT");
+ 
+            // If the SDKROOT environment variable is set and is an absolute
+            // path, then see if we can find dylib1.o inside it and use that if
+            // so.
+            enum bool use_dashl_dylib1o = TRUE;
+            if (sdkroot && sdkroot[0] == '/') {
+              // Construct the path to the object file.
+              char *sdk_dylib1o_path;
+              int res = asprintf(&sdk_dylib1o_path, "%s/usr/lib/dylib1.o",
+                                 sdkroot);
+              if (res > 0 && sdk_dylib1o_path) {
+                struct stat s;
+                // Add the full path if it exists.
+                if (stat(sdk_dylib1o_path, &s) == 0) {
+                  add_execute_list(sdk_dylib1o_path);
+                  use_dashl_dylib1o = FALSE;
+                }
+                free(sdk_dylib1o_path);
+              }
+            }
+
 	    filelist = NULL;
 	    for(j = 0; j < cmd_flags.nfiles; j++){
 		if(cmd_flags.filelist[j] == NULL){

@@ -511,6 +511,16 @@ uint32_t nfat_archs)
 		    return(fat_archs + i);
 	    }
 
+	case CPU_TYPE_ARM64:
+	    for(i = 0; i < nfat_archs; i++){
+		if(fat_archs[i].cputype != cputype)
+		    continue;
+		if((fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+		   CPU_SUBTYPE_ARM64_ALL)
+		    return(fat_archs + i);
+	    }
+	    break;
+
 	default:
 	    return(NULL);
 	}
@@ -534,6 +544,15 @@ cpu_type_t cputype,
 cpu_subtype_t cpusubtype1,
 cpu_subtype_t cpusubtype2)
 {
+	/*
+	 * If this is an x86_64 cputype and either subtype is the
+	 * "Haswell and compatible" it does not combine with anything else.
+	 */
+	if(cputype == CPU_TYPE_X86_64 &&
+	   (cpusubtype1 == CPU_SUBTYPE_X86_64_H ||
+	    cpusubtype2 == CPU_SUBTYPE_X86_64_H))
+	    return((cpu_subtype_t)-1);
+
 	/*
 	 * We now combine any i386 or x86_64 subtype to the ALL subtype.
 	 */
@@ -747,6 +766,13 @@ cpu_subtype_t cpusubtype2)
 		default:
 		    return((cpu_subtype_t)-1);
 	    }
+
+	case CPU_TYPE_ARM64:
+	    if((cpusubtype1 & ~CPU_SUBTYPE_MASK) != CPU_SUBTYPE_ARM64_ALL)
+			return((cpu_subtype_t)-1);
+	    if((cpusubtype2 & ~CPU_SUBTYPE_MASK) != CPU_SUBTYPE_ARM64_ALL)
+			return((cpu_subtype_t)-1);
+	    break; /* logically can't get here */
 
 	default:
 	    return((cpu_subtype_t)-1);
@@ -1014,6 +1040,29 @@ cpu_subtype_t exec_cpusubtype) /* can be the ALL type */
 		return(FALSE);
 	    }
 	    break; /* logically can't get here */
+
+	case CPU_TYPE_ARM64:
+	    switch (host_cpusubtype){
+	    case CPU_SUBTYPE_ARM64_V8:
+		switch(exec_cpusubtype){
+		case CPU_SUBTYPE_ARM64_ALL:
+		case CPU_SUBTYPE_ARM64_V8:
+		    return(TRUE);
+		default:
+		    break; /* fall through to arm 32-bit types below */
+		}
+		break;
+
+	    default:
+	        switch (exec_cpusubtype){
+	        case CPU_SUBTYPE_ARM64_ALL:
+		    return(TRUE);
+		default:
+		    break; /* fall through to arm 32-bit types below */
+		}
+		break;
+	    }
+	    /* fall through to arm 32-bit types below */
 
 	case CPU_TYPE_ARM:
 	    switch (host_cpusubtype){

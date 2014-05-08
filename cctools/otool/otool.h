@@ -63,8 +63,10 @@ extern enum bool gflag; /* group the disassembly */
 extern enum bool jflag; /* print opcode bytes */
 extern char *pflag;     /* procedure name to start disassembling from */
 extern char *segname,
-     *sectname;     /* name of the section to print the contents of */
-extern char *mcpu;  /* the arg of the -mcpu=arg flag */
+     *sectname;	    /* name of the section to print the contents of */
+extern char *mcpu; 	/* the arg of the -mcpu=arg flag */
+/* Print function offsets when disassembling when TRUE. */
+extern enum bool function_offsets;
 
 uint32_t m68k_usrstack(void);
 uint32_t m88k_usrstack(void);

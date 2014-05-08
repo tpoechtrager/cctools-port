@@ -12,6 +12,8 @@
 #include "lock.h"
 #include "visibility.h"
 
+int asprintf(char **strp, const char *fmt, ...); /* port hack */
+
 /* QNX needs a special header for asprintf() */
 #ifdef __QNXNTO__
 #include <nbutil.h>

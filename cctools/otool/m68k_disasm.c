@@ -34,6 +34,7 @@
 #include <mach-o/nlist.h>
 #include <mach-o/reloc.h>
 #include "stuff/bytesex.h"
+#include "dyld_bind_info.h"
 #include "ofile_print.h"
 #include "stuff/symbol.h"
 #include "otool.h"

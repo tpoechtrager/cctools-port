@@ -180,6 +180,12 @@ char **envp)
 		*work_argv = NULL; /* NULL means 'not a file-name' */
 		continue;
 	    }
+	    if(strncmp(arg, "-mcpu", 5) == 0){
+		/* ignore -mcpu as it is only used with clang(1)'s integrated
+		   assembler, but the as(1) driver will pass it. */
+		*work_argv = NULL; /* NULL means 'not a file-name' */
+		continue;
+	    }
 
 	    /* Keep scanning args looking for flags. */
 	    if (arg[1] == '-' && arg[2] == 0) {

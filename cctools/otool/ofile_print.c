@@ -218,11 +218,13 @@
 #include <mach-o/hppa/reloc.h>
 #include <mach-o/sparc/reloc.h>
 #include <mach-o/arm/reloc.h>
+#include <mach-o/arm64/reloc.h>
 #include "stuff/symbol.h"
 #include "stuff/ofile.h"
 #include "stuff/allocate.h"
 #include "stuff/errors.h"
 #include "stuff/guess_short_name.h"
+#include "dyld_bind_info.h"
 #include "ofile_print.h"
 
 /* <mach/loader.h> */
@@ -460,6 +462,9 @@ struct fat_arch *fat_arch)
 	    case CPU_SUBTYPE_X86_64_ALL:
 		printf("x86_64\n");
 		break;
+	    case CPU_SUBTYPE_X86_64_H:
+		printf("x86_64h\n");
+		break;
 	    default:
 		goto print_arch_unknown;
 	    }		
@@ -611,6 +616,17 @@ struct fat_arch *fat_arch)
 		break;
 	    }
 	    break;
+	case CPU_TYPE_ARM64:
+	    switch(fat_arch->cpusubtype & ~CPU_SUBTYPE_MASK){
+	    case CPU_SUBTYPE_ARM64_ALL:
+		printf("arm64\n");
+	    break;
+	    case CPU_SUBTYPE_ARM64_V8:
+		printf("arm64v8\n");
+	    default:
+		goto print_arch_unknown;
+	    }
+	    break;
 	case CPU_TYPE_ANY:
 	    switch((int)(fat_arch->cpusubtype & ~CPU_SUBTYPE_MASK)){
 	    case CPU_SUBTYPE_MULTIPLE:
@@ -717,6 +733,10 @@ cpu_subtype_t cpusubtype)
 	    case CPU_SUBTYPE_X86_64_ALL:
 		printf("    cputype CPU_TYPE_X86_64\n"
 		       "    cpusubtype CPU_SUBTYPE_X86_64_ALL\n");
+		break;
+	    case CPU_SUBTYPE_X86_64_H:
+		printf("    cputype CPU_TYPE_X86_64\n"
+		       "    cpusubtype CPU_SUBTYPE_X86_64_H\n");
 		break;
 	    default:
 		goto print_arch_unknown;
@@ -904,6 +924,20 @@ cpu_subtype_t cpusubtype)
 		printf("    cputype CPU_TYPE_ARM\n"
 		       "    cpusubtype CPU_SUBTYPE_ARM_V7EM\n");
 		break;
+	    default:
+		goto print_arch_unknown;
+	    }
+	    break;
+	case CPU_TYPE_ARM64:
+	    switch(cpusubtype & ~CPU_SUBTYPE_MASK){
+	    case CPU_SUBTYPE_ARM64_ALL:
+		printf("    cputype CPU_TYPE_ARM64\n"
+		       "    cpusubtype CPU_SUBTYPE_ARM64_ALL\n");
+	    	break;
+	    case CPU_SUBTYPE_ARM64_V8:
+		printf("    cputype CPU_TYPE_ARM64\n"
+		       "    cpusubtype CPU_SUBTYPE_ARM64_V8\n");
+	    	break;
 	    default:
 		goto print_arch_unknown;
 	    }
@@ -1314,6 +1348,9 @@ enum bool verbose)
 		case CPU_SUBTYPE_X86_64_ALL:
 		    printf("        ALL");
 		    break;
+		case CPU_SUBTYPE_X86_64_H:
+		    printf("    Haswell");
+		    break;
 		default:
 		    printf(" %10d", cpusubtype & ~CPU_SUBTYPE_MASK);
 		    break;
@@ -1616,6 +1653,20 @@ NS32:
 		    break;
 		case CPU_SUBTYPE_ARM_V7EM:
 		    printf("       V7EM");
+		    break;
+		default:
+		    printf(" %10d", cpusubtype & ~CPU_SUBTYPE_MASK);
+		    break;
+		}
+		break;
+	    case CPU_TYPE_ARM64:
+		printf("   ARM64");
+		switch(cpusubtype & ~CPU_SUBTYPE_MASK){
+		case CPU_SUBTYPE_ARM64_ALL:
+		    printf("        ALL");
+		    break;
+		case CPU_SUBTYPE_ARM64_V8:
+		    printf("         V8");
 		    break;
 		default:
 		    printf(" %10d", cpusubtype & ~CPU_SUBTYPE_MASK);
@@ -2155,6 +2206,7 @@ enum bool very_verbose)
 	    case LC_FUNCTION_STARTS:
 	    case LC_DATA_IN_CODE:
 	    case LC_DYLIB_CODE_SIGN_DRS:
+	    case LC_LINKER_OPTIMIZATION_HINT:
 		memset((char *)&ld, '\0', sizeof(struct linkedit_data_command));
 		size = left < sizeof(struct linkedit_data_command) ?
 		       left : sizeof(struct linkedit_data_command);
@@ -3389,6 +3441,8 @@ uint32_t object_size)
 	    printf("      cmd LC_DATA_IN_CODE\n");
         else if(ld->cmd == LC_DYLIB_CODE_SIGN_DRS)
 	    printf("      cmd LC_DYLIB_CODE_SIGN_DRS\n");
+        else if(ld->cmd == LC_LINKER_OPTIMIZATION_HINT)
+	    printf("      cmd LC_LINKER_OPTIMIZATION_HINT\n");
 	else
 	    printf("      cmd %u (?)\n", ld->cmd);
 	printf("  cmdsize %u", ld->cmdsize);
@@ -5793,6 +5847,90 @@ print_x86_debug_state64:
 		}
 	    }
 	}
+	else if(cputype == CPU_TYPE_ARM64){
+	    arm_thread_state64_t cpu;
+	    while(begin < end){
+		if(end - begin > (ptrdiff_t)sizeof(uint32_t)){
+		    memcpy((char *)&flavor, begin, sizeof(uint32_t));
+		    begin += sizeof(uint32_t);
+		}
+		else{
+		    flavor = 0;
+		    begin = end;
+		}
+		if(swapped)
+		    flavor = SWAP_INT(flavor);
+		if(end - begin > (ptrdiff_t)sizeof(uint32_t)){
+		    memcpy((char *)&count, begin, sizeof(uint32_t));
+		    begin += sizeof(uint32_t);
+		}
+		else{
+		    count = 0;
+		    begin = end;
+		}
+		if(swapped)
+		    count = SWAP_INT(count);
+
+		switch(flavor){
+		case 1:
+		case ARM_THREAD_STATE64:
+		    if(flavor == 1)
+		        printf("     flavor 1 (not ARM_THREAD_STATE64 %u)\n",
+			       ARM_THREAD_STATE64);
+		    else
+		        printf("     flavor ARM_THREAD_STATE64\n");
+		    if(count == ARM_THREAD_STATE64_COUNT)
+			printf("      count ARM_THREAD_STATE64_COUNT\n");
+		    else
+			printf("      count %u (not ARM_THREAD_STATE64_"
+			       "COUNT %u)\n", count, ARM_THREAD_STATE64_COUNT);
+		    left = end - begin;
+		    if(left >= sizeof(arm_thread_state64_t)){
+		        memcpy((char *)&cpu, begin,
+			       sizeof(arm_thread_state64_t));
+		        begin += sizeof(arm_thread_state64_t);
+		    }
+		    else{
+		        memset((char *)&cpu, '\0',
+			       sizeof(arm_thread_state64_t));
+		        memcpy((char *)&cpu, begin, left);
+		        begin += left;
+		    }
+		    if(swapped)
+			swap_arm_thread_state64_t(&cpu, host_byte_sex);
+		    printf(
+		       "\t    x0  0x%016llx x1  0x%016llx x2  0x%016llx\n"
+		       "\t    x3  0x%016llx x4  0x%016llx x5  0x%016llx\n"
+		       "\t    x6  0x%016llx x7  0x%016llx x8  0x%016llx\n"
+		       "\t    x9  0x%016llx x10 0x%016llx x11 0x%016llx\n"
+		       "\t    x12 0x%016llx x13 0x%016llx x14 0x%016llx\n"
+		       "\t    x15 0x%016llx x16 0x%016llx x17 0x%016llx\n"
+		       "\t    x18 0x%016llx x19 0x%016llx x20 0x%016llx\n"
+		       "\t    x21 0x%016llx x22 0x%016llx x23 0x%016llx\n"
+		       "\t    x24 0x%016llx x25 0x%016llx x26 0x%016llx\n"
+		       "\t    x27 0x%016llx x28 0x%016llx  fp 0x%016llx\n"
+		       "\t     lr 0x%016llx sp  0x%016llx  pc 0x%016llx\n"
+		       "\t   cpsr 0x%08x\n",
+			cpu.__x[0], cpu.__x[1], cpu.__x[2], cpu.__x[3],
+			cpu.__x[4], cpu.__x[5], cpu.__x[6], cpu.__x[7],
+			cpu.__x[8], cpu.__x[9], cpu.__x[10], cpu.__x[11],
+			cpu.__x[12], cpu.__x[13], cpu.__x[14], cpu.__x[15],
+			cpu.__x[16], cpu.__x[17], cpu.__x[18], cpu.__x[19],
+			cpu.__x[20], cpu.__x[21], cpu.__x[22], cpu.__x[23],
+			cpu.__x[24], cpu.__x[25], cpu.__x[26], cpu.__x[27],
+			cpu.__x[28], cpu.__fp, cpu.__lr, cpu.__sp, cpu.__pc,
+			cpu.__cpsr);
+		    break;
+		default:
+		    printf("     flavor %u (unknown)\n", flavor);
+		    printf("      count %u\n", count);
+		    printf("      state:\n");
+		    print_unknown_state(begin, end, count, swapped);
+		    begin += count * sizeof(uint32_t);
+		    break;
+		}
+	    }
+	}
 	else{
 	    while(begin < end){
 		if(end - begin > (ptrdiff_t)sizeof(uint32_t)){
@@ -6414,6 +6552,7 @@ enum bool verbose)
 			     */
 			    if((cputype == CPU_TYPE_POWERPC64 && 
 				reloc.r_type == PPC_RELOC_VANILLA) ||
+			       cputype == CPU_TYPE_ARM64 ||
 			       cputype == CPU_TYPE_X86_64) {
 				    printf("quad   ");
 			    }
@@ -6484,6 +6623,10 @@ enum bool verbose)
 				reloc.r_type == ARM_RELOC_PAIR)
 			    printf("other_half = 0x%04x\n",
 				   (unsigned int)reloc.r_address);
+			else if(cputype == CPU_TYPE_ARM64 &&
+				reloc.r_type == ARM64_RELOC_ADDEND)
+			    printf("addend = 0x%06x\n",
+				   (unsigned int)reloc.r_symbolnum);
 			else{
 			    printf("%d ", reloc.r_symbolnum);
 			    if(reloc.r_symbolnum > nsects + 1)
@@ -6566,6 +6709,12 @@ static char *arm_r_types[] = {
 	" 10 (?) ", " 11 (?) ", " 12 (?) ", " 13 (?) ", " 14 (?) ", " 15 (?) "
 };
 
+static char *arm64_r_types[] = {
+	"UNSIGND ", "SUB     ", "BR26    ", "PAGE21  ", "PAGOF12 ",
+	"GOTLDP  ", "GOTLDPOF", "PTRTGOT ", "TLVLDP  ", "TLVLDPOF", 
+	"ADDEND  ", " 11 (?) ", " 12 (?) ", " 13 (?) ", " 14 (?) ", " 15 (?) "
+};
+
 static
 void
 print_r_type(
@@ -6610,6 +6759,9 @@ enum bool predicted)
 	    break;
 	case CPU_TYPE_ARM:
 	    printf("%s", arm_r_types[r_type]);
+	    break;
+	case CPU_TYPE_ARM64:
+	    printf("%s", arm64_r_types[r_type]);
 	    break;
 	default:
 	    printf("%-7u ", r_type);
@@ -7315,6 +7467,86 @@ enum bool verbose)
 	    }
 	    else
 		printf("\n");
+	}
+}
+
+static
+uint64_t
+decodeULEB128(
+const uint8_t *p,
+unsigned *n)
+{
+  const uint8_t *orig_p = p;
+  uint64_t Value = 0;
+  unsigned Shift = 0;
+  do {
+    Value += (*p & 0x7f) << Shift;
+    Shift += 7;
+  } while (*p++ >= 128);
+  if (n)
+    *n = (unsigned)(p - orig_p);
+  return Value;
+}
+
+void
+print_link_opt_hints(
+char *loh,
+uint32_t nloh)
+{
+    uint32_t i, j;
+    unsigned n;
+    uint64_t identifier, narguments, value;
+
+	printf("Linker optimiztion hints (%u total bytes)\n", nloh);
+	for(i = 0; i < nloh;){
+	    identifier = decodeULEB128((const uint8_t *)(loh + i), &n);
+	    i += n;
+	    printf("    identifier %llu ", identifier);
+	    if(i >= nloh)
+		return;
+	    switch(identifier){
+	    case 1:
+		printf("AdrpAdrp\n");
+		break;
+	    case 2:
+		printf("AdrpLdr\n");
+		break;
+	    case 3:
+		printf("AdrpAddLdr\n");
+		break;
+	    case 4:
+		printf("AdrpLdrGotLdr\n");
+		break;
+	    case 5:
+		printf("AdrpAddStr\n");
+		break;
+	    case 6:
+		printf("AdrpLdrGotStr\n");
+		break;
+	    case 7:
+		printf("AdrpAdd\n");
+		break;
+	    case 8:
+		printf("AdrpLdrGot\n");
+		break;
+	    default:
+		printf("Unknown identifier value\n");
+		break;
+	    }
+
+	    narguments = decodeULEB128((const uint8_t *)(loh + i), &n);
+	    i += n;
+	    printf("    narguments %llu\n", narguments);
+	    if(i >= nloh)
+		return;
+
+	    for(j = 0; j < narguments; j++){
+		value = decodeULEB128((const uint8_t *)(loh + i), &n);
+		i += n;
+		printf("\tvalue 0x%llx\n", value);
+		if(i >= nloh)
+		    return;
+	    }
 	}
 }
 
@@ -8466,26 +8698,41 @@ uint32_t nsorted_symbols)
 }
 
 /*
- * print_label prints a symbol name for the addr if a symbol exist with the
+ * Print_label prints a symbol name for the addr if a symbol exist with the
  * same address in label form, namely:.
  *
  * <symbol name>:\n
  *
  * The colon and the newline are printed if colon_and_newline is TRUE.
+ * If it prints a label it returns TRUE else it returns FALSE.
  */
-void
+enum bool
 print_label(
 uint64_t addr,
 enum bool colon_and_newline,
 struct symbol *sorted_symbols,
 uint32_t nsorted_symbols)
 {
-    char *name;
+    int32_t high, low, mid;
 
-	name = get_label(addr, sorted_symbols, nsorted_symbols);
-	if(name != NULL){
-	    printf("%s", name);
-	    if(colon_and_newline == TRUE)
-		printf(":\n");
+	low = 0;
+	high = nsorted_symbols - 1;
+	mid = (high - low) / 2;
+	while(high >= low){
+	    if(sorted_symbols[mid].n_value == addr){
+		printf("%s", sorted_symbols[mid].name);
+		if(colon_and_newline == TRUE)
+		    printf(":\n");
+		return(TRUE);
+	    }
+	    if(sorted_symbols[mid].n_value > addr){
+		high = mid - 1;
+		mid = (high + low) / 2;
+	    }
+	    else{
+		low = mid + 1;
+		mid = (high + low) / 2;
+	    }
 	}
+	return(FALSE);
 }

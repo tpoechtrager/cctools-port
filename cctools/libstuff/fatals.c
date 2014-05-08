@@ -43,7 +43,7 @@ const char *format,
     va_list ap;
 
 	va_start(ap, format);
-        fprintf(stderr, "%s: ", progname);
+        fprintf(stderr, "fatal error: %s: ", progname);
 	vfprintf(stderr, format, ap);
         fprintf(stderr, "\n");
 	va_end(ap);
@@ -62,7 +62,7 @@ const char *format,
     va_list ap;
 
 	va_start(ap, format);
-        fprintf(stderr, "%s: ", progname);
+        fprintf(stderr, "fatal error: %s: ", progname);
 	vfprintf(stderr, format, ap);
 	fprintf(stderr, " (%s)\n", strerror(errno));
 	va_end(ap);
@@ -82,7 +82,7 @@ char *format,
     va_list ap;
 
 	va_start(ap, format);
-        fprintf(stderr, "%s: ", progname);
+        fprintf(stderr, "fatal error: %s: ", progname);
 	vfprintf(stderr, format, ap);
 	fprintf(stderr, " (%s)\n", mach_error_string(r));
 	va_end(ap);

@@ -29,6 +29,7 @@
  * @APPLE_LICENSE_HEADER_END@
  */
 #include "stdio.h"
+#include "stdlib.h"
 #include "stddef.h"
 #include "string.h"
 #include "mach-o/loader.h"
@@ -36,6 +37,7 @@
 #include "stuff/bytesex.h"
 #include "stuff/symbol.h"
 #include "stuff/reloc.h"
+#include "dyld_bind_info.h"
 #include "ofile_print.h"
 
 extern char *oname;
@@ -331,6 +333,25 @@ enum byte_sex target_byte_sex)
 	string_object->_pad = SWAP_INT(string_object->_pad);
 }
 
+struct cfstring_t {
+    uint64_t isa;		/* class_t * (64-bit pointer) */
+    uint64_t flags;		/* flag bits */
+    uint64_t characters;	/* char * (64-bit pointer) */
+    uint64_t length;		/* number of non-NULL characters in above */
+};
+
+static
+void
+swap_cfstring_t(
+struct cfstring_t *cfstring,
+enum byte_sex target_byte_sex)
+{
+        cfstring->isa = SWAP_LONG_LONG(cfstring->isa);
+        cfstring->flags = SWAP_LONG_LONG(cfstring->flags);
+        cfstring->characters = SWAP_LONG_LONG(cfstring->characters);
+        cfstring->length = SWAP_LONG_LONG(cfstring->length);
+}
+
 struct info {
     enum bool swapped;
     enum byte_sex host_byte_sex;
@@ -348,6 +369,8 @@ struct info {
     uint32_t next_relocs;
     struct relocation_info *loc_relocs;
     uint32_t nloc_relocs;
+    struct dyld_bind_info *dbi;
+    uint64_t ndbi;
     enum bool verbose;
     enum bool Vflag;
 };
@@ -479,6 +502,8 @@ struct relocation_info *ext_relocs,
 uint32_t next_relocs,
 struct relocation_info *loc_relocs,
 uint32_t nloc_relocs,
+struct dyld_bind_info *dbi,
+uint64_t ndbi,
 enum bool verbose,
 enum bool Vflag)
 {
@@ -498,6 +523,8 @@ enum bool Vflag)
 	info.next_relocs = next_relocs;
 	info.loc_relocs = loc_relocs;
 	info.nloc_relocs = nloc_relocs;
+	info.dbi = dbi;
+	info.ndbi = ndbi;
 	info.verbose = verbose;
 	info.Vflag = Vflag;
 	get_sections_64(load_commands, ncmds, sizeofcmds, object_byte_sex,
@@ -588,6 +615,9 @@ void (*func)(uint64_t, struct info *))
 
 	    name = get_symbol_64(i, s->addr - info->database, p,
 			         s->relocs, s->nrelocs, info, &n_value);
+	    if(name == NULL)
+		name = get_dyld_bind_info_symbolname(s->addr + i, info->dbi,
+						     info->ndbi);
 	    if(n_value != 0){
 		printf("0x%llx", n_value);
 		if(p != 0)
@@ -603,6 +633,102 @@ void (*func)(uint64_t, struct info *))
 	    if(func != NULL)
 		func(p, info);
 	}
+}
+
+/*
+ * get_objc2_64bit_cfstring_name() is used for disassembly and is passed a
+ * pointer to a cfstring and returns its name.
+ */
+char *
+get_objc2_64bit_cfstring_name(
+uint64_t p,
+struct load_command *load_commands,
+uint32_t ncmds,
+uint32_t sizeofcmds,
+enum byte_sex object_byte_sex,
+char *object_addr,
+uint32_t object_size)
+{
+    struct section_info_64 *sections;
+    uint32_t nsections, left;
+    uint64_t database;
+    struct cfstring_t cfs;
+    char *name;
+    void *r;
+
+	get_sections_64(load_commands, ncmds, sizeofcmds, object_byte_sex,
+			object_addr, object_size, &sections, &nsections,
+			&database);
+
+	r = get_pointer_64(p, NULL, &left, NULL, sections, nsections);
+	if(r == NULL || left < sizeof(struct cfstring_t))
+	    return(NULL);
+	memcpy(&cfs, r, sizeof(struct cfstring_t));
+	if(get_host_byte_sex() != object_byte_sex)
+	    swap_cfstring_t(&cfs, get_host_byte_sex());
+	if(cfs.characters == 0)
+	    return(NULL);
+
+	name = get_pointer_64(cfs.characters, NULL, &left, NULL,
+			      sections, nsections);
+
+	if(sections != NULL)
+	    free(sections);
+
+	return(name);
+}
+
+/*
+ * get_objc2_64bit_class_name() is used for disassembly and is passed a pointer
+ * to an Objective-C class and returns the class name.
+ */
+char *
+get_objc2_64bit_class_name(
+uint64_t p,
+struct load_command *load_commands,
+uint32_t ncmds,
+uint32_t sizeofcmds,
+enum byte_sex object_byte_sex,
+char *object_addr,
+uint32_t object_size)
+{
+    struct section_info_64 *sections;
+    uint32_t nsections, left;
+    uint64_t database;
+    struct class_t c;
+    struct class_ro_t cro;
+    char *name;
+    void *r;
+
+	get_sections_64(load_commands, ncmds, sizeofcmds, object_byte_sex,
+			object_addr, object_size, &sections, &nsections,
+			&database);
+
+	r = get_pointer_64(p, NULL, &left, NULL, sections, nsections);
+	if(r == NULL || left < sizeof(struct class_t))
+	    return(NULL);
+	memcpy(&c, r, sizeof(struct class_t));
+	if(get_host_byte_sex() != object_byte_sex)
+	    swap_class_t(&c, get_host_byte_sex());
+	if(c.data == 0)
+	    return(NULL);
+
+	r = get_pointer_64(c.data, NULL, &left, NULL, sections, nsections);
+	if(r == NULL || left < sizeof(struct class_ro_t))
+	    return(NULL);
+	memcpy(&cro, r, sizeof(struct class_ro_t));
+	if(get_host_byte_sex() != object_byte_sex)
+	    swap_class_ro_t(&cro, get_host_byte_sex());
+	
+	if(cro.name == 0)
+	    return(NULL);
+
+	name = get_pointer_64(cro.name, NULL, &left, NULL, sections, nsections);
+
+	if(sections != NULL)
+	    free(sections);
+
+	return(name);
 }
 
 static
@@ -2098,6 +2224,9 @@ uint64_t *n_value)
     unsigned int r_symbolnum;
     uint32_t n_strx;
 
+	if(n_value != NULL)
+	    *n_value = 0;
+
 	if(info->verbose == FALSE)
 	    return(NULL);
 
@@ -2138,8 +2267,6 @@ uint64_t *n_value)
 	    if(reloc_has_pair(info->cputype, info->ext_relocs[i].r_type) ==TRUE)
 		i++;
 	}
-	if(n_value != NULL)
-	    *n_value = 0;
 	if(value == 0)
 	    return(NULL);
 	return(guess_symbol(value, info->sorted_symbols, info->nsorted_symbols,

@@ -47,6 +47,7 @@ struct filehdr
 
 /* Machine numbers (for the f_magic field).  */
 #define IMAGE_FILE_MACHINE_ARM               0x01c0
+#define IMAGE_FILE_MACHINE_ARM64             0x01c6
 #define IMAGE_FILE_MACHINE_I386              0x014c
 #define IMAGE_FILE_MACHINE_AMD64             0x8664
 

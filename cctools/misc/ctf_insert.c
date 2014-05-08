@@ -399,6 +399,14 @@ struct object *object)
 	    object->input_sym_info_size +=
 		object->code_sign_drs_cmd->datasize;
 	}
+	if(object->link_opt_hint_cmd != NULL){
+	    object->output_link_opt_hint_info_data = object->object_addr +
+		object->link_opt_hint_cmd->dataoff;
+	    object->output_link_opt_hint_info_data_size = 
+		object->link_opt_hint_cmd->datasize;
+	    object->input_sym_info_size +=
+		object->link_opt_hint_cmd->datasize;
+	}
 	object->output_sym_info_size = object->input_sym_info_size;
 
 	/*
@@ -429,6 +437,8 @@ struct object *object)
 	    object->data_in_code_cmd->dataoff += move_size;
 	if(object->code_sign_drs_cmd != NULL)
 	    object->code_sign_drs_cmd->dataoff += move_size;
+	if(object->link_opt_hint_cmd != NULL)
+	    object->link_opt_hint_cmd->dataoff += move_size;
 
 	/*
 	 * Record the new content for writeout() to put in to the output file.

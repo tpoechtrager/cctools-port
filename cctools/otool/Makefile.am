@@ -4,9 +4,9 @@ otool_LDADD =  \
 		$(top_srcdir)/libobjc2/libobjc.la \
 		$(DL_LIBS) 
 
-otool_LDFLAGS = $(PTHREAD_FLAGS) 
+otool_LDFLAGS = $(PTHREAD_FLAGS) -lsupc++ # __cxa_demangle
 
-otool_CFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/include/foreign -I$(top_srcdir)/libstuff -I$(top_srcdir)/libobjc2 $(WARNINGS) $(LTO_DEFS) -D__DARWIN_UNIX03 $(ENDIAN_FLAG) -DOTOOL
+otool_CFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/include/foreign -I$(top_srcdir)/libstuff -I$(top_srcdir)/libobjc2 $(WARNINGS) $(LTO_DEFS) -D_DARWIN_C_SOURCE -D__DARWIN_UNIX03 $(ENDIAN_FLAG) -DOTOOL
 
 otool_SOURCES =  \
 	main.c \
@@ -22,5 +22,6 @@ otool_SOURCES =  \
 	arm_disasm.c \
 	print_objc.c \
 	print_objc2_32bit.c \
-	print_objc2_64bit.c
-
+	print_objc2_64bit.c \
+	arm64_disasm.c \
+	dyld_bind_info.c

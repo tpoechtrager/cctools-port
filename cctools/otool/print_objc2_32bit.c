@@ -36,6 +36,7 @@
 #include "stuff/bytesex.h"
 #include "stuff/symbol.h"
 #include "stuff/reloc.h"
+#include "dyld_bind_info.h"
 #include "ofile_print.h"
 
 extern char *oname;

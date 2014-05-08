@@ -35,6 +35,7 @@
 #include "stuff/allocate.h"
 #include "stuff/bytesex.h"
 #include "stuff/symbol.h"
+#include "dyld_bind_info.h"
 #include "ofile_print.h"
 
 /*

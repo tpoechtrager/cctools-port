@@ -155,6 +155,13 @@ struct object *object)
 		object->code_sign_drs_cmd =
 			(struct linkedit_data_command *)lc;
 	    }
+	    else if(lc->cmd == LC_LINKER_OPTIMIZATION_HINT){
+		if(object->link_opt_hint_cmd != NULL)
+		    fatal_arch(arch, member, "malformed file (more than one "
+			"LC_LINKER_OPTIMIZATION_HINT load command): ");
+		object->link_opt_hint_cmd =
+			(struct linkedit_data_command *)lc;
+	    }
 	    else if((lc->cmd == LC_DYLD_INFO) ||(lc->cmd == LC_DYLD_INFO_ONLY)){
 		if(object->dyld_info != NULL)
 		    fatal_arch(arch, member, "malformed file (more than one "
@@ -393,6 +400,12 @@ struct object *object)
 	    if(object->code_sign_drs_cmd->dataoff != offset)
 		order_error(arch, member, "code signing DRs info out of place");
 	    offset += object->code_sign_drs_cmd->datasize;
+	}
+	if(object->link_opt_hint_cmd != NULL){
+	    if(object->link_opt_hint_cmd->dataoff != offset)
+		order_error(arch, member, "linker optimization hint info out "
+					  "of place");
+	    offset += object->link_opt_hint_cmd->datasize;
 	}
 	if(object->st->nsyms != 0){
 	    if(object->st->symoff != offset)
