@@ -109,7 +109,9 @@ private:
 	uint8_t*					copyDataInCodeLoadCommand(uint8_t* p) const;
 	uint8_t*					copyDependentDRLoadCommand(uint8_t* p) const;
 	uint8_t*					copyDyldEnvLoadCommand(uint8_t* p, const char* env) const;
-	
+	uint8_t*					copyLinkerOptionsLoadCommand(uint8_t* p, const std::vector<const char*>&) const;
+	uint8_t*					copyOptimizationHintsLoadCommand(uint8_t* p) const;
+
 	uint32_t					sectionFlags(ld::Internal::FinalSection* sect) const;
 	bool						sectionTakesNoDiskSpace(ld::Internal::FinalSection* sect) const;
 	
@@ -136,6 +138,7 @@ private:
 	bool						_hasDataInCodeLoadCommand;
 	bool						_hasSourceVersionLoadCommand;
 	bool						_hasDependentDRInfo;
+	bool						_hasOptimizationHints;
 	uint32_t					_dylibLoadCommmandsCount;
 	uint32_t					_allowableClientLoadCommmandsCount;
 	uint32_t					_dyldEnvironExrasCount;
@@ -143,6 +146,7 @@ private:
 	std::vector<const char*>	_subUmbrellaNames;
 	uint8_t						_uuid[16];
 	mutable macho_uuid_command<P>*	_uuidCmdInOutputBuffer;
+	std::vector< std::vector<const char*> >	 _linkerOptions;
 	
 	static ld::Section			_s_section;
 	static ld::Section			_s_preload_section;
@@ -174,6 +178,7 @@ HeaderAndLoadCommandsAtom<A>::HeaderAndLoadCommandsAtom(const Options& opts, ld:
 	_hasRoutinesLoadCommand = (opts.initFunctionName() != NULL);
 	_hasSymbolTableLoadCommand = true;
 	_hasUUIDLoadCommand = (opts.UUIDMode() != Options::kUUIDNone);
+	_hasOptimizationHints = (_state.someObjectHasOptimizationHints && (opts.outputKind() == Options::kObjectFile));
 	switch ( opts.outputKind() ) {
 		case Options::kDynamicExecutable:
 		case Options::kDynamicLibrary:
@@ -192,6 +197,22 @@ HeaderAndLoadCommandsAtom<A>::HeaderAndLoadCommandsAtom(const Options& opts, ld:
 					break;
 				}
 			}
+			for (CStringSet::const_iterator it = _state.linkerOptionFrameworks.begin(); it != _state.linkerOptionFrameworks.end(); ++it) {
+				const char* frameWorkName = *it;
+				std::vector<const char*>* lo = new std::vector<const char*>();
+				lo->push_back("-framework");
+				lo->push_back(frameWorkName);
+				_linkerOptions.push_back(*lo);
+			};
+			for (CStringSet::const_iterator it = _state.linkerOptionLibraries.begin(); it != _state.linkerOptionLibraries.end(); ++it) {
+				const char* libName = *it;
+				std::vector<const char*>* lo = new std::vector<const char*>();
+				char * s = new char[strlen(libName)+3];
+				strcpy(s, "-l");
+				strcat(s, libName);
+				lo->push_back(s);
+				_linkerOptions.push_back(*lo);
+			};
 			break;
 		case Options::kStaticExecutable:
 			_hasDynamicSymbolTableLoadCommand = opts.positionIndependentExecutable();
@@ -210,6 +231,7 @@ HeaderAndLoadCommandsAtom<A>::HeaderAndLoadCommandsAtom(const Options& opts, ld:
 	_dylibLoadCommmandsCount = _writer.dylibCount();
 	_allowableClientLoadCommmandsCount = _options.allowableClients().size();
 	_dyldEnvironExrasCount = _options.dyldEnvironExtras().size();
+	
 	if ( ! _options.useSimplifiedDylibReExports() ) {
 		// target OS does not support LC_REEXPORT_DYLIB, so use old complicated load commands
 		for(uint32_t ord=1; ord <= _writer.dylibCount(); ++ord) {
@@ -394,7 +416,21 @@ uint64_t HeaderAndLoadCommandsAtom<A>::size() const
 	if ( _hasDataInCodeLoadCommand )
 		sz += sizeof(macho_linkedit_data_command<P>);
 
+	if ( !_linkerOptions.empty() ) {
+		for (ld::relocatable::File::LinkerOptionsList::const_iterator it = _linkerOptions.begin(); it != _linkerOptions.end(); ++it) {
+			uint32_t s = sizeof(macho_linker_option_command<P>);
+			const std::vector<const char*>& options = *it;
+			for (std::vector<const char*>::const_iterator t=options.begin(); t != options.end(); ++t) {
+				s += (strlen(*t) + 1);
+			}
+			sz += alignedSize(s);
+		}
+	}
+	
 	if ( _hasDependentDRInfo ) 
+		sz += sizeof(macho_linkedit_data_command<P>);
+	
+	if ( _hasOptimizationHints )
 		sz += sizeof(macho_linkedit_data_command<P>);
 		
 	return sz;
@@ -465,7 +501,16 @@ uint32_t HeaderAndLoadCommandsAtom<A>::commandsCount() const
 	if ( _hasDataInCodeLoadCommand )
 		++count;
 
+	if ( !_linkerOptions.empty() ) {
+		for (ld::relocatable::File::LinkerOptionsList::const_iterator it = _linkerOptions.begin(); it != _linkerOptions.end(); ++it) {
+			++count;
+		}
+	}
+
 	if ( _hasDependentDRInfo ) 
+		++count;
+	
+	if ( _hasOptimizationHints )
 		++count;
 		
 	return count;
@@ -525,9 +570,9 @@ uint32_t HeaderAndLoadCommandsAtom<A>::flags() const
 					bits |= MH_FORCE_FLAT;
 					break;
 			}
-			if ( _writer.hasWeakExternalSymbols || _writer.overridesWeakExternalSymbols )
+			if ( _state.hasWeakExternalSymbols || _writer.overridesWeakExternalSymbols )
 				bits |= MH_WEAK_DEFINES;
-			if ( _writer.usesWeakExternalSymbols || _writer.hasWeakExternalSymbols )
+			if ( _writer.usesWeakExternalSymbols || _state.hasWeakExternalSymbols )
 				bits |= MH_BINDS_TO_WEAK;
 			if ( _options.prebind() )
 				bits |= MH_PREBOUND;
@@ -542,7 +587,7 @@ uint32_t HeaderAndLoadCommandsAtom<A>::flags() const
 				bits |= MH_PIE;
 			if ( _options.markAutoDeadStripDylib() ) 
 				bits |= MH_DEAD_STRIPPABLE_DYLIB;
-			if ( _writer.hasThreadLocalVariableDefinitions )
+			if ( _state.hasThreadLocalVariableDefinitions )
 				bits |= MH_HAS_TLV_DESCRIPTORS;
 			if ( _options.hasNonExecutableHeap() )
 				bits |= MH_NO_HEAP_EXECUTION;
@@ -556,10 +601,12 @@ uint32_t HeaderAndLoadCommandsAtom<A>::flags() const
 template <> uint32_t HeaderAndLoadCommandsAtom<x86>::magic() const		{ return MH_MAGIC; }
 template <> uint32_t HeaderAndLoadCommandsAtom<x86_64>::magic() const	{ return MH_MAGIC_64; }
 template <> uint32_t HeaderAndLoadCommandsAtom<arm>::magic() const		{ return MH_MAGIC; }
+template <> uint32_t HeaderAndLoadCommandsAtom<arm64>::magic() const		{ return MH_MAGIC_64; }
 
 template <> uint32_t HeaderAndLoadCommandsAtom<x86>::cpuType() const	{ return CPU_TYPE_I386; }
 template <> uint32_t HeaderAndLoadCommandsAtom<x86_64>::cpuType() const	{ return CPU_TYPE_X86_64; }
 template <> uint32_t HeaderAndLoadCommandsAtom<arm>::cpuType() const	{ return CPU_TYPE_ARM; }
+template <> uint32_t HeaderAndLoadCommandsAtom<arm64>::cpuType() const	{ return CPU_TYPE_ARM64; }
 
 
 
@@ -572,16 +619,22 @@ uint32_t HeaderAndLoadCommandsAtom<x86>::cpuSubType() const
 template <>
 uint32_t HeaderAndLoadCommandsAtom<x86_64>::cpuSubType() const
 {
-	if ( (_options.outputKind() == Options::kDynamicExecutable) && (_options.macosxVersionMin() >= ld::mac10_5) )
-		return (CPU_SUBTYPE_X86_64_ALL | 0x80000000);
+	if ( (_options.outputKind() == Options::kDynamicExecutable) && (_state.cpuSubType == CPU_SUBTYPE_X86_64_ALL) && (_options.macosxVersionMin() >= ld::mac10_5) )
+		return (_state.cpuSubType | 0x80000000);
 	else
-		return CPU_SUBTYPE_X86_64_ALL;
+		return _state.cpuSubType;
 }
 
 template <>
 uint32_t HeaderAndLoadCommandsAtom<arm>::cpuSubType() const
 {
 	return _state.cpuSubType;
+}
+
+template <>
+uint32_t HeaderAndLoadCommandsAtom<arm64>::cpuSubType() const
+{
+	return CPU_SUBTYPE_ARM64_ALL;
 }
 
 
@@ -1144,6 +1197,28 @@ uint8_t* HeaderAndLoadCommandsAtom<arm>::copyThreadsLoadCommand(uint8_t* p) cons
 }
 
 
+template <>
+uint32_t HeaderAndLoadCommandsAtom<arm64>::threadLoadCommandSize() const
+{
+	return this->alignedSize(16 + 34 * 8); // base size + ARM_EXCEPTION_STATE64_COUNT * 4
+}
+
+template <>
+uint8_t* HeaderAndLoadCommandsAtom<arm64>::copyThreadsLoadCommand(uint8_t* p) const
+{
+	assert(_state.entryPoint != NULL);
+	pint_t start = _state.entryPoint->finalAddress(); 
+	macho_thread_command<P>* cmd = (macho_thread_command<P>*)p;
+	cmd->set_cmd(LC_UNIXTHREAD);
+	cmd->set_cmdsize(threadLoadCommandSize());
+	cmd->set_flavor(6);	 // ARM_THREAD_STATE64
+	cmd->set_count(68);	 // ARM_EXCEPTION_STATE64_COUNT
+	cmd->set_thread_register(32, start);		// pc 
+	if ( _options.hasCustomStack() )
+		cmd->set_thread_register(31, _options.customStackAddr());	// sp 
+	return p + threadLoadCommandSize();
+}
+
 
 template <typename A>
 uint8_t* HeaderAndLoadCommandsAtom<A>::copyEntryPointLoadCommand(uint8_t* p) const
@@ -1165,7 +1240,7 @@ template <typename A>
 uint8_t* HeaderAndLoadCommandsAtom<A>::copyEncryptionLoadCommand(uint8_t* p) const
 {
 	macho_encryption_info_command<P>* cmd = (macho_encryption_info_command<P>*)p;
-	cmd->set_cmd(LC_ENCRYPTION_INFO);
+	cmd->set_cmd(sizeof(typename A::P::uint_t) == 4 ? LC_ENCRYPTION_INFO : LC_ENCRYPTION_INFO_64);
 	cmd->set_cmdsize(sizeof(macho_encryption_info_command<P>));
 	assert(_writer.encryptedTextStartOffset() != 0);
 	assert(_writer.encryptedTextEndOffset() != 0);
@@ -1311,6 +1386,27 @@ uint8_t* HeaderAndLoadCommandsAtom<A>::copyDataInCodeLoadCommand(uint8_t* p) con
 
 
 template <typename A>
+uint8_t* HeaderAndLoadCommandsAtom<A>::copyLinkerOptionsLoadCommand(uint8_t* p, const std::vector<const char*>& options) const
+{
+	macho_linker_option_command<P>* cmd = (macho_linker_option_command<P>*)p;
+	cmd->set_cmd(LC_LINKER_OPTION);
+	cmd->set_count(options.size());
+	char* buffer = cmd->buffer();
+	uint32_t sz = sizeof(macho_linker_option_command<P>);
+	for (std::vector<const char*>::const_iterator it=options.begin(); it != options.end(); ++it) {
+		const char* opt = *it;
+		uint32_t len = strlen(opt);
+		strcpy(buffer, opt);
+		sz += (len + 1);
+		buffer += (len + 1);
+	}
+	sz = alignedSize(sz);
+	cmd->set_cmdsize(sz);	
+	return p + sz;
+}
+
+
+template <typename A>
 uint8_t* HeaderAndLoadCommandsAtom<A>::copyDependentDRLoadCommand(uint8_t* p) const
 {
 	macho_linkedit_data_command<P>* cmd = (macho_linkedit_data_command<P>*)p;
@@ -1318,6 +1414,19 @@ uint8_t* HeaderAndLoadCommandsAtom<A>::copyDependentDRLoadCommand(uint8_t* p) co
 	cmd->set_cmdsize(sizeof(macho_linkedit_data_command<P>));
 	cmd->set_dataoff(_writer.dependentDRsSection->fileOffset);
 	cmd->set_datasize(_writer.dependentDRsSection->size);
+	return p + sizeof(macho_linkedit_data_command<P>);
+}
+
+
+
+template <typename A>
+uint8_t* HeaderAndLoadCommandsAtom<A>::copyOptimizationHintsLoadCommand(uint8_t* p) const
+{
+	macho_linkedit_data_command<P>* cmd = (macho_linkedit_data_command<P>*)p;
+	cmd->set_cmd(LC_LINKER_OPTIMIZATION_HINTS);
+	cmd->set_cmdsize(sizeof(macho_linkedit_data_command<P>));
+	cmd->set_dataoff(_writer.optimizationHintsSection->fileOffset);
+	cmd->set_datasize(_writer.optimizationHintsSection->size);
 	return p + sizeof(macho_linkedit_data_command<P>);
 }
 
@@ -1384,7 +1493,7 @@ void HeaderAndLoadCommandsAtom<A>::copyRawContent(uint8_t buffer[]) const
 	if ( _hasSplitSegInfoLoadCommand )
 		p = this->copySplitSegInfoLoadCommand(p);
 		
-	for(uint32_t ord=1; ord <= _writer.dylibCount(); ++ord) {
+	for (uint32_t ord=1; ord <= _writer.dylibCount(); ++ord) {
 		p = this->copyDylibLoadCommand(p, _writer.dylibByOrdinal(ord));
 	}
 
@@ -1425,9 +1534,18 @@ void HeaderAndLoadCommandsAtom<A>::copyRawContent(uint8_t buffer[]) const
 
 	if ( _hasDataInCodeLoadCommand )
 		p = this->copyDataInCodeLoadCommand(p);
+
+	if ( !_linkerOptions.empty() ) {
+		for (ld::relocatable::File::LinkerOptionsList::const_iterator it = _linkerOptions.begin(); it != _linkerOptions.end(); ++it) {
+			p = this->copyLinkerOptionsLoadCommand(p, *it);
+		}
+	}
 	
 	if ( _hasDependentDRInfo ) 
 		p = this->copyDependentDRLoadCommand(p);
+ 
+	if ( _hasOptimizationHints )
+		p = this->copyOptimizationHintsLoadCommand(p);
  
 }
 

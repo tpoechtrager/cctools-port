@@ -804,6 +804,39 @@ void dumper::dumpFixup(const ld::Fixup* ref)
 		case ld::Fixup::kindStoreThumbHigh16:
 			printf(", then store high-16 in Thumb movt");
 			break;
+		case ld::Fixup::kindStoreARM64Branch26:
+			printf(", then store as ARM64 26-bit pcrel branch");
+			break;
+		case ld::Fixup::kindStoreARM64Page21:
+			printf(", then store as ARM64 21-bit pcrel ADRP");
+			break;
+		case ld::Fixup::kindStoreARM64PageOff12:
+			printf(", then store as ARM64 12-bit offset");
+			break;
+		case ld::Fixup::kindStoreARM64GOTLoadPage21:
+			printf(", then store as ARM64 21-bit pcrel ADRP of GOT");
+			break;
+		case ld::Fixup::kindStoreARM64GOTLoadPageOff12:
+			printf(", then store as ARM64 12-bit page offset of GOT");
+			break;
+		case ld::Fixup::kindStoreARM64GOTLeaPage21:
+			printf(", then store as ARM64 21-bit pcrel ADRP of GOT lea");
+			break;
+		case ld::Fixup::kindStoreARM64GOTLeaPageOff12:
+			printf(", then store as ARM64 12-bit page offset of GOT lea");
+			break;
+		case ld::Fixup::kindStoreARM64TLVPLoadPage21:
+			printf(", then store as ARM64 21-bit pcrel ADRP of TLVP");
+			break;
+		case ld::Fixup::kindStoreARM64TLVPLoadPageOff12:
+			printf(", then store as ARM64 12-bit page offset of TLVP");
+			break;
+		case ld::Fixup::kindStoreARM64PointerToGOT:
+			printf(", then store as 64-bit pointer to GOT entry");
+			break;
+		case ld::Fixup::kindStoreARM64PCRelToGOT:
+			printf(", then store as 32-bit delta to GOT entry");
+			break;
 		case ld::Fixup::kindDtraceExtra:
 			printf("dtrace static probe extra info");
 			break;
@@ -825,11 +858,20 @@ void dumper::dumpFixup(const ld::Fixup* ref)
 		case ld::Fixup::kindStoreThumbDtraceIsEnableSiteClear:
 			printf("Thumb dtrace static is-enabled site");
 			break;
+		case ld::Fixup::kindStoreARM64DtraceCallSiteNop:
+			printf("ARM64 dtrace static probe site");
+			break;
+		case ld::Fixup::kindStoreARM64DtraceIsEnableSiteClear:
+			printf("ARM64 dtrace static is-enabled site");
+			break;
 		case ld::Fixup::kindLazyTarget:
 			printf("lazy reference to external symbol %s", referenceTargetAtomName(ref));
 			break;
 		case ld::Fixup::kindSetLazyOffset:
 			printf("offset of lazy binding info for %s", referenceTargetAtomName(ref));
+			break;
+		case ld::Fixup::kindIslandTarget:
+			printf("ultimate target of island %s", referenceTargetAtomName(ref));
 			break;
 		case ld::Fixup::kindDataInCodeStartData:
 			printf("start of data in code");
@@ -848,6 +890,46 @@ void dumper::dumpFixup(const ld::Fixup* ref)
 			break;
 		case ld::Fixup::kindDataInCodeEnd:
 			printf("end of data in code");
+			break;
+		case ld::Fixup::kindLinkerOptimizationHint:
+#if SUPPORT_ARCH_arm64
+			ld::Fixup::LOH_arm64 extra;
+			extra.addend = ref->u.addend;
+			printf("ARM64 hint: ");
+			switch(extra.info.kind) {
+				case LOH_ARM64_ADRP_ADRP:
+					printf("ADRP-ADRP");
+					break;
+				case LOH_ARM64_ADRP_LDR:
+					printf("ADRP-LDR");
+					break;
+				case LOH_ARM64_ADRP_ADD_LDR:
+					printf("ADRP-ADD-LDR");
+					break;
+				case LOH_ARM64_ADRP_LDR_GOT_LDR:
+					printf("ADRP-LDR-GOT-LDR");
+					break;
+				case LOH_ARM64_ADRP_ADD_STR:
+					printf("ADRP-ADD-STR");
+					break;
+				case LOH_ARM64_ADRP_LDR_GOT_STR:
+					printf("ADRP-LDR-GOT-STR");
+					break;
+				case LOH_ARM64_ADRP_ADD:
+					printf("ADRP-ADD");
+					break;
+				default:
+					printf("kind=%d", extra.info.kind);
+					break;
+			}
+			printf(", offset1=0x%X", (extra.info.delta1 << 2)  + ref->offsetInAtom);
+			if ( extra.info.count > 0 )
+				printf(", offset2=0x%X", (extra.info.delta2 << 2) + ref->offsetInAtom);
+			if ( extra.info.count > 1 )
+				printf(", offset3=0x%X", (extra.info.delta3 << 2)  + ref->offsetInAtom);
+			if ( extra.info.count > 2 )
+				printf(", offset4=0x%X", (extra.info.delta4 << 2)  + ref->offsetInAtom);
+#endif			
 			break;
 		case ld::Fixup::kindStoreTargetAddressLittleEndian32:
 			printf("store 32-bit little endian address of %s", referenceTargetAtomName(ref));
@@ -898,6 +980,37 @@ void dumper::dumpFixup(const ld::Fixup* ref)
 		case ld::Fixup::kindSetTargetTLVTemplateOffsetLittleEndian32:
 		case ld::Fixup::kindSetTargetTLVTemplateOffsetLittleEndian64:
 			printf("tlv template offset of %s", referenceTargetAtomName(ref));
+			break;
+		case ld::Fixup::kindStoreTargetAddressARM64Branch26:
+			printf("ARM64 store 26-bit pcrel branch to %s", referenceTargetAtomName(ref));
+			break;
+		case ld::Fixup::kindStoreTargetAddressARM64Page21:
+			printf("ARM64 store 21-bit pcrel ADRP to %s", referenceTargetAtomName(ref));
+			break;
+		case ld::Fixup::kindStoreTargetAddressARM64PageOff12:
+			printf("ARM64 store 12-bit page offset of %s", referenceTargetAtomName(ref));
+			break;
+#if 0
+/* PORT FIXME (may not even be porting bug) */
+		case ld::Fixup::kindStoreTargetAddressARM64TLVPage21:
+			printf("ARM64 store 21-bit pcrel ADRP to TLV for %s", referenceTargetAtomName(ref));
+			break;
+		case ld::Fixup::kindStoreTargetAddressARM64TLVPageOff12:
+			printf("ARM64 store 12-bit page offset of TLV of %s", referenceTargetAtomName(ref));
+			break;
+#endif
+		case ld::Fixup::kindStoreTargetAddressARM64GOTLoadPage21:
+			printf("ARM64 store 21-bit pcrel ADRP to GOT for %s", referenceTargetAtomName(ref));
+			break;
+		case ld::Fixup::kindStoreTargetAddressARM64GOTLoadPageOff12:
+			printf("ARM64 store 12-bit page offset of GOT of %s", referenceTargetAtomName(ref));
+			break;
+		case ld::Fixup::kindStoreTargetAddressARM64GOTLeaPage21:
+			printf("ARM64 store 21-bit pcrel ADRP for lea of %s", referenceTargetAtomName(ref));
+			break;
+		case ld::Fixup::kindStoreTargetAddressARM64GOTLeaPageOff12:
+			printf("ARM64 store 12-bit page offset of lea of %s", referenceTargetAtomName(ref));
+			break;
 		//default:
 		//	printf("unknown fixup");
 		//	break;
@@ -1116,7 +1229,10 @@ static ld::relocatable::File* createReader(const char* path)
 	objOpts.architecture		= sPreferredArch;
 	objOpts.objSubtypeMustMatch = false;
 	objOpts.logAllFiles			= false;
-	objOpts.convertUnwindInfo	= true;
+	objOpts.warnUnwindConversionProblems	= true;
+	objOpts.keepDwarfUnwind		= false;
+	objOpts.forceDwarfConversion = false;
+	objOpts.verboseOptimizationHints = true;
 	objOpts.subType				= sPreferredSubArch;
 #if 1
 	if ( ! foundFatSlice ) {
@@ -1134,7 +1250,7 @@ static ld::relocatable::File* createReader(const char* path)
 
 #ifdef LTO_SUPPORT
 	// see if it is an llvm object file
-	objResult = lto::parse(p, fileLen, path, stat_buf.st_mtime, ld::File::Ordinal::NullOrdinal(), sPreferredArch, sPreferredSubArch, false);
+	objResult = lto::parse(p, fileLen, path, stat_buf.st_mtime, ld::File::Ordinal::NullOrdinal(), sPreferredArch, sPreferredSubArch, false, true);
 	if ( objResult != NULL ) 
 		return objResult;
 #endif /* LTO_SUPPORT */

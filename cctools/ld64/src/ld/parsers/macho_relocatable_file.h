@@ -35,7 +35,11 @@ struct ParserOptions {
 	uint32_t		architecture;
 	bool			objSubtypeMustMatch;
 	bool			logAllFiles;
-	bool			convertUnwindInfo;
+	bool			warnUnwindConversionProblems;
+	bool			keepDwarfUnwind;
+	bool			forceDwarfConversion;
+	bool			neverConvertDwarf;
+	bool			verboseOptimizationHints;
 	uint32_t		subType;
 };
 

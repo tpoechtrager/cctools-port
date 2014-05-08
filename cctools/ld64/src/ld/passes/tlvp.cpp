@@ -142,6 +142,10 @@ void doPass(const Options& opts, ld::Internal& internal)
 					case ld::Fixup::kindStoreTargetAddressX86Abs32TLVLoad:
 					case ld::Fixup::kindStoreX86PCRel32TLVLoad:
 					case ld::Fixup::kindStoreX86Abs32TLVLoad:
+#if SUPPORT_ARCH_arm64
+					case ld::Fixup::kindStoreTargetAddressARM64TLVPLoadPage21:
+					case ld::Fixup::kindStoreTargetAddressARM64TLVPLoadPageOff12:
+#endif
 						ref.fixupWithTLVStore = fit;
 						break;
 					default:
@@ -230,6 +234,14 @@ void doPass(const Options& opts, ld::Internal& internal)
 				case ld::Fixup::kindStoreX86Abs32TLVLoad:
 					it->fixupWithTLVStore->kind = ld::Fixup::kindStoreX86Abs32TLVLoadNowLEA;
 					break;
+#if SUPPORT_ARCH_arm64
+				case ld::Fixup::kindStoreTargetAddressARM64TLVPLoadPage21:
+					it->fixupWithTLVStore->kind = ld::Fixup::kindStoreARM64TLVPLoadNowLeaPage21;
+					break;
+				case ld::Fixup::kindStoreTargetAddressARM64TLVPLoadPageOff12:
+					it->fixupWithTLVStore->kind = ld::Fixup::kindStoreTargetAddressARM64TLVPLoadNowLeaPageOff12;
+					break;
+#endif
 				default:
 					assert(0 && "bad store kind for TLV optimization");
 			}

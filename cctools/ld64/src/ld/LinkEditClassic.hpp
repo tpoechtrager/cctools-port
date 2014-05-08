@@ -927,6 +927,9 @@ uint64_t ExternalRelocationsAtom<A>::size() const
 	return (_pointerLocations.size() + _callSiteLocations.size()) * sizeof(macho_relocation_info<P>);
 }
 
+#if SUPPORT_ARCH_arm64
+template <> uint32_t ExternalRelocationsAtom<arm64>::pointerReloc() { return ARM64_RELOC_UNSIGNED; }
+#endif
 #if SUPPORT_ARCH_arm_any
 template <> uint32_t ExternalRelocationsAtom<arm>::pointerReloc() { return ARM_RELOC_VANILLA; }
 #endif
@@ -936,6 +939,10 @@ template <> uint32_t ExternalRelocationsAtom<x86_64>::pointerReloc() { return X8
 
 template <> uint32_t ExternalRelocationsAtom<x86_64>::callReloc() { return X86_64_RELOC_BRANCH; }
 template <> uint32_t ExternalRelocationsAtom<x86>::callReloc() { return GENERIC_RELOC_VANILLA; }
+#if SUPPORT_ARCH_arm64
+template <> uint32_t ExternalRelocationsAtom<arm64>::callReloc() { return ARM64_RELOC_BRANCH26; }
+#endif
+
 template <typename A> 
 uint32_t ExternalRelocationsAtom<A>::callReloc() 
 { 
@@ -1647,6 +1654,205 @@ void SectionRelocationsAtom<arm>::encodeSectionReloc(ld::Internal::FinalSection*
 }
 #endif
 
+#if SUPPORT_ARCH_arm64
+template <>
+void SectionRelocationsAtom<arm64>::encodeSectionReloc(ld::Internal::FinalSection* sect, 
+													const Entry& entry, std::vector<macho_relocation_info<P> >& relocs)
+{
+	macho_relocation_info<P> reloc1;
+	macho_relocation_info<P> reloc2;
+	uint64_t address = entry.inAtom->finalAddress()+entry.offsetInAtom - sect->address;
+	bool external = entry.toTargetUsesExternalReloc;
+	uint32_t symbolNum = sectSymNum(external, entry.toTarget);
+	bool fromExternal = false;
+	uint32_t fromSymbolNum = 0;
+	if ( entry.fromTarget != NULL ) {
+		fromExternal = entry.fromTargetUsesExternalReloc;
+		fromSymbolNum = sectSymNum(fromExternal, entry.fromTarget);
+	}
+	
+	
+	switch ( entry.kind ) {
+		case ld::Fixup::kindStoreARM64Branch26:
+			if ( entry.toAddend != 0 ) {
+				assert(entry.toAddend < 0x400000);
+				reloc2.set_r_address(address);
+				reloc2.set_r_symbolnum(entry.toAddend);
+				reloc2.set_r_pcrel(false);
+				reloc2.set_r_length(2);
+				reloc2.set_r_extern(false);
+				reloc2.set_r_type(ARM64_RELOC_ADDEND);
+				relocs.push_back(reloc2);
+			}
+			// fall into next case
+		case ld::Fixup::kindStoreTargetAddressARM64Branch26:
+		case ld::Fixup::kindStoreARM64DtraceCallSiteNop:
+		case ld::Fixup::kindStoreARM64DtraceIsEnableSiteClear:
+			reloc1.set_r_address(address);
+			reloc1.set_r_symbolnum(symbolNum);
+			reloc1.set_r_pcrel(true);
+			reloc1.set_r_length(2);
+			reloc1.set_r_extern(external);
+			reloc1.set_r_type(ARM64_RELOC_BRANCH26);
+			relocs.push_back(reloc1);
+			break;
+			
+		case ld::Fixup::kindStoreARM64Page21:
+			if ( entry.toAddend != 0 ) {
+				assert(entry.toAddend < 0x400000);
+				reloc2.set_r_address(address);
+				reloc2.set_r_symbolnum(entry.toAddend);
+				reloc2.set_r_pcrel(false);
+				reloc2.set_r_length(2);
+				reloc2.set_r_extern(false);
+				reloc2.set_r_type(ARM64_RELOC_ADDEND);
+				relocs.push_back(reloc2);
+			}
+			// fall into next case
+		case ld::Fixup::kindStoreTargetAddressARM64Page21:
+			reloc1.set_r_address(address);
+			reloc1.set_r_symbolnum(symbolNum);
+			reloc1.set_r_pcrel(true);
+			reloc1.set_r_length(2);
+			reloc1.set_r_extern(external);
+			reloc1.set_r_type(ARM64_RELOC_PAGE21);
+			relocs.push_back(reloc1);
+			break;
+
+		case ld::Fixup::kindStoreARM64PageOff12:
+			if ( entry.toAddend != 0 ) {
+				assert(entry.toAddend < 0x400000);
+				reloc2.set_r_address(address);
+				reloc2.set_r_symbolnum(entry.toAddend);
+				reloc2.set_r_pcrel(false);
+				reloc2.set_r_length(2);
+				reloc2.set_r_extern(false);
+				reloc2.set_r_type(ARM64_RELOC_ADDEND);
+				relocs.push_back(reloc2);
+			}
+			// fall into next case
+		case ld::Fixup::kindStoreTargetAddressARM64PageOff12:
+			reloc1.set_r_address(address);
+			reloc1.set_r_symbolnum(symbolNum);
+			reloc1.set_r_pcrel(false);
+			reloc1.set_r_length(2);
+			reloc1.set_r_extern(external);
+			reloc1.set_r_type(ARM64_RELOC_PAGEOFF12);
+			relocs.push_back(reloc1);
+			break;
+
+		case ld::Fixup::kindStoreTargetAddressARM64GOTLoadPage21:
+		case ld::Fixup::kindStoreARM64GOTLoadPage21:
+			reloc1.set_r_address(address);
+			reloc1.set_r_symbolnum(symbolNum);
+			reloc1.set_r_pcrel(true);
+			reloc1.set_r_length(2);
+			reloc1.set_r_extern(external);
+			reloc1.set_r_type(ARM64_RELOC_GOT_LOAD_PAGE21);
+			relocs.push_back(reloc1);
+			break;
+
+		case ld::Fixup::kindStoreTargetAddressARM64GOTLoadPageOff12:
+		case ld::Fixup::kindStoreARM64GOTLoadPageOff12:
+			reloc1.set_r_address(address);
+			reloc1.set_r_symbolnum(symbolNum);
+			reloc1.set_r_pcrel(false);
+			reloc1.set_r_length(2);
+			reloc1.set_r_extern(external);
+			reloc1.set_r_type(ARM64_RELOC_GOT_LOAD_PAGEOFF12);
+			relocs.push_back(reloc1);
+			break;
+
+
+		case ld::Fixup::kindStoreLittleEndian64:
+		case ld::Fixup::kindStoreTargetAddressLittleEndian64:
+			if ( entry.fromTarget != NULL ) {
+				// this is a pointer-diff
+				reloc1.set_r_address(address);
+				reloc1.set_r_symbolnum(symbolNum);
+				reloc1.set_r_pcrel(false);
+				reloc1.set_r_length(3);
+				reloc1.set_r_extern(external);
+				reloc1.set_r_type(ARM64_RELOC_UNSIGNED);
+				reloc2.set_r_address(address);
+				reloc2.set_r_symbolnum(fromSymbolNum);
+				reloc2.set_r_pcrel(false);
+				reloc2.set_r_length(3);
+				reloc2.set_r_extern(fromExternal);
+				reloc2.set_r_type(ARM64_RELOC_SUBTRACTOR);
+				relocs.push_back(reloc2);
+				relocs.push_back(reloc1);
+			}
+			else {
+				// regular pointer
+				reloc1.set_r_address(address);
+				reloc1.set_r_symbolnum(symbolNum);
+				reloc1.set_r_pcrel(false);
+				reloc1.set_r_length(3);
+				reloc1.set_r_extern(external);
+				reloc1.set_r_type(ARM64_RELOC_UNSIGNED);
+				relocs.push_back(reloc1);
+			}
+			break;
+
+		case ld::Fixup::kindStoreLittleEndian32:
+		case ld::Fixup::kindStoreTargetAddressLittleEndian32:
+			if ( entry.fromTarget != NULL ) {
+				// this is a pointer-diff
+				reloc1.set_r_address(address);
+				reloc1.set_r_symbolnum(symbolNum);
+				reloc1.set_r_pcrel(false);
+				reloc1.set_r_length(2);
+				reloc1.set_r_extern(external);
+				reloc1.set_r_type(ARM64_RELOC_UNSIGNED);
+				reloc2.set_r_address(address);
+				reloc2.set_r_symbolnum(fromSymbolNum);
+				reloc2.set_r_pcrel(false);
+				reloc2.set_r_length(2);
+				reloc2.set_r_extern(fromExternal);
+				reloc2.set_r_type(ARM64_RELOC_SUBTRACTOR);
+				relocs.push_back(reloc2);
+				relocs.push_back(reloc1);
+			}
+			else {
+				// regular pointer
+				reloc1.set_r_address(address);
+				reloc1.set_r_symbolnum(symbolNum);
+				reloc1.set_r_pcrel(false);
+				reloc1.set_r_length(2);
+				reloc1.set_r_extern(external);
+				reloc1.set_r_type(ARM64_RELOC_UNSIGNED);
+				relocs.push_back(reloc1);
+			}
+			break;
+
+		case ld::Fixup::kindStoreARM64PointerToGOT:
+            reloc1.set_r_address(address);
+            reloc1.set_r_symbolnum(symbolNum);
+            reloc1.set_r_pcrel(false);
+            reloc1.set_r_length(3);
+            reloc1.set_r_extern(external);
+            reloc1.set_r_type(ARM64_RELOC_POINTER_TO_GOT);
+            relocs.push_back(reloc1);
+            break;
+
+		case ld::Fixup::kindStoreARM64PCRelToGOT:
+            reloc1.set_r_address(address);
+            reloc1.set_r_symbolnum(symbolNum);
+            reloc1.set_r_pcrel(true);
+            reloc1.set_r_length(2);
+            reloc1.set_r_extern(external);
+            reloc1.set_r_type(ARM64_RELOC_POINTER_TO_GOT);
+            relocs.push_back(reloc1);
+            break;
+
+		default:
+			assert(0 && "need to handle arm64 -r reloc");
+		
+	}
+
+}
+#endif // SUPPORT_ARCH_arm64
 
 
 template <typename A>

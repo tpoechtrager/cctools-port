@@ -50,7 +50,6 @@
 #define __STDC_CONSTANT_MACROS 1
 #include "llvm-c/lto.h"
 
-
 namespace lto {
 	  
 
@@ -109,6 +108,8 @@ public:
 																					{ return _debugInfoModTime; }
 	virtual const std::vector<ld::relocatable::File::Stab>*	stabs()	const			{ return NULL; }
 	virtual bool										canScatterAtoms() const		{ return true; }
+	virtual LinkerOptionsList*							linkerOptions() const		{ return NULL; }
+
 
 	lto_module_t										module()					{ return _module; }
 	class InternalAtom&									internalAtom()				{ return _internalAtom; }
@@ -200,7 +201,8 @@ public:
 	static bool						validFile(const uint8_t* fileContent, uint64_t fileLength, cpu_type_t architecture, cpu_subtype_t subarch);
 	static const char*				fileKind(const uint8_t* fileContent, uint64_t fileLength);
 	static File*					parse(const uint8_t* fileContent, uint64_t fileLength, const char* path, 
-											time_t modTime, ld::File::Ordinal ordinal, cpu_type_t architecture, cpu_subtype_t subarch, bool logAllFiles);
+											time_t modTime, ld::File::Ordinal ordinal, cpu_type_t architecture, cpu_subtype_t subarch,
+											bool logAllFiles, bool verboseOptimizationHints);
 	static bool						libLTOisLoaded() { return (::lto_get_version() != NULL); }
 	static bool						optimize(   const std::vector<const ld::Atom*>&	allAtoms,
 												ld::Internal&						state,
@@ -214,6 +216,9 @@ public:
 private:
 	static const char*				tripletPrefixForArch(cpu_type_t arch);
 	static ld::relocatable::File*	parseMachOFile(const uint8_t* p, size_t len, const OptimizeOptions& options);
+#if LTO_API_VERSION >= 7
+	static void ltoDiagnosticHandler(lto_codegen_diagnostic_severity_t, const char*, void*);
+#endif
 
 	typedef	std::unordered_set<const char*, ld::CStringHash, ld::CStringEquals>  CStringSet;
 	typedef std::unordered_map<const char*, Atom*, ld::CStringHash, ld::CStringEquals> CStringToAtom;
@@ -277,7 +282,7 @@ const char* Parser::fileKind(const uint8_t* p, uint64_t fileLength)
 }
 
 File* Parser::parse(const uint8_t* fileContent, uint64_t fileLength, const char* path, time_t modTime, ld::File::Ordinal ordinal,
-													cpu_type_t architecture, cpu_subtype_t subarch, bool logAllFiles) 
+													cpu_type_t architecture, cpu_subtype_t subarch, bool logAllFiles, bool verboseOptimizationHints) 
 {
 	File* f = new File(path, modTime, ordinal, fileContent, fileLength, architecture);
 	_s_files.push_back(f);
@@ -293,7 +298,11 @@ ld::relocatable::File* Parser::parseMachOFile(const uint8_t* p, size_t len, cons
 	objOpts.architecture		= options.arch;
 	objOpts.objSubtypeMustMatch = false; 
 	objOpts.logAllFiles			= false;
-	objOpts.convertUnwindInfo	= true;
+	objOpts.warnUnwindConversionProblems	= options.needsUnwindInfoSection;
+	objOpts.keepDwarfUnwind		= options.keepDwarfUnwind;
+	objOpts.forceDwarfConversion = false;
+	objOpts.neverConvertDwarf   = false;
+	objOpts.verboseOptimizationHints = options.verboseOptimizationHints;
 	objOpts.subType				= 0;
 	
 	// mach-o parsing is done in-memory, but need path for debug notes
@@ -450,6 +459,30 @@ void Atom::setCompiledAtom(const ld::Atom& atom)
 
 
 
+// <rdar://problem/12379604> The order that files are merged must match command line order
+struct CommandLineOrderFileSorter
+{
+     bool operator()(File* left, File* right)
+     {
+        return ( left->ordinal() < right->ordinal() );
+     }
+};
+
+
+#if LTO_API_VERSION >= 7
+void Parser::ltoDiagnosticHandler(lto_codegen_diagnostic_severity_t severity, const char* message, void*) 
+{
+	switch ( severity ) {
+		case LTO_DS_NOTE:
+		case LTO_DS_WARNING:
+			warning("%s", message);
+			break;
+		case LTO_DS_ERROR:
+			throwf("%s", message);
+	}
+}
+#endif
+
 bool Parser::optimize(  const std::vector<const ld::Atom*>&	allAtoms,
 						ld::Internal&						state,
 						const OptimizeOptions&				options,
@@ -472,10 +505,20 @@ bool Parser::optimize(  const std::vector<const ld::Atom*>&	allAtoms,
 	
 	// create optimizer and add each Reader
 	lto_code_gen_t generator = ::lto_codegen_create();
+#if LTO_API_VERSION >= 7
+	lto_codegen_set_diagnostic_handler(generator, ltoDiagnosticHandler, NULL);
+#endif
+
+	// <rdar://problem/12379604> The order that files are merged must match command line order
+	std::sort(_s_files.begin(), _s_files.end(), CommandLineOrderFileSorter());
+	ld::File::Ordinal lastOrdinal;
 	for (std::vector<File*>::iterator it=_s_files.begin(); it != _s_files.end(); ++it) {
-		if ( logBitcodeFiles ) fprintf(stderr, "lto_codegen_add_module(%s)\n", (*it)->path());
-		if ( ::lto_codegen_add_module(generator, (*it)->module()) )
-			throwf("lto: could not merge in %s because '%s', using libLTO version '%s'", (*it)->path(), ::lto_get_error_message(), ::lto_get_version());
+		File* f = *it;
+		assert(f->ordinal() > lastOrdinal);
+		if ( logBitcodeFiles ) fprintf(stderr, "lto_codegen_add_module(%s)\n", f->path());
+		if ( ::lto_codegen_add_module(generator, f->module()) )
+			throwf("lto: could not merge in %s because '%s', using libLTO version '%s'", f->path(), ::lto_get_error_message(), ::lto_get_version());
+		lastOrdinal = f->ordinal();
 	}
 
 	// add any -mllvm command line options
@@ -483,6 +526,10 @@ bool Parser::optimize(  const std::vector<const ld::Atom*>&	allAtoms,
 		if ( logExtraOptions ) fprintf(stderr, "passing option to llvm: %s\n", *it);
 		::lto_codegen_debug_options(generator, *it);
 	}
+
+	// <rdar://problem/13687397> Need a way for LTO to get cpu variants (until that info is in bitcode)
+	if ( options.mcpu != NULL )
+		::lto_codegen_set_cpu(generator, options.mcpu);
 
 	// The atom graph uses directed edges (references). Collect all references where 
 	// originating atom is not part of any LTO Reader. This allows optimizer to optimize an 
@@ -508,10 +555,7 @@ bool Parser::optimize(  const std::vector<const ld::Atom*>&	allAtoms,
 						break;
 					case ld::Fixup::bindingsIndirectlyBound:
 						target = state.indirectBindingTable[fit->u.bindingIndex];
-						if ( target == NULL )
-							throwf("'%s' in %s contains undefined reference", atom->name(), atom->file()->path());
-						assert(target != NULL);
-						if ( target->contentType() == ld::Atom::typeLTOtemporary )
+						if ( (target != NULL) && (target->contentType() == ld::Atom::typeLTOtemporary) )
 							nonLLVMRefs.insert(target->name());
 					default:
 						break;
@@ -721,6 +765,8 @@ bool Parser::optimize(  const std::vector<const ld::Atom*>&	allAtoms,
 
 void Parser::AtomSyncer::doAtom(const ld::Atom& machoAtom)
 {
+	static const ld::Atom* lastProxiedAtom = NULL;
+	static const ld::File* lastProxiedFile = NULL;
 	// update proxy atoms to point to real atoms and find new atoms
 	const char* name = machoAtom.name();
 	if ( machoAtom.scope() >= ld::Atom::scopeLinkageUnit ) {
@@ -728,6 +774,8 @@ void Parser::AtomSyncer::doAtom(const ld::Atom& machoAtom)
 		if ( pos != _llvmAtoms.end() ) {
 			// turn Atom into a proxy for this mach-o atom
 			pos->second->setCompiledAtom(machoAtom);
+			lastProxiedAtom = &machoAtom;
+			lastProxiedFile = pos->second->file();
 		}
 		else {
 			// an atom of this name was not in the allAtoms list the linker gave us
@@ -753,6 +801,11 @@ void Parser::AtomSyncer::doAtom(const ld::Atom& machoAtom)
 	else {
 		// ld only knew about non-static atoms, so this one must be new
 		_newAtoms.push_back(&machoAtom);
+		// <rdar://problem/15469363> if new static atom in same section as previous non-static atom, assign to same file as previous
+		if ( (lastProxiedAtom != NULL) && (lastProxiedAtom->section() == machoAtom.section()) ) {
+			ld::Atom* ma = const_cast<ld::Atom*>(&machoAtom);
+			ma->setFile(lastProxiedFile);
+		}
 	}
 	
 	// adjust fixups to go through proxy atoms
@@ -778,7 +831,8 @@ void Parser::AtomSyncer::doAtom(const ld::Atom& machoAtom)
 						fit->u.target = pos->second;
 					}
 					else {
-						if ( _deadllvmAtoms.find(targetName) != _deadllvmAtoms.end() ) {
+						// <rdar://problem/12859831> Don't unbind follow-on reference into by-name reference 
+						if ( (_deadllvmAtoms.find(targetName) != _deadllvmAtoms.end()) && (fit->kind != ld::Fixup::kindNoneFollowOn) ) {
 							// target was coalesed away and replace by mach-o atom from a non llvm .o file
 							fit->binding = ld::Fixup::bindingByNameUnbound;
 							fit->u.name = targetName;
@@ -822,11 +876,12 @@ bool isObjectFile(const uint8_t* fileContent, uint64_t fileLength, cpu_type_t ar
 //
 ld::relocatable::File* parse(const uint8_t* fileContent, uint64_t fileLength, 
 								const char* path, time_t modTime, ld::File::Ordinal ordinal,
-								cpu_type_t architecture, cpu_subtype_t subarch, bool logAllFiles)
+								cpu_type_t architecture, cpu_subtype_t subarch, bool logAllFiles,
+								bool verboseOptimizationHints)
 {
 	Mutex lock;
 	if ( Parser::validFile(fileContent, fileLength, architecture, subarch) )
-		return Parser::parse(fileContent, fileLength, path, modTime, ordinal, architecture, subarch, logAllFiles);
+		return Parser::parse(fileContent, fileLength, path, modTime, ordinal, architecture, subarch, logAllFiles, verboseOptimizationHints);
 	else
 		return NULL;
 }

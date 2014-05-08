@@ -8,6 +8,7 @@ AM_CXXFLAGS = \
 	-fblocks \
 	-D__DARWIN_UNIX03 \
 	$(WARNINGS) \
+	-Wno-switch \
 	$(LTO_DEFS) \
 	$(ENDIAN_FLAGS) \
 	-I$(top_srcdir)/include \

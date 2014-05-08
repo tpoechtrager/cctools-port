@@ -102,9 +102,6 @@ struct PerformanceStatistics {
 };
 
 
-
-
-
 class InternalState : public ld::Internal
 {
 public:
@@ -112,6 +109,8 @@ public:
 	virtual	ld::Internal::FinalSection*		addAtom(const ld::Atom& atom);
 	virtual ld::Internal::FinalSection*		getFinalSection(const ld::Section&);
 	
+	uint64_t								assignFileOffsets();
+	void									setSectionSizesAndAlignments();
 	void									sortSections();
 	void									markAtomsOrdered() { _atomsOrderedInSections = true; }
 	virtual									~InternalState() {}
@@ -123,7 +122,7 @@ private:
 							FinalSection(const ld::Section& sect, uint32_t sectionsSeen, bool objFile);
 		static int					sectionComparer(const void* l, const void* r);
 		static const ld::Section&	outputSection(const ld::Section& sect, bool mergeZeroFill);
-		static const ld::Section&	objectOutputSection(const ld::Section& sect, bool makeTentativeDefsReal);
+		static const ld::Section&	objectOutputSection(const ld::Section& sect, const Options&);
 	private:
 		friend class InternalState;
 		static uint32_t		sectionOrder(const ld::Section& sect, uint32_t sectionsSeen);
@@ -141,6 +140,9 @@ private:
 		static ld::Section		_s_DATA_zerofill;
 	};
 	
+	bool hasZeroForFileOffset(const ld::Section* sect);
+	uint64_t pageAlign(uint64_t addr);
+	uint64_t pageAlign(uint64_t addr, uint64_t pageSize);
 	
 	struct SectionHash {
 		size_t operator()(const ld::Section*) const;
@@ -245,10 +247,19 @@ const ld::Section& InternalState::FinalSection::outputSection(const ld::Section&
 	return sect;
 }
 
-const ld::Section& InternalState::FinalSection::objectOutputSection(const ld::Section& sect, bool makeTentativeDefsReal)
+const ld::Section& InternalState::FinalSection::objectOutputSection(const ld::Section& sect, const Options& options)
 {
+  	const std::vector<Options::SectionRename>& renames = options.sectionRenames();
+	for ( std::vector<Options::SectionRename>::const_iterator it=renames.begin(); it != renames.end(); ++it) {
+	  if ( (strcmp(sect.sectionName(), it->fromSection) == 0) && (strcmp(sect.segmentName(), it->fromSegment) == 0) ) {
+		ld::Section* s = new ld::Section(it->toSegment, it->toSection, sect.type());
+		return *s;
+	  }
+	}
+
+
 	// in -r mode the only section that ever changes is __tenative -> __common with -d option
-	if ( (sect.type() == ld::Section::typeTentativeDefs) && makeTentativeDefsReal)
+	if ( (sect.type() == ld::Section::typeTentativeDefs) && options.makeTentativeDefinitionsReal())
 		return _s_DATA_common;
 	return sect;
 }
@@ -335,8 +346,11 @@ uint32_t InternalState::FinalSection::sectionOrder(const ld::Section& sect, uint
 				else
 					return INT_MAX-2;
 			default:
+				// <rdar://problem/14348664> __DATA,__const section should be near __mod_init_func not __data
+				if ( strcmp(sect.sectionName(), "__const") == 0 )
+					return 14;
 				// <rdar://problem/7435296> Reorder sections to reduce page faults in object files
-				if ( strcmp(sect.sectionName(), "__objc_classlist") == 0 ) 
+				else if ( strcmp(sect.sectionName(), "__objc_classlist") == 0 ) 
 					return 20;
 				else if ( strcmp(sect.sectionName(), "__objc_nlclslist") == 0 ) 
 					return 21;
@@ -521,7 +535,7 @@ ld::Internal::FinalSection* InternalState::getFinalSection(const ld::Section& in
 			}
 			break;
 		case Options::kObjectFile:
-			baseForFinalSection = &FinalSection::objectOutputSection(inputSection, _options.makeTentativeDefinitionsReal());
+			baseForFinalSection = &FinalSection::objectOutputSection(inputSection, _options);
 			pos = _sectionInToFinalMap.find(baseForFinalSection);
 			if ( pos != _sectionInToFinalMap.end() ) {
 				_sectionInToFinalMap[&inputSection] = pos->second;
@@ -568,6 +582,308 @@ void InternalState::sortSections()
 	
 }
 
+
+bool InternalState::hasZeroForFileOffset(const ld::Section* sect)
+{
+	switch ( sect->type() ) {
+		case ld::Section::typeZeroFill:
+		case ld::Section::typeTLVZeroFill:
+			return _options.optimizeZeroFill();
+		case ld::Section::typePageZero:
+		case ld::Section::typeStack:
+		case ld::Section::typeTentativeDefs:
+			return true;
+		default:
+			break;
+	}
+	return false;
+}
+
+uint64_t InternalState::pageAlign(uint64_t addr)
+{
+	const uint64_t alignment = _options.segmentAlignment();
+	return ((addr+alignment-1) & (-alignment)); 
+}
+
+uint64_t InternalState::pageAlign(uint64_t addr, uint64_t pageSize)
+{
+	return ((addr+pageSize-1) & (-pageSize)); 
+}
+
+void InternalState::setSectionSizesAndAlignments()
+{
+	for (std::vector<ld::Internal::FinalSection*>::iterator sit = sections.begin(); sit != sections.end(); ++sit) {
+		ld::Internal::FinalSection* sect = *sit;
+		if ( sect->type() == ld::Section::typeAbsoluteSymbols ) {
+			// absolute symbols need their finalAddress() to their value
+			for (std::vector<const ld::Atom*>::iterator ait = sect->atoms.begin(); ait != sect->atoms.end(); ++ait) {
+				const ld::Atom* atom = *ait;
+				(const_cast<ld::Atom*>(atom))->setSectionOffset(atom->objectAddress());
+			}
+		}
+		else {
+			uint16_t maxAlignment = 0;
+			uint64_t offset = 0;
+			for (std::vector<const ld::Atom*>::iterator ait = sect->atoms.begin(); ait != sect->atoms.end(); ++ait) {
+				const ld::Atom* atom = *ait;
+				bool pagePerAtom = false;
+				uint32_t atomAlignmentPowerOf2 = atom->alignment().powerOf2;
+				uint32_t atomModulus = atom->alignment().modulus;
+				if ( _options.pageAlignDataAtoms() && ( strcmp(atom->section().segmentName(), "__DATA") == 0) ) { 
+					// most objc sections cannot be padded
+					bool contiguousObjCSection = ( strncmp(atom->section().sectionName(), "__objc_", 7) == 0 );
+					if ( strcmp(atom->section().sectionName(), "__objc_const") == 0 )
+						contiguousObjCSection = false;
+					if ( strcmp(atom->section().sectionName(), "__objc_data") == 0 )
+						contiguousObjCSection = false;
+					switch ( atom->section().type() ) {
+						case ld::Section::typeUnclassified:
+						case ld::Section::typeTentativeDefs:
+						case ld::Section::typeZeroFill:
+							if ( contiguousObjCSection ) 
+								break;
+							pagePerAtom = true;
+							if ( atomAlignmentPowerOf2 < 12 ) {
+								atomAlignmentPowerOf2 = 12;
+								atomModulus = 0;
+							}
+							break;
+						default:
+							break;
+					}
+				}
+				if ( atomAlignmentPowerOf2 > maxAlignment )
+					maxAlignment = atomAlignmentPowerOf2;
+				// calculate section offset for this atom
+				uint64_t alignment = 1 << atomAlignmentPowerOf2;
+				uint64_t currentModulus = (offset % alignment);
+				uint64_t requiredModulus = atomModulus;
+				if ( currentModulus != requiredModulus ) {
+					if ( requiredModulus > currentModulus )
+						offset += requiredModulus-currentModulus;
+					else
+						offset += requiredModulus+alignment-currentModulus;
+				}
+				// LINKEDIT atoms are laid out later
+				if ( sect->type() != ld::Section::typeLinkEdit ) {
+					(const_cast<ld::Atom*>(atom))->setSectionOffset(offset);
+					offset += atom->size();
+					if ( pagePerAtom ) {
+						offset = (offset + 4095) & (-4096); // round up to end of page
+					}
+				}
+				if ( (atom->scope() == ld::Atom::scopeGlobal) 
+					&& (atom->definition() == ld::Atom::definitionRegular) 
+					&& (atom->combine() == ld::Atom::combineByName) 
+					&& ((atom->symbolTableInclusion() == ld::Atom::symbolTableIn) 
+					 || (atom->symbolTableInclusion() == ld::Atom::symbolTableInAndNeverStrip)) ) {
+						this->hasWeakExternalSymbols = true;
+						if ( _options.warnWeakExports()	) 
+							warning("weak external symbol: %s", atom->name());
+				}
+			}
+			sect->size = offset;
+			// section alignment is that of a contained atom with the greatest alignment
+			sect->alignment = maxAlignment;
+			// unless -sectalign command line option overrides
+			if  ( _options.hasCustomSectionAlignment(sect->segmentName(), sect->sectionName()) )
+				sect->alignment = _options.customSectionAlignment(sect->segmentName(), sect->sectionName());
+			// each atom in __eh_frame has zero alignment to assure they pack together,
+			// but compilers usually make the CFIs pointer sized, so we want whole section
+			// to start on pointer sized boundary.
+			if ( sect->type() == ld::Section::typeCFI )
+				sect->alignment = 3;
+			if ( sect->type() == ld::Section::typeTLVDefs )
+				this->hasThreadLocalVariableDefinitions = true;
+		}
+	}
+}
+
+uint64_t InternalState::assignFileOffsets() 
+{
+  	const bool log = false;
+	const bool hiddenSectionsOccupyAddressSpace = ((_options.outputKind() != Options::kObjectFile)
+												&& (_options.outputKind() != Options::kPreload));
+	const bool segmentsArePageAligned = (_options.outputKind() != Options::kObjectFile);
+
+	uint64_t address = 0;
+	const char* lastSegName = "";
+	uint64_t floatingAddressStart = _options.baseAddress();
+	
+	// first pass, assign addresses to sections in segments with fixed start addresses
+	if ( log ) fprintf(stderr, "Fixed address segments:\n");
+	for (std::vector<ld::Internal::FinalSection*>::iterator it = sections.begin(); it != sections.end(); ++it) {
+		ld::Internal::FinalSection* sect = *it;
+		if ( ! _options.hasCustomSegmentAddress(sect->segmentName()) ) 
+			continue;
+		if ( segmentsArePageAligned ) {
+			if ( strcmp(lastSegName, sect->segmentName()) != 0 ) {
+				address = _options.customSegmentAddress(sect->segmentName());
+				lastSegName = sect->segmentName();
+			}
+		}
+		// adjust section address based on alignment
+		uint64_t unalignedAddress = address;
+		uint64_t alignment = (1 << sect->alignment);
+		address = ( (unalignedAddress+alignment-1) & (-alignment) );
+	
+		// update section info
+		sect->address = address;
+		sect->alignmentPaddingBytes = (address - unalignedAddress);
+		
+		// sanity check size
+		if ( ((address + sect->size) > _options.maxAddress()) && (_options.outputKind() != Options::kObjectFile) 
+															  && (_options.outputKind() != Options::kStaticExecutable) )
+			throwf("section %s (address=0x%08llX, size=%llu) would make the output executable exceed available address range", 
+						sect->sectionName(), address, sect->size);
+		
+		if ( log ) fprintf(stderr, "  address=0x%08llX, hidden=%d, alignment=%02d, section=%s,%s\n",
+						sect->address, sect->isSectionHidden(), sect->alignment, sect->segmentName(), sect->sectionName());
+		// update running totals
+		if ( !sect->isSectionHidden() || hiddenSectionsOccupyAddressSpace )
+			address += sect->size;
+		
+		// if TEXT segment address is fixed, then flow other segments after it
+		if ( strcmp(sect->segmentName(), "__TEXT") == 0 ) {
+			floatingAddressStart = address;
+		}
+	}
+	
+	// second pass, assign section address to sections in segments that are contiguous with previous segment
+	address = floatingAddressStart;
+	lastSegName = "";
+	ld::Internal::FinalSection* overlappingFixedSection = NULL;
+	ld::Internal::FinalSection* overlappingFlowSection = NULL;
+	if ( log ) fprintf(stderr, "Regular layout segments:\n");
+	for (std::vector<ld::Internal::FinalSection*>::iterator it = sections.begin(); it != sections.end(); ++it) {
+		ld::Internal::FinalSection* sect = *it;
+		if ( _options.hasCustomSegmentAddress(sect->segmentName()) ) 
+			continue;
+		if ( (_options.outputKind() == Options::kPreload) && (sect->type() == ld::Section::typeMachHeader) ) {
+			sect->alignmentPaddingBytes = 0;
+			continue;
+		}
+		if ( segmentsArePageAligned ) {
+			if ( strcmp(lastSegName, sect->segmentName()) != 0 ) {
+				// round up size of last segment if needed
+				if ( *lastSegName != '\0' ) {
+					address = pageAlign(address, _options.segPageSize(lastSegName));
+				}
+				// set segment address based on end of last segment
+				address = pageAlign(address);
+				lastSegName = sect->segmentName();
+			}
+		}
+		// adjust section address based on alignment
+		uint64_t unalignedAddress = address;
+		uint64_t alignment = (1 << sect->alignment);
+		address = ( (unalignedAddress+alignment-1) & (-alignment) );
+	
+		// update section info
+		sect->address = address;
+		sect->alignmentPaddingBytes = (address - unalignedAddress);
+		
+		// sanity check size
+		if ( ((address + sect->size) > _options.maxAddress()) && (_options.outputKind() != Options::kObjectFile) 
+															  && (_options.outputKind() != Options::kStaticExecutable) )
+				throwf("section %s (address=0x%08llX, size=%llu) would make the output executable exceed available address range", 
+						sect->sectionName(), address, sect->size);
+
+		// sanity check it does not overlap a fixed address segment
+		for (std::vector<ld::Internal::FinalSection*>::iterator sit = sections.begin(); sit != sections.end(); ++sit) {
+			ld::Internal::FinalSection* otherSect = *sit;
+			if ( ! _options.hasCustomSegmentAddress(otherSect->segmentName()) ) 
+				continue;
+			if ( sect->address > otherSect->address ) {
+				if ( (otherSect->address+otherSect->size) > sect->address ) {
+					overlappingFixedSection = otherSect;
+					overlappingFlowSection = sect;
+				}
+			}
+			else {
+				if ( (sect->address+sect->size) > otherSect->address ) {
+					overlappingFixedSection = otherSect;
+					overlappingFlowSection = sect;
+				}
+			}
+		}
+		
+		if ( log ) fprintf(stderr, "  address=0x%08llX, size=0x%08llX, hidden=%d, alignment=%02d, padBytes=%d, section=%s,%s\n",
+							sect->address, sect->size, sect->isSectionHidden(), sect->alignment, sect->alignmentPaddingBytes, 
+							sect->segmentName(), sect->sectionName());
+		// update running totals
+		if ( !sect->isSectionHidden() || hiddenSectionsOccupyAddressSpace )
+			address += sect->size;
+	}
+	if ( overlappingFixedSection != NULL ) {
+		fprintf(stderr, "Section layout:\n");
+		for (std::vector<ld::Internal::FinalSection*>::iterator it = sections.begin(); it != sections.end(); ++it) {
+			ld::Internal::FinalSection* sect = *it;
+			if ( sect->isSectionHidden() )
+				continue;
+			fprintf(stderr, "  address:0x%08llX, alignment:2^%d, size:0x%08llX, padBytes:%d, section:%s/%s\n",
+							sect->address, sect->alignment, sect->size, sect->alignmentPaddingBytes, 
+							sect->segmentName(), sect->sectionName());
+	
+		}
+		throwf("Section (%s/%s) overlaps fixed address section (%s/%s)", 
+			overlappingFlowSection->segmentName(), overlappingFlowSection->sectionName(),
+			overlappingFixedSection->segmentName(), overlappingFixedSection->sectionName());
+	}
+	
+	
+	// third pass, assign section file offsets 
+	uint64_t fileOffset = 0;
+	lastSegName = "";
+	if ( log ) fprintf(stderr, "All segments with file offsets:\n");
+	for (std::vector<ld::Internal::FinalSection*>::iterator it = sections.begin(); it != sections.end(); ++it) {
+		ld::Internal::FinalSection* sect = *it;
+		if ( hasZeroForFileOffset(sect) ) {
+			// fileoff of zerofill sections is moot, but historically it is set to zero
+			sect->fileOffset = 0;
+
+			// <rdar://problem/10445047> align file offset with address layout
+			fileOffset += sect->alignmentPaddingBytes;
+		}
+		else {
+			// page align file offset at start of each segment
+			if ( segmentsArePageAligned && (*lastSegName != '\0') && (strcmp(lastSegName, sect->segmentName()) != 0) ) {
+				fileOffset = pageAlign(fileOffset, _options.segPageSize(lastSegName));
+			}
+			lastSegName = sect->segmentName();
+
+			// align file offset with address layout
+			fileOffset += sect->alignmentPaddingBytes;
+			
+			// update section info
+			sect->fileOffset = fileOffset;
+			
+			// update running total
+			fileOffset += sect->size;
+		}
+		
+		if ( log ) fprintf(stderr, "  fileoffset=0x%08llX, address=0x%08llX, hidden=%d, size=%lld, alignment=%02d, section=%s,%s\n",
+				sect->fileOffset, sect->address, sect->isSectionHidden(), sect->size, sect->alignment, 
+				sect->segmentName(), sect->sectionName());
+	}
+
+#if 0
+	// for encrypted iPhoneOS apps
+	if ( _options.makeEncryptable() ) { 
+		// remember end of __TEXT for later use by load command
+		for (std::vector<ld::Internal::FinalSection*>::iterator it = state.sections.begin(); it != state.sections.end(); ++it) {
+			ld::Internal::FinalSection* sect = *it;
+			if ( strcmp(sect->segmentName(), "__TEXT") == 0 ) {
+				_encryptedTEXTendOffset = pageAlign(sect->fileOffset + sect->size);
+			}
+		}
+	}
+#endif
+
+	// return total file size
+	return fileOffset;
+}
+
 static char* commatize(uint64_t in, char* out)
 {
 	char* result = out;
@@ -589,10 +905,9 @@ static void printTime(const char* msg, uint64_t partTime, uint64_t totalTime)
 	static uint64_t sUnitsPerSecond = 0;
 	if ( sUnitsPerSecond == 0 ) {
 		struct mach_timebase_info timeBaseInfo;
-		if ( mach_timebase_info(&timeBaseInfo) == KERN_SUCCESS ) {
-			sUnitsPerSecond = 1000000000ULL * timeBaseInfo.denom / timeBaseInfo.numer;
-			//fprintf(stderr, "sUnitsPerSecond=%llu\n", sUnitsPerSecond);
-		}
+		if ( mach_timebase_info(&timeBaseInfo) != KERN_SUCCESS )
+      return;
+    sUnitsPerSecond = 1000000000ULL * timeBaseInfo.denom / timeBaseInfo.numer;
 	}
 	if ( partTime < sUnitsPerSecond ) {
 		uint32_t milliSecondsTimeTen = (partTime*10000)/sUnitsPerSecond;

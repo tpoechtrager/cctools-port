@@ -41,6 +41,7 @@ namespace passes {
 namespace branch_island {
 
 
+static std::map<const Atom*, uint64_t> sAtomToAddress;
 
 
 struct TargetAndOffset { const ld::Atom* atom; uint32_t offset; };
@@ -68,43 +69,27 @@ public:
 							ld::Atom::scopeLinkageUnit, ld::Atom::typeBranchIsland, 
 							ld::Atom::symbolTableIn, false, false, false, ld::Atom::Alignment(2)), 
 				_name(nm),
-				_target(target),
-				_finalTarget(finalTarget) { }
+				_fixup1(0, ld::Fixup::k1of1, ld::Fixup::kindStoreTargetAddressARMBranch24, target),
+				_fixup2(0, ld::Fixup::k1of1, ld::Fixup::kindIslandTarget, finalTarget.atom) {
+					if (_s_log) fprintf(stderr, "%s: ARM jump instruction branch island to final target %s\n", 
+										target->name(), finalTarget.atom->name());
+				}
 
 	virtual const ld::File*					file() const					{ return NULL; }
 	virtual const char*						name() const					{ return _name; }
 	virtual uint64_t						size() const					{ return 4; }
 	virtual uint64_t						objectAddress() const			{ return 0; }
 	virtual void							copyRawContent(uint8_t buffer[]) const {
-		int64_t displacement = _target->finalAddress() - this->finalAddress() - 8;
-		if ( _target->contentType() == ld::Atom::typeBranchIsland ) {
-			// an ARM branch can branch farther than a thumb branch.  The branch
-			// island generation was conservative and put islands every thumb
-			// branch distance apart.  Check to see if this is a an island
-			// hopping branch that could be optimized to go directly to target.
-			int64_t skipToFinalDisplacement = _finalTarget.atom->finalAddress() + _finalTarget.offset - this->finalAddress() - 8;
-			if ( (skipToFinalDisplacement < 33554428LL) && (skipToFinalDisplacement > (-33554432LL)) ) {
-				// can skip branch island and jump straight to target
-				if (_s_log) fprintf(stderr, "%s: optimized jump to final target at 0x%08llX, thisAddr=0x%08llX\n", 
-											_target->name(), _finalTarget.atom->finalAddress(), this->finalAddress());
-				displacement = skipToFinalDisplacement;
-			}
-			else {
-				// ultimate target is too far, jump to island
-				if (_s_log) fprintf(stderr, "%s: jump to branch island at 0x%08llX\n", 
-											_target->name(), _finalTarget.atom->finalAddress());
-			}
-		}
-		uint32_t imm24 = (displacement >> 2) & 0x00FFFFFF;
-		int32_t branchInstruction = 0xEA000000 | imm24;
-		OSWriteLittleInt32(buffer, 0, branchInstruction);
+		OSWriteLittleInt32(buffer, 0, 0xEA000000);
 	}
 	virtual void							setScope(Scope)					{ }
+	virtual ld::Fixup::iterator				fixupsBegin() const				{ return (ld::Fixup*)&_fixup1; }
+	virtual ld::Fixup::iterator				fixupsEnd()	const 				{ return &((ld::Fixup*)&_fixup2)[1]; }
 
 private:
 	const char*								_name;
-	const ld::Atom*							_target;
-	TargetAndOffset							_finalTarget;
+	ld::Fixup								_fixup1;
+	ld::Fixup								_fixup2;
 };
 
 
@@ -154,60 +139,66 @@ public:
 							ld::Atom::scopeLinkageUnit, ld::Atom::typeBranchIsland, 
 							ld::Atom::symbolTableIn, false, true, false, ld::Atom::Alignment(1)), 
 				_name(nm),
-				_target(target),
-				_finalTarget(finalTarget) { }
+				_fixup1(0, ld::Fixup::k1of1, ld::Fixup::kindStoreTargetAddressThumbBranch22, target),
+				_fixup2(0, ld::Fixup::k1of1, ld::Fixup::kindIslandTarget, finalTarget.atom)		{ 
+					if (_s_log) fprintf(stderr, "%s: Thumb jump instruction branch island to final target %s\n", 
+										target->name(), finalTarget.atom->name());
+					}
 
 	virtual const ld::File*					file() const					{ return NULL; }
 	virtual const char*						name() const					{ return _name; }
 	virtual uint64_t						size() const					{ return 4; }
 	virtual uint64_t						objectAddress() const			{ return 0; }
 	virtual void							copyRawContent(uint8_t buffer[]) const {
-		int64_t displacement = _target->finalAddress() - this->finalAddress() - 4;
-		if ( _target->contentType() == ld::Atom::typeBranchIsland ) {
-			// an ARM branch can branch farther than a thumb branch.  The branch
-			// island generation was conservative and put islands every thumb
-			// branch distance apart.  Check to see if this is a an island
-			// hopping branch that could be optimized to go directly to target.
-			int64_t skipToFinalDisplacement = _finalTarget.atom->finalAddress() + _finalTarget.offset - this->finalAddress() - 4;
-			if ( (skipToFinalDisplacement < 16777214) && (skipToFinalDisplacement > (-16777216LL)) ) {
-				// can skip branch island and jump straight to target
-				if (_s_log) fprintf(stderr, "%s: optimized jump to final target at 0x%08llX, thisAddr=0x%08llX\n", 
-											_target->name(), _finalTarget.atom->finalAddress(), this->finalAddress());
-				displacement = skipToFinalDisplacement;
-			}
-			else {
-				// ultimate target is too far for thumb2 branch, jump to island
-				if (_s_log) fprintf(stderr, "%s: jump to branch island at 0x%08llX\n", 
-											_target->name(), _finalTarget.atom->finalAddress());
-			}
-		}
-		// The instruction is really two instructions:
-		// The lower 16 bits are the first instruction, which contains the high
-		//   11 bits of the displacement.
-		// The upper 16 bits are the second instruction, which contains the low
-		//   11 bits of the displacement, as well as differentiating bl and blx.
-		uint32_t s = (uint32_t)(displacement >> 24) & 0x1;
-		uint32_t i1 = (uint32_t)(displacement >> 23) & 0x1;
-		uint32_t i2 = (uint32_t)(displacement >> 22) & 0x1;
-		uint32_t imm10 = (uint32_t)(displacement >> 12) & 0x3FF;
-		uint32_t imm11 = (uint32_t)(displacement >> 1) & 0x7FF;
-		uint32_t j1 = (i1 == s);
-		uint32_t j2 = (i2 == s);
-		uint32_t opcode = 0x9000F000;
-		uint32_t nextDisp = (j1 << 13) | (j2 << 11) | imm11;
-		uint32_t firstDisp = (s << 10) | imm10;
-		uint32_t newInstruction = opcode | (nextDisp << 16) | firstDisp;
-		//warning("s=%d, j1=%d, j2=%d, imm10=0x%0X, imm11=0x%0X, opcode=0x%08X, first=0x%04X, next=0x%04X, new=0x%08X, disp=0x%llX for %s to %s\n",
-		//	s, j1, j2, imm10, imm11, opcode, firstDisp, nextDisp, newInstruction, displacement, inAtom->getDisplayName(), ref->getTarget().getDisplayName());
-		OSWriteLittleInt32(buffer, 0, newInstruction);
+		OSWriteLittleInt32(buffer, 0, 0xf0008000);
 	}
 	virtual void							setScope(Scope)					{ }
+	virtual ld::Fixup::iterator				fixupsBegin() const				{ return (ld::Fixup*)&_fixup1; }
+	virtual ld::Fixup::iterator				fixupsEnd()	const 				{ return &((ld::Fixup*)&_fixup2)[1]; }
 
 private:
 	const char*								_name;
-	const ld::Atom*							_target;
-	TargetAndOffset							_finalTarget;
+	ld::Fixup								_fixup1;
+	ld::Fixup								_fixup2;
 };
+
+
+
+class Thumb2toThumbBranchAbsoluteIslandAtom : public ld::Atom {
+public:
+											Thumb2toThumbBranchAbsoluteIslandAtom(const char* nm, const ld::Section& inSect, TargetAndOffset finalTarget)
+				: ld::Atom(inSect, ld::Atom::definitionRegular, ld::Atom::combineNever,
+							ld::Atom::scopeLinkageUnit, ld::Atom::typeBranchIsland, 
+							ld::Atom::symbolTableIn, false, true, false, ld::Atom::Alignment(1)), 
+				_name(nm),
+				_fixup1(0, ld::Fixup::k1of2, ld::Fixup::kindSetTargetAddress, finalTarget.atom),
+				_fixup2(0, ld::Fixup::k2of2, ld::Fixup::kindStoreThumbLow16),
+				_fixup3(4, ld::Fixup::k1of2, ld::Fixup::kindSetTargetAddress, finalTarget.atom),
+				_fixup4(4, ld::Fixup::k2of2, ld::Fixup::kindStoreThumbHigh16),
+				_fixup5(0, ld::Fixup::k1of1, ld::Fixup::kindIslandTarget, finalTarget.atom) { } 
+
+	virtual const ld::File*					file() const					{ return NULL; }
+	virtual const char*						name() const					{ return _name; }
+	virtual uint64_t						size() const					{ return 10; }
+	virtual uint64_t						objectAddress() const			{ return 0; }
+	virtual void							copyRawContent(uint8_t buffer[]) const {
+		OSWriteLittleInt32(&buffer[0], 0, 0x0c00f240);	// 	movw	r12, #0x5678
+		OSWriteLittleInt32(&buffer[4], 0, 0x0c00f2c0);	// 	movt	r12, #0x1234
+		OSWriteLittleInt16(&buffer[8], 0, 0x4760);		// 	bx		r12
+	}
+	virtual void							setScope(Scope)					{ }
+	virtual ld::Fixup::iterator				fixupsBegin() const				{ return (ld::Fixup*)&_fixup1; }
+	virtual ld::Fixup::iterator				fixupsEnd()	const 				{ return &((ld::Fixup*)&_fixup5)[1]; }
+
+private:
+	const char*								_name;
+	ld::Fixup								_fixup1;
+	ld::Fixup								_fixup2;
+	ld::Fixup								_fixup3;
+	ld::Fixup								_fixup4;
+	ld::Fixup								_fixup5;
+};
+
 
 
 class NoPicARMtoThumbMBranchIslandAtom : public ld::Atom {
@@ -245,7 +236,8 @@ private:
 };
 
 
-static ld::Atom* makeBranchIsland(const Options& opts, ld::Fixup::Kind kind, int islandRegion, const ld::Atom* nextTarget, TargetAndOffset finalTarget)
+static ld::Atom* makeBranchIsland(const Options& opts, ld::Fixup::Kind kind, int islandRegion, const ld::Atom* nextTarget, 
+									TargetAndOffset finalTarget, const ld::Section& inSect, bool crossSectionBranch)
 {
 	char* name;
 	if ( finalTarget.offset == 0 ) {
@@ -263,7 +255,10 @@ static ld::Atom* makeBranchIsland(const Options& opts, ld::Fixup::Kind kind, int
 		case ld::Fixup::kindStoreThumbBranch22:
 		case ld::Fixup::kindStoreTargetAddressARMBranch24:
 		case ld::Fixup::kindStoreTargetAddressThumbBranch22:
-			if ( finalTarget.atom->isThumb() ) {
+			if ( crossSectionBranch && opts.preferSubArchitecture() && opts.archSupportsThumb2() ) {
+				return new Thumb2toThumbBranchAbsoluteIslandAtom(name, inSect, finalTarget);
+			}
+			else if ( finalTarget.atom->isThumb() ) {
 				if ( opts.preferSubArchitecture() && opts.archSupportsThumb2() ) {
 					return new Thumb2toThumbBranchIslandAtom(name, nextTarget, finalTarget);
 				}
@@ -343,47 +338,51 @@ static uint64_t maxDistanceBetweenIslands(const Options& opts, bool seenThumbBra
 // before any branches could be pushed out of range.
 //
 
-void doPass(const Options& opts, ld::Internal& state)
-{	
-	// only make branch islands in final linked images
-	if ( opts.outputKind() == Options::kObjectFile )
-		return;
 
-	// only ARM needs branch islands
-	switch ( opts.architecture() ) {
-		case CPU_TYPE_ARM:
-			break;
-		default:
-			return;
-	}
-	
-	// scan to find __text section
-	ld::Internal::FinalSection* textSection = NULL;
-	for (std::vector<ld::Internal::FinalSection*>::iterator sit=state.sections.begin(); sit != state.sections.end(); ++sit) {
-		ld::Internal::FinalSection* sect = *sit;
-		if ( strcmp(sect->sectionName(), "__text") == 0 )
-			textSection = sect;
-	}
-	if ( textSection == NULL )
-		return;
-	
+static void makeIslandsForSection(const Options& opts, ld::Internal& state, ld::Internal::FinalSection* textSection)
+{
 	// assign section offsets to each atom in __text section, watch for thumb branches, and find total size
-	const bool isARM = (opts.architecture() == CPU_TYPE_ARM);
 	bool hasThumbBranches = false;
+	bool haveCrossSectionBranches = false;
+	const bool preload = (opts.outputKind() == Options::kPreload);
 	uint64_t offset = 0;
 	for (std::vector<const ld::Atom*>::iterator ait=textSection->atoms.begin();  ait != textSection->atoms.end(); ++ait) {
 		const ld::Atom* atom = *ait;
-		// check for thumb branches
-		if ( isARM && ~hasThumbBranches ) {
-			for (ld::Fixup::iterator fit = atom->fixupsBegin(), end=atom->fixupsEnd(); fit != end; ++fit) {
-				switch ( fit->kind ) {
-					case ld::Fixup::kindStoreThumbBranch22:
-					case ld::Fixup::kindStoreTargetAddressThumbBranch22:
-						hasThumbBranches = true;
-						break;
-					default:
-						break;
-				}
+		// check for thumb branches and cross section branches
+		const ld::Atom* target = NULL;
+		for (ld::Fixup::iterator fit = atom->fixupsBegin(), end=atom->fixupsEnd(); fit != end; ++fit) {
+			if ( fit->firstInCluster() ) {
+				target = NULL;
+			}
+			switch ( fit->binding ) {
+				case ld::Fixup::bindingNone:
+				case ld::Fixup::bindingByNameUnbound:
+					break;
+				case ld::Fixup::bindingByContentBound:
+				case ld::Fixup::bindingDirectlyBound:
+					target = fit->u.target;
+					break;
+				case ld::Fixup::bindingsIndirectlyBound:
+					target = state.indirectBindingTable[fit->u.bindingIndex];
+					break;
+			}
+			bool haveBranch = false;
+			switch (fit->kind) {
+				case ld::Fixup::kindStoreThumbBranch22:
+				case ld::Fixup::kindStoreTargetAddressThumbBranch22:
+					hasThumbBranches = true;
+					// fall into arm branch case
+				case ld::Fixup::kindStoreARMBranch24:
+				case ld::Fixup::kindStoreTargetAddressARMBranch24:
+					haveBranch = true;
+					break;
+                default:
+                    break;   
+			}
+			if ( haveBranch && (target->contentType() != ld::Atom::typeStub) ) {
+				// <rdar://problem/14792124> haveCrossSectionBranches only applies to -preload builds
+				if ( preload && (atom->section() != target->section()) )
+					haveCrossSectionBranches = true;
 			}
 		}
 		// align atom
@@ -400,9 +399,9 @@ void doPass(const Options& opts, ld::Internal& state)
 		offset += atom->size();
 	}
 	uint64_t totalTextSize = offset;
-	if ( totalTextSize < textSizeWhenMightNeedBranchIslands(opts, hasThumbBranches) )
+	if ( (totalTextSize < textSizeWhenMightNeedBranchIslands(opts, hasThumbBranches)) && !haveCrossSectionBranches )
 		return;
-	if (_s_log) fprintf(stderr, "ld:  __text section size=%llu, might need branch islands\n", totalTextSize);
+	if (_s_log) fprintf(stderr, "ld: section %s size=%llu, might need branch islands\n", textSection->sectionName(), totalTextSize);
 	
 	// Figure out how many regions of branch islands will be needed, and their locations.
 	// Construct a vector containing the atoms after which branch islands will be inserted,
@@ -410,12 +409,12 @@ void doPass(const Options& opts, ld::Internal& state)
 	const uint64_t kBetweenRegions = maxDistanceBetweenIslands(opts, hasThumbBranches); // place regions of islands every 14MB in __text section
 	std::vector<const ld::Atom*> branchIslandInsertionPoints; // atoms in the atom list after which branch islands will be inserted
 	uint64_t previousIslandEndAddr = 0;
-	const ld::Atom *insertionPoint;
+	const ld::Atom *insertionPoint = NULL;
 	branchIslandInsertionPoints.reserve(totalTextSize/kBetweenRegions*2);
 	for (std::vector<const ld::Atom*>::iterator it=textSection->atoms.begin(); it != textSection->atoms.end(); it++) {
 		const ld::Atom* atom = *it;
 		// if we move past the next atom, will the run length exceed kBetweenRegions?
-		if ( atom->sectionOffset() + atom->size() - previousIslandEndAddr > kBetweenRegions ) {
+		if ( atom->sectionOffset() + atom->size() > previousIslandEndAddr + kBetweenRegions ) {
 			// yes. Add the last known good location (atom) for inserting a branch island.
 			if ( insertionPoint == NULL )
 				throwf("Unable to insert branch island. No insertion point available.");
@@ -427,28 +426,24 @@ void doPass(const Options& opts, ld::Internal& state)
 		if ( !atom->hasFixupsOfKind(ld::Fixup::kindNoneFollowOn) )
 			insertionPoint = atom;
 	}
-	// add one more island after the last atom
-	if (insertionPoint != NULL)
+	// add one more island after the last atom if close to limit
+	if ( (insertionPoint != NULL) && (insertionPoint->sectionOffset() + insertionPoint->size() > previousIslandEndAddr + (kBetweenRegions-0x100000)) )
 		branchIslandInsertionPoints.push_back(insertionPoint);
-	const int kIslandRegionsCount = branchIslandInsertionPoints.size();
-	if (_s_log) {
-		fprintf(stderr, "ld: will use %u branch island regions\n", kIslandRegionsCount);
-		for (std::vector<const ld::Atom*>::iterator it = branchIslandInsertionPoints.begin(); it != branchIslandInsertionPoints.end(); ++it) {
-			const ld::Atom* atom = *it;
-			const ld::File *file = atom->file();
-			fprintf(stderr, "ld: branch island will be inserted at 0x%llx after %s", atom->sectionOffset()+atom->size(), atom->name());
-			if (file) fprintf(stderr, " (%s)", atom->file()->path());
-			fprintf(stderr, "\n");
-		}
+	if ( haveCrossSectionBranches && branchIslandInsertionPoints.empty() ) {
+		branchIslandInsertionPoints.push_back(textSection->atoms.back());
 	}
+	const int kIslandRegionsCount = branchIslandInsertionPoints.size();
 
-
+	if (_s_log) fprintf(stderr, "ld: will use %u branch island regions\n", kIslandRegionsCount);
 	typedef std::map<TargetAndOffset,const ld::Atom*, TargetAndOffsetComparor> AtomToIsland;
     AtomToIsland* regionsMap[kIslandRegionsCount];
+	uint64_t regionAddresses[kIslandRegionsCount];
 	std::vector<const ld::Atom*>* regionsIslands[kIslandRegionsCount];
 	for(int i=0; i < kIslandRegionsCount; ++i) {
 		regionsMap[i] = new AtomToIsland();
 		regionsIslands[i] = new std::vector<const ld::Atom*>();
+		regionAddresses[i] = branchIslandInsertionPoints[i]->sectionOffset() + branchIslandInsertionPoints[i]->size();
+		if (_s_log) fprintf(stderr, "ld: branch islands will be inserted at 0x%08llX after %s\n", regionAddresses[i], branchIslandInsertionPoints[i]->name());
 	}
 	unsigned int islandCount = 0;
 	
@@ -493,25 +488,51 @@ void doPass(const Options& opts, ld::Internal& state)
                     break;   
 			}
 			if ( haveBranch ) {
+				bool crossSectionBranch = ( preload && (atom->section() != target->section()) );
 				int64_t srcAddr = atom->sectionOffset() + fit->offsetInAtom;
 				int64_t dstAddr = target->sectionOffset() + addend;
+				if ( preload ) {
+					srcAddr = sAtomToAddress[atom] + fit->offsetInAtom;
+					dstAddr = sAtomToAddress[target] + addend;
+				}
 				if ( target->section().type() == ld::Section::typeStub )
 					dstAddr = totalTextSize;
 				int64_t displacement = dstAddr - srcAddr;
 				TargetAndOffset finalTargetAndOffset = { target, addend };
 				const int64_t kBranchLimit = kBetweenRegions;
-				if ( displacement > kBranchLimit ) {
+				if ( crossSectionBranch && ((displacement > kBranchLimit) || (displacement < (-kBranchLimit))) ) {
+					const ld::Atom* island;
+					AtomToIsland* region = regionsMap[0];
+					AtomToIsland::iterator pos = region->find(finalTargetAndOffset);
+					if ( pos == region->end() ) {
+						island = makeBranchIsland(opts, fit->kind, 0, target, finalTargetAndOffset, atom->section(), true);
+						(*region)[finalTargetAndOffset] = island;
+						if (_s_log) fprintf(stderr, "added absolute branching island %p %s, displacement=%lld\n", 
+												island, island->name(), displacement);
+						++islandCount;
+						regionsIslands[0]->push_back(island);
+					}
+					else {
+						island = pos->second;
+					}
+					if (_s_log) fprintf(stderr, "using island %p %s for branch to %s from %s\n", island, island->name(), target->name(), atom->name());
+					fixupWithTarget->u.target = island;
+					fixupWithTarget->binding = ld::Fixup::bindingDirectlyBound;
+				}
+				else if ( displacement > kBranchLimit ) {
 					// create forward branch chain
 					const ld::Atom* nextTarget = target;
+					if (_s_log) fprintf(stderr, "need forward branching island srcAdr=0x%08llX, dstAdr=0x%08llX, target=%s\n",
+														srcAddr, dstAddr, target->name());
 					for (int i=kIslandRegionsCount-1; i >=0 ; --i) {
 						AtomToIsland* region = regionsMap[i];
-						int64_t islandRegionAddr = kBetweenRegions * (i+1);
-						if ( (srcAddr < islandRegionAddr) && (islandRegionAddr <= dstAddr) ) { 
+						int64_t islandRegionAddr = regionAddresses[i];
+						if ( (srcAddr < islandRegionAddr) && ((islandRegionAddr <= dstAddr)) ) { 
 							AtomToIsland::iterator pos = region->find(finalTargetAndOffset);
 							if ( pos == region->end() ) {
-								ld::Atom* island = makeBranchIsland(opts, fit->kind, i, nextTarget, finalTargetAndOffset);
+								ld::Atom* island = makeBranchIsland(opts, fit->kind, i, nextTarget, finalTargetAndOffset, atom->section(), false);
 								(*region)[finalTargetAndOffset] = island;
-								if (_s_log) fprintf(stderr, "added island %s to region %d for %s\n", island->name(), i, atom->name());
+								if (_s_log) fprintf(stderr, "added forward branching island %p %s to region %d for %s\n", island, island->name(), i, atom->name());
 								regionsIslands[i]->push_back(island);
 								++islandCount;
 								nextTarget = island;
@@ -521,7 +542,7 @@ void doPass(const Options& opts, ld::Internal& state)
 							}
 						}
 					}
-					if (_s_log) fprintf(stderr, "using island %s for branch to %s from %s\n", nextTarget->name(), target->name(), atom->name());
+					if (_s_log) fprintf(stderr, "using island %p %s for branch to %s from %s\n", nextTarget, nextTarget->name(), target->name(), atom->name());
 					fixupWithTarget->u.target = nextTarget;
 					fixupWithTarget->binding = ld::Fixup::bindingDirectlyBound;
 				}
@@ -530,13 +551,14 @@ void doPass(const Options& opts, ld::Internal& state)
 					const ld::Atom* prevTarget = target;
 					for (int i=0; i < kIslandRegionsCount ; ++i) {
 						AtomToIsland* region = regionsMap[i];
-						int64_t islandRegionAddr = kBetweenRegions * (i+1);
-						if ( (dstAddr <= islandRegionAddr) && (islandRegionAddr < srcAddr) ) {
+						int64_t islandRegionAddr = regionAddresses[i];
+						if ( (dstAddr < islandRegionAddr) && (islandRegionAddr <= srcAddr) ) {
+							if (_s_log) fprintf(stderr, "need backward branching island srcAdr=0x%08llX, dstAdr=0x%08llX, target=%s\n", srcAddr, dstAddr, target->name());
 							AtomToIsland::iterator pos = region->find(finalTargetAndOffset);
 							if ( pos == region->end() ) {
-								ld::Atom* island = makeBranchIsland(opts, fit->kind, i, prevTarget, finalTargetAndOffset);
+								ld::Atom* island = makeBranchIsland(opts, fit->kind, i, prevTarget, finalTargetAndOffset, atom->section(), false);
 								(*region)[finalTargetAndOffset] = island;
-								if (_s_log) fprintf(stderr, "added back island %s to region %d for %s\n", island->name(), i, atom->name());
+								if (_s_log) fprintf(stderr, "added back branching island %p %s to region %d for %s\n", island, island->name(), i, atom->name());
 								regionsIslands[i]->push_back(island);
 								++islandCount;
 								prevTarget = island;
@@ -546,7 +568,7 @@ void doPass(const Options& opts, ld::Internal& state)
 							}
 						}
 					}
-					if (_s_log) fprintf(stderr, "using back island %s for %s\n", prevTarget->name(), atom->name());
+					if (_s_log) fprintf(stderr, "using back island %p %s for %s\n", prevTarget, prevTarget->name(), atom->name());
 					fixupWithTarget->u.target = prevTarget;
 					fixupWithTarget->binding = ld::Fixup::bindingDirectlyBound;
 				}
@@ -561,30 +583,92 @@ void doPass(const Options& opts, ld::Internal& state)
 		std::vector<const ld::Atom*> newAtomList;
 		newAtomList.reserve(textSection->atoms.size()+islandCount);
 		
-		uint64_t regionIndex = 0;
+		int regionIndex = 0;
 		for (std::vector<const ld::Atom*>::iterator ait=textSection->atoms.begin(); ait != textSection->atoms.end(); ait++) {
-			newAtomList.push_back(*ait);
-			// copy over atoms until we find an island insertion point
-			// Note that the last insertion point is the last atom, so this loop never moves the iterator to atoms.end().
-			while (*ait != branchIslandInsertionPoints[regionIndex]) {
-				ait++;
-				newAtomList.push_back(*ait);
+			const ld::Atom* atom = *ait;
+			newAtomList.push_back(atom);
+			if ( (regionIndex < kIslandRegionsCount) && (atom == branchIslandInsertionPoints[regionIndex]) ) {
+				std::vector<const ld::Atom*>* islands = regionsIslands[regionIndex];
+				newAtomList.insert(newAtomList.end(), islands->begin(), islands->end());
+				++regionIndex;
 			}
-			
-			// insert the branch island atoms after the insertion point atom
-			std::vector<const ld::Atom*>* regionIslands = regionsIslands[regionIndex];
-			for (std::vector<const ld::Atom*>::iterator rit=regionIslands->begin(); rit != regionIslands->end(); rit++) {
-				const ld::Atom* islandAtom = *rit;
-				newAtomList.push_back(islandAtom);
-				if ( _s_log ) fprintf(stderr, "inserting island %s into __text section\n", islandAtom->name());
-			}
-			regionIndex++;
 		}
 		// swap in new list of atoms for __text section
 		textSection->atoms.clear();
 		textSection->atoms = newAtomList;
 	}
 
+}
+
+
+static void buildAddressMap(const Options& opts, ld::Internal& state) {
+	// Assign addresses to sections
+	state.setSectionSizesAndAlignments();
+	state.assignFileOffsets();
+	
+	// Assign addresses to atoms in a side table
+	const bool log = false;
+	if ( log ) fprintf(stderr, "buildAddressMap()\n");
+	for (std::vector<ld::Internal::FinalSection*>::iterator sit = state.sections.begin(); sit != state.sections.end(); ++sit) {
+		ld::Internal::FinalSection* sect = *sit;
+		uint16_t maxAlignment = 0;
+		uint64_t offset = 0;
+		if ( log ) fprintf(stderr, "  section=%s/%s, address=0x%08llX\n", sect->segmentName(), sect->sectionName(), sect->address);
+		for (std::vector<const ld::Atom*>::iterator ait = sect->atoms.begin(); ait != sect->atoms.end(); ++ait) {
+			const ld::Atom* atom = *ait;
+			uint32_t atomAlignmentPowerOf2 = atom->alignment().powerOf2;
+			uint32_t atomModulus = atom->alignment().modulus;
+			if ( atomAlignmentPowerOf2 > maxAlignment )
+				maxAlignment = atomAlignmentPowerOf2;
+			// calculate section offset for this atom
+			uint64_t alignment = 1 << atomAlignmentPowerOf2;
+			uint64_t currentModulus = (offset % alignment);
+			uint64_t requiredModulus = atomModulus;
+			if ( currentModulus != requiredModulus ) {
+				if ( requiredModulus > currentModulus )
+					offset += requiredModulus-currentModulus;
+				else
+					offset += requiredModulus+alignment-currentModulus;
+			}
+			
+			if ( log ) fprintf(stderr, "    0x%08llX atom=%p, name=%s\n", sect->address+offset, atom, atom->name());
+			sAtomToAddress[atom] = sect->address + offset;
+			
+			offset += atom->size();
+		}
+	}
+
+	
+}
+
+void doPass(const Options& opts, ld::Internal& state)
+{	
+	// only make branch islands in final linked images
+	if ( opts.outputKind() == Options::kObjectFile )
+		return;
+	
+	// Allow user to disable branch island generation
+	if ( !opts.allowBranchIslands() )
+		return;
+	
+	// only ARM needs branch islands
+	switch ( opts.architecture() ) {
+		case CPU_TYPE_ARM:
+			break;
+		default:
+			return;
+	}
+	
+	if ( opts.outputKind() == Options::kPreload ) {
+		buildAddressMap(opts, state);
+	}
+	
+	// scan sections and add island to each code section
+	for (std::vector<ld::Internal::FinalSection*>::iterator sit=state.sections.begin(); sit != state.sections.end(); ++sit) {
+		ld::Internal::FinalSection* sect = *sit;
+		if ( sect->type() == ld::Section::typeCode ) 
+			makeIslandsForSection(opts, state, sect);
+	}
 }
 
 

@@ -54,6 +54,7 @@ struct objc_image_info  {
 #define OBJC_IMAGE_REQUIRES_GC			(1<<2)
 #define OBJC_IMAGE_OPTIMIZED_BY_DYLD	(1<<3)
 #define OBJC_IMAGE_SUPPORTS_COMPACTION	(1<<4)
+#define OBJC_IMAGE_IS_SIMULATED			(1<<5)
 
 
 
@@ -110,6 +111,9 @@ ObjCImageInfoAtom<A>::ObjCImageInfoAtom(ld::File::ObjcConstraint objcConstraint,
 			value |= OBJC_IMAGE_SUPPORTS_GC | OBJC_IMAGE_REQUIRES_GC;
 			if ( compaction ) 
 				value |= OBJC_IMAGE_SUPPORTS_COMPACTION;
+			break;
+		case ld::File::objcConstraintRetainReleaseForSimulator:
+				value |= OBJC_IMAGE_IS_SIMULATED;
 			break;
 	}
 
@@ -1176,10 +1180,18 @@ void doPass(const Options& opts, ld::Internal& state)
 							opts.objCABIVersion2POverride() ? true : false));
 				break;
 #endif
+#if SUPPORT_ARCH_arm_any
 			case CPU_TYPE_ARM:
 				state.addAtom(*new ObjCImageInfoAtom<arm>(state.objcObjectConstraint, compaction, 
 							true));
 				break;
+#endif
+#if SUPPORT_ARCH_arm64
+			case CPU_TYPE_ARM64:
+				state.addAtom(*new ObjCImageInfoAtom<arm64>(state.objcObjectConstraint, compaction, 
+							true));
+				break;
+#endif
 			default:
 				assert(0 && "unknown objc arch");
 		}	
@@ -1195,15 +1207,18 @@ void doPass(const Options& opts, ld::Internal& state)
 #endif
 #if SUPPORT_ARCH_i386
 			case CPU_TYPE_I386:
-				// disable optimization until fully tested
 				if ( opts.objCABIVersion2POverride() )
                     OptimizeCategories<x86>::doit(opts, state);
 				break;
 #endif
 #if SUPPORT_ARCH_arm_any
 			case CPU_TYPE_ARM:
-				// disable optimization until fully tested
 				OptimizeCategories<arm>::doit(opts, state);
+				break;
+#endif
+#if SUPPORT_ARCH_arm64
+			case CPU_TYPE_ARM64:
+				// disabled until tested
 				break;
 #endif
 			default:

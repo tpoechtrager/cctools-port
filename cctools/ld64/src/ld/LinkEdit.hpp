@@ -1005,6 +1005,14 @@ void ExportInfoAtom<A>::encode() const
 			entries.push_back(entry);
 			//fprintf(stderr, "re-export %s from lib %llu as %s\n", entry.importName, entry.other, entry.name);
 		}
+		else if ( atom->definition() == ld::Atom::definitionAbsolute ) {
+			entry.name = atom->name();
+			entry.flags = _options.canUseAbsoluteSymbols() ? EXPORT_SYMBOL_FLAGS_KIND_ABSOLUTE : EXPORT_SYMBOL_FLAGS_KIND_REGULAR;
+			entry.address = address;
+			entry.other = other;
+			entry.importName = NULL;
+			entries.push_back(entry);
+		}
 		else {
 			if ( (atom->definition() == ld::Atom::definitionRegular) && (atom->combine() == ld::Atom::combineByName) )
 				flags |= EXPORT_SYMBOL_FLAGS_WEAK_DEFINITION;
@@ -1068,6 +1076,7 @@ private:
 	mutable std::vector<uint64_t>				_thumbHi16Locations[16];
 	mutable std::vector<uint64_t>				_armLo16Locations;
 	mutable std::vector<uint64_t>				_armHi16Locations[16];
+	mutable std::vector<uint64_t>				_adrpLocations;
 
 
 	static ld::Section			_s_section;
@@ -1092,6 +1101,8 @@ void SplitSegInfoAtom<x86_64>::addSplitSegInfo(uint64_t address, ld::Fixup::Kind
 		case ld::Fixup::kindStoreTargetAddressX86PCRel32:
 		case ld::Fixup::kindStoreTargetAddressX86PCRel32GOTLoad:
 		case ld::Fixup::kindStoreTargetAddressX86PCRel32GOTLoadNowLEA:
+		case ld::Fixup::kindStoreTargetAddressX86PCRel32TLVLoad:
+		case ld::Fixup::kindStoreTargetAddressX86PCRel32TLVLoadNowLEA:
 			_32bitPointerLocations.push_back(address);
 			break;
 		case ld::Fixup::kindStoreLittleEndian64:
@@ -1110,6 +1121,8 @@ void SplitSegInfoAtom<x86>::addSplitSegInfo(uint64_t address, ld::Fixup::Kind ki
 	switch (kind) {
 		case ld::Fixup::kindStoreLittleEndian32:
 		case ld::Fixup::kindStoreTargetAddressLittleEndian32:
+		case ld::Fixup::kindStoreX86PCRel32TLVLoad:
+		case ld::Fixup::kindStoreX86PCRel32TLVLoadNowLEA:
 			_32bitPointerLocations.push_back(address);
 			break;
 		default:
@@ -1145,7 +1158,34 @@ void SplitSegInfoAtom<arm>::addSplitSegInfo(uint64_t address, ld::Fixup::Kind ki
 	}
 }
 
-
+#if SUPPORT_ARCH_arm64
+template <>
+void SplitSegInfoAtom<arm64>::addSplitSegInfo(uint64_t address, ld::Fixup::Kind kind, uint32_t extra) const
+{
+	switch (kind) {
+		case ld::Fixup::kindStoreARM64Page21:
+		case ld::Fixup::kindStoreARM64GOTLoadPage21:
+		case ld::Fixup::kindStoreARM64GOTLeaPage21:
+		case ld::Fixup::kindStoreARM64TLVPLoadPage21:
+		case ld::Fixup::kindStoreTargetAddressARM64Page21:
+		case ld::Fixup::kindStoreTargetAddressARM64GOTLoadPage21:
+		case ld::Fixup::kindStoreTargetAddressARM64GOTLeaPage21:
+			_adrpLocations.push_back(address);
+			break;
+		case ld::Fixup::kindStoreLittleEndian32:
+		case ld::Fixup::kindStoreARM64PCRelToGOT:
+			_32bitPointerLocations.push_back(address);
+			break;
+ 		case ld::Fixup::kindStoreLittleEndian64:
+		case ld::Fixup::kindStoreTargetAddressLittleEndian64:
+			_64bitPointerLocations.push_back(address);
+			break;
+		default:
+			warning("codegen at address 0x%08llX prevents image from working in dyld shared cache", address);
+			break;
+	}
+}
+#endif
 
 template <typename A>
 void SplitSegInfoAtom<A>::uleb128EncodeAddresses(const std::vector<uint64_t>& locations) const
@@ -1198,6 +1238,14 @@ void SplitSegInfoAtom<A>::encode() const
 		//fprintf(stderr, "type 2:\n");
 		std::sort(_64bitPointerLocations.begin(), _64bitPointerLocations.end());
 		this->uleb128EncodeAddresses(_64bitPointerLocations);
+		this->_encodedData.append_byte(0); // terminator
+	}
+
+	if ( _adrpLocations.size() != 0 ) {
+		this->_encodedData.append_byte(3);
+		//fprintf(stderr, "type 3:\n");
+		std::sort(_adrpLocations.begin(), _adrpLocations.end());
+		this->uleb128EncodeAddresses(_adrpLocations);
 		this->_encodedData.append_byte(0); // terminator
 	}
 
@@ -1505,6 +1553,68 @@ void DependentDRAtom<A>::encode() const
 	this->_encoded = true;
 }
 
+
+
+template <typename A>
+class OptimizationHintsAtom : public LinkEditAtom
+{
+public:
+												OptimizationHintsAtom(const Options& opts, ld::Internal& state, OutputFile& writer)
+													: LinkEditAtom(opts, state, writer, _s_section, sizeof(pint_t)) { 
+														assert(opts.outputKind() == Options::kObjectFile);
+													}
+
+	// overrides of ld::Atom
+	virtual const char*							name() const		{ return "linker optimization hints"; }
+	// overrides of LinkEditAtom
+	virtual void								encode() const;
+
+private:
+	typedef typename A::P						P;
+	typedef typename A::P::E					E;
+	typedef typename A::P::uint_t				pint_t;
+
+	static ld::Section			_s_section;
+
+};
+
+template <typename A>
+ld::Section OptimizationHintsAtom<A>::_s_section("__LINKEDIT", "__opt_hints", ld::Section::typeLinkEdit, true);
+
+template <typename A>
+void OptimizationHintsAtom<A>::encode() const
+{
+	if ( _state.someObjectHasOptimizationHints ) {
+		for (std::vector<ld::Internal::FinalSection*>::iterator sit = _state.sections.begin(); sit != _state.sections.end(); ++sit) {
+			ld::Internal::FinalSection* sect = *sit;
+			if ( sect->type() != ld::Section::typeCode )
+				continue;
+			for (std::vector<const ld::Atom*>::iterator ait = sect->atoms.begin(); ait != sect->atoms.end(); ++ait) {
+				const ld::Atom*	atom = *ait;
+				uint64_t address = atom->finalAddress();
+				for (ld::Fixup::iterator fit = atom->fixupsBegin(); fit != atom->fixupsEnd(); ++fit) {
+					if ( fit->kind != ld::Fixup::kindLinkerOptimizationHint) 
+						continue;
+					ld::Fixup::LOH_arm64 extra;
+					extra.addend = fit->u.addend;
+					_encodedData.append_uleb128(extra.info.kind);
+					_encodedData.append_uleb128(extra.info.count+1);
+					_encodedData.append_uleb128((extra.info.delta1 << 2) + fit->offsetInAtom + address);
+					if ( extra.info.count > 0 )
+						_encodedData.append_uleb128((extra.info.delta2 << 2) + fit->offsetInAtom + address);
+					if ( extra.info.count > 1 )
+						_encodedData.append_uleb128((extra.info.delta3 << 2) + fit->offsetInAtom + address);
+					if ( extra.info.count > 2 )
+						_encodedData.append_uleb128((extra.info.delta4 << 2) + fit->offsetInAtom + address);
+				}
+			}
+		}
+			
+		this->_encodedData.pad_to_size(sizeof(pint_t));
+	}
+	
+	this->_encoded = true;
+}
 
 
 } // namespace tool 

@@ -45,13 +45,15 @@ class LibraryOptions
 {
 public:
 	LibraryOptions() : fWeakImport(false), fReExport(false), fBundleLoader(false), 
-						fLazyLoad(false), fUpward(false), fForceLoad(false) {}
+						fLazyLoad(false), fUpward(false), fIndirectDylib(false), 
+						fForceLoad(false) {}
 	// for dynamic libraries
 	bool		fWeakImport;
 	bool		fReExport;
 	bool		fBundleLoader;
 	bool		fLazyLoad;
 	bool		fUpward;
+	bool		fIndirectDylib;
 	// for static libraries
 	bool		fForceLoad;
 };
@@ -115,12 +117,12 @@ public:
         // If the object already has a path the p must be NULL.
         // If the object does not have a path then p can be any candidate path, and if the file exists the object permanently remembers the path.
         // Returns true if the file exists, false if not.
-        bool checkFileExists(const char *p=NULL);
+        bool checkFileExists(const Options& options, const char *p=NULL);
         
         // Returns true if a previous call to checkFileExists() succeeded.
         // Returns false if the file does not exist of checkFileExists() has never been called.
         bool missing() const { return modTime==0; }
-};
+	};
 
 	struct ExtraSection {
 		const char*				segmentName;
@@ -170,6 +172,21 @@ public:
 		const char*			alias;
 	};
 
+	struct SectionRename {
+		const char*			fromSegment;
+		const char*			fromSection;
+		const char*			toSegment;
+		const char*			toSection;
+	};
+
+
+	enum { depLinkerVersion=0x00, depObjectFile=0x10, depDirectDylib=0x10, depIndirectDylib=0x10, 
+		  depUpwardDirectDylib=0x10, depUpwardIndirectDylib=0x10, depArchive=0x10,
+		  depFileList=0x10, depSection=0x10, depBundleLoader=0x10, depMisc=0x10, depNotFound=0x11,
+		  depOutputFile = 0x40 };
+	
+	void						dumpDependency(uint8_t, const char* path) const;
+	
 	typedef const char* const*	UndefinesIterator;
 
 //	const ObjectFile::ReaderOptions&	readerOptions();
@@ -322,25 +339,42 @@ public:
 	bool						canReExportSymbols() const { return fCanReExportSymbols; }
 	const char*					tempLtoObjectPath() const { return fTempLtoObjectPath; }
 	const char*					overridePathlibLTO() const { return fOverridePathlibLTO; }
+	const char*					mcpuLTO() const { return fLtoCpu; }
 	bool						objcCategoryMerging() const { return fObjcCategoryMerging; }
 	bool						pageAlignDataAtoms() const { return fPageAlignDataAtoms; }
+	bool						keepDwarfUnwind() const { return fKeepDwarfUnwind; }
+	bool						verboseOptimizationHints() const { return fVerboseOptimizationHints; }
+	bool						ignoreOptimizationHints() const { return fIgnoreOptimizationHints; }
+	bool						generateDtraceDOF() const { return fGenerateDtraceDOF; }
+	bool						allowBranchIslands() const { return fAllowBranchIslands; }
 	bool						hasWeakBitTweaks() const;
 	bool						forceWeak(const char* symbolName) const;
 	bool						forceNotWeak(const char* symbolName) const;
 	bool						forceWeakNonWildCard(const char* symbolName) const;
 	bool						forceNotWeakNonWildcard(const char* symbolName) const;
+	bool						forceCoalesce(const char* symbolName) const;
     Snapshot&                   snapshot() const { return fLinkSnapshot; }
 	bool						errorBecauseOfWarnings() const;
 	bool						needsThreadLoadCommand() const { return fNeedsThreadLoadCommand; }
 	bool						needsEntryPointLoadCommand() const { return fEntryPointLoadCommand; }
 	bool						needsSourceVersionLoadCommand() const { return fSourceVersionLoadCommand; }
 	bool						needsDependentDRInfo() const { return fDependentDRInfo; }
+	bool						canUseAbsoluteSymbols() const { return fAbsoluteSymbols; }
+	bool						allowSimulatorToLinkWithMacOSX() const { return fAllowSimulatorToLinkWithMacOSX; }
 	uint64_t					sourceVersion() const { return fSourceVersion; }
 	uint32_t					sdkVersion() const { return fSDKVersion; }
 	const char*					demangleSymbol(const char* sym) const;
     bool						pipelineEnabled() const { return fPipelineFifo != NULL; }
     const char*					pipelineFifo() const { return fPipelineFifo; }
-	
+	bool						dumpDependencyInfo() const { return (fDependencyInfoPath != NULL); }
+	const char*					dependencyInfoPath() const { return fDependencyInfoPath; }
+	bool						targetIOSSimulator() const { return fTargetIOSSimulator; }
+	ld::relocatable::File::LinkerOptionsList&	
+								linkerOptions() const { return fLinkerOptions; }
+	FileInfo					findFramework(const char* frameworkName) const;
+	FileInfo					findLibrary(const char* rootName, bool dylibsOnly=false) const;
+	const std::vector<SectionRename>& sectionRenames() const { return fSectionRenames; }
+
 private:
 	typedef std::unordered_map<const char*, unsigned int, ld::CStringHash, ld::CStringEquals> NameToOrder;
 	typedef std::unordered_set<const char*, ld::CStringHash, ld::CStringEquals>  NameSet;
@@ -372,9 +406,7 @@ private:
 	void						checkIllegalOptionCombinations();
 	void						buildSearchPaths(int argc, const char* argv[]);
 	void						parseArch(const char* architecture);
-	FileInfo					findLibrary(const char* rootName, bool dylibsOnly=false);
-	FileInfo					findFramework(const char* frameworkName);
-	FileInfo					findFramework(const char* rootName, const char* suffix);
+	FileInfo					findFramework(const char* rootName, const char* suffix) const;
 	bool						checkForFile(const char* format, const char* dir, const char* rootName,
 											 FileInfo& result) const;
 	uint64_t					parseVersionNumber64(const char*);
@@ -404,6 +436,7 @@ private:
 	void						warnObsolete(const char* arg);
 	uint32_t					parseProtection(const char* prot);
 	void						loadSymbolOrderFile(const char* fileOfExports, NameToOrder& orderMapping);
+	void						addSectionRename(const char* srcSegment, const char* srcSection, const char* dstSegment, const char* dstSection);
 
 
 
@@ -441,6 +474,7 @@ private:
 	SetWithWildcards					fForceWeakSymbols;
 	SetWithWildcards					fForceNotWeakSymbols;
 	SetWithWildcards					fReExportSymbols;
+	SetWithWildcards					fForceCoalesceSymbols;
 	NameSet								fRemovedExports;
 	NameToOrder							fExportSymbolsOrder;
 	ExportMode							fExportMode;
@@ -464,6 +498,7 @@ private:
 	const char*							fDyldInstallPath;
 	const char*							fTempLtoObjectPath;
 	const char*							fOverridePathlibLTO;
+	const char*							fLtoCpu;
 	uint64_t							fZeroPageSize;
 	uint64_t							fStackSize;
 	uint64_t							fStackAddr;
@@ -562,6 +597,17 @@ private:
 	bool								fDependentDRInfo;
 	bool								fDependentDRInfoForcedOn;
 	bool								fDependentDRInfoForcedOff;
+	bool								fTargetIOSSimulator;
+	bool								fExportDynamic;
+	bool								fAbsoluteSymbols;
+	bool								fAllowSimulatorToLinkWithMacOSX;
+	bool								fKeepDwarfUnwind;
+	bool								fKeepDwarfUnwindForcedOn;
+	bool								fKeepDwarfUnwindForcedOff;
+	bool								fVerboseOptimizationHints;
+	bool								fIgnoreOptimizationHints;
+	bool								fGenerateDtraceDOF;
+	bool								fAllowBranchIslands;
 	DebugInfoStripping					fDebugInfoStripping;
 	const char*							fTraceOutputFile;
 	ld::MacVersionMin					fMacVersionMin;
@@ -582,10 +628,14 @@ private:
 	std::vector<const char*>			fFrameworkSearchPaths;
 	std::vector<const char*>			fSDKPaths;
 	std::vector<const char*>			fDyldEnvironExtras;
+	std::vector< std::vector<const char*> > fLinkerOptions;
+	std::vector<SectionRename>			fSectionRenames;
 	bool								fSaveTempFiles;
-    mutable Snapshot                  fLinkSnapshot;
-    bool                              fSnapshotRequested;
-    const char *                      fPipelineFifo;
+    mutable Snapshot					fLinkSnapshot;
+    bool								fSnapshotRequested;
+    const char*							fPipelineFifo;
+	const char*							fDependencyInfoPath;
+	mutable int							fDependencyFileDescriptor;
 };
 
 

@@ -252,6 +252,26 @@ bool DyldInfoPrinter<arm>::validFile(const uint8_t* fileContent)
 }
 #endif
 
+#if SUPPORT_ARCH_arm64
+template <>
+bool DyldInfoPrinter<arm64>::validFile(const uint8_t* fileContent)
+{	
+	const macho_header<P>* header = (const macho_header<P>*)fileContent;
+	if ( header->magic() != MH_MAGIC_64 )
+		return false;
+	if ( header->cputype() != CPU_TYPE_ARM64 )
+		return false;
+	switch (header->filetype()) {
+		case MH_EXECUTE:
+		case MH_DYLIB:
+		case MH_BUNDLE:
+		case MH_DYLINKER:
+			return true;
+	}
+	return false;
+}
+#endif
+
 template <typename A>
 DyldInfoPrinter<A>::DyldInfoPrinter(const uint8_t* fileContent, uint32_t fileLength, const char* path, bool printArch)
  : fHeader(NULL), fLength(fileLength), 
@@ -612,7 +632,7 @@ void DyldInfoPrinter<A>::printRebaseInfo()
 		uint64_t segOffset = 0;
 		uint32_t count;
 		uint32_t skip;
-		int segIndex;
+		int segIndex = 0;
 		pint_t segStartAddr = 0;
 		const char* segName = "??";
 		const char* typeName = "??";
@@ -1267,13 +1287,14 @@ void DyldInfoPrinter<A>::printExportInfo()
 			const bool reExport = (it->flags & EXPORT_SYMBOL_FLAGS_REEXPORT);
 			const bool weakDef = (it->flags & EXPORT_SYMBOL_FLAGS_WEAK_DEFINITION);
 			const bool threadLocal = ((it->flags & EXPORT_SYMBOL_FLAGS_KIND_MASK) == EXPORT_SYMBOL_FLAGS_KIND_THREAD_LOCAL);
+			const bool abs = ((it->flags & EXPORT_SYMBOL_FLAGS_KIND_MASK) == EXPORT_SYMBOL_FLAGS_KIND_ABSOLUTE);
 			const bool resolver = (it->flags & EXPORT_SYMBOL_FLAGS_STUB_AND_RESOLVER);
 			if ( reExport )
 				printf("[re-export] ");
 			else
 				printf("0x%08llX  ", fBaseAddress+it->address);
 			printf("%s", it->name);
-			if ( weakDef || threadLocal || resolver ) {
+			if ( weakDef || threadLocal || resolver || abs ) {
 				bool needComma = false;
 				printf(" [");
 				if ( weakDef ) {
@@ -1284,6 +1305,12 @@ void DyldInfoPrinter<A>::printExportInfo()
 					if ( needComma ) 
 						printf(", ");
 					printf("per-thread");
+					needComma = true;
+				}
+				if ( abs ) {
+					if ( needComma )
+						printf(", ");
+					printf("absolute");
 					needComma = true;
 				}
 				if ( resolver ) {
@@ -1312,7 +1339,7 @@ void DyldInfoPrinter<A>::processExportGraphNode(const uint8_t* const start, cons
 											char* cummulativeString, int curStrOffset) 
 {
 	const uint8_t* const me = p;
-	const uint8_t terminalSize = read_uleb128(p, end);
+	const uint64_t terminalSize = read_uleb128(p, end);
 	const uint8_t* children = p + terminalSize;
 	if ( terminalSize != 0 ) {
 		uint32_t flags = read_uleb128(p, end);
@@ -1432,6 +1459,8 @@ void DyldInfoPrinter<A>::printExportInfoNodes()
 						printf("[addr=0x%06llX] ", address);
 					else if ( (flags & EXPORT_SYMBOL_FLAGS_KIND_MASK) == EXPORT_SYMBOL_FLAGS_KIND_THREAD_LOCAL)
 						printf("[flags=THREAD_LOCAL addr=0x%06llX] ", address);
+					else if ( (flags & EXPORT_SYMBOL_FLAGS_KIND_MASK) == EXPORT_SYMBOL_FLAGS_KIND_ABSOLUTE)
+						printf("[flags=ABSOLUTE addr=0x%06llX] ", address);
 					else
 						printf("[flags=0x%llX addr=0x%06llX] ", flags, address);
 				}
@@ -1467,7 +1496,12 @@ const uint8_t* DyldInfoPrinter<A>::printSharedRegionInfoForEachULEB128Address(co
 			kindStr = "64-bit pointer";
 			break;
 		case 3:
-			kindStr = "ppc hi16";
+#if SUPPORT_ARCH_arm64
+			if ( fHeader->cputype() == CPU_TYPE_ARM64 )
+				kindStr = "arm64 ADRP";
+			else
+#endif
+				kindStr = "ppc hi16";
 			break;
 		case 4:
 			kindStr = "32-bit offset to IMPORT";
@@ -1751,7 +1785,6 @@ x86::P::uint_t DyldInfoPrinter<x86>::relocBase()
 template <>
 x86_64::P::uint_t DyldInfoPrinter<x86_64>::relocBase()
 {
-	// check for split-seg
 	return fFirstWritableSegment->vmaddr();
 }
 
@@ -1766,6 +1799,13 @@ arm::P::uint_t DyldInfoPrinter<arm>::relocBase()
 }
 #endif
 
+#if SUPPORT_ARCH_arm64
+template <>
+arm64::P::uint_t DyldInfoPrinter<arm64>::relocBase()
+{
+	return fFirstWritableSegment->vmaddr();
+}
+#endif
 
 template <>
 const char*	DyldInfoPrinter<ppc>::relocTypeName(uint8_t r_type)
@@ -1815,6 +1855,16 @@ const char*	DyldInfoPrinter<arm>::relocTypeName(uint8_t r_type)
 		return "pb pointer";
 	else
 		return "??";
+}
+#endif
+
+#if SUPPORT_ARCH_arm64	
+template <>
+const char*	DyldInfoPrinter<arm64>::relocTypeName(uint8_t r_type)
+{
+	if ( r_type == ARM64_RELOC_UNSIGNED )
+		return "pointer";
+	return "??";
 }
 #endif
 
@@ -2115,6 +2165,14 @@ static void dump(const char* path)
 							throw "in universal file, arm slice does not contain arm mach-o";
 						break;
 #endif
+#if SUPPORT_ARCH_arm64
+					case CPU_TYPE_ARM64:
+						if ( DyldInfoPrinter<arm64>::validFile(p + offset) )
+							DyldInfoPrinter<arm64>::make(p + offset, size, path, (sPreferredArch == 0));
+						else
+							throw "in universal file, arm64 slice does not contain arm mach-o";
+						break;
+#endif
 					default:
 							throwf("in universal file, unknown architecture slice 0x%x\n", cputype);
 					}
@@ -2136,6 +2194,11 @@ static void dump(const char* path)
 #if SUPPORT_ARCH_arm_any
 		else if ( DyldInfoPrinter<arm>::validFile(p) ) {
 			DyldInfoPrinter<arm>::make(p, length, path, false);
+		}
+#endif
+#if SUPPORT_ARCH_arm64
+		else if ( DyldInfoPrinter<arm64>::validFile(p) ) {
+			DyldInfoPrinter<arm64>::make(p, length, path, false);
 		}
 #endif
 		else {
@@ -2187,6 +2250,10 @@ int main(int argc, const char* argv[])
 						sPreferredArch = CPU_TYPE_I386;
 					else if ( strcmp(arch, "x86_64") == 0 )
 						sPreferredArch = CPU_TYPE_X86_64;
+#if SUPPORT_ARCH_arm64
+					else if ( strcmp(arch, "arm64") == 0 )
+						sPreferredArch = CPU_TYPE_ARM64;
+#endif
 					else {
 						if ( arch == NULL )
 							throw "-arch missing architecture name";

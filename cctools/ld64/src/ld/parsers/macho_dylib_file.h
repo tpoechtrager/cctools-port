@@ -31,6 +31,12 @@
 namespace mach_o {
 namespace dylib {
 
+
+extern bool isDylibFile(const uint8_t* fileContent, cpu_type_t* result, cpu_subtype_t* subResult);					
+
+extern const char* archName(const uint8_t* fileContent);
+
+
 extern ld::dylib::File* parse(const uint8_t* fileContent, uint64_t fileLength, const char* path, 
 								time_t modTime, const Options& opts, ld::File::Ordinal ordinal, 
 								bool bundleLoader, bool indirectDylib);

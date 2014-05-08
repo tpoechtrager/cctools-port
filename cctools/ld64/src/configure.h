@@ -28,7 +28,8 @@ extern "C" {
 #define SUPPORT_ARCH_armv7f  1
 #define SUPPORT_ARCH_armv7k  1
 #define SUPPORT_ARCH_armv7s  1
-#define ALL_SUPPORTED_ARCHS  "i386 x86_64 armv4t armv5 armv6 armv7 armv7f armv7k armv7s"
+#define SUPPORT_ARCH_arm64  1
+#define ALL_SUPPORTED_ARCHS  "i386 x86_64 armv4t armv5 armv6 armv7 armv7f armv7k armv7s arm64"
 
 #define HW_NCPU      3
 #define CTL_HW      6

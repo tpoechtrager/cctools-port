@@ -1,6 +1,6 @@
 /* -*- mode: C++; c-basic-offset: 4; tab-width: 4 -*-
  *
- * Copyright (c) 2007-2009 Apple Inc. All rights reserved.
+ * Copyright (c) 2007-2011 Apple Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  *
@@ -1035,8 +1035,287 @@ inline const char* Registers_ppc::getRegisterName(int regNum)
 			return "unknown register";
 	}
 
-
 }
+
+
+
+
+
+struct arm_thread_state64_t
+{
+	__uint64_t    __x[29];	/* General purpose registers x0-x28 */
+	__uint64_t    __fp;		/* Frame pointer x29 */
+	__uint64_t    __lr;		/* Link register x30 */
+	__uint64_t    __sp;		/* Stack pointer x31 */
+	__uint64_t    __pc;		/* Program counter */
+	__uint32_t    __cpsr;	/* Current program status register */
+	__uint32_t	  padding[3]; /* round up struct size to be 0x110 */
+};
+
+
+///
+/// Registers_arm64  holds the register state of a thread in a 64-bit intel process.  
+///
+class Registers_arm64
+{
+public:	
+					Registers_arm64();
+					Registers_arm64(const void* registers); 
+
+	bool			validRegister(int num) const;
+	uint64_t		getRegister(int num) const;
+	void			setRegister(int num, uint64_t value);
+	bool			validFloatRegister(int num) const;
+	double			getFloatRegister(int num) const;
+	void			setFloatRegister(int num, double value);
+	bool			validVectorRegister(int num) const;
+	v128			getVectorRegister(int num) const;
+	void			setVectorRegister(int num, v128 value);
+	const char*		getRegisterName(int num);
+	void			jumpto();
+	uint64_t		getSP()	const			{ return fRegisters.__sp; }
+	void			setSP(uint64_t value)	{ fRegisters.__sp = value; }
+	uint64_t		getIP()	const			{ return fRegisters.__pc; }
+	void			setIP(uint64_t value)	{ fRegisters.__pc = value; }
+	uint64_t		getFP() const			{ return fRegisters.__fp; }
+	void			setFP(uint64_t value)	{ fRegisters.__fp = value; }
+private:
+	arm_thread_state64_t	fRegisters;
+	double					fHalfVectorRegisters[32];
+	// Currently only the lower double in 128-bit vectore registers
+	// is perserved during unwinding.  We could define new register
+	// numbers (> 96) which mean whole vector registers, then this
+	// struct would need to change to contain whole vector registers.
+};
+
+inline Registers_arm64::Registers_arm64(const void* registers)
+{
+	COMPILE_TIME_ASSERT( sizeof(Registers_arm64) < sizeof(unw_context_t) );
+	fRegisters = *((arm_thread_state64_t*)registers); 
+}
+
+inline Registers_arm64::Registers_arm64()
+{
+	bzero(&fRegisters, sizeof(fRegisters)); 
+	bzero(&fRegisters, sizeof(fHalfVectorRegisters)); 
+}
+
+
+inline bool Registers_arm64::validRegister(int regNum) const
+{
+	if ( regNum == UNW_REG_IP )
+		return true;
+	if ( regNum == UNW_REG_SP )
+		return true;
+	if ( regNum < 0 )
+		return false;
+	if ( regNum > 95 )
+		return false;
+	if ( (regNum > 31) && (regNum < 64) )
+		return false;
+	return true;
+}
+
+inline uint64_t Registers_arm64::getRegister(int regNum) const
+{
+	if ( regNum == UNW_REG_IP )
+		return fRegisters.__pc;
+	if ( regNum == UNW_REG_SP )
+		return fRegisters.__sp;
+	if ( (regNum >= 0) && (regNum < 32) )
+		return fRegisters.__x[regNum];
+	ABORT("unsupported arm64 register");
+}
+
+inline void Registers_arm64::setRegister(int regNum, uint64_t value)
+{
+	if ( regNum == UNW_REG_IP )
+		fRegisters.__pc = value;
+	else if ( regNum == UNW_REG_SP )
+		fRegisters.__sp = value;
+	else if ( (regNum >= 0) && (regNum < 32) )
+		fRegisters.__x[regNum] = value;
+	else
+		ABORT("unsupported arm64 register");
+}
+
+inline const char* Registers_arm64::getRegisterName(int regNum)
+{
+	switch (regNum) {
+		case UNW_REG_IP:
+			return "pc";
+		case UNW_REG_SP:
+			return "sp";
+		case UNW_ARM64_X0:
+			return "x0";
+		case UNW_ARM64_X1:
+			return "x1";
+		case UNW_ARM64_X2:
+			return "x2";
+		case UNW_ARM64_X3:
+			return "x3";
+		case UNW_ARM64_X4:
+			return "x4";
+		case UNW_ARM64_X5:
+			return "x5";
+		case UNW_ARM64_X6:
+			return "x6";
+		case UNW_ARM64_X7:
+			return "x7";
+		case UNW_ARM64_X8:
+			return "x8";
+		case UNW_ARM64_X9:
+			return "x9";
+		case UNW_ARM64_X10:
+			return "x10";
+		case UNW_ARM64_X11:
+			return "x11";
+		case UNW_ARM64_X12:
+			return "x12";
+		case UNW_ARM64_X13:
+			return "x13";
+		case UNW_ARM64_X14:
+			return "x14";
+		case UNW_ARM64_X15:
+			return "x15";
+		case UNW_ARM64_X16:
+			return "x16";
+		case UNW_ARM64_X17:
+			return "x17";
+		case UNW_ARM64_X18:
+			return "x18";
+		case UNW_ARM64_X19:
+			return "x19";
+		case UNW_ARM64_X20:
+			return "x20";
+		case UNW_ARM64_X21:
+			return "x21";
+		case UNW_ARM64_X22:
+			return "x22";
+		case UNW_ARM64_X23:
+			return "x23";
+		case UNW_ARM64_X24:
+			return "x24";
+		case UNW_ARM64_X25:
+			return "x25";
+		case UNW_ARM64_X26:
+			return "x26";
+		case UNW_ARM64_X27:
+			return "x27";
+		case UNW_ARM64_X28:
+			return "x28";
+		case UNW_ARM64_X29:
+			return "fp";
+		case UNW_ARM64_X30:
+			return "lr";
+		case UNW_ARM64_X31:
+			return "sp";
+		case UNW_ARM64_D0:
+			return "d0";
+		case UNW_ARM64_D1:
+			return "d1";
+		case UNW_ARM64_D2:
+			return "d2";
+		case UNW_ARM64_D3:
+			return "d3";
+		case UNW_ARM64_D4:
+			return "d4";
+		case UNW_ARM64_D5:
+			return "d5";
+		case UNW_ARM64_D6:
+			return "d6";
+		case UNW_ARM64_D7:
+			return "d7";
+		case UNW_ARM64_D8:
+			return "d8";
+		case UNW_ARM64_D9:
+			return "d9";
+		case UNW_ARM64_D10:
+			return "d10";
+		case UNW_ARM64_D11:
+			return "d11";
+		case UNW_ARM64_D12:
+			return "d12";
+		case UNW_ARM64_D13:
+			return "d13";
+		case UNW_ARM64_D14:
+			return "d14";
+		case UNW_ARM64_D15:
+			return "d15";
+		case UNW_ARM64_D16:
+			return "d16";
+		case UNW_ARM64_D17:
+			return "d17";
+		case UNW_ARM64_D18:
+			return "d18";
+		case UNW_ARM64_D19:
+			return "d19";
+		case UNW_ARM64_D20:
+			return "d20";
+		case UNW_ARM64_D21:
+			return "d21";
+		case UNW_ARM64_D22:
+			return "d22";
+		case UNW_ARM64_D23:
+			return "d23";
+		case UNW_ARM64_D24:
+			return "d24";
+		case UNW_ARM64_D25:
+			return "d25";
+		case UNW_ARM64_D26:
+			return "d26";
+		case UNW_ARM64_D27:
+			return "d27";
+		case UNW_ARM64_D28:
+			return "d28";
+		case UNW_ARM64_D29:
+			return "d29";
+		case UNW_ARM64_D30:
+			return "d30";
+		case UNW_ARM64_D31:
+			return "d31";
+		default:
+			return "unknown register";
+	}
+}
+
+bool Registers_arm64::validFloatRegister(int regNum) const
+{
+	if ( regNum < UNW_ARM64_D0 )
+		return false;
+	if ( regNum > UNW_ARM64_D31 )
+		return false;
+	return true;
+}
+
+
+double Registers_arm64::getFloatRegister(int regNum) const
+{
+	assert(validFloatRegister(regNum));
+	return fHalfVectorRegisters[regNum-UNW_ARM64_D0];
+}
+
+void Registers_arm64::setFloatRegister(int regNum, double value)
+{
+	assert(validFloatRegister(regNum));
+	fHalfVectorRegisters[regNum-UNW_ARM64_D0] = value;
+}
+
+inline bool Registers_arm64::validVectorRegister(int regNum) const
+{
+	return false;
+}
+
+inline v128 Registers_arm64::getVectorRegister(int regNum) const
+{
+	ABORT("no arm64 vector register support yet");
+}
+
+inline void Registers_arm64::setVectorRegister(int regNum, v128 value)
+{
+	ABORT("no arm64 vector register support yet");
+}
+
 
 
 } // namespace libunwind 

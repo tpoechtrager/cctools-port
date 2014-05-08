@@ -33,8 +33,9 @@
 #include "configure.h"
 
 #include <vector>
-#include <set>
+#include <unordered_set>
 
+#include "configure.h"
 
 namespace ld {
 
@@ -52,7 +53,9 @@ namespace ld {
 class File
 {
 public:
-	enum ObjcConstraint { objcConstraintNone, objcConstraintRetainRelease, objcConstraintRetainReleaseOrGC, objcConstraintGC };
+	enum ObjcConstraint { objcConstraintNone, objcConstraintRetainRelease, 
+							objcConstraintRetainReleaseOrGC, objcConstraintGC,
+							objcConstraintRetainReleaseForSimulator };
 	
 	class AtomHandler {
 	public:
@@ -85,7 +88,7 @@ public:
 		
 		Ordinal (uint64_t ordinal) : _ordinal(ordinal) {}
 		
-		enum { ArgListPartition=0, IndirectDylibPartition=1, LTOPartition = 2, InvalidParition=0xffff };
+		enum { kArgListPartition=0, kIndirectDylibPartition=1, kLTOPartition = 2, kLinkerOptionPartition = 2, InvalidParition=0xffff };
 		Ordinal(uint16_t partition, uint16_t majorIndex, uint16_t minorIndex, uint16_t counter) {
 			_ordinal = ((uint64_t)partition<<48) | ((uint64_t)majorIndex<<32) | ((uint64_t)minorIndex<<16) | ((uint64_t)counter<<0);
 		}
@@ -116,16 +119,21 @@ public:
 		// The minorIndex is used for files pulled in by a file list and the value is the index of the file in the file list.
 		// The counter is used for .a files and the value is the index of the object in the archive.
 		// Thus, an object pulled in from a .a that was listed in a file list could use all three fields.
-		static const Ordinal makeArgOrdinal(uint16_t argIndex) { return Ordinal(ArgListPartition, argIndex, 0, 0); };
+		static const Ordinal makeArgOrdinal(uint16_t argIndex) { return Ordinal(kArgListPartition, argIndex, 0, 0); };
 		const Ordinal nextFileListOrdinal() const { return nextMinorIndex(); }
-		const Ordinal archiveOrdinalWithMemberIndex(uint16_t index) const { return Ordinal(ArgListPartition, majorIndex(), minorIndex(), index); }
+		const Ordinal archiveOrdinalWithMemberIndex(uint16_t index) const { return Ordinal(kArgListPartition, majorIndex(), minorIndex(), index); }
 		
 		// For indirect libraries the partition is IndirectDylibPartition and the counter is used or order the libraries.
-		static const ld::File::Ordinal indirectDylibBase() { return Ordinal(IndirectDylibPartition, 0, 0, 0); }
+		static const ld::File::Ordinal indirectDylibBase() { return Ordinal(kIndirectDylibPartition, 0, 0, 0); }
 		const Ordinal nextIndirectDylibOrdinal() const { return nextCounter(); }
 		
 		// For the LTO mach-o the partition is LTOPartition. As there is only one LTO file no other fields are needed.
-		static const ld::File::Ordinal LTOOrdinal()			{ return Ordinal(LTOPartition, 0, 0, 0); }
+		static const ld::File::Ordinal LTOOrdinal()			{ return Ordinal(kLTOPartition, 0, 0, 0); }
+
+		// For linker options embedded in object files
+		static const ld::File::Ordinal linkeOptionBase() { return Ordinal(kIndirectDylibPartition, 1, 0, 0); }
+		const Ordinal nextLinkerOptionOrdinal() { nextCounter(); return *this; };
+		
 	};
 	
 	typedef enum { Reloc, Dylib, Archive, Other } Type;
@@ -156,10 +164,11 @@ private:
 //
 enum MacVersionMin { macVersionUnset=0, mac10_4=0x000A0400, mac10_5=0x000A0500, 
 						mac10_6=0x000A0600, mac10_7=0x000A0700, mac10_8=0x000A0800,
-						mac10_Future=0x10000000 };
+						mac10_9=0x000A0900, mac10_Future=0x10000000 };
 enum IOSVersionMin { iOSVersionUnset=0, iOS_2_0=0x00020000, iOS_3_1=0x00030100, 
 						iOS_4_2=0x00040200, iOS_4_3=0x00040300, iOS_5_0=0x00050000,
-						iOS_6_0=0x00060000, iOS_Future=0x10000000};
+						iOS_6_0=0x00060000, iOS_7_0=0x00070000,  
+						iOS_Future=0x10000000};
  
 namespace relocatable {
 	//
@@ -190,6 +199,7 @@ namespace relocatable {
 			uint32_t			value;
 			const char*			string;
 		};
+		typedef const std::vector< std::vector<const char*> > LinkerOptionsList;
 
 											File(const char* pth, time_t modTime, Ordinal ord)
 												: ld::File(pth, modTime, ord, Reloc) { }
@@ -200,6 +210,7 @@ namespace relocatable {
 		virtual const std::vector<Stab>*	stabs() const = 0;
 		virtual bool						canScatterAtoms() const = 0;
 		virtual bool						hasLongBranchStubs()		{ return false; }
+		virtual LinkerOptionsList*			linkerOptions() const = 0;
 	};
 } // namespace relocatable
 
@@ -259,6 +270,7 @@ namespace dylib {
 		virtual bool						hasPublicInstallName() const = 0;
 		virtual bool						allSymbolsAreWeakImported() const = 0;
 		virtual const void*					codeSignatureDR() const = 0;
+		virtual bool						installPathVersionSpecific() const { return false; }
 	protected:
 		const char*							_dylibInstallPath;
 		uint32_t							_dylibTimeStamp;
@@ -392,16 +404,31 @@ struct Fixup
 					kindStoreARMLoad12,
 					kindStoreARMLow16, kindStoreARMHigh16, 
 					kindStoreThumbLow16, kindStoreThumbHigh16, 
+#if SUPPORT_ARCH_arm64
+					// ARM64 specific store kinds
+					kindStoreARM64Branch26,  
+					kindStoreARM64Page21, kindStoreARM64PageOff12,
+					kindStoreARM64GOTLoadPage21, kindStoreARM64GOTLoadPageOff12,
+					kindStoreARM64GOTLeaPage21, kindStoreARM64GOTLeaPageOff12,
+					kindStoreARM64TLVPLoadPage21, kindStoreARM64TLVPLoadPageOff12,
+					kindStoreARM64TLVPLoadNowLeaPage21, kindStoreARM64TLVPLoadNowLeaPageOff12,
+					kindStoreARM64PointerToGOT, kindStoreARM64PCRelToGOT,
+#endif
 					// dtrace probes
 					kindDtraceExtra,
 					kindStoreX86DtraceCallSiteNop, kindStoreX86DtraceIsEnableSiteClear,
 					kindStoreARMDtraceCallSiteNop, kindStoreARMDtraceIsEnableSiteClear,
+					kindStoreARM64DtraceCallSiteNop, kindStoreARM64DtraceIsEnableSiteClear,
 					kindStoreThumbDtraceCallSiteNop, kindStoreThumbDtraceIsEnableSiteClear,
 					// lazy binding
 					kindLazyTarget, kindSetLazyOffset,
+					// islands
+					kindIslandTarget,
 					// data-in-code markers
 					kindDataInCodeStartData, kindDataInCodeStartJT8, kindDataInCodeStartJT16, 
 					kindDataInCodeStartJT32, kindDataInCodeStartJTA32, kindDataInCodeEnd,
+					// linker optimzation hints
+					kindLinkerOptimizationHint,
 					// pointer store combinations
 					kindStoreTargetAddressLittleEndian32,	// kindSetTargetAddress + kindStoreLittleEndian32
 					kindStoreTargetAddressLittleEndian64,	// kindSetTargetAddress + kindStoreLittleEndian64
@@ -422,6 +449,20 @@ struct Fixup
 					kindStoreTargetAddressARMBranch24,		// kindSetTargetAddress + kindStoreARMBranch24
 					kindStoreTargetAddressThumbBranch22,	// kindSetTargetAddress + kindStoreThumbBranch22
 					kindStoreTargetAddressARMLoad12,		// kindSetTargetAddress + kindStoreARMLoad12
+#if SUPPORT_ARCH_arm64
+					// ARM64 value calculation and store combinations
+					kindStoreTargetAddressARM64Branch26,		// kindSetTargetAddress + kindStoreARM64Branch26
+					kindStoreTargetAddressARM64Page21,			// kindSetTargetAddress + kindStoreARM64Page21
+					kindStoreTargetAddressARM64PageOff12,		// kindSetTargetAddress + kindStoreARM64PageOff12
+					kindStoreTargetAddressARM64GOTLoadPage21,	// kindSetTargetAddress + kindStoreARM64GOTLoadPage21
+					kindStoreTargetAddressARM64GOTLoadPageOff12,// kindSetTargetAddress + kindStoreARM64GOTLoadPageOff12
+					kindStoreTargetAddressARM64GOTLeaPage21,	// kindSetTargetAddress + kindStoreARM64GOTLeaPage21
+					kindStoreTargetAddressARM64GOTLeaPageOff12,	// kindSetTargetAddress + kindStoreARM64GOTLeaPageOff12
+					kindStoreTargetAddressARM64TLVPLoadPage21,	// kindSetTargetAddress + kindStoreARM64TLVPLoadPage21
+					kindStoreTargetAddressARM64TLVPLoadPageOff12,// kindSetTargetAddress + kindStoreARM64TLVPLoadPageOff12
+					kindStoreTargetAddressARM64TLVPLoadNowLeaPage21,	// kindSetTargetAddress + kindStoreARM64TLVPLoadNowLeaPage21
+					kindStoreTargetAddressARM64TLVPLoadNowLeaPageOff12,	// kindSetTargetAddress + kindStoreARM64TLVPLoadNowLeaPageOff12
+#endif
 			};
 
 	union {
@@ -437,54 +478,72 @@ struct Fixup
 	TargetBinding	binding : 3;
 	bool			contentAddendOnly : 1;
 	bool			contentDetlaToAddendOnly : 1;
+	bool			contentIgnoresAddend : 1;
 	
 	typedef Fixup*		iterator;
 
 	Fixup() :
 		offsetInAtom(0), kind(kindNone), clusterSize(k1of1), weakImport(false), 
 		binding(bindingNone),  
-		contentAddendOnly(false), contentDetlaToAddendOnly(false) { u.target = NULL; }
+		contentAddendOnly(false), contentDetlaToAddendOnly(false), contentIgnoresAddend(false) { u.target = NULL; }
 
 	Fixup(Kind k, Atom* targetAtom) :
 		offsetInAtom(0), kind(k), clusterSize(k1of1), weakImport(false), 
 		binding(Fixup::bindingDirectlyBound),  
-		contentAddendOnly(false), contentDetlaToAddendOnly(false)  
+		contentAddendOnly(false), contentDetlaToAddendOnly(false), contentIgnoresAddend(false)  
 			{ assert(targetAtom != NULL); u.target = targetAtom; }
 
 	Fixup(uint32_t off, Cluster c, Kind k) :
 		offsetInAtom(off), kind(k), clusterSize(c), weakImport(false), 
 		binding(Fixup::bindingNone),  
-		contentAddendOnly(false), contentDetlaToAddendOnly(false)  
+		contentAddendOnly(false), contentDetlaToAddendOnly(false), contentIgnoresAddend(false)  
 			{ u.addend = 0; }
 
 	Fixup(uint32_t off, Cluster c, Kind k, bool weakIm, const char* name) :
 		offsetInAtom(off), kind(k), clusterSize(c), weakImport(weakIm), 
 		binding(Fixup::bindingByNameUnbound),  
-		contentAddendOnly(false), contentDetlaToAddendOnly(false) 
+		contentAddendOnly(false), contentDetlaToAddendOnly(false), contentIgnoresAddend(false) 
 			{ assert(name != NULL); u.name = name; }
 		
 	Fixup(uint32_t off, Cluster c, Kind k, TargetBinding b, const char* name) :
 		offsetInAtom(off), kind(k), clusterSize(c), weakImport(false), binding(b),  
-		contentAddendOnly(false), contentDetlaToAddendOnly(false) 
+		contentAddendOnly(false), contentDetlaToAddendOnly(false), contentIgnoresAddend(false) 
 			{ assert(name != NULL); u.name = name; }
 		
 	Fixup(uint32_t off, Cluster c, Kind k, const Atom* targetAtom) :
 		offsetInAtom(off), kind(k), clusterSize(c), weakImport(false), 
 		binding(Fixup::bindingDirectlyBound),  
-		contentAddendOnly(false), contentDetlaToAddendOnly(false) 
+		contentAddendOnly(false), contentDetlaToAddendOnly(false), contentIgnoresAddend(false) 
 			{ assert(targetAtom != NULL); u.target = targetAtom; }
 		
 	Fixup(uint32_t off, Cluster c, Kind k, TargetBinding b, const Atom* targetAtom) :
 		offsetInAtom(off), kind(k), clusterSize(c), weakImport(false), binding(b),  
-		contentAddendOnly(false), contentDetlaToAddendOnly(false) 
+		contentAddendOnly(false), contentDetlaToAddendOnly(false), contentIgnoresAddend(false) 
 			{ assert(targetAtom != NULL); u.target = targetAtom; }
 		
 	Fixup(uint32_t off, Cluster c, Kind k, uint64_t addend) :
 		offsetInAtom(off), kind(k), clusterSize(c), weakImport(false), 
 		binding(Fixup::bindingNone),  
-		contentAddendOnly(false), contentDetlaToAddendOnly(false) 
+		contentAddendOnly(false), contentDetlaToAddendOnly(false), contentIgnoresAddend(false) 
 			{ u.addend = addend; }
 			
+#if SUPPORT_ARCH_arm64
+	Fixup(Kind k, uint32_t lohKind, uint32_t off1, uint32_t off2) :
+		offsetInAtom(off1), kind(k), clusterSize(k1of1),  
+		weakImport(false), binding(Fixup::bindingNone), contentAddendOnly(false), 
+		contentDetlaToAddendOnly(false), contentIgnoresAddend(false) {
+			assert(k == kindLinkerOptimizationHint);
+			LOH_arm64 extra;
+			extra.addend = 0;
+			extra.info.kind = lohKind;
+			extra.info.count = 1;
+			extra.info.delta1 = 0;
+			extra.info.delta2 = (off2 - off1) >> 2;
+			u.addend = extra.addend; 
+		}
+#endif			
+			
+
 	bool firstInCluster() const { 
 		switch (clusterSize) {
 			case k1of1:
@@ -512,6 +571,20 @@ struct Fixup
 		}
 		return false;
 	}
+	
+#if SUPPORT_ARCH_arm64
+	union LOH_arm64 {
+		uint64_t	addend;
+		struct {
+			unsigned	kind	:  6,
+						count	:  2,	// 00 => 1 addr, 11 => 4 addrs
+						delta1 : 14,	// 16-bit delta, low 2 bits assumed zero
+						delta2 : 14,
+						delta3 : 14,
+						delta4 : 14;	
+		} info;
+	};
+#endif
 	
 };
 
@@ -612,7 +685,7 @@ public:
 														switch ( _combine ) {
 															case combineByNameAndContent:
 															case combineByNameAndReferences:
-																assert(_symbolTableInclusion == symbolTableNotIn);
+																assert(_symbolTableInclusion != symbolTableIn);
 																assert(_scope != scopeGlobal);
                                                                 break;
                                                             case combineByName:
@@ -676,6 +749,7 @@ public:
 		}
 		return false;
 	}
+	virtual void							setFile(const File* f)		{ }
 	
 	virtual UnwindInfo::iterator			beginUnwind() const { return NULL; }
 	virtual UnwindInfo::iterator			endUnwind() const	{ return NULL; }
@@ -693,7 +767,6 @@ protected:
 													_combine = a._combine;
 													_dontDeadStrip = a._dontDeadStrip;
 													_thumb = a._thumb;
-													_alias = a._alias;
 													_autoHide = a._autoHide;
 													_contentType = a._contentType;
 													_symbolTableInclusion = a._symbolTableInclusion;
@@ -734,6 +807,23 @@ public:
 };
 
 
+	
+// utility classes for using std::unordered_map with c-strings
+struct CStringHash {
+	size_t operator()(const char* __s) const {
+		size_t __h = 0;
+		for ( ; *__s; ++__s)
+			__h = 5 * __h + *__s;
+		return __h;
+	};
+};
+struct CStringEquals
+{
+	bool operator()(const char* left, const char* right) const { return (strcmp(left, right) == 0); }
+};
+
+typedef	std::unordered_set<const char*, ld::CStringHash, ld::CStringEquals>  CStringSet;
+
 class Internal
 {
 public:
@@ -758,6 +848,8 @@ public:
 		bool							hasExternalRelocs;
 	};
 	
+	virtual uint64_t					assignFileOffsets() = 0;
+	virtual void						setSectionSizesAndAlignments() = 0;
 	virtual ld::Internal::FinalSection*	addAtom(const Atom&) = 0;
 	virtual ld::Internal::FinalSection* getFinalSection(const ld::Section& inputSection) = 0;
 	virtual								~Internal() {}
@@ -768,11 +860,16 @@ public:
 											objcDylibConstraint(ld::File::objcConstraintNone), 
 											cpuSubType(0), 
 											allObjectFilesScatterable(true), 
-											someObjectFileHasDwarf(false), usingHugeSections(false) { }
+											someObjectFileHasDwarf(false), usingHugeSections(false),
+											hasThreadLocalVariableDefinitions(false),
+											hasWeakExternalSymbols(false),
+											someObjectHasOptimizationHints(false) { }
 										
 	std::vector<FinalSection*>					sections;
 	std::vector<ld::dylib::File*>				dylibs;
 	std::vector<ld::relocatable::File::Stab>	stabs;
+	CStringSet									linkerOptionLibraries;
+	CStringSet									linkerOptionFrameworks;
 	std::vector<const ld::Atom*>				indirectBindingTable;
 	const ld::dylib::File*						bundleLoader;
 	const Atom*									entryPoint;
@@ -785,24 +882,12 @@ public:
 	bool										allObjectFilesScatterable;
 	bool										someObjectFileHasDwarf;
 	bool										usingHugeSections;
+	bool										hasThreadLocalVariableDefinitions;
+	bool										hasWeakExternalSymbols;
+	bool										someObjectHasOptimizationHints;
 };
 
 
-
-	
-// utility classes for using std::unordered_map with c-strings
-struct CStringHash {
-	size_t operator()(const char* __s) const {
-		size_t __h = 0;
-		for ( ; *__s; ++__s)
-			__h = 5 * __h + *__s;
-		return __h;
-	};
-};
-struct CStringEquals
-{
-	bool operator()(const char* left, const char* right) const { return (strcmp(left, right) == 0); }
-};
 
 
 

@@ -34,6 +34,7 @@
 #include <unordered_set>
 
 #include "ld.hpp"
+#include "MachOFileAbstraction.hpp"
 #include "dtrace_dof.h"
 
 // prototype for entry point in libdtrace.dylib
@@ -122,6 +123,10 @@ void doPass(const Options& opts, ld::Internal& internal)
 	// only make __dof section in final linked images
 	if ( opts.outputKind() == Options::kObjectFile )
 		return;
+	
+	// skip making __dof section if command line option said not to
+	if ( ! opts.generateDtraceDOF() )
+		return;
 
 	// scan all atoms looking for dtrace probes
 	std::vector<DTraceProbeInfo>					probeSites;
@@ -138,11 +143,13 @@ void doPass(const Options& opts, ld::Internal& internal)
 					case ld::Fixup::kindStoreX86DtraceCallSiteNop:
 					case ld::Fixup::kindStoreARMDtraceCallSiteNop:
 					case ld::Fixup::kindStoreThumbDtraceCallSiteNop:
+					case ld::Fixup::kindStoreARM64DtraceCallSiteNop:
 						probeSites.push_back(DTraceProbeInfo(atom, fit->offsetInAtom, fit->u.name));
 						break;
 					case ld::Fixup::kindStoreX86DtraceIsEnableSiteClear:
 					case ld::Fixup::kindStoreARMDtraceIsEnableSiteClear:
 					case ld::Fixup::kindStoreThumbDtraceIsEnableSiteClear:
+					case ld::Fixup::kindStoreARM64DtraceIsEnableSiteClear:
 						isEnabledSites.push_back(DTraceProbeInfo(atom, fit->offsetInAtom, fit->u.name));
 						break;
 					case ld::Fixup::kindDtraceExtra:
@@ -164,6 +171,7 @@ void doPass(const Options& opts, ld::Internal& internal)
 		case CPU_TYPE_I386:
 		case CPU_TYPE_X86_64:
 		case CPU_TYPE_ARM:
+		case CPU_TYPE_ARM64:
 			storeKind = ld::Fixup::kindStoreLittleEndian32;
 			break;
 		default:

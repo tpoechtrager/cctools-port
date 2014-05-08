@@ -62,8 +62,14 @@ enum {
   DW_FORM_ref4,
   DW_FORM_ref8,
   DW_FORM_ref_udata,
-  DW_FORM_indirect /* 22 */
+  DW_FORM_indirect, 
+  /* new in Dwarf 4 */
+  DW_FORM_sec_offset, 
+  DW_FORM_exprloc,
+  DW_FORM_flag_present,
+  DW_FORM_ref_sig8 
 };
+
 
 enum {
   DW_LNS_extended_op = 0,

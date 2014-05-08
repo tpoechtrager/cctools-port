@@ -34,6 +34,7 @@
 #include <mach-o/compact_unwind_encoding.h>
 #include <mach/machine.h>
 #include <stddef.h>
+#include <libunwind.h>
 
 #include "FileAbstraction.hpp"
 
@@ -205,7 +206,7 @@
 
 #ifndef LC_DATA_IN_CODE
 	#define LC_DATA_IN_CODE 0x29 /* table of non-instructions in __text */
-	struct data_in_code_entry {
+ 	struct data_in_code_entry {
 		uint32_t	offset;
 		uint16_t	length;
 		uint16_t	kind;
@@ -215,6 +216,20 @@
 #ifndef LC_DYLIB_CODE_SIGN_DRS
 	#define LC_DYLIB_CODE_SIGN_DRS 0x2B
 #endif
+
+#ifndef LC_ENCRYPTION_INFO_64
+	#define LC_ENCRYPTION_INFO_64 0x2C
+  struct encryption_info_command_64 {
+     uint32_t	cmd;		
+     uint32_t	cmdsize;
+     uint32_t	cryptoff;
+     uint32_t	cryptsize;
+     uint32_t	cryptid;
+     uint32_t	pad;
+  };
+#endif
+
+
 
 #ifndef CPU_SUBTYPE_ARM_V7F
   #define CPU_SUBTYPE_ARM_V7F    ((cpu_subtype_t) 10)
@@ -226,6 +241,128 @@
   #define CPU_SUBTYPE_ARM_V7S    ((cpu_subtype_t) 11)
 #endif
 
+
+
+// hack until arm64 headers are worked out
+#undef CPU_TYPE_ARM64
+#undef CPU_SUBTYPE_ARM64_ALL
+#undef CPU_SUBTYPE_ARM64_V8
+
+#define CPU_TYPE_ARM64			(CPU_TYPE_ARM | CPU_ARCH_ABI64)
+#define CPU_SUBTYPE_ARM64_ALL	0
+#define CPU_SUBTYPE_ARM64_V8    1
+
+#define ARM64_RELOC_UNSIGNED            0 // for pointers
+#define ARM64_RELOC_SUBTRACTOR          1 // must be followed by a ARM64_RELOC_UNSIGNED
+#define ARM64_RELOC_BRANCH26            2 // a B/BL instruction with 26-bit displacement
+#define ARM64_RELOC_PAGE21              3 // pc-rel distance to page of target
+#define ARM64_RELOC_PAGEOFF12           4 // offset within page, scaled by r_length
+#define ARM64_RELOC_GOT_LOAD_PAGE21     5 // pc-rel distance to page of GOT slot
+#define ARM64_RELOC_GOT_LOAD_PAGEOFF12  6 // offset within page of GOT slot, scaled by r_length
+#define ARM64_RELOC_POINTER_TO_GOT      7 // for pointers to GOT slots
+#define ARM64_RELOC_TLVP_LOAD_PAGE21    8 // pc-rel distance to page of TLVP slot
+#define ARM64_RELOC_TLVP_LOAD_PAGEOFF12 9 // offset within page of TLVP slot, scaled by r_length
+#define ARM64_RELOC_ADDEND				10 // r_symbolnum is addend for next reloc
+
+
+
+#define UNW_ARM64_X0     0
+#define UNW_ARM64_X1     1
+#define UNW_ARM64_X2     2
+#define UNW_ARM64_X3     3
+#define UNW_ARM64_X4     4
+#define UNW_ARM64_X5     5
+#define UNW_ARM64_X6     6
+#define UNW_ARM64_X7     7
+#define UNW_ARM64_X8     8
+#define UNW_ARM64_X9     9
+#define UNW_ARM64_X10   10
+#define UNW_ARM64_X11   11
+#define UNW_ARM64_X12   12
+#define UNW_ARM64_X13   13
+#define UNW_ARM64_X14   14
+#define UNW_ARM64_X15   15
+#define UNW_ARM64_X16   16
+#define UNW_ARM64_X17   17
+#define UNW_ARM64_X18   18
+#define UNW_ARM64_X19   19
+#define UNW_ARM64_X20   20
+#define UNW_ARM64_X21   21
+#define UNW_ARM64_X22   22
+#define UNW_ARM64_X23   23
+#define UNW_ARM64_X24   24
+#define UNW_ARM64_X25   25
+#define UNW_ARM64_X26   26
+#define UNW_ARM64_X27   27
+#define UNW_ARM64_X28   28
+#define UNW_ARM64_X29   29  
+#define UNW_ARM64_FP    29
+#define UNW_ARM64_X30   30  
+#define UNW_ARM64_LR    30
+#define UNW_ARM64_X31   31  
+#define UNW_ARM64_SP    31
+#define UNW_ARM64_D0    64
+#define UNW_ARM64_D1    65
+#define UNW_ARM64_D2    66
+#define UNW_ARM64_D3    67
+#define UNW_ARM64_D4    68
+#define UNW_ARM64_D5    69
+#define UNW_ARM64_D6    70
+#define UNW_ARM64_D7    71
+#define UNW_ARM64_D8    72
+#define UNW_ARM64_D9    73
+#define UNW_ARM64_D10   74
+#define UNW_ARM64_D11   75
+#define UNW_ARM64_D12   76
+#define UNW_ARM64_D13   77
+#define UNW_ARM64_D14   78
+#define UNW_ARM64_D15   79
+#define UNW_ARM64_D16   80
+#define UNW_ARM64_D17   81
+#define UNW_ARM64_D18   82
+#define UNW_ARM64_D19   83
+#define UNW_ARM64_D20   84
+#define UNW_ARM64_D21   85
+#define UNW_ARM64_D22   86
+#define UNW_ARM64_D23   87
+#define UNW_ARM64_D24   88
+#define UNW_ARM64_D25   89
+#define UNW_ARM64_D26   90
+#define UNW_ARM64_D27   91
+#define UNW_ARM64_D28   92
+#define UNW_ARM64_D29   93
+#define UNW_ARM64_D30   94
+#define UNW_ARM64_D31   95
+
+#define UNWIND_ARM64_MODE_MASK                          0x0F000000
+#define UNWIND_ARM64_MODE_FRAME_OLD                     0x01000000
+#define UNWIND_ARM64_MODE_FRAMELESS                     0x02000000
+#define UNWIND_ARM64_MODE_DWARF                         0x03000000
+#define UNWIND_ARM64_MODE_FRAME                         0x04000000
+    
+#define UNWIND_ARM64_FRAME_X19_X20_PAIR                 0x00000001
+#define UNWIND_ARM64_FRAME_X21_X22_PAIR                 0x00000002
+#define UNWIND_ARM64_FRAME_X23_X24_PAIR                 0x00000004
+#define UNWIND_ARM64_FRAME_X25_X26_PAIR                 0x00000008
+#define UNWIND_ARM64_FRAME_X27_X28_PAIR                 0x00000010
+#define UNWIND_ARM64_FRAME_D8_D9_PAIR                   0x00000100
+#define UNWIND_ARM64_FRAME_D10_D11_PAIR                 0x00000200
+#define UNWIND_ARM64_FRAME_D12_D13_PAIR                 0x00000400
+#define UNWIND_ARM64_FRAME_D14_D15_PAIR                 0x00000800
+
+#define UNWIND_ARM64_FRAMELESS_STACK_SIZE_MASK			0x00FFF000
+
+#define UNWIND_ARM64_FRAME_X21_X22_PAIR_OLD                 0x00000001
+#define UNWIND_ARM64_FRAME_X23_X24_PAIR_OLD                 0x00000002
+#define UNWIND_ARM64_FRAME_X25_X26_PAIR_OLD                 0x00000004
+#define UNWIND_ARM64_FRAME_X27_X28_PAIR_OLD                 0x00000008
+#define UNWIND_ARM64_FRAME_D8_D9_PAIR_OLD                   0x00000010
+#define UNWIND_ARM64_FRAME_D10_D11_PAIR_OLD                 0x00000020
+#define UNWIND_ARM64_FRAME_D12_D13_PAIR_OLD                 0x00000040
+#define UNWIND_ARM64_FRAME_D14_D15_PAIR_OLD                 0x00000080
+
+
+#define UNWIND_ARM64_DWARF_SECTION_OFFSET               0x00FFFFFF
 
 #ifndef LC_SOURCE_VERSION
 	#define LC_SOURCE_VERSION 0x2A
@@ -250,6 +387,53 @@
 	#define LC_DYLIB_CODE_SIGN_DRS 0x2B 
 #endif	
 
+#ifndef LC_LINKER_OPTION 
+	#define LC_LINKER_OPTION   0x2D
+
+	struct linker_option_command {
+		uint32_t	cmd;	  /*LC_LINKER_OPTION only used in MH_OBJECT filetypes */
+		uint32_t	cmdsize;
+		uint32_t	count;	  /* number of strings */
+		/* concatenation of zero terminated UTF8 strings.  Zero filled at end to align */
+	};
+#endif
+
+#ifndef LC_LINKER_OPTIMIZATION_HINTS 
+	#define LC_LINKER_OPTIMIZATION_HINTS   0x2E
+	#define LOH_ARM64_ADRP_ADRP				1
+	#define LOH_ARM64_ADRP_LDR				2
+	#define LOH_ARM64_ADRP_ADD_LDR			3
+	#define LOH_ARM64_ADRP_LDR_GOT_LDR		4
+	#define LOH_ARM64_ADRP_ADD_STR			5
+	#define LOH_ARM64_ADRP_LDR_GOT_STR		6
+	#define LOH_ARM64_ADRP_ADD				7
+	#define LOH_ARM64_ADRP_LDR_GOT			8
+#endif
+
+#ifndef EXPORT_SYMBOL_FLAGS_KIND_ABSOLUTE
+	#define EXPORT_SYMBOL_FLAGS_KIND_ABSOLUTE			0x02
+#endif
+
+
+#ifndef CPU_SUBTYPE_ARM_V8
+	#define CPU_SUBTYPE_ARM_V8		((cpu_subtype_t) 13) 
+#endif
+
+#ifndef CPU_SUBTYPE_ARM_V6M
+	#define CPU_SUBTYPE_ARM_V6M		((cpu_subtype_t) 14) 
+#endif	
+
+#ifndef CPU_SUBTYPE_ARM_V7M
+	#define CPU_SUBTYPE_ARM_V7M		((cpu_subtype_t) 15) 
+#endif	
+
+#ifndef CPU_SUBTYPE_ARM_V7EM
+	#define CPU_SUBTYPE_ARM_V7EM	((cpu_subtype_t) 16) 
+#endif	
+
+#ifndef CPU_SUBTYPE_X86_64_H
+	#define CPU_SUBTYPE_X86_64_H	((cpu_subtype_t) 8) 
+#endif	
 
 struct ArchInfo {
 	const char*			archName;
@@ -263,7 +447,10 @@ struct ArchInfo {
 
 static const ArchInfo archInfoArray[] = {
 #if SUPPORT_ARCH_x86_64
-	{ "x86_64", CPU_TYPE_X86_64, CPU_SUBTYPE_X86_64_ALL, "x86_64-",  "", false, false },
+	{ "x86_64", CPU_TYPE_X86_64, CPU_SUBTYPE_X86_64_ALL, "x86_64-",  "", true, false },
+#endif
+#if SUPPORT_ARCH_x86_64h
+	{ "x86_64h", CPU_TYPE_X86_64, CPU_SUBTYPE_X86_64_H,	 "x86_64h-",  "", true, false },
 #endif
 #if SUPPORT_ARCH_i386
 	{ "i386",   CPU_TYPE_I386,   CPU_SUBTYPE_I386_ALL,   "i386-",    "", false, false },
@@ -296,10 +483,32 @@ static const ArchInfo archInfoArray[] = {
 	{ "armv7s", CPU_TYPE_ARM,    CPU_SUBTYPE_ARM_V7S,    "thumbv7s-", "armv7s", true,  true },
 	#define SUPPORT_ARCH_arm_any 1
 #endif
+#if SUPPORT_ARCH_armv6m
+	{ "armv6m", CPU_TYPE_ARM,    CPU_SUBTYPE_ARM_V6M,    "thumbv6m-", "", true,  false },
+	#define SUPPORT_ARCH_arm_any 1
+#endif
+#if SUPPORT_ARCH_armv7m
+	{ "armv7m", CPU_TYPE_ARM,    CPU_SUBTYPE_ARM_V7M,    "thumbv7m-", "armv7m", true,  true },
+	#define SUPPORT_ARCH_arm_any 1
+#endif
+#if SUPPORT_ARCH_armv7em
+	{ "armv7em", CPU_TYPE_ARM,   CPU_SUBTYPE_ARM_V7EM,   "thumbv7em-", "armv7em", true,  true },
+	#define SUPPORT_ARCH_arm_any 1
+#endif
+#if SUPPORT_ARCH_armv8
+	{ "armv8", CPU_TYPE_ARM,     CPU_SUBTYPE_ARM_V8,     "thumbv8-", "armv8", true,  true },
+	#define SUPPORT_ARCH_arm_any 1
+#endif
+#if SUPPORT_ARCH_arm64
+	{ "arm64", CPU_TYPE_ARM64,   CPU_SUBTYPE_ARM64_ALL,  "arm64-",    "",   false,  false },
+#endif
+#if SUPPORT_ARCH_arm64v8
+	{ "arm64v8", CPU_TYPE_ARM64, CPU_SUBTYPE_ARM64_V8,   "arm64v8-",  "",   true,  false },
+#endif
 	{ NULL, 0, 0, NULL, NULL, false, false }
 };
 
-
+ 
 // weird, but this include must wait until after SUPPORT_ARCH_arm_any is set up
 #if SUPPORT_ARCH_arm_any
 #include <mach-o/arm/reloc.h>
@@ -1125,27 +1334,37 @@ private:
 //
 // mach-o encyrption info load command
 //
+template <typename P> struct macho_encryption_info_content {};
+template <> struct macho_encryption_info_content<Pointer32<BigEndian> >    { struct encryption_info_command		fields; };
+template <> struct macho_encryption_info_content<Pointer64<BigEndian> >	   { struct encryption_info_command_64	fields; };
+template <> struct macho_encryption_info_content<Pointer32<LittleEndian> > { struct encryption_info_command		fields; };
+template <> struct macho_encryption_info_content<Pointer64<LittleEndian> > { struct encryption_info_command_64	fields; };
+
+
 template <typename P>
 class macho_encryption_info_command {
 public:
-	uint32_t		cmd() const						INLINE { return E::get32(fields.cmd); }
-	void			set_cmd(uint32_t value)			INLINE { E::set32(fields.cmd, value); }
+	uint32_t		cmd() const						INLINE { return E::get32(entry.fields.cmd); }
+	void			set_cmd(uint32_t value)			INLINE { E::set32(entry.fields.cmd, value); }
 
-	uint32_t		cmdsize() const					INLINE { return E::get32(fields.cmdsize); }
-	void			set_cmdsize(uint32_t value)		INLINE { E::set32(fields.cmdsize, value); }
+	uint32_t		cmdsize() const					INLINE { return E::get32(entry.fields.cmdsize); }
+	void			set_cmdsize(uint32_t value)		INLINE { E::set32(entry.fields.cmdsize, value); }
 
-	uint32_t		cryptoff() const				INLINE { return E::get32(fields.cryptoff); }
-	void			set_cryptoff(uint32_t value)	INLINE { E::set32(fields.cryptoff, value);  }
+	uint32_t		cryptoff() const				INLINE { return E::get32(entry.fields.cryptoff); }
+	void			set_cryptoff(uint32_t value)	INLINE { E::set32(entry.fields.cryptoff, value);  }
 	
-	uint32_t		cryptsize() const				INLINE { return E::get32(fields.cryptsize); }
-	void			set_cryptsize(uint32_t value)	INLINE { E::set32(fields.cryptsize, value);  }
+	uint32_t		cryptsize() const				INLINE { return E::get32(entry.fields.cryptsize); }
+	void			set_cryptsize(uint32_t value)	INLINE { E::set32(entry.fields.cryptsize, value);  }
 	
-	uint32_t		cryptid() const					INLINE { return E::get32(fields.cryptid); }
-	void			set_cryptid(uint32_t value)		INLINE { E::set32(fields.cryptid, value);  }
+	uint32_t		cryptid() const					INLINE { return E::get32(entry.fields.cryptid); }
+	void			set_cryptid(uint32_t value)		INLINE { E::set32(entry.fields.cryptid, value);  }
 	
+	uint32_t		pad() const						INLINE { return E::get32(entry.fields.pad); }
+	void			set_pad(uint32_t value)			INLINE { E::set32(entry.fields.pad, value);  }
+
 	typedef typename P::E		E;
 private:
-	encryption_info_command	fields;
+	macho_encryption_info_content<P>	entry;
 };
 
 
@@ -1465,6 +1684,36 @@ public:
 private:
 	data_in_code_entry	fields;
 };
+
+#ifndef DICE_KIND_DATA
+  #define DICE_KIND_DATA              0x0001 
+  #define DICE_KIND_JUMP_TABLE8       0x0002 
+  #define DICE_KIND_JUMP_TABLE16      0x0003 
+  #define DICE_KIND_JUMP_TABLE32      0x0004 
+  #define DICE_KIND_ABS_JUMP_TABLE32  0x0005 
+#endif
+
+template <typename P>
+class macho_linker_option_command {
+public:
+	uint32_t		cmd() const								INLINE { return E::get32(fields.cmd); }
+	void			set_cmd(uint32_t value)					INLINE { E::set32(fields.cmd, value); }
+
+	uint32_t		cmdsize() const							INLINE { return E::get32(fields.cmdsize); }
+	void			set_cmdsize(uint32_t value)				INLINE { E::set32(fields.cmdsize, value); }
+
+	uint64_t		count() const							INLINE { return fields.count; }
+	void			set_count(uint32_t value)				INLINE { E::set32(fields.count, value); }
+
+	const char*		buffer() const							INLINE { return ((char*)&fields) + sizeof(linker_option_command); }
+	char*			buffer()								INLINE { return ((char*)&fields) + sizeof(linker_option_command); }
+
+	typedef typename P::E		E;
+private:
+	linker_option_command	fields;
+};
+
+
 
 
 

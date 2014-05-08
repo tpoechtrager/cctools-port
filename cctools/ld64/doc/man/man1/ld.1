@@ -297,6 +297,10 @@ them to use no space on disk.  This option suppresses that optimization, so zero
 space on disk in a final linked image.
 .It Fl merge_zero_fill_sections
 Causes all zero-fill sections in the __DATA segment to be merged into one __zerofill section.
+.It Fl no_branch_islands
+Disables linker creation of branch islands which allows images to be created that are larger than the
+maximum branch distance. Useful with -preload when code is in multiple sections but all are within
+the branch range.
 .El
 .Ss Options when creating a dynamic library (dylib) 
 .Bl -tag
@@ -357,6 +361,10 @@ is a hexadecimal number with an optional leading 0x. The
 should be an even multiple of 4KB, that is the last three hexadecimal digits should be zero.
 .It Fl allow_stack_execute 
 Marks executable so that all stacks in the task will be given stack execution privilege. This includes pthread stacks.
+.It Fl export_dynamic
+Preserves all global symbols in main executables during LTO.  Without this option, Link Time Optimization
+is allowed to inline and remove global functions. This option is used when a main executable may load
+a plug-in which requires certain symbols from the main executable. 
 .El
 .Ss Options when creating a bundle
 .Bl -tag
@@ -376,6 +384,8 @@ Don't turn private external (aka visibility=hidden) symbols into static symbols,
 but rather leave them as private external in the resulting object file.
 .It Fl d
 Force definition of common symbols.  That is, transform tentative definitions into real definitions.
+.It Fl rename_section Ar fromSegment fromSection toSegment toSection
+Renames section fromSegment/fromSection to toSegment/toSection.
 .El
 .Ss Options that control symbol resolution
 .Bl -tag
@@ -695,7 +705,7 @@ order file  to cluster commonly used/dirty globals onto the same page(s).
 .Ss Obsolete Options
 .Bl -tag
 .It Fl segalign Ar value
-All segments must be page aligned.  This option is obsolete.
+All segments must be page aligned. 
 .It Fl seglinkedit
 Object files (MH_OBJECT) with a LINKEDIT segment are no longer supported. This option is obsolete.
 .It Fl noseglinkedit
@@ -703,7 +713,7 @@ This is the default.  This option is obsolete.
 .It Fl fvmlib
 Fixed VM shared libraries (MH_FVMLIB) are no longer supported. This option is obsolete.
 .It Fl preload
-Preload executables (MH_PRELOAD) are no longer supported.  This option is obsolete.
+Preload executables (MH_PRELOAD) are no longer supported. 
 .It Fl sectobjectsymbols Ar segname Ar sectname
 Adding a local label at a section start is no longer supported.  This option is obsolete.
 .It Fl nofixprebinding

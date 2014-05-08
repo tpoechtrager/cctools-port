@@ -35,8 +35,8 @@
 #include <map>
 
 #include "Options.h"
-#include "ld.hpp"
 #include "MachOFileAbstraction.hpp"
+#include "ld.hpp"
 
 #include "make_stubs.h"
 
@@ -90,8 +90,9 @@ private:
 #include "stub_x86_classic.hpp"
 #include "stub_arm.hpp"
 #include "stub_arm_classic.hpp"
-
-
+#if SUPPORT_ARCH_arm64
+#include "stub_arm64.hpp"
+#endif
 
 Pass::Pass(const Options& opts) 
 	:	compressedHelperHelper(NULL), 
@@ -119,6 +120,9 @@ const ld::Atom* Pass::stubableFixup(const ld::Fixup* fixup, ld::Internal& state)
 			case ld::Fixup::kindStoreTargetAddressX86BranchPCRel32:
 			case ld::Fixup::kindStoreTargetAddressARMBranch24:
 			case ld::Fixup::kindStoreTargetAddressThumbBranch22:
+#if SUPPORT_ARCH_arm64
+			case ld::Fixup::kindStoreTargetAddressARM64Branch26:
+#endif
                 assert(target != NULL);
 				// create stub if target is in a dylib
 				if ( target->definition() == ld::Atom::definitionProxy ) 
@@ -215,6 +219,14 @@ ld::Atom* Pass::makeStub(const ld::Atom& target, bool weakImport)
 				else
 					return new ld::passes::stubs::arm::classic::StubNoPICAtom(*this, target, forLazyDylib, weakImport);
 			}
+			break;
+#endif
+#if SUPPORT_ARCH_arm64
+		case CPU_TYPE_ARM64:
+			if ( (_options.outputKind() == Options::kKextBundle) && _options.kextsUseStubs() ) 
+				return new ld::passes::stubs::arm64::KextStubAtom(*this, target);
+			else
+				return new ld::passes::stubs::arm64::StubAtom(*this, target, stubToGlobalWeakDef, stubToResolver, weakImport);
 			break;
 #endif
 	}

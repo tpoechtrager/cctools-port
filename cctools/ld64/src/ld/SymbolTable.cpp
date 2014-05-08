@@ -312,6 +312,7 @@ private:
 	}
 	
 	void pickAtom() {
+		//fprintf(stderr, "pickAtom(), a=%p, def=%d, b=%p, def=%d\n", &_atomA, _atomA.definition(), &_atomB, _atomB.definition());
 		// First, discriminate by definition
 		switch (_atomA.definition()) {
 			case ld::Atom::definitionRegular:
@@ -320,6 +321,12 @@ private:
 						pickBetweenRegularAtoms();
 						break;
 					case ld::Atom::definitionTentative:
+						if ( _atomB.size() > _atomA.size() ) {
+							const char* atomApath = (_atomA.file() != NULL) ? _atomA.file()->path() : "<internal>";
+							const char* atomBpath = (_atomB.file() != NULL) ? _atomB.file()->path() : "<internal>";
+							warning("tentative definition of '%s' with size %llu from '%s' is being replaced by real definition of smaller size %llu from '%s'",
+									_atomA.name(), _atomB.size(), atomBpath, _atomA.size(), atomApath);
+						}
 						pickAtomA();
 						break;
 					case ld::Atom::definitionAbsolute:
@@ -334,6 +341,12 @@ private:
 			case ld::Atom::definitionTentative:
 				switch (_atomB.definition()) {
 					case ld::Atom::definitionRegular:
+						if ( _atomA.size() > _atomB.size() ) {
+							const char* atomApath = (_atomA.file() != NULL) ? _atomA.file()->path() : "<internal>";
+							const char* atomBpath = (_atomB.file() != NULL) ? _atomB.file()->path() : "<internal>";
+							warning("tentative definition of '%s' with size %llu from '%s' is being replaced by real definition of smaller size %llu from '%s'",
+									_atomA.name(), _atomA.size(),atomApath, _atomB.size(), atomBpath);
+						}
 						pickAtomB();
 						break;
 					case ld::Atom::definitionTentative:
@@ -575,6 +588,19 @@ SymbolTable::IndirectBindingSlot SymbolTable::findSlotForName(const char* name)
 	return slot;
 }
 
+void SymbolTable::removeDeadAtoms()
+{
+	for (NameToSlot::iterator it=_byNameTable.begin(); it != _byNameTable.end(); ++it) {
+		IndirectBindingSlot slot = it->second;
+		const ld::Atom* atom = _indirectBindingTable[slot];
+		if ( atom != NULL ) {
+			if ( !atom->live() && !atom->dontDeadStrip() ) {
+				//fprintf(stderr, "removing from symbolTable[%u] %s\n", slot, atom->name());
+				_indirectBindingTable[slot] = NULL;
+			}
+		}
+	}
+}
 
 // find existing or create new slot
 SymbolTable::IndirectBindingSlot SymbolTable::findSlotForContent(const ld::Atom* atom, const ld::Atom** existingAtom)

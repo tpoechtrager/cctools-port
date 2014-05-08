@@ -1,6 +1,6 @@
 /* -*- mode: C++; c-basic-offset: 4; tab-width: 4 -*-
  *
- * Copyright (c) 2008 Apple Inc. All rights reserved.
+ * Copyright (c) 2008-2013 Apple Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  *
@@ -95,7 +95,9 @@ public:
 	typedef typename A::sint_t		sint_t;	
 
 	static const char* parseCFIs(A& addressSpace, pint_t ehSectionStart, uint32_t sectionLength, 
-						CFI_Atom_Info<A>* infos, uint32_t infosCount, void* ref, WarnFunc warn);
+                            const pint_t cuStarts[], uint32_t cuCount, 
+                            bool keepDwarfWhichHasCU, bool forceDwarfConversion, bool neverConvertToCU,
+                            CFI_Atom_Info<A>* infos, uint32_t& infosCount, void* ref, WarnFunc warn);
 
 
 	static compact_unwind_encoding_t createCompactEncodingFromFDE(A& addressSpace, pint_t fdeStart, 
@@ -152,6 +154,18 @@ private:
 	static compact_unwind_encoding_t createCompactEncodingFromProlog(A& addressSpace, pint_t funcAddr,
 												const Registers_ppc&, const typename CFI_Parser<A>::PrologInfo& prolog,
 												char warningBuffer[1024]);
+												
+	// arm64 specific variants
+	static bool   isReturnAddressRegister(int regNum, const Registers_arm64&);
+	static int    lastRestoreReg(const Registers_arm64&);
+	static pint_t getCFA(A& addressSpace, const typename CFI_Parser<A>::PrologInfo& prolog, const Registers_arm64&);
+	static bool checkRegisterPair(uint32_t reg, const typename CFI_Parser<A>::PrologInfo& prolog,
+												int& offset, char warningBuffer[1024]);
+	static compact_unwind_encoding_t encodeToUseDwarf(const Registers_arm64&);
+	static compact_unwind_encoding_t createCompactEncodingFromProlog(A& addressSpace, pint_t funcAddr,
+												const Registers_arm64&, const typename CFI_Parser<A>::PrologInfo& prolog,
+												char warningBuffer[1024]);
+	
 };
 
 
@@ -159,7 +173,9 @@ private:
 
 template <typename A, typename R>
 const char* DwarfInstructions<A,R>::parseCFIs(A& addressSpace, pint_t ehSectionStart, uint32_t sectionLength, 
-												CFI_Atom_Info<A>* infos, uint32_t infosCount, void* ref, WarnFunc warn)
+                                      const pint_t cuStarts[], uint32_t cuCount,  
+                                      bool keepDwarfWhichHasCU,  bool forceDwarfConversion, bool neverConvertToCU,
+                                      CFI_Atom_Info<A>* infos, uint32_t& infosCount, void* ref, WarnFunc warn)
 {
 	typename CFI_Parser<A>::CIE_Info cieInfo;
 	CFI_Atom_Info<A>* entry = infos;
@@ -221,7 +237,6 @@ const char* DwarfInstructions<A,R>::parseCFIs(A& addressSpace, pint_t ehSectionS
 			pint_t pcStart = addressSpace.getEncodedP(p, nextCFI, cieInfo.pointerEncoding);
 			pint_t pcRange = addressSpace.getEncodedP(p, nextCFI, cieInfo.pointerEncoding & 0x0F);
 			//fprintf(stderr, "FDE with pcRange [0x%08llX, 0x%08llX)\n",(uint64_t)pcStart, (uint64_t)(pcStart+pcRange));
-			// test if pc is within the function this FDE covers
 			entry->u.fdeInfo.function.targetAddress = pcStart;
 			entry->u.fdeInfo.function.offsetInCFI = offsetOfFunctionAddress;
 			entry->u.fdeInfo.function.encodingOfTargetAddress = cieInfo.pointerEncoding;
@@ -243,34 +258,60 @@ const char* DwarfInstructions<A,R>::parseCFIs(A& addressSpace, pint_t ehSectionS
 				}
 				p = endOfAug;
 			}
-			// compute compact unwind encoding
-			typename CFI_Parser<A>::FDE_Info fdeInfo;
-			fdeInfo.fdeStart = currentCFI;
-			fdeInfo.fdeLength = nextCFI - currentCFI;
-			fdeInfo.fdeInstructions = p;
-			fdeInfo.pcStart = pcStart;
-			fdeInfo.pcEnd = pcStart +  pcRange;
-			fdeInfo.lsda = entry->u.fdeInfo.lsda.targetAddress;
-			typename CFI_Parser<A>::PrologInfo prolog;
-			R dummy; // for proper selection of architecture specific functions
-			if ( CFI_Parser<A>::parseFDEInstructions(addressSpace, fdeInfo, cieInfo, CFI_INVALID_ADDRESS, &prolog) ) {
-				char warningBuffer[1024];
-				entry->u.fdeInfo.compactUnwindInfo = createCompactEncodingFromProlog(addressSpace, fdeInfo.pcStart, dummy, prolog, warningBuffer);
-				if ( fdeInfo.lsda != CFI_INVALID_ADDRESS ) 
-					entry->u.fdeInfo.compactUnwindInfo |= UNWIND_HAS_LSDA;
-				if ( warningBuffer[0] != '\0' )
-					warn(ref, fdeInfo.pcStart, warningBuffer);
+			// See if already is a compact unwind for this address.  
+			bool alreadyHaveCU = false;
+			for (uint32_t i=0; i < cuCount; ++i) {
+				if (cuStarts[i] == entry->u.fdeInfo.function.targetAddress) {
+				  alreadyHaveCU = true;
+				  break;
+				}
+			}
+			//fprintf(stderr, "FDE for func at 0x%08X, alreadyHaveCU=%d\n", (uint32_t)entry->u.fdeInfo.function.targetAddress, alreadyHaveCU);
+			if ( alreadyHaveCU && !forceDwarfConversion ) {
+				if ( keepDwarfWhichHasCU )
+					++entry;
 			}
 			else {
-				warn(ref, CFI_INVALID_ADDRESS, "dwarf unwind instructions could not be parsed");
-				entry->u.fdeInfo.compactUnwindInfo = encodeToUseDwarf(dummy);
+				if ( neverConvertToCU || ((cuCount != 0) && !forceDwarfConversion) ) {
+					// Have some compact unwind, so this is a new .o file, therefore anything without
+					// compact unwind must be something not expressable in compact unwind.
+					R dummy;
+					entry->u.fdeInfo.compactUnwindInfo = encodeToUseDwarf(dummy);
+				}
+				else {
+					// compute compact unwind encoding by parsing dwarf
+					typename CFI_Parser<A>::FDE_Info fdeInfo;
+					fdeInfo.fdeStart = currentCFI;
+					fdeInfo.fdeLength = nextCFI - currentCFI;
+					fdeInfo.fdeInstructions = p;
+					fdeInfo.pcStart = pcStart;
+					fdeInfo.pcEnd = pcStart +  pcRange;
+					fdeInfo.lsda = entry->u.fdeInfo.lsda.targetAddress;
+					typename CFI_Parser<A>::PrologInfo prolog;
+					R dummy; // for proper selection of architecture specific functions
+					if ( CFI_Parser<A>::parseFDEInstructions(addressSpace, fdeInfo, cieInfo, CFI_INVALID_ADDRESS, &prolog) ) {
+						char warningBuffer[1024];
+						entry->u.fdeInfo.compactUnwindInfo = createCompactEncodingFromProlog(addressSpace, fdeInfo.pcStart, dummy, prolog, warningBuffer);
+						if ( fdeInfo.lsda != CFI_INVALID_ADDRESS ) 
+							entry->u.fdeInfo.compactUnwindInfo |= UNWIND_HAS_LSDA;
+						if ( warningBuffer[0] != '\0' )
+							warn(ref, fdeInfo.pcStart, warningBuffer);
+					}
+					else {
+						warn(ref, CFI_INVALID_ADDRESS, "dwarf unwind instructions could not be parsed");
+						entry->u.fdeInfo.compactUnwindInfo = encodeToUseDwarf(dummy);
+					}
+				}
+				++entry;
 			}
-			++entry;
 		}
 		p = nextCFI;
 	}
-	if ( entry != end )
-		return "wrong entry count for parseCFIs";
+	if ( entry != end ) {
+		//fprintf(stderr, "DwarfInstructions<A,R>::parseCFIs() infosCount was %d on input, now %ld\n", infosCount, entry - infos); 
+		infosCount = (entry - infos);
+	}
+	
 	return NULL; // success
 }
 
@@ -1037,7 +1078,7 @@ compact_unwind_encoding_t DwarfInstructions<A,R>::createCompactEncodingFromProlo
 	for (int i=0; i < 64; ++i) {
 		if ( prolog.savedRegisters[i].location != CFI_Parser<A>::kRegisterUnused ) {
 			if ( prolog.savedRegisters[i].location != CFI_Parser<A>::kRegisterInCFA ) {
-				sprintf(warningBuffer, "register %d saved somewhere other that in frame", i);
+				sprintf(warningBuffer, "register %d saved somewhere other than in frame", i);
 				return UNWIND_X86_64_MODE_DWARF;
 			}
 			switch (i) {
@@ -1184,15 +1225,19 @@ compact_unwind_encoding_t DwarfInstructions<A,R>::createCompactEncodingFromProlo
 				strcpy(warningBuffer, "stack size is large but stack subq instruction not found");
 				return UNWIND_X86_64_MODE_DWARF;
 			}
-			pint_t functionContentAdjustStackIns = funcAddr + prolog.codeOffsetAtStackDecrement - 4;		
+			pint_t functionContentAdjustStackIns = funcAddr + prolog.codeOffsetAtStackDecrement - 4;
+        #if __EXCEPTIONS 
 			try {
+        #endif
 				uint32_t stackDecrementInCode = addressSpace.get32(functionContentAdjustStackIns);
 				stackAdjust = (prolog.cfaRegisterOffset - stackDecrementInCode)/8;
+        #if __EXCEPTIONS 
 			}
 			catch (...) {
 				strcpy(warningBuffer, "stack size is large but stack subq instruction not found");
 				return UNWIND_X86_64_MODE_DWARF;
 			}
+        #endif
 			stackValue = functionContentAdjustStackIns - funcAddr;
 			immedStackSize = false;
 			if ( stackAdjust > 7 ) {
@@ -1410,7 +1455,7 @@ compact_unwind_encoding_t DwarfInstructions<A,R>::createCompactEncodingFromProlo
 	for (int i=0; i < 64; ++i) {
 		if ( prolog.savedRegisters[i].location != CFI_Parser<A>::kRegisterUnused ) {
 			if ( prolog.savedRegisters[i].location != CFI_Parser<A>::kRegisterInCFA ) {
-				sprintf(warningBuffer, "register %d saved somewhere other that in frame", i);
+				sprintf(warningBuffer, "register %d saved somewhere other than in frame", i);
 				return UNWIND_X86_MODE_DWARF;
 			}
 			switch (i) {
@@ -1554,12 +1599,22 @@ compact_unwind_encoding_t DwarfInstructions<A,R>::createCompactEncodingFromProlo
 		if ( stackValue > stackMaxImmedValue ) {
 			// stack size is too big to fit as an immediate value, so encode offset of subq instruction in function
 			pint_t functionContentAdjustStackIns = funcAddr + prolog.codeOffsetAtStackDecrement - 4;		
-			uint32_t stackDecrementInCode = addressSpace.get32(functionContentAdjustStackIns);
-			stackAdjust = (prolog.cfaRegisterOffset - stackDecrementInCode)/4;
+        #if __EXCEPTIONS 
+			try {
+        #endif
+                uint32_t stackDecrementInCode = addressSpace.get32(functionContentAdjustStackIns);
+                stackAdjust = (prolog.cfaRegisterOffset - stackDecrementInCode)/4;
+        #if __EXCEPTIONS 
+			}
+			catch (...) {
+				strcpy(warningBuffer, "stack size is large but stack subl instruction not found");
+				return UNWIND_X86_MODE_DWARF;
+			}
+        #endif
 			stackValue = functionContentAdjustStackIns - funcAddr;
 			immedStackSize = false;
 			if ( stackAdjust > 7 ) {
-				strcpy(warningBuffer, "stack subq instruction is too different from dwarf stack size");
+				strcpy(warningBuffer, "stack subl instruction is too different from dwarf stack size");
 				return UNWIND_X86_MODE_DWARF;
 			}
 			encoding = UNWIND_X86_MODE_STACK_IND;
@@ -1715,6 +1770,195 @@ compact_unwind_encoding_t DwarfInstructions<A,R>::createCompactEncodingFromProlo
 
 
 
+//
+// arm64 specific functions
+//
+
+template <typename A, typename R>
+compact_unwind_encoding_t DwarfInstructions<A,R>::encodeToUseDwarf(const Registers_arm64&) 
+{
+	return UNWIND_ARM64_MODE_DWARF;
+}
+
+template <typename A, typename R>
+bool DwarfInstructions<A,R>::isReturnAddressRegister(int regNum, const Registers_arm64&) 
+{
+	return (regNum == UNW_ARM64_LR); 
+}
+
+template <typename A, typename R>
+int DwarfInstructions<A,R>::lastRestoreReg(const Registers_arm64&) 
+{
+	COMPILE_TIME_ASSERT( (int)CFI_Parser<A>::kMaxRegisterNumber > (int)UNW_ARM64_D31 );
+	return UNW_ARM64_D31; 
+}
+
+
+template <typename A, typename R>
+typename A::pint_t DwarfInstructions<A,R>::getCFA(A& addressSpace, const typename CFI_Parser<A>::PrologInfo& prolog, 
+                                                                               const Registers_arm64& registers)
+{
+	if ( prolog.cfaRegister != 0 )
+		return registers.getRegister(prolog.cfaRegister) + prolog.cfaRegisterOffset;
+	else
+		ABORT("getCFA(): unsupported location for arm64 cfa");
+}
+
+template <typename A, typename R>
+bool DwarfInstructions<A,R>::checkRegisterPair(uint32_t reg, const typename CFI_Parser<A>::PrologInfo& prolog,
+												int& offset, char warningBuffer[1024])
+{
+	if ( (prolog.savedRegisters[reg].location != CFI_Parser<A>::kRegisterUnused)
+	  || (prolog.savedRegisters[reg+1].location != CFI_Parser<A>::kRegisterUnused) ) {
+		if ( prolog.savedRegisters[reg].location != CFI_Parser<A>::kRegisterInCFA ) {
+			sprintf(warningBuffer, "register %d saved somewhere other than in frame", reg);
+			return false;
+		}
+		if ( prolog.savedRegisters[reg+1].location != CFI_Parser<A>::kRegisterInCFA ) {
+			sprintf(warningBuffer, "register %d saved somewhere other than in frame", reg+1);
+			return false;
+		}
+		if ( prolog.savedRegisters[reg].value != prolog.savedRegisters[reg+1].value + 8 ) {
+			sprintf(warningBuffer, "registers %d and %d not saved contiguously in frame", reg, reg+1);
+			return false;
+		}
+		if ( prolog.savedRegisters[reg].value != offset ) {
+			sprintf(warningBuffer, "registers %d not saved contiguously in frame", reg);
+			return false;
+		}
+		offset -= 16;
+		return true;
+	}
+	return false;
+}
+
+
+template <typename A, typename R>
+compact_unwind_encoding_t DwarfInstructions<A,R>::createCompactEncodingFromProlog(A& addressSpace, pint_t funcAddr,
+												const Registers_arm64& r, const typename CFI_Parser<A>::PrologInfo& prolog,
+												char warningBuffer[1024])
+{
+	warningBuffer[0] = '\0';
+	
+	if ( prolog.registerSavedTwiceInCIE == UNW_ARM64_LR ) {
+		warningBuffer[0] = '\0';	// silently disable conversion to compact unwind by linker
+		return UNWIND_ARM64_MODE_DWARF;
+	}
+	// don't create compact unwind info for unsupported dwarf kinds
+	if ( prolog.registerSavedMoreThanOnce ) {
+		strcpy(warningBuffer, "register saved more than once (might be shrink wrap)");
+		return UNWIND_ARM64_MODE_DWARF;
+	}
+	if ( prolog.spExtraArgSize != 0 ) {
+		strcpy(warningBuffer, "dwarf uses DW_CFA_GNU_args_size");
+		return UNWIND_ARM64_MODE_DWARF;
+	}
+	if ( prolog.sameValueUsed ) {
+		strcpy(warningBuffer, "dwarf uses DW_CFA_same_value");
+		return UNWIND_ARM64_MODE_DWARF;
+	}
+	
+	compact_unwind_encoding_t encoding = 0;
+	int offset = 0;
+
+	// figure out which kind of frame this function uses
+	bool standardFPframe = ( 
+		 (prolog.cfaRegister == UNW_ARM64_FP) 
+	  && (prolog.cfaRegisterOffset == 16)
+	  && (prolog.savedRegisters[UNW_ARM64_FP].location == CFI_Parser<A>::kRegisterInCFA)
+	  && (prolog.savedRegisters[UNW_ARM64_FP].value == -16) 
+	  && (prolog.savedRegisters[UNW_ARM64_LR].location == CFI_Parser<A>::kRegisterInCFA)
+	  && (prolog.savedRegisters[UNW_ARM64_LR].value == -8) );
+
+	bool standardFrameless = ( prolog.cfaRegister == UNW_ARM64_SP );
+	
+	if ( standardFrameless ) {
+		// verify enough space for registers saved
+		int count = 0;
+		for (int i=0; i < 96; ++i) {
+			if ( prolog.savedRegisters[i].location != CFI_Parser<A>::kRegisterUnused ) 
+				++count;
+		}
+		if ( count * 8 > prolog.cfaRegisterOffset ) {
+			strcpy(warningBuffer, "saved registers do not fit in stack size");
+			return UNWIND_ARM64_MODE_DWARF;
+		}
+		if ( (prolog.cfaRegisterOffset % 16) != 0 ) {
+			strcpy(warningBuffer, "stack size is not 16-byte multiple");
+			return UNWIND_ARM64_MODE_DWARF;
+		}
+		const int32_t maxStack = (UNWIND_ARM64_FRAMELESS_STACK_SIZE_MASK >> __builtin_ctz(UNWIND_ARM64_FRAMELESS_STACK_SIZE_MASK));
+		if ( (prolog.cfaRegisterOffset / 16) > maxStack ) {
+			strcpy(warningBuffer, "stack size is too large for frameless function");
+			return UNWIND_ARM64_MODE_DWARF;
+		}
+		encoding = UNWIND_ARM64_MODE_FRAMELESS | ((prolog.cfaRegisterOffset/16) << __builtin_ctz(UNWIND_ARM64_FRAMELESS_STACK_SIZE_MASK));
+		offset = -16;
+	}
+	else if ( standardFPframe  ) {
+		encoding = UNWIND_ARM64_MODE_FRAME;
+		offset = -24;
+	}
+	else {
+		// no compact encoding for this
+		strcpy(warningBuffer, "does not use standard frame");
+		return UNWIND_ARM64_MODE_DWARF;
+	}
+		
+	// make sure no volatile registers are saved
+	for (int i=UNW_ARM64_X0; i < UNW_ARM64_X19; ++i) {
+		if ( prolog.savedRegisters[i].location != CFI_Parser<A>::kRegisterUnused ) {
+			sprintf(warningBuffer, "non standard register %d saved in frame", i);
+			return UNWIND_ARM64_MODE_DWARF;
+		}
+	}
+	for (int i=UNW_ARM64_SP+1; i < UNW_ARM64_D8; ++i) {
+		if ( prolog.savedRegisters[i].location != CFI_Parser<A>::kRegisterUnused ) {
+			sprintf(warningBuffer, "non standard register %d saved in frame", i);
+			return UNWIND_ARM64_MODE_DWARF;
+		}
+	}
+	for (int i=UNW_ARM64_D16; i < UNW_ARM64_D31+1; ++i) {
+		if ( prolog.savedRegisters[i].location != CFI_Parser<A>::kRegisterUnused ) {
+			sprintf(warningBuffer, "non standard register %d saved in frame", i);
+			return UNWIND_ARM64_MODE_DWARF;
+		}
+	}
+
+	// compute encoding
+	bool X19_X20_saved = checkRegisterPair(UNW_ARM64_X19, prolog, offset, warningBuffer);
+	bool X21_X22_saved = checkRegisterPair(UNW_ARM64_X21, prolog, offset, warningBuffer);
+	bool X23_X24_saved = checkRegisterPair(UNW_ARM64_X23, prolog, offset, warningBuffer);
+	bool X25_X26_saved = checkRegisterPair(UNW_ARM64_X25, prolog, offset, warningBuffer);
+	bool X27_X28_saved = checkRegisterPair(UNW_ARM64_X27, prolog, offset, warningBuffer);
+	bool D8_D9_saved   = checkRegisterPair(UNW_ARM64_D8,  prolog, offset, warningBuffer);
+	bool D10_D11_saved = checkRegisterPair(UNW_ARM64_D10, prolog, offset, warningBuffer);
+	bool D12_D13_saved = checkRegisterPair(UNW_ARM64_D12, prolog, offset, warningBuffer);
+	bool D14_D15_saved = checkRegisterPair(UNW_ARM64_D14, prolog, offset, warningBuffer);
+	if ( warningBuffer[0] != '\0' )
+		return UNWIND_ARM64_MODE_DWARF;
+
+	if ( X19_X20_saved )
+		encoding |= UNWIND_ARM64_FRAME_X19_X20_PAIR;
+	if ( X21_X22_saved )
+		encoding |= UNWIND_ARM64_FRAME_X21_X22_PAIR;
+	if ( X23_X24_saved )
+		encoding |= UNWIND_ARM64_FRAME_X23_X24_PAIR;
+	if ( X25_X26_saved )
+		encoding |= UNWIND_ARM64_FRAME_X25_X26_PAIR;
+	if ( X27_X28_saved )
+		encoding |= UNWIND_ARM64_FRAME_X27_X28_PAIR;
+	if ( D8_D9_saved )
+		encoding |= UNWIND_ARM64_FRAME_D8_D9_PAIR;
+	if ( D10_D11_saved )
+		encoding |= UNWIND_ARM64_FRAME_D10_D11_PAIR;
+	if ( D12_D13_saved )
+		encoding |= UNWIND_ARM64_FRAME_D12_D13_PAIR;
+	if ( D14_D15_saved )
+		encoding |= UNWIND_ARM64_FRAME_D14_D15_PAIR;
+
+  return encoding;
+}
 
 } // namespace libunwind
 

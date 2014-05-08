@@ -73,16 +73,20 @@
 namespace ld {
 namespace tool {
 
+uint32_t sAdrpNA = 0;
+uint32_t sAdrpNoped = 0;
+uint32_t sAdrpNotNoped = 0;
+
 
 OutputFile::OutputFile(const Options& opts) 
 	:
-		hasWeakExternalSymbols(false), usesWeakExternalSymbols(false), overridesWeakExternalSymbols(false), 
-		_noReExportedDylibs(false), hasThreadLocalVariableDefinitions(false), pieDisabled(false), hasDataInCode(false), 
+		usesWeakExternalSymbols(false), overridesWeakExternalSymbols(false), 
+		_noReExportedDylibs(false), pieDisabled(false), hasDataInCode(false), 
 		headerAndLoadCommandsSection(NULL),
 		rebaseSection(NULL), bindingSection(NULL), weakBindingSection(NULL), 
 		lazyBindingSection(NULL), exportSection(NULL), 
 		splitSegInfoSection(NULL), functionStartsSection(NULL), 
-		dataInCodeSection(NULL), dependentDRsSection(NULL), 
+		dataInCodeSection(NULL), optimizationHintsSection(NULL), dependentDRsSection(NULL), 
 		symbolTableSection(NULL), stringPoolSection(NULL), 
 		localRelocationsSection(NULL), externalRelocationsSection(NULL), 
 		sectionRelocationsSection(NULL), 
@@ -98,6 +102,7 @@ OutputFile::OutputFile(const Options& opts)
 		_hasDynamicSymbolTable(true),
 		_hasLocalRelocations(!opts.makeCompressedDyldInfo()),
 		_hasExternalRelocations(!opts.makeCompressedDyldInfo()),
+		_hasOptimizationHints(opts.outputKind() == Options::kObjectFile),
 		_encryptedTEXTstartOffset(0),
 		_encryptedTEXTendOffset(0),
 		_localSymbolsStartIndex(0),
@@ -119,7 +124,8 @@ OutputFile::OutputFile(const Options& opts)
 		_splitSegInfoAtom(NULL),
 		_functionStartsAtom(NULL),
 		_dataInCodeAtom(NULL),
-		_dependentDRInfoAtom(NULL)
+		_dependentDRInfoAtom(NULL),
+		_optimizationHintsAtom(NULL)
 {
 }
 
@@ -147,9 +153,9 @@ void OutputFile::write(ld::Internal& state)
 	this->buildDylibOrdinalMapping(state);
 	this->addLoadCommands(state);
 	this->addLinkEdit(state);
-	this->setSectionSizesAndAlignments(state);
+	state.setSectionSizesAndAlignments();
 	this->setLoadCommandsPadding(state);
-	this->assignFileOffsets(state);
+	_fileSize = state.assignFileOffsets();
 	this->assignAtomAddresses(state);
 	this->synthesizeDebugNotes(state);
 	this->buildSymbolTable(state);
@@ -196,7 +202,6 @@ void OutputFile::assignAtomAddresses(ld::Internal& state)
 		if ( log ) fprintf(stderr, "  section=%s/%s\n", sect->segmentName(), sect->sectionName());
 		for (std::vector<const ld::Atom*>::iterator ait = sect->atoms.begin(); ait != sect->atoms.end(); ++ait) {
 			const ld::Atom* atom = *ait;
-			if ( log ) fprintf(stderr, "    atom=%p, name=%s\n", atom, atom->name());
 			switch ( sect-> type() ) {
 				case ld::Section::typeImportProxies:
 					// want finalAddress() of all proxy atoms to be zero
@@ -211,6 +216,7 @@ void OutputFile::assignAtomAddresses(ld::Internal& state)
 					break;
 				default:
 					(const_cast<ld::Atom*>(atom))->setSectionStartAddress(sect->address);
+					if ( log ) fprintf(stderr, "    atom=%p, addr=0x%08llX, name=%s\n", atom, atom->finalAddress(), atom->name());
 					break;
 			}
 		}
@@ -257,6 +263,12 @@ void OutputFile::updateLINKEDITAddresses(ld::Internal& state)
 		// build data-in-code info  
 		assert(_dataInCodeAtom != NULL);
 		_dataInCodeAtom->encode();
+	}
+	
+	if ( _hasOptimizationHints ) {
+		// build linker-optimization-hint info  
+		assert(_optimizationHintsAtom != NULL);
+		_optimizationHintsAtom->encode();
 	}
 	
 	if ( _options.needsDependentDRInfo() ) {
@@ -330,83 +342,6 @@ void OutputFile::updateLINKEDITAddresses(ld::Internal& state)
 	_fileSize = state.sections.back()->fileOffset + state.sections.back()->size;
 }
 
-void OutputFile::setSectionSizesAndAlignments(ld::Internal& state)
-{
-	for (std::vector<ld::Internal::FinalSection*>::iterator sit = state.sections.begin(); sit != state.sections.end(); ++sit) {
-		ld::Internal::FinalSection* sect = *sit;
-		if ( sect->type() == ld::Section::typeAbsoluteSymbols ) {
-			// absolute symbols need their finalAddress() to their value
-			for (std::vector<const ld::Atom*>::iterator ait = sect->atoms.begin(); ait != sect->atoms.end(); ++ait) {
-				const ld::Atom* atom = *ait;
-				(const_cast<ld::Atom*>(atom))->setSectionOffset(atom->objectAddress());
-			}
-		}
-		else {
-			uint16_t maxAlignment = 0;
-			uint64_t offset = 0;
-			for (std::vector<const ld::Atom*>::iterator ait = sect->atoms.begin(); ait != sect->atoms.end(); ++ait) {
-				const ld::Atom* atom = *ait;
-				bool pagePerAtom = false;
-				uint32_t atomAlignmentPowerOf2 = atom->alignment().powerOf2;
-				if ( _options.pageAlignDataAtoms() && ( strcmp(atom->section().segmentName(), "__DATA") == 0) ) { 
-					switch ( atom->section().type() ) {
-						case ld::Section::typeUnclassified:
-						case ld::Section::typeTentativeDefs:
-						case ld::Section::typeZeroFill:
-							pagePerAtom = true;
-							if ( atomAlignmentPowerOf2 < 12 )
-								atomAlignmentPowerOf2 = 12;
-							break;
-						default:
-							break;
-					}
-				}
-				if ( atomAlignmentPowerOf2 > maxAlignment )
-					maxAlignment = atomAlignmentPowerOf2;
-				// calculate section offset for this atom
-				uint64_t alignment = 1 << atomAlignmentPowerOf2;
-				uint64_t currentModulus = (offset % alignment);
-				uint64_t requiredModulus = atom->alignment().modulus;
-				if ( currentModulus != requiredModulus ) {
-					if ( requiredModulus > currentModulus )
-						offset += requiredModulus-currentModulus;
-					else
-						offset += requiredModulus+alignment-currentModulus;
-				}
-				// LINKEDIT atoms are laid out later
-				if ( sect->type() != ld::Section::typeLinkEdit ) {
-					(const_cast<ld::Atom*>(atom))->setSectionOffset(offset);
-					offset += atom->size();
-					if ( pagePerAtom ) {
-						offset = (offset + 4095) & (-4096); // round up to end of page
-					}
-				}
-				if ( (atom->scope() == ld::Atom::scopeGlobal) 
-					&& (atom->definition() == ld::Atom::definitionRegular) 
-					&& (atom->combine() == ld::Atom::combineByName) 
-					&& ((atom->symbolTableInclusion() == ld::Atom::symbolTableIn) 
-					 || (atom->symbolTableInclusion() == ld::Atom::symbolTableInAndNeverStrip)) ) {
-						this->hasWeakExternalSymbols = true;
-						if ( _options.warnWeakExports()	) 
-							warning("weak external symbol: %s", atom->name());
-				}
-			}
-			sect->size = offset;
-			// section alignment is that of a contained atom with the greatest alignment
-			sect->alignment = maxAlignment;
-			// unless -sectalign command line option overrides
-			if  ( _options.hasCustomSectionAlignment(sect->segmentName(), sect->sectionName()) )
-				sect->alignment = _options.customSectionAlignment(sect->segmentName(), sect->sectionName());
-			// each atom in __eh_frame has zero alignment to assure they pack together,
-			// but compilers usually make the CFIs pointer sized, so we want whole section
-			// to start on pointer sized boundary.
-			if ( sect->type() == ld::Section::typeCFI )
-				sect->alignment = 3;
-			if ( sect->type() == ld::Section::typeTLVDefs )
-				this->hasThreadLocalVariableDefinitions = true;
-		}
-	}
-}
 
 void OutputFile::setLoadCommandsPadding(ld::Internal& state)
 {
@@ -431,13 +366,14 @@ void OutputFile::setLoadCommandsPadding(ld::Internal& state)
 		default:
 			// work backwards from end of segment and lay out sections so that extra room goes to padding atom
 			uint64_t addr = 0;
+			uint64_t textSegPageSize = _options.segPageSize("__TEXT");
 			for (std::vector<ld::Internal::FinalSection*>::reverse_iterator it = state.sections.rbegin(); it != state.sections.rend(); ++it) {
 				ld::Internal::FinalSection* sect = *it;
 				if ( strcmp(sect->segmentName(), "__TEXT") != 0 ) 
 					continue;
 				if ( sect == headerAndLoadCommandsSection ) {
 					addr -= headerAndLoadCommandsSection->size;
-					paddingSize = addr % _options.segmentAlignment();
+					paddingSize = addr % textSegPageSize;
 					break;
 				}
 				addr -= sect->size;
@@ -487,192 +423,6 @@ uint64_t OutputFile::pageAlign(uint64_t addr, uint64_t pageSize)
 {
 	return ((addr+pageSize-1) & (-pageSize)); 
 }
-
-
-void OutputFile::assignFileOffsets(ld::Internal& state)
-{
-	const bool log = false;
-	const bool hiddenSectionsOccupyAddressSpace = ((_options.outputKind() != Options::kObjectFile)
-												&& (_options.outputKind() != Options::kPreload));
-	const bool segmentsArePageAligned = (_options.outputKind() != Options::kObjectFile);
-
-	uint64_t address = 0;
-	const char* lastSegName = "";
-	uint64_t floatingAddressStart = _options.baseAddress();
-	
-	// first pass, assign addresses to sections in segments with fixed start addresses
-	if ( log ) fprintf(stderr, "Fixed address segments:\n");
-	for (std::vector<ld::Internal::FinalSection*>::iterator it = state.sections.begin(); it != state.sections.end(); ++it) {
-		ld::Internal::FinalSection* sect = *it;
-		if ( ! _options.hasCustomSegmentAddress(sect->segmentName()) ) 
-			continue;
-		if ( segmentsArePageAligned ) {
-			if ( strcmp(lastSegName, sect->segmentName()) != 0 ) {
-				address = _options.customSegmentAddress(sect->segmentName());
-				lastSegName = sect->segmentName();
-			}
-		}
-		// adjust section address based on alignment
-		uint64_t unalignedAddress = address;
-		uint64_t alignment = (1 << sect->alignment);
-		address = ( (unalignedAddress+alignment-1) & (-alignment) );
-	
-		// update section info
-		sect->address = address;
-		sect->alignmentPaddingBytes = (address - unalignedAddress);
-		
-		// sanity check size
-		if ( ((address + sect->size) > _options.maxAddress()) && (_options.outputKind() != Options::kObjectFile) 
-															  && (_options.outputKind() != Options::kStaticExecutable) )
-			throwf("section %s (address=0x%08llX, size=%llu) would make the output executable exceed available address range", 
-						sect->sectionName(), address, sect->size);
-		
-		if ( log ) fprintf(stderr, "  address=0x%08llX, hidden=%d, alignment=%02d, section=%s,%s\n",
-						sect->address, sect->isSectionHidden(), sect->alignment, sect->segmentName(), sect->sectionName());
-		// update running totals
-		if ( !sect->isSectionHidden() || hiddenSectionsOccupyAddressSpace )
-			address += sect->size;
-		
-		// if TEXT segment address is fixed, then flow other segments after it
-		if ( strcmp(sect->segmentName(), "__TEXT") == 0 ) {
-			floatingAddressStart = address;
-		}
-	}
-	
-	// second pass, assign section address to sections in segments that are contiguous with previous segment
-	address = floatingAddressStart;
-	lastSegName = "";
-	ld::Internal::FinalSection* overlappingFixedSection = NULL;
-	ld::Internal::FinalSection* overlappingFlowSection = NULL;
-	if ( log ) fprintf(stderr, "Regular layout segments:\n");
-	for (std::vector<ld::Internal::FinalSection*>::iterator it = state.sections.begin(); it != state.sections.end(); ++it) {
-		ld::Internal::FinalSection* sect = *it;
-		if ( _options.hasCustomSegmentAddress(sect->segmentName()) ) 
-			continue;
-		if ( (_options.outputKind() == Options::kPreload) && (sect->type() == ld::Section::typeMachHeader) ) {
-			sect->alignmentPaddingBytes = 0;
-			continue;
-		}
-		if ( segmentsArePageAligned ) {
-			if ( strcmp(lastSegName, sect->segmentName()) != 0 ) {
-				// round up size of last segment if needed
-				if ( *lastSegName != '\0' ) {
-					address = pageAlign(address, _options.segPageSize(lastSegName));
-				}
-				// set segment address based on end of last segment
-				address = pageAlign(address);
-				lastSegName = sect->segmentName();
-			}
-		}
-		// adjust section address based on alignment
-		uint64_t unalignedAddress = address;
-		uint64_t alignment = (1 << sect->alignment);
-		address = ( (unalignedAddress+alignment-1) & (-alignment) );
-	
-		// update section info
-		sect->address = address;
-		sect->alignmentPaddingBytes = (address - unalignedAddress);
-		
-		// sanity check size
-		if ( ((address + sect->size) > _options.maxAddress()) && (_options.outputKind() != Options::kObjectFile) 
-															  && (_options.outputKind() != Options::kStaticExecutable) )
-				throwf("section %s (address=0x%08llX, size=%llu) would make the output executable exceed available address range", 
-						sect->sectionName(), address, sect->size);
-
-		// sanity check it does not overlap a fixed address segment
-		for (std::vector<ld::Internal::FinalSection*>::iterator sit = state.sections.begin(); sit != state.sections.end(); ++sit) {
-			ld::Internal::FinalSection* otherSect = *sit;
-			if ( ! _options.hasCustomSegmentAddress(otherSect->segmentName()) ) 
-				continue;
-			if ( sect->address > otherSect->address ) {
-				if ( (otherSect->address+otherSect->size) > sect->address ) {
-					overlappingFixedSection = otherSect;
-					overlappingFlowSection = sect;
-				}
-			}
-			else {
-				if ( (sect->address+sect->size) > otherSect->address ) {
-					overlappingFixedSection = otherSect;
-					overlappingFlowSection = sect;
-				}
-			}
-		}
-		
-		if ( log ) fprintf(stderr, "  address=0x%08llX, size=0x%08llX, hidden=%d, alignment=%02d, padBytes=%d, section=%s,%s\n",
-							sect->address, sect->size, sect->isSectionHidden(), sect->alignment, sect->alignmentPaddingBytes, 
-							sect->segmentName(), sect->sectionName());
-		// update running totals
-		if ( !sect->isSectionHidden() || hiddenSectionsOccupyAddressSpace )
-			address += sect->size;
-	}
-	if ( overlappingFixedSection != NULL ) {
-		fprintf(stderr, "Section layout:\n");
-		for (std::vector<ld::Internal::FinalSection*>::iterator it = state.sections.begin(); it != state.sections.end(); ++it) {
-			ld::Internal::FinalSection* sect = *it;
-			if ( sect->isSectionHidden() )
-				continue;
-			fprintf(stderr, "  address:0x%08llX, alignment:2^%d, size:0x%08llX, padBytes:%d, section:%s/%s\n",
-							sect->address, sect->alignment, sect->size, sect->alignmentPaddingBytes, 
-							sect->segmentName(), sect->sectionName());
-	
-		}
-		throwf("Section (%s/%s) overlaps fixed address section (%s/%s)", 
-			overlappingFlowSection->segmentName(), overlappingFlowSection->sectionName(),
-			overlappingFixedSection->segmentName(), overlappingFixedSection->sectionName());
-	}
-	
-	
-	// third pass, assign section file offsets 
-	uint64_t fileOffset = 0;
-	lastSegName = "";
-	if ( log ) fprintf(stderr, "All segments with file offsets:\n");
-	for (std::vector<ld::Internal::FinalSection*>::iterator it = state.sections.begin(); it != state.sections.end(); ++it) {
-		ld::Internal::FinalSection* sect = *it;
-		if ( hasZeroForFileOffset(sect) ) {
-			// fileoff of zerofill sections is moot, but historically it is set to zero
-			sect->fileOffset = 0;
-
-			// <rdar://problem/10445047> align file offset with address layout
-			fileOffset += sect->alignmentPaddingBytes;
-		}
-		else {
-			// page align file offset at start of each segment
-			if ( segmentsArePageAligned && (*lastSegName != '\0') && (strcmp(lastSegName, sect->segmentName()) != 0) ) {
-				fileOffset = pageAlign(fileOffset, _options.segPageSize(lastSegName));
-			}
-			lastSegName = sect->segmentName();
-
-			// align file offset with address layout
-			fileOffset += sect->alignmentPaddingBytes;
-			
-			// update section info
-			sect->fileOffset = fileOffset;
-			
-			// update running total
-			fileOffset += sect->size;
-		}
-		
-		if ( log ) fprintf(stderr, "  fileoffset=0x%08llX, address=0x%08llX, hidden=%d, size=%lld, alignment=%02d, section=%s,%s\n",
-				sect->fileOffset, sect->address, sect->isSectionHidden(), sect->size, sect->alignment, 
-				sect->segmentName(), sect->sectionName());
-	}
-
-
-	// for encrypted iPhoneOS apps
-	if ( _options.makeEncryptable() ) { 
-		// remember end of __TEXT for later use by load command
-		for (std::vector<ld::Internal::FinalSection*>::iterator it = state.sections.begin(); it != state.sections.end(); ++it) {
-			ld::Internal::FinalSection* sect = *it;
-			if ( strcmp(sect->segmentName(), "__TEXT") == 0 ) {
-				_encryptedTEXTendOffset = pageAlign(sect->fileOffset + sect->size);
-			}
-		}
-	}
-
-	// remember total file size
-	_fileSize = fileOffset;
-}
-
 
 static const char* makeName(const ld::Atom& atom)
 {
@@ -927,49 +677,91 @@ void OutputFile::rangeCheckARM12(int64_t displacement, ld::Internal& state, cons
 	}
 }
 
+bool OutputFile::checkArmBranch24Displacement(int64_t displacement)
+{
+	return ( (displacement < 33554428LL) && (displacement > (-33554432LL)) );
+}
 
 void OutputFile::rangeCheckARMBranch24(int64_t displacement, ld::Internal& state, const ld::Atom* atom, const ld::Fixup* fixup)
 {
-	if ( (displacement > 33554428LL) || (displacement < (-33554432LL)) ) {
-		// show layout of final image
-		printSectionLayout(state);
+	if ( checkArmBranch24Displacement(displacement) )
+		return;
 		
-		const ld::Atom* target;	
-		throwf("b/bl/blx ARM branch out of range (%lld max is +/-32MB): from %s (0x%08llX) to %s (0x%08llX)", 
+	// show layout of final image
+	printSectionLayout(state);
+	
+	const ld::Atom* target;	
+	throwf("b/bl/blx ARM branch out of range (%lld max is +/-32MB): from %s (0x%08llX) to %s (0x%08llX)", 
+			displacement, atom->name(), atom->finalAddress(), referenceTargetAtomName(state, fixup), 
+			addressOf(state, fixup, &target));
+}
+
+bool OutputFile::checkThumbBranch22Displacement(int64_t displacement)
+{
+	// thumb2 supports  +/- 16MB displacement
+	if ( _options.preferSubArchitecture() && _options.archSupportsThumb2() ) {
+		if ( (displacement > 16777214LL) || (displacement < (-16777216LL)) ) {
+			return false;
+		}
+	}
+	else {
+		// thumb1 supports +/- 4MB displacement
+		if ( (displacement > 4194302LL) || (displacement < (-4194304LL)) ) {
+			return false;
+		}
+	}
+	return true;
+}
+
+void OutputFile::rangeCheckThumbBranch22(int64_t displacement, ld::Internal& state, const ld::Atom* atom, const ld::Fixup* fixup)
+{
+	if ( checkThumbBranch22Displacement(displacement) )
+		return;
+
+	// show layout of final image
+	printSectionLayout(state);
+
+	const ld::Atom* target;	
+	if ( _options.preferSubArchitecture() && _options.archSupportsThumb2() ) {
+		throwf("b/bl/blx thumb2 branch out of range (%lld max is +/-16MB): from %s (0x%08llX) to %s (0x%08llX)", 
+				displacement, atom->name(), atom->finalAddress(), referenceTargetAtomName(state, fixup), 
+				addressOf(state, fixup, &target));
+	}
+	else {
+		throwf("b/bl/blx thumb1 branch out of range (%lld max is +/-4MB): from %s (0x%08llX) to %s (0x%08llX)", 
 				displacement, atom->name(), atom->finalAddress(), referenceTargetAtomName(state, fixup), 
 				addressOf(state, fixup, &target));
 	}
 }
 
-void OutputFile::rangeCheckThumbBranch22(int64_t displacement, ld::Internal& state, const ld::Atom* atom, const ld::Fixup* fixup)
+
+void OutputFile::rangeCheckARM64Branch26(int64_t displacement, ld::Internal& state, const ld::Atom* atom, const ld::Fixup* fixup)
 {
-	// thumb2 supports a larger displacement
-	if ( _options.preferSubArchitecture() && _options.archSupportsThumb2() ) {
-		if ( (displacement > 16777214LL) || (displacement < (-16777216LL)) ) {
-			// show layout of final image
-			printSectionLayout(state);
-			
-			const ld::Atom* target;	
-			throwf("b/bl/blx thumb2 branch out of range (%lld max is +/-16MB): from %s (0x%08llX) to %s (0x%08llX)", 
-					displacement, atom->name(), atom->finalAddress(), referenceTargetAtomName(state, fixup), 
+	const int64_t bl_128MegLimit = 0x07FFFFFF;
+	if ( (displacement > bl_128MegLimit) || (displacement < (-bl_128MegLimit)) ) {
+		// show layout of final image
+		printSectionLayout(state);
+		
+		const ld::Atom* target;	
+		throwf("b(l) ARM64 branch out of range (%lld max is +/-128MB): from %s (0x%08llX) to %s (0x%08llX)", 
+				displacement, atom->name(), atom->finalAddress(), referenceTargetAtomName(state, fixup), 
 				addressOf(state, fixup, &target));
-		}
-	}
-	else {
-		if ( (displacement > 4194302LL) || (displacement < (-4194304LL)) ) {
-			// show layout of final image
-			printSectionLayout(state);
-			
-			const ld::Atom* target;	
-			throwf("b/bl/blx thumb1 branch out of range (%lld max is +/-4MB): from %s (0x%08llX) to %s (0x%08llX)", 
-					displacement, atom->name(), atom->finalAddress(), referenceTargetAtomName(state, fixup), 
-				addressOf(state, fixup, &target));
-		}
 	}
 }
 
-
-
+void OutputFile::rangeCheckARM64Page21(int64_t displacement, ld::Internal& state, const ld::Atom* atom, const ld::Fixup* fixup)
+{
+	const int64_t adrp_4GigLimit = 0x100000000ULL;
+	if ( (displacement > adrp_4GigLimit) || (displacement < (-adrp_4GigLimit)) ) {
+		// show layout of final image
+		printSectionLayout(state);
+		
+		const ld::Atom* target;	
+		throwf("ARM64 ADRP out of range (%lld max is +/-4GB): from %s (0x%08llX) to %s (0x%08llX)", 
+				displacement, atom->name(), atom->finalAddress(), referenceTargetAtomName(state, fixup), 
+				addressOf(state, fixup, &target));
+	}
+}
 
 
 uint16_t OutputFile::get16LE(uint8_t* loc) { return LittleEndian::get16(*(uint16_t*)loc); }
@@ -990,6 +782,517 @@ void     OutputFile::set32BE(uint8_t* loc, uint32_t value) { BigEndian::set32(*(
 uint64_t OutputFile::get64BE(uint8_t* loc) { return BigEndian::get64(*(uint64_t*)loc); }
 void     OutputFile::set64BE(uint8_t* loc, uint64_t value) { BigEndian::set64(*(uint64_t*)loc, value); }
 
+static uint32_t makeNOP() {
+	return 0xD503201F;
+}
+
+enum SignExtension { signedNot, signed32, signed64 };
+struct LoadStoreInfo {
+	uint32_t		reg;
+	uint32_t		baseReg;
+	uint32_t		offset;		// after scaling
+	uint32_t		size;		// 1,2,4,8, or 16
+	bool			isStore;
+	bool			isFloat;	// if destReg is FP/SIMD
+	SignExtension	signEx;		// if load is sign extended
+};
+
+static uint32_t makeLDR_literal(const LoadStoreInfo& info, uint64_t targetAddress, uint64_t instructionAddress) 
+{
+	int64_t delta = targetAddress - instructionAddress;
+	assert(delta < 1024*1024);
+	assert(delta > -1024*1024);
+	assert((info.reg & 0xFFFFFFE0) == 0);
+	assert((targetAddress & 0x3) == 0);
+	assert((instructionAddress & 0x3) == 0);
+	assert(!info.isStore);
+	uint32_t imm19 = (delta << 3) & 0x00FFFFE0;
+	uint32_t instruction = 0;
+	switch ( info.size ) {
+		case 4:
+			if ( info.isFloat ) {
+				assert(info.signEx == signedNot);
+				instruction = 0x1C000000;
+			}
+			else {
+				if ( info.signEx == signed64 )
+					instruction = 0x98000000;
+				else
+					instruction = 0x18000000;
+			}
+			break;
+		case 8:
+			assert(info.signEx == signedNot);
+			instruction = info.isFloat ? 0x5C000000 : 0x58000000;
+			break;
+		case 16:
+			assert(info.signEx == signedNot);
+			instruction = 0x9C000000;
+			break;
+		default:
+			assert(0 && "invalid load size for literal");
+	}
+	return (instruction | imm19 | info.reg);
+}
+
+static uint32_t makeADR(uint32_t destReg, uint64_t targetAddress, uint64_t instructionAddress)
+{
+	assert((destReg & 0xFFFFFFE0) == 0);
+	assert((instructionAddress & 0x3) == 0);
+	uint32_t instruction = 0x10000000;
+	int64_t delta = targetAddress - instructionAddress;
+	assert(delta < 1024*1024);
+	assert(delta > -1024*1024);
+	uint32_t immhi = (delta & 0x001FFFFC) << 3;
+	uint32_t immlo = (delta & 0x00000003) << 29;
+	return (instruction | immhi | immlo | destReg); 
+}
+
+static uint32_t makeLoadOrStore(const LoadStoreInfo& info)
+{
+	uint32_t instruction = 0x39000000;
+	if ( info.isFloat )
+		instruction |= 0x04000000;
+	instruction |= info.reg;
+	instruction |= (info.baseReg << 5);
+	uint32_t sizeBits = 0;
+	uint32_t opcBits = 0;
+	uint32_t imm12Bits = 0;
+	switch ( info.size ) {
+		case 1:
+			sizeBits = 0;
+			imm12Bits = info.offset;
+			if ( info.isStore ) {
+				opcBits = 0;
+			}
+			else {
+				switch ( info.signEx ) {
+					case signedNot:
+						opcBits = 1;
+						break;
+					case signed32:
+						opcBits = 3;
+						break;
+					case signed64:
+						opcBits = 2;
+						break;
+				}
+			}
+			break;
+		case 2:
+			sizeBits = 1;
+			assert((info.offset % 2) == 0);
+			imm12Bits = info.offset/2;
+			if ( info.isStore ) {
+				opcBits = 0;
+			}
+			else {
+				switch ( info.signEx ) {
+					case signedNot:
+						opcBits = 1;
+						break;
+					case signed32:
+						opcBits = 3;
+						break;
+					case signed64:
+						opcBits = 2;
+						break;
+				}
+			}
+			break;
+		case 4:
+			sizeBits = 2;
+			assert((info.offset % 4) == 0);
+			imm12Bits = info.offset/4;
+			if ( info.isStore ) {
+				opcBits = 0;
+			}
+			else {
+				switch ( info.signEx ) {
+					case signedNot:
+						opcBits = 1;
+						break;
+					case signed32:
+						assert(0 && "cannot use signed32 with 32-bit load/store");
+						break;
+					case signed64:
+						opcBits = 2;
+						break;
+				}
+			}
+			break;
+		case 8:
+			sizeBits = 3;
+			assert((info.offset % 8) == 0);
+			imm12Bits = info.offset/8;
+			if ( info.isStore ) {
+				opcBits = 0;
+			}
+			else {
+				opcBits = 1;
+				assert(info.signEx == signedNot);
+			}
+			break;
+		case 16:
+			sizeBits = 0;
+			assert((info.offset % 16) == 0);
+			imm12Bits = info.offset/16;
+			assert(info.isFloat);
+			if ( info.isStore ) {
+				opcBits = 2;
+			}
+			else {
+				opcBits = 3;
+			}
+			break;
+		default:
+			assert(0 && "bad load/store size");
+			break;
+	}
+	assert(imm12Bits < 4096);
+	return (instruction | (sizeBits << 30) | (opcBits << 22) | (imm12Bits << 10));
+}
+
+static bool parseLoadOrStore(uint32_t instruction, LoadStoreInfo& info) 
+{
+	if ( (instruction & 0x3B000000) != 0x39000000 ) 
+		return false;
+	info.isFloat = ( (instruction & 0x04000000) != 0 );
+	info.reg = (instruction & 0x1F);
+	info.baseReg = ((instruction>>5) & 0x1F);
+	switch (instruction & 0xC0C00000) {
+		case 0x00000000:
+			info.size = 1;
+			info.isStore = true;
+			info.signEx = signedNot;
+			break;
+		case 0x00400000:
+			info.size = 1;
+			info.isStore = false;
+			info.signEx = signedNot;
+			break;
+		case 0x00800000:
+			if ( info.isFloat ) {
+				info.size = 16;
+				info.isStore = true;
+				info.signEx = signedNot;
+			}
+			else {
+				info.size = 1;
+				info.isStore = false;
+				info.signEx = signed64;
+			}
+			break;
+		case 0x00C00000:
+			if ( info.isFloat ) {
+				info.size = 16;
+				info.isStore = false;
+				info.signEx = signedNot;
+			}
+			else {
+				info.size = 1;
+				info.isStore = false;
+				info.signEx = signed32;
+			}
+			break;
+		case 0x40000000:
+			info.size = 2;
+			info.isStore = true;
+			info.signEx = signedNot;
+			break;
+		case 0x40400000:
+			info.size = 2;
+			info.isStore = false;
+			info.signEx = signedNot;
+			break;
+		case 0x40800000:
+			info.size = 2;
+			info.isStore = false;
+			info.signEx = signed64;
+			break;
+		case 0x40C00000:
+			info.size = 2;
+			info.isStore = false;
+			info.signEx = signed32;
+			break;
+		case 0x80000000:
+			info.size = 4;
+			info.isStore = true;
+			info.signEx = signedNot;
+			break;
+		case 0x80400000:
+			info.size = 4;
+			info.isStore = false;
+			info.signEx = signedNot;
+			break;
+		case 0x80800000:
+			info.size = 4;
+			info.isStore = false;
+			info.signEx = signed64;
+			break;
+		case 0xC0000000:
+			info.size = 8;
+			info.isStore = true;
+			info.signEx = signedNot;
+			break;
+		case 0xC0400000:
+			info.size = 8;
+			info.isStore = false;
+			info.signEx = signedNot;
+			break;
+		default:
+			return false;
+	}
+	info.offset = ((instruction >> 10) & 0x0FFF) * info.size;
+	return true;	
+}
+
+struct AdrpInfo {
+	uint32_t	destReg;
+};
+
+static bool parseADRP(uint32_t instruction, AdrpInfo& info) 
+{
+	if ( (instruction & 0x9F000000) != 0x90000000 )
+		return false;
+	info.destReg = (instruction & 0x1F);
+	return true;
+}
+
+struct AddInfo {
+	uint32_t	destReg;
+	uint32_t	srcReg;
+	uint32_t	addend;
+};
+
+static bool parseADD(uint32_t instruction, AddInfo& info) 
+{
+	if ( (instruction & 0xFFC00000) != 0x91000000 )
+		return false;
+	info.destReg = (instruction & 0x1F);
+	info.srcReg = ((instruction>>5) & 0x1F);
+	info.addend = ((instruction>>10) & 0xFFF);
+	return true;
+}
+
+
+
+#if 0
+static uint32_t makeLDR_scaledOffset(const LoadStoreInfo& info) 
+{
+	assert((info.reg & 0xFFFFFFE0) == 0);
+	assert((info.baseReg & 0xFFFFFFE0) == 0);
+	assert(!info.isFloat || (info.signEx != signedNot));
+	uint32_t sizeBits = 0;
+	uint32_t opcBits = 1;
+	uint32_t vBit = info.isFloat;
+	switch ( info.signEx ) {
+		case signedNot:
+			opcBits = 1;
+			break;
+		case signed32:
+			opcBits = 3;
+			break;
+		case signed64:
+			opcBits = 2;
+			break;
+		default:
+			assert(0 && "bad SignExtension runtime value");
+	}
+	switch ( info.size ) {
+		case 1:
+			sizeBits = 0;
+			break;
+		case 2:
+			sizeBits = 1;
+			break;
+		case 4:
+			sizeBits = 2;
+			break;
+		case 8:
+			sizeBits = 3;
+			break;
+		case 16:
+			sizeBits = 0;
+			vBit = 1;
+			opcBits = 3;
+			break;
+		default:
+			assert(0 && "invalid load size for literal");
+	}
+	assert((info.offset % info.size) == 0);
+	uint32_t scaledOffset = info.offset/info.size;
+	assert(scaledOffset < 4096);
+	return (0x39000000 | (sizeBits<<30) | (vBit<<26) | (opcBits<<22) | (scaledOffset<<10) | (info.baseReg<<5) | info.reg);
+}
+
+static uint32_t makeLDR_literal(uint32_t destReg, uint32_t loadSize, bool isFloat, uint64_t targetAddress, uint64_t instructionAddress) 
+{
+	int64_t delta = targetAddress - instructionAddress;
+	assert(delta < 1024*1024);
+	assert(delta > -1024*1024);
+	assert((destReg & 0xFFFFFFE0) == 0);
+	assert((targetAddress & 0x3) == 0);
+	assert((instructionAddress & 0x3) == 0);
+	uint32_t imm19 = (delta << 3) & 0x00FFFFE0;
+	uint32_t instruction = 0;
+	switch ( loadSize ) {
+		case 4:
+			instruction = isFloat ? 0x1C000000 : 0x18000000;
+			break;
+		case 8:
+			instruction = isFloat ? 0x5C000000 : 0x58000000;
+			break;
+		case 16:
+			instruction = 0x9C000000;
+			break;
+		default:
+			assert(0 && "invalid load size for literal");
+	}
+	return (instruction | imm19 | destReg);
+}
+
+
+static bool ldrInfo(uint32_t instruction, uint8_t* size, uint8_t* destReg, bool* v, uint32_t* scaledOffset)
+{
+	*v = ( (instruction & 0x04000000) != 0 );
+	*destReg = (instruction & 0x1F);
+	uint32_t imm12 = ((instruction >> 10) & 0x00000FFF);
+	switch ( (instruction & 0xC0000000) >> 30 ) {
+		case 0:
+			// vector and byte LDR have same "size" bits, need to check other bits to differenciate
+			if ( (instruction & 0x00800000) == 0 ) {
+				*size = 1;
+				*scaledOffset = imm12;
+			}
+			else {
+				*size = 16;
+				*scaledOffset = imm12 * 16;
+			}
+			break;
+		case 1:
+			*size = 2;
+			*scaledOffset = imm12 * 2;
+			break;
+		case 2:
+			*size = 4;
+			*scaledOffset = imm12 * 4;
+			break;
+		case 3:
+			*size = 8;
+			*scaledOffset = imm12 * 8;
+			break;
+	}
+	return ((instruction & 0x3B400000) == 0x39400000);
+}
+#endif
+
+static bool withinOneMeg(uint64_t addr1, uint64_t addr2) {
+	int64_t delta = (addr2 - addr1);
+	return ( (delta < 1024*1024) && (delta > -1024*1024) );
+}
+
+void OutputFile::setInfo(ld::Internal& state, const ld::Atom* atom, uint8_t* buffer, const std::map<uint32_t, const Fixup*>& usedByHints, 
+						uint32_t offsetInAtom, uint32_t delta, InstructionInfo* info) 
+{
+	info->offsetInAtom = offsetInAtom + delta;
+	std::map<uint32_t, const Fixup*>::const_iterator pos = usedByHints.find(info->offsetInAtom);
+	if ( (pos != usedByHints.end()) && (pos->second != NULL) ) {
+		info->fixup = pos->second;
+		info->targetAddress = addressOf(state, info->fixup, &info->target);
+		if ( info->fixup->clusterSize != ld::Fixup::k1of1 ) {
+			assert(info->fixup->firstInCluster());
+			const ld::Fixup* nextFixup = info->fixup + 1;
+			if ( nextFixup->kind == ld::Fixup::kindAddAddend ) {
+				info->targetAddress += nextFixup->u.addend;
+			}
+			else {
+				assert(0 && "expected addend");
+			}
+		}
+	}
+	else {
+		info->fixup = NULL;
+		info->targetAddress = 0;
+		info->target = NULL;
+	}
+	info->instructionContent = &buffer[info->offsetInAtom];
+	info->instructionAddress = atom->finalAddress() + info->offsetInAtom;
+	info->instruction = get32LE(info->instructionContent);
+}	
+
+static bool isPageKind(const ld::Fixup* fixup, bool mustBeGOT=false)
+{
+	if ( fixup == NULL )
+		return false;
+	const ld::Fixup* f;
+	switch ( fixup->kind ) {
+		case ld::Fixup::kindStoreTargetAddressARM64Page21:
+			return !mustBeGOT;
+		case ld::Fixup::kindStoreTargetAddressARM64GOTLoadPage21:
+		case ld::Fixup::kindStoreTargetAddressARM64GOTLeaPage21:
+			return true;
+		case ld::Fixup::kindSetTargetAddress:
+			f = fixup;
+			do { 
+				++f;
+			} while ( ! f->lastInCluster() );
+			switch (f->kind ) {
+				case ld::Fixup::kindStoreARM64Page21:
+					return !mustBeGOT;
+				case ld::Fixup::kindStoreARM64GOTLoadPage21:
+				case ld::Fixup::kindStoreARM64GOTLeaPage21:
+					return true;
+				default:
+					break;
+			}
+			break;
+		default:
+			break;
+	}
+	return false;
+}
+
+static bool isPageOffsetKind(const ld::Fixup* fixup, bool mustBeGOT=false)
+{
+	if ( fixup == NULL )
+		return false;
+	const ld::Fixup* f;
+	switch ( fixup->kind ) {
+		case ld::Fixup::kindStoreTargetAddressARM64PageOff12:
+			return !mustBeGOT;
+		case ld::Fixup::kindStoreTargetAddressARM64GOTLoadPageOff12:
+		case ld::Fixup::kindStoreTargetAddressARM64GOTLeaPageOff12:
+			return true;
+		case ld::Fixup::kindSetTargetAddress:
+			f = fixup;
+			do { 
+				++f;
+			} while ( ! f->lastInCluster() );
+			switch (f->kind ) {
+				case ld::Fixup::kindStoreARM64PageOff12:
+					return !mustBeGOT;
+				case ld::Fixup::kindStoreARM64GOTLoadPageOff12:
+				case ld::Fixup::kindStoreARM64GOTLeaPageOff12:
+					return true;
+				default:
+					break;
+			}
+			break;
+		default:
+			break;
+	}
+	return false;
+}
+
+
+#define LOH_ASSERT(cond) \
+	if ( !(cond) ) { \
+		warning("ignoring linker optimzation hint at %s+0x%X because " #cond, atom->name(), fit->offsetInAtom); \
+		break; \
+	} 
+
+
 void OutputFile::applyFixUps(ld::Internal& state, uint64_t mhAddress, const ld::Atom* atom, uint8_t* buffer)
 {
 	//fprintf(stderr, "applyFixUps() on %s\n", atom->name());
@@ -1003,8 +1306,10 @@ void OutputFile::applyFixUps(ld::Internal& state, uint64_t mhAddress, const ld::
 	bool is_blx;
 	bool is_b;
 	bool thumbTarget = false;
+	std::map<uint32_t, const Fixup*> usedByHints;
 	for (ld::Fixup::iterator fit = atom->fixupsBegin(), end=atom->fixupsEnd(); fit != end; ++fit) {
 		uint8_t* fixUpLocation = &buffer[fit->offsetInAtom];
+		ld::Fixup::LOH_arm64 lohExtra;
 		switch ( (ld::Fixup::Kind)(fit->kind) ) { 
 			case ld::Fixup::kindNone:
 			case ld::Fixup::kindNoneFollowOn:
@@ -1027,16 +1332,18 @@ void OutputFile::applyFixUps(ld::Internal& state, uint64_t mhAddress, const ld::
 					accumulator -= delta;
 				break;
 			case ld::Fixup::kindAddAddend:
-				// <rdar://problem/8342028> ARM main executables main contain .long constants pointing
-				// into themselves such as jump tables.  These .long should not have thumb bit set
-				// even though the target is a thumb instruction. We can tell it is an interior pointer
-				// because we are processing an addend. 
-				if ( thumbTarget && (toTarget == atom) && ((int32_t)fit->u.addend > 0) ) {
-					accumulator &= (-2);
-					//warning("removing thumb bit from intra-atom pointer in %s %s+0x%0X", 
-					//		atom->section().sectionName(), atom->name(), fit->offsetInAtom);
+				if ( ! fit->contentIgnoresAddend ) {
+					// <rdar://problem/8342028> ARM main executables main contain .long constants pointing
+					// into themselves such as jump tables.  These .long should not have thumb bit set
+					// even though the target is a thumb instruction. We can tell it is an interior pointer
+					// because we are processing an addend. 
+					if ( thumbTarget && (toTarget == atom) && ((int32_t)fit->u.addend > 0) ) {
+						accumulator &= (-2);
+						//warning("removing thumb bit from intra-atom pointer in %s %s+0x%0X", 
+						//		atom->section().sectionName(), atom->name(), fit->offsetInAtom);
+					}
+					accumulator += fit->u.addend;
 				}
-				accumulator += fit->u.addend;
 				break;
 			case ld::Fixup::kindSubtractAddend:
 				accumulator -= fit->u.addend;
@@ -1233,7 +1540,20 @@ void OutputFile::applyFixUps(ld::Internal& state, uint64_t mhAddress, const ld::
 					set32LE(fixUpLocation, 0x46C04040);
 				}
 				break;
+			case ld::Fixup::kindStoreARM64DtraceCallSiteNop:
+				if ( _options.outputKind() != Options::kObjectFile ) {
+					// change call site to a NOP
+					set32LE(fixUpLocation, 0xD503201F);
+				}
+				break;
+			case ld::Fixup::kindStoreARM64DtraceIsEnableSiteClear:
+				if ( _options.outputKind() != Options::kObjectFile ) {
+					// change call site to 'MOVZ X0,0'
+					set32LE(fixUpLocation, 0xD2800000);
+				}
+				break;
 			case ld::Fixup::kindLazyTarget:
+			case ld::Fixup::kindIslandTarget:
 				break;
 			case ld::Fixup::kindSetLazyOffset:
 				assert(fit->binding == ld::Fixup::bindingDirectlyBound);
@@ -1245,6 +1565,17 @@ void OutputFile::applyFixUps(ld::Internal& state, uint64_t mhAddress, const ld::
 			case ld::Fixup::kindDataInCodeStartJT32:
 			case ld::Fixup::kindDataInCodeStartJTA32:
 			case ld::Fixup::kindDataInCodeEnd:
+				break;
+			case ld::Fixup::kindLinkerOptimizationHint:
+				// expand table of address/offsets used by hints
+				lohExtra.addend = fit->u.addend;
+				usedByHints[fit->offsetInAtom + (lohExtra.info.delta1 << 2)] = NULL;
+				if ( lohExtra.info.count > 0 )
+					usedByHints[fit->offsetInAtom + (lohExtra.info.delta2 << 2)] = NULL;
+				if ( lohExtra.info.count > 1 )
+					usedByHints[fit->offsetInAtom + (lohExtra.info.delta3 << 2)] = NULL;
+				if ( lohExtra.info.count > 2 )
+					usedByHints[fit->offsetInAtom + (lohExtra.info.delta4 << 2)] = NULL;
 				break;
 			case ld::Fixup::kindStoreTargetAddressLittleEndian32:
 				accumulator = addressOf(state, fit, &toTarget);
@@ -1330,6 +1661,22 @@ void OutputFile::applyFixUps(ld::Internal& state, uint64_t mhAddress, const ld::
 			case ld::Fixup::kindStoreTargetAddressARMBranch24:
 				accumulator = addressOf(state, fit, &toTarget);
 				thumbTarget = targetIsThumb(state, fit);
+				if ( toTarget->contentType() == ld::Atom::typeBranchIsland ) {
+					// Branching to island.  If ultimate target is in range, branch there directly.
+					for (ld::Fixup::iterator islandfit = toTarget->fixupsBegin(), end=toTarget->fixupsEnd(); islandfit != end; ++islandfit) {
+						if ( islandfit->kind == ld::Fixup::kindIslandTarget ) {
+							const ld::Atom* islandTarget = NULL;
+							uint64_t islandTargetAddress = addressOf(state, islandfit, &islandTarget);
+							delta = islandTargetAddress - (atom->finalAddress() + fit->offsetInAtom + 4);
+							if ( checkArmBranch24Displacement(delta) ) {
+								toTarget = islandTarget;
+								accumulator = islandTargetAddress;
+								thumbTarget = targetIsThumb(state, islandfit);
+							}
+							break;
+						}
+					}
+				}
 				if ( thumbTarget ) 
 					accumulator |= 1;
 				if ( fit->contentDetlaToAddendOnly )
@@ -1340,18 +1687,18 @@ void OutputFile::applyFixUps(ld::Internal& state, uint64_t mhAddress, const ld::
 				delta = accumulator - (atom->finalAddress() + fit->offsetInAtom + 8);
 				rangeCheckARMBranch24(delta, state, atom, fit);
 				instruction = get32LE(fixUpLocation);
-				// Make sure we are calling arm with bl, thumb with blx			
+				// Make sure we are calling arm with bl, thumb with blx		
 				is_bl = ((instruction & 0xFF000000) == 0xEB000000);
 				is_blx = ((instruction & 0xFE000000) == 0xFA000000);
 				is_b = !is_blx && ((instruction & 0x0F000000) == 0x0A000000);
-				if ( is_bl && thumbTarget ) {
-					uint32_t opcode = 0xFA000000;
+				if ( (is_bl | is_blx) && thumbTarget ) {
+					uint32_t opcode = 0xFA000000;  // force to be blx
 					uint32_t disp = (uint32_t)(delta >> 2) & 0x00FFFFFF;
 					uint32_t h_bit = (uint32_t)(delta << 23) & 0x01000000;
 					newInstruction = opcode | h_bit | disp;
 				} 
-				else if ( is_blx && !thumbTarget ) {
-					uint32_t opcode = 0xEB000000;
+				else if ( (is_bl | is_blx) && !thumbTarget ) {
+					uint32_t opcode = 0xEB000000;  // force to be bl
 					uint32_t disp = (uint32_t)(delta >> 2) & 0x00FFFFFF;
 					newInstruction = opcode | disp;
 				} 
@@ -1374,6 +1721,23 @@ void OutputFile::applyFixUps(ld::Internal& state, uint64_t mhAddress, const ld::
 			case ld::Fixup::kindStoreTargetAddressThumbBranch22:
 				accumulator = addressOf(state, fit, &toTarget);
 				thumbTarget = targetIsThumb(state, fit);
+				if ( toTarget->contentType() == ld::Atom::typeBranchIsland ) {
+					// branching to island, so see if ultimate target is in range 
+					// and if so branch to ultimate target instead.
+					for (ld::Fixup::iterator islandfit = toTarget->fixupsBegin(), end=toTarget->fixupsEnd(); islandfit != end; ++islandfit) {
+						if ( islandfit->kind == ld::Fixup::kindIslandTarget ) {
+							const ld::Atom* islandTarget = NULL;
+							uint64_t islandTargetAddress = addressOf(state, islandfit, &islandTarget);
+							delta = islandTargetAddress - (atom->finalAddress() + fit->offsetInAtom + 4);
+							if ( checkThumbBranch22Displacement(delta) ) {
+								toTarget = islandTarget;
+								accumulator = islandTargetAddress;
+								thumbTarget = targetIsThumb(state, islandfit);
+							}
+							break;
+						}
+					}
+				}
 				if ( thumbTarget ) 
 					accumulator |= 1;
 				if ( fit->contentDetlaToAddendOnly )
@@ -1508,8 +1872,591 @@ void OutputFile::applyFixUps(ld::Internal& state, uint64_t mhAddress, const ld::
 					set32LE(fixUpLocation, newInstruction);		
 				}
 				break;
+#if SUPPORT_ARCH_arm64
+			case ld::Fixup::kindStoreTargetAddressARM64Branch26:
+				accumulator = addressOf(state, fit, &toTarget);
+				// fall into kindStoreARM64Branch26 case
+			case ld::Fixup::kindStoreARM64Branch26:
+				if ( fit->contentAddendOnly )
+					delta = accumulator;
+				else
+                    delta = accumulator - (atom->finalAddress() + fit->offsetInAtom);
+				rangeCheckARM64Branch26(delta, state, atom, fit);
+				instruction = get32LE(fixUpLocation);
+				newInstruction = (instruction & 0xFC000000) | ((uint32_t)(delta >> 2) & 0x03FFFFFF);
+				set32LE(fixUpLocation, newInstruction);
+				break;
+			case ld::Fixup::kindStoreTargetAddressARM64GOTLeaPage21:
+			case ld::Fixup::kindStoreTargetAddressARM64GOTLoadPage21:
+			case ld::Fixup::kindStoreTargetAddressARM64Page21:
+			case ld::Fixup::kindStoreTargetAddressARM64TLVPLoadPage21:
+			case ld::Fixup::kindStoreTargetAddressARM64TLVPLoadNowLeaPage21:
+				accumulator = addressOf(state, fit, &toTarget);
+				// fall into kindStoreARM64Branch26 case
+			case ld::Fixup::kindStoreARM64GOTLeaPage21:
+			case ld::Fixup::kindStoreARM64GOTLoadPage21:
+			case ld::Fixup::kindStoreARM64TLVPLoadPage21:
+			case ld::Fixup::kindStoreARM64TLVPLoadNowLeaPage21:
+			case ld::Fixup::kindStoreARM64Page21:
+				{
+					// the ADRP instruction adds the imm << 12 to the page that the pc is on
+					if ( fit->contentAddendOnly )
+						delta = 0;
+					else
+						delta = (accumulator & (-4096)) - ((atom->finalAddress() + fit->offsetInAtom) & (-4096));
+					rangeCheckARM64Page21(delta, state, atom, fit);
+					instruction = get32LE(fixUpLocation);
+					uint32_t immhi = (delta >> 9) & (0x00FFFFE0);
+					uint32_t immlo = (delta << 17) & (0x60000000);
+					newInstruction = (instruction & 0x9F00001F) | immlo | immhi;
+					set32LE(fixUpLocation, newInstruction);
+				}
+				break;
+			case ld::Fixup::kindStoreTargetAddressARM64GOTLoadPageOff12:
+			case ld::Fixup::kindStoreTargetAddressARM64PageOff12:
+			case ld::Fixup::kindStoreTargetAddressARM64TLVPLoadPageOff12:
+				accumulator = addressOf(state, fit, &toTarget);
+				// fall into kindAddressARM64PageOff12 case
+			case ld::Fixup::kindStoreARM64TLVPLoadPageOff12:
+			case ld::Fixup::kindStoreARM64GOTLoadPageOff12:
+			case ld::Fixup::kindStoreARM64PageOff12:
+				{
+					uint32_t offset = accumulator & 0x00000FFF;
+					instruction = get32LE(fixUpLocation);
+					// LDR/STR instruction have implicit scale factor, need to compensate for that
+					if ( instruction & 0x08000000 ) {
+						uint32_t implictShift = ((instruction >> 30) & 0x3);
+						switch ( implictShift ) {
+							case 0:
+								if ( (instruction & 0x04800000) == 0x04800000 ) {
+									// vector and byte LDR/STR have same "size" bits, need to check other bits to differenciate
+									implictShift = 4;
+									if ( (offset & 0xF) != 0 ) {
+											throwf("128-bit LDR/STR not 16-byte aligned: from %s (0x%08llX) to %s (0x%08llX)", 
+												atom->name(), atom->finalAddress(), referenceTargetAtomName(state, fit), 
+												addressOf(state, fit, &toTarget));
+									}
+								}
+								break;
+							case 1:
+								if ( (offset & 0x1) != 0 ) {
+										throwf("16-bit LDR/STR not 2-byte aligned: from %s (0x%08llX) to %s (0x%08llX)", 
+											atom->name(), atom->finalAddress(), referenceTargetAtomName(state, fit), 
+											addressOf(state, fit, &toTarget));
+								}
+								break;
+							case 2:
+								if ( (offset & 0x3) != 0 ) {
+										throwf("32-bit LDR/STR not 4-byte aligned: from %s (0x%08llX) to %s (0x%08llX)", 
+											atom->name(), atom->finalAddress(), referenceTargetAtomName(state, fit), 
+											addressOf(state, fit, &toTarget));
+								}
+								break;
+							case 3:
+								if ( (offset & 0x7) != 0 ) {
+										throwf("64-bit LDR/STR not 8-byte aligned: from %s (0x%08llX) to %s (0x%08llX)", 
+											atom->name(), atom->finalAddress(), referenceTargetAtomName(state, fit), 
+											addressOf(state, fit, &toTarget));
+								}
+								break;
+						}
+						// compensate for implicit scale
+						offset >>= implictShift;
+					}
+					if ( fit->contentAddendOnly )
+						offset = 0;
+					uint32_t imm12 = offset << 10;
+					newInstruction = (instruction & 0xFFC003FF) | imm12;
+					set32LE(fixUpLocation, newInstruction);
+				}
+				break;
+			case ld::Fixup::kindStoreTargetAddressARM64GOTLeaPageOff12:
+				accumulator = addressOf(state, fit, &toTarget);
+				// fall into kindStoreARM64GOTLoadPage21 case
+			case ld::Fixup::kindStoreARM64GOTLeaPageOff12:
+				{
+					// GOT entry was optimized away, change LDR instruction to a ADD
+					instruction = get32LE(fixUpLocation);
+					if ( (instruction & 0xFFC00000) != 0xF9400000 )
+						throwf("GOT load reloc does not point to a LDR instruction in %s", atom->name());
+					uint32_t offset = accumulator & 0x00000FFF;
+					uint32_t imm12 = offset << 10;
+					newInstruction = 0x91000000 | imm12 | (instruction & 0x000003FF);
+					set32LE(fixUpLocation, newInstruction);
+				}
+				break;
+			case ld::Fixup::kindStoreTargetAddressARM64TLVPLoadNowLeaPageOff12:
+				accumulator = addressOf(state, fit, &toTarget);
+				// fall into kindStoreARM64TLVPLeaPageOff12 case
+			case ld::Fixup::kindStoreARM64TLVPLoadNowLeaPageOff12:
+				{
+					// TLV thunk in same linkage unit, so LEA it directly, changing LDR instruction to a ADD
+					instruction = get32LE(fixUpLocation);
+					if ( (instruction & 0xFFC00000) != 0xF9400000 )
+						throwf("TLV load reloc does not point to a LDR instruction in %s", atom->name());
+					uint32_t offset = accumulator & 0x00000FFF;
+					uint32_t imm12 = offset << 10;
+					newInstruction = 0x91000000 | imm12 | (instruction & 0x000003FF);
+					set32LE(fixUpLocation, newInstruction);
+				}
+				break;
+			case ld::Fixup::kindStoreARM64PointerToGOT:
+				set64LE(fixUpLocation, accumulator);
+				break;
+            case ld::Fixup::kindStoreARM64PCRelToGOT:
+				if ( fit->contentAddendOnly )
+					delta = accumulator;
+				else
+					delta = accumulator - (atom->finalAddress() + fit->offsetInAtom);
+				set32LE(fixUpLocation, delta);
+				break;
+#endif
 		}
 	}
+	
+	// after all fixups are done on atom, if there are potential optimizations, do those
+	if ( (usedByHints.size() != 0) && (_options.outputKind() != Options::kObjectFile) && !_options.ignoreOptimizationHints() ) {
+		// fill in second part of usedByHints map, so we can see the target of fixups that might be optimized
+		for (ld::Fixup::iterator fit = atom->fixupsBegin(), end=atom->fixupsEnd(); fit != end; ++fit) {
+			switch ( fit->kind ) {
+				case ld::Fixup::kindLinkerOptimizationHint:
+				case ld::Fixup::kindNoneFollowOn:
+				case ld::Fixup::kindNoneGroupSubordinate:
+				case ld::Fixup::kindNoneGroupSubordinateFDE:
+				case ld::Fixup::kindNoneGroupSubordinateLSDA:
+				case ld::Fixup::kindNoneGroupSubordinatePersonality:
+					break;
+				default:
+					if ( fit->firstInCluster() ) {
+						std::map<uint32_t, const Fixup*>::iterator pos = usedByHints.find(fit->offsetInAtom);
+						if ( pos != usedByHints.end() ) {
+							assert(pos->second == NULL && "two fixups in same hint location");
+							pos->second = fit;
+							//fprintf(stderr, "setting %s usedByHints[0x%04X], kind = %d\n",  atom->name(), fit->offsetInAtom, fit->kind);
+						}
+					}
+			}
+		}
+		
+		// apply hints pass 1
+		for (ld::Fixup::iterator fit = atom->fixupsBegin(), end=atom->fixupsEnd(); fit != end; ++fit) {
+			if ( fit->kind != ld::Fixup::kindLinkerOptimizationHint ) 
+				continue;
+			InstructionInfo infoA;
+			InstructionInfo infoB;
+			InstructionInfo infoC;
+			InstructionInfo infoD;
+			LoadStoreInfo ldrInfoB, ldrInfoC;
+			AddInfo addInfoB;
+			AdrpInfo adrpInfoA;
+			bool usableSegment;
+			bool targetFourByteAligned;
+			bool literalableSize, isADRP, isADD, isLDR, isSTR;
+			//uint8_t loadSize, destReg;
+			//uint32_t scaledOffset;
+			//uint32_t imm12;
+			ld::Fixup::LOH_arm64 alt;
+			alt.addend = fit->u.addend;
+			setInfo(state, atom, buffer, usedByHints, fit->offsetInAtom, (alt.info.delta1 << 2), &infoA);
+			if ( alt.info.count > 0 ) 
+				setInfo(state, atom, buffer, usedByHints, fit->offsetInAtom, (alt.info.delta2 << 2), &infoB);
+			if ( alt.info.count > 1 )
+				setInfo(state, atom, buffer, usedByHints, fit->offsetInAtom, (alt.info.delta3 << 2), &infoC);
+			if ( alt.info.count > 2 )
+				setInfo(state, atom, buffer, usedByHints, fit->offsetInAtom, (alt.info.delta4 << 2), &infoD);
+				
+			switch ( alt.info.kind ) {
+				case LOH_ARM64_ADRP_ADRP:
+					// processed in pass 2 beacuse some ADRP may have been removed
+					break;
+				case LOH_ARM64_ADRP_LDR:
+					LOH_ASSERT(alt.info.count == 1);
+					LOH_ASSERT(isPageKind(infoA.fixup));
+					LOH_ASSERT(isPageOffsetKind(infoB.fixup));
+					LOH_ASSERT(infoA.target == infoB.target);
+					LOH_ASSERT(infoA.targetAddress == infoB.targetAddress);
+					usableSegment = ( !_options.sharedRegionEligible() || (strcmp(atom->section().segmentName(), infoB.target->section().segmentName()) == 0) );
+					isADRP = parseADRP(infoA.instruction, adrpInfoA);
+					LOH_ASSERT(isADRP);
+					isLDR = parseLoadOrStore(infoB.instruction, ldrInfoB);
+					LOH_ASSERT(isLDR);
+					LOH_ASSERT(ldrInfoB.baseReg == adrpInfoA.destReg);
+					LOH_ASSERT(ldrInfoB.offset == (infoA.targetAddress & 0x00000FFF));
+					literalableSize = ( (ldrInfoB.size != 1) && (ldrInfoB.size != 2) );
+					targetFourByteAligned = ( (infoA.targetAddress & 0x3) == 0 );
+					if ( literalableSize && usableSegment && targetFourByteAligned && withinOneMeg(infoB.instructionAddress, infoA.targetAddress) ) {
+						set32LE(infoA.instructionContent, makeNOP());
+						set32LE(infoB.instructionContent, makeLDR_literal(ldrInfoB, infoA.targetAddress, infoB.instructionAddress));
+						if ( _options.verboseOptimizationHints() )
+							fprintf(stderr, "adrp-ldr at 0x%08llX transformed to LDR literal\n", infoB.instructionAddress);
+					}
+					else {
+						if ( _options.verboseOptimizationHints() )
+							fprintf(stderr, "adrp-ldr at 0x%08llX not transformed, isLDR=%d, literalableSize=%d, inRange=%d, usableSegment=%d, scaledOffset=%d\n", 
+								infoB.instructionAddress, isLDR, literalableSize, withinOneMeg(infoB.instructionAddress, infoA.targetAddress), usableSegment, ldrInfoB.offset);
+					}
+					break;
+				case LOH_ARM64_ADRP_ADD_LDR:
+					LOH_ASSERT(alt.info.count == 2);
+					LOH_ASSERT(isPageKind(infoA.fixup));
+					LOH_ASSERT(isPageOffsetKind(infoB.fixup));
+					LOH_ASSERT(infoC.fixup == NULL);
+					LOH_ASSERT(infoA.target == infoB.target);
+					LOH_ASSERT(infoA.targetAddress == infoB.targetAddress);
+					usableSegment = ( !_options.sharedRegionEligible() || (strcmp(atom->section().segmentName(), infoB.target->section().segmentName()) == 0) );
+					isADRP = parseADRP(infoA.instruction, adrpInfoA);
+					LOH_ASSERT(isADRP);
+					isADD = parseADD(infoB.instruction, addInfoB);
+					LOH_ASSERT(isADD);
+					LOH_ASSERT(adrpInfoA.destReg == addInfoB.srcReg);
+					isLDR = parseLoadOrStore(infoC.instruction, ldrInfoC);
+					LOH_ASSERT(isLDR);
+					LOH_ASSERT(addInfoB.destReg == ldrInfoC.baseReg);
+					targetFourByteAligned = ( ((infoB.targetAddress+ldrInfoC.offset) & 0x3) == 0 );
+					literalableSize  = ( (ldrInfoC.size != 1) && (ldrInfoC.size != 2) );
+					if ( literalableSize && usableSegment && targetFourByteAligned && withinOneMeg(infoC.instructionAddress, infoA.targetAddress+ldrInfoC.offset) ) {
+						// can do T1 transformation to LDR literal
+						set32LE(infoA.instructionContent, makeNOP());
+						set32LE(infoB.instructionContent, makeNOP());
+						set32LE(infoC.instructionContent, makeLDR_literal(ldrInfoC, infoA.targetAddress+ldrInfoC.offset, infoC.instructionAddress));
+						if ( _options.verboseOptimizationHints() ) {
+							fprintf(stderr, "adrp-add-ldr at 0x%08llX T1 transformed to LDR literal\n", infoC.instructionAddress);
+						}
+					}
+					else if ( usableSegment && withinOneMeg(infoA.instructionAddress, infoA.targetAddress+ldrInfoC.offset) ) {
+						// can to T4 transformation and turn ADRP/ADD into ADR
+						set32LE(infoA.instructionContent, makeADR(ldrInfoC.baseReg, infoA.targetAddress+ldrInfoC.offset, infoA.instructionAddress));
+						set32LE(infoB.instructionContent, makeNOP());	
+						ldrInfoC.offset = 0; // offset is now in ADR instead of ADD or LDR
+						set32LE(infoC.instructionContent, makeLoadOrStore(ldrInfoC));
+						set32LE(infoC.instructionContent, infoC.instruction & 0xFFC003FF);	
+						if ( _options.verboseOptimizationHints() )
+							fprintf(stderr, "adrp-add-ldr at 0x%08llX T4 transformed to ADR/LDR\n", infoB.instructionAddress);						
+					}
+					else if ( ((infoB.targetAddress % ldrInfoC.size) == 0) && (ldrInfoC.offset == 0) ) {
+						// can do T2 transformation by merging ADD into LD
+						// Leave ADRP as-is
+						set32LE(infoB.instructionContent, makeNOP());	
+						ldrInfoC.offset += addInfoB.addend;
+						set32LE(infoC.instructionContent, makeLoadOrStore(ldrInfoC));
+						if ( _options.verboseOptimizationHints() )
+							fprintf(stderr, "adrp-add-ldr at 0x%08llX T2 transformed to ADRP/LDR \n", infoC.instructionAddress);
+					}
+					else {
+						if ( _options.verboseOptimizationHints() )
+							fprintf(stderr, "adrp-add-ldr at 0x%08llX could not be transformed, loadSize=%d, literalableSize=%d, inRange=%d, usableSegment=%d, targetFourByteAligned=%d, imm12=%d\n", 
+									infoC.instructionAddress, ldrInfoC.size, literalableSize, withinOneMeg(infoC.instructionAddress, infoA.targetAddress+ldrInfoC.offset), usableSegment, targetFourByteAligned, ldrInfoC.offset);
+					}
+					break;
+				case LOH_ARM64_ADRP_ADD:
+					LOH_ASSERT(alt.info.count == 1);
+					LOH_ASSERT(isPageKind(infoA.fixup));
+					LOH_ASSERT(isPageOffsetKind(infoB.fixup));
+					LOH_ASSERT(infoA.target == infoB.target);
+					LOH_ASSERT(infoA.targetAddress == infoB.targetAddress);
+					isADRP = parseADRP(infoA.instruction, adrpInfoA);
+					LOH_ASSERT(isADRP);
+					isADD = parseADD(infoB.instruction, addInfoB);
+					LOH_ASSERT(isADD);
+					LOH_ASSERT(adrpInfoA.destReg == addInfoB.srcReg);
+					usableSegment = ( !_options.sharedRegionEligible() || (strcmp(atom->section().segmentName(), infoB.target->section().segmentName()) == 0) );
+					if ( usableSegment && withinOneMeg(infoA.targetAddress, infoA.instructionAddress) ) {
+						// can do T4 transformation and use ADR 
+						set32LE(infoA.instructionContent, makeADR(addInfoB.destReg, infoA.targetAddress, infoA.instructionAddress));
+						set32LE(infoB.instructionContent, makeNOP());	
+						if ( _options.verboseOptimizationHints() )
+							fprintf(stderr, "adrp-add at 0x%08llX transformed to ADR\n", infoB.instructionAddress);
+					}
+					else {
+						if ( _options.verboseOptimizationHints() )
+							fprintf(stderr, "adrp-add at 0x%08llX not transformed, isAdd=%d, inRange=%d, usableSegment=%d\n", 
+								infoB.instructionAddress, isADD, withinOneMeg(infoA.targetAddress, infoA.instructionAddress), usableSegment);
+					}
+					break;
+				case LOH_ARM64_ADRP_LDR_GOT_LDR:
+					LOH_ASSERT(alt.info.count == 2);
+					LOH_ASSERT(isPageKind(infoA.fixup, true));
+					LOH_ASSERT(isPageOffsetKind(infoB.fixup, true));
+					LOH_ASSERT(infoC.fixup == NULL);
+					LOH_ASSERT(infoA.target == infoB.target);
+					LOH_ASSERT(infoA.targetAddress == infoB.targetAddress);
+					isADRP = parseADRP(infoA.instruction, adrpInfoA);
+					LOH_ASSERT(isADRP);
+					isLDR = parseLoadOrStore(infoC.instruction, ldrInfoC);
+					LOH_ASSERT(isLDR);
+					LOH_ASSERT(ldrInfoC.offset == 0);
+					isADD = parseADD(infoB.instruction, addInfoB);
+					isLDR = parseLoadOrStore(infoB.instruction, ldrInfoB);
+					if ( isLDR ) {
+						// target of GOT is external
+						LOH_ASSERT(ldrInfoB.size == 8);
+						LOH_ASSERT(!ldrInfoB.isFloat);
+						LOH_ASSERT(ldrInfoC.baseReg == ldrInfoB.reg);
+						//fprintf(stderr, "infoA.target=%p, %s, infoA.targetAddress=0x%08llX\n", infoA.target, infoA.target->name(), infoA.targetAddress);
+						usableSegment = ( !_options.sharedRegionEligible() || (strcmp(atom->section().segmentName(), infoB.target->section().segmentName()) == 0) );
+						targetFourByteAligned = ( ((infoA.targetAddress) & 0x3) == 0 );
+						if ( usableSegment && targetFourByteAligned && withinOneMeg(infoB.instructionAddress, infoA.targetAddress) ) {
+							// can do T5 transform
+							set32LE(infoA.instructionContent, makeNOP());
+							set32LE(infoB.instructionContent, makeLDR_literal(ldrInfoB, infoA.targetAddress, infoB.instructionAddress));
+							if ( _options.verboseOptimizationHints() ) {
+								fprintf(stderr, "adrp-ldr-got-ldr at 0x%08llX T5 transformed to LDR literal of GOT plus LDR\n", infoC.instructionAddress);
+							}
+						}
+						else {
+							if ( _options.verboseOptimizationHints() ) 
+								fprintf(stderr, "adrp-ldr-got-ldr at 0x%08llX no optimization done\n", infoC.instructionAddress);
+						}
+					}
+					else if ( isADD ) {
+						// target of GOT is in same linkage unit and B instruction was changed to ADD to compute LEA of target
+						LOH_ASSERT(addInfoB.srcReg == adrpInfoA.destReg);
+						LOH_ASSERT(addInfoB.destReg == ldrInfoC.baseReg);
+						usableSegment = ( !_options.sharedRegionEligible() || (strcmp(atom->section().segmentName(), infoB.target->section().segmentName()) == 0) );
+						targetFourByteAligned = ( ((infoA.targetAddress) & 0x3) == 0 );
+						literalableSize  = ( (ldrInfoC.size != 1) && (ldrInfoC.size != 2) );
+						if ( usableSegment && literalableSize && targetFourByteAligned && withinOneMeg(infoC.instructionAddress, infoA.targetAddress) ) {
+							// can do T1 transform
+							set32LE(infoA.instructionContent, makeNOP());	
+							set32LE(infoB.instructionContent, makeNOP());	
+							set32LE(infoC.instructionContent, makeLDR_literal(ldrInfoC, infoA.targetAddress, infoC.instructionAddress));
+							if ( _options.verboseOptimizationHints() ) 
+								fprintf(stderr, "adrp-ldr-got-ldr at 0x%08llX T1 transformed to LDR literal\n", infoC.instructionAddress);
+						}
+						else if ( usableSegment && withinOneMeg(infoA.instructionAddress, infoA.targetAddress) ) {
+							// can do T4 transform
+							set32LE(infoA.instructionContent, makeADR(ldrInfoC.baseReg, infoA.targetAddress, infoA.instructionAddress));
+							set32LE(infoB.instructionContent, makeNOP());	
+							set32LE(infoC.instructionContent, makeLoadOrStore(ldrInfoC));
+							if ( _options.verboseOptimizationHints() ) {
+								fprintf(stderr, "adrp-ldr-got-ldr at 0x%08llX T4 transformed to ADR/LDR\n", infoC.instructionAddress);
+							}
+						}
+						else if ( (infoA.targetAddress % ldrInfoC.size) == 0 ) {
+							// can do T2 transform
+							set32LE(infoB.instructionContent, makeNOP());
+							ldrInfoC.baseReg = adrpInfoA.destReg;
+							ldrInfoC.offset = addInfoB.addend;
+							set32LE(infoC.instructionContent, makeLoadOrStore(ldrInfoC));
+							if ( _options.verboseOptimizationHints() ) {
+								fprintf(stderr, "adrp-ldr-got-ldr at 0x%08llX T4 transformed to ADRP/NOP/LDR\n", infoC.instructionAddress);
+							}
+						}
+						else {
+							// T3 transform already done by ld::passes:got:doPass()
+							if ( _options.verboseOptimizationHints() ) {
+								fprintf(stderr, "adrp-ldr-got-ldr at 0x%08llX T3 transformed to ADRP/ADD/LDR\n", infoC.instructionAddress);
+							}
+						}
+					}
+					else {
+						if ( _options.verboseOptimizationHints() ) 							
+							fprintf(stderr, "adrp-ldr-got-ldr at 0x%08llX not ADD or LDR\n", infoC.instructionAddress);
+					}
+					break;
+				case LOH_ARM64_ADRP_ADD_STR:
+					LOH_ASSERT(alt.info.count == 2);
+					LOH_ASSERT(isPageKind(infoA.fixup));
+					LOH_ASSERT(isPageOffsetKind(infoB.fixup));
+					LOH_ASSERT(infoC.fixup == NULL);
+					LOH_ASSERT(infoA.target == infoB.target);
+					LOH_ASSERT(infoA.targetAddress == infoB.targetAddress);
+					usableSegment = ( !_options.sharedRegionEligible() || (strcmp(atom->section().segmentName(), infoB.target->section().segmentName()) == 0) );
+					isADRP = parseADRP(infoA.instruction, adrpInfoA);
+					LOH_ASSERT(isADRP);
+					isADD = parseADD(infoB.instruction, addInfoB);
+					LOH_ASSERT(isADD);
+					LOH_ASSERT(adrpInfoA.destReg == addInfoB.srcReg);
+					isSTR = (parseLoadOrStore(infoC.instruction, ldrInfoC) && ldrInfoC.isStore);
+					LOH_ASSERT(isSTR);
+					LOH_ASSERT(addInfoB.destReg == ldrInfoC.baseReg);
+					if ( usableSegment && withinOneMeg(infoA.instructionAddress, infoA.targetAddress+ldrInfoC.offset) ) {
+						// can to T4 transformation and turn ADRP/ADD into ADR
+						set32LE(infoA.instructionContent, makeADR(ldrInfoC.baseReg, infoA.targetAddress+ldrInfoC.offset, infoA.instructionAddress));
+						set32LE(infoB.instructionContent, makeNOP());	
+						ldrInfoC.offset = 0; // offset is now in ADR instead of ADD or LDR
+						set32LE(infoC.instructionContent, makeLoadOrStore(ldrInfoC));
+						set32LE(infoC.instructionContent, infoC.instruction & 0xFFC003FF);	
+						if ( _options.verboseOptimizationHints() )
+							fprintf(stderr, "adrp-add-str at 0x%08llX T4 transformed to ADR/STR\n", infoB.instructionAddress);						
+					}
+					else if ( ((infoB.targetAddress % ldrInfoC.size) == 0) && (ldrInfoC.offset == 0) ) {
+						// can do T2 transformation by merging ADD into STR
+						// Leave ADRP as-is
+						set32LE(infoB.instructionContent, makeNOP());	
+						ldrInfoC.offset += addInfoB.addend;
+						set32LE(infoC.instructionContent, makeLoadOrStore(ldrInfoC));
+						if ( _options.verboseOptimizationHints() )
+							fprintf(stderr, "adrp-add-str at 0x%08llX T2 transformed to ADRP/STR \n", infoC.instructionAddress);
+					}
+					else {
+						if ( _options.verboseOptimizationHints() )
+							fprintf(stderr, "adrp-add-str at 0x%08llX could not be transformed, loadSize=%d, inRange=%d, usableSegment=%d, imm12=%d\n", 
+									infoC.instructionAddress, ldrInfoC.size, withinOneMeg(infoC.instructionAddress, infoA.targetAddress+ldrInfoC.offset), usableSegment, ldrInfoC.offset);
+					}
+					break;
+				case LOH_ARM64_ADRP_LDR_GOT_STR:
+					LOH_ASSERT(alt.info.count == 2);
+					LOH_ASSERT(isPageKind(infoA.fixup, true));
+					LOH_ASSERT(isPageOffsetKind(infoB.fixup, true));
+					LOH_ASSERT(infoC.fixup == NULL);
+					LOH_ASSERT(infoA.target == infoB.target);
+					LOH_ASSERT(infoA.targetAddress == infoB.targetAddress);
+					isADRP = parseADRP(infoA.instruction, adrpInfoA);
+					LOH_ASSERT(isADRP);
+					isSTR = (parseLoadOrStore(infoC.instruction, ldrInfoC) && ldrInfoC.isStore);
+					LOH_ASSERT(isSTR);
+					LOH_ASSERT(ldrInfoC.offset == 0);
+					isADD = parseADD(infoB.instruction, addInfoB);
+					isLDR = parseLoadOrStore(infoB.instruction, ldrInfoB);
+					if ( isLDR ) {
+						// target of GOT is external
+						LOH_ASSERT(ldrInfoB.size == 8);
+						LOH_ASSERT(!ldrInfoB.isFloat);
+						LOH_ASSERT(ldrInfoC.baseReg == ldrInfoB.reg);
+						usableSegment = ( !_options.sharedRegionEligible() || (strcmp(atom->section().segmentName(), infoB.target->section().segmentName()) == 0) );
+						targetFourByteAligned = ( ((infoA.targetAddress) & 0x3) == 0 );
+						if ( usableSegment && targetFourByteAligned && withinOneMeg(infoB.instructionAddress, infoA.targetAddress) ) {
+							// can do T5 transform
+							set32LE(infoA.instructionContent, makeNOP());
+							set32LE(infoB.instructionContent, makeLDR_literal(ldrInfoB, infoA.targetAddress, infoB.instructionAddress));
+							if ( _options.verboseOptimizationHints() ) {
+								fprintf(stderr, "adrp-ldr-got-str at 0x%08llX T5 transformed to LDR literal of GOT plus STR\n", infoC.instructionAddress);
+							}
+						}
+						else {
+							if ( _options.verboseOptimizationHints() ) 
+								fprintf(stderr, "adrp-ldr-got-str at 0x%08llX no optimization done\n", infoC.instructionAddress);
+						}
+					}
+					else if ( isADD ) {
+						// target of GOT is in same linkage unit and B instruction was changed to ADD to compute LEA of target
+						LOH_ASSERT(addInfoB.srcReg == adrpInfoA.destReg);
+						LOH_ASSERT(addInfoB.destReg == ldrInfoC.baseReg);
+						usableSegment = ( !_options.sharedRegionEligible() || (strcmp(atom->section().segmentName(), infoB.target->section().segmentName()) == 0) );
+						targetFourByteAligned = ( ((infoA.targetAddress) & 0x3) == 0 );
+						literalableSize  = ( (ldrInfoC.size != 1) && (ldrInfoC.size != 2) );
+						if ( usableSegment && withinOneMeg(infoA.instructionAddress, infoA.targetAddress) ) {
+							// can do T4 transform
+							set32LE(infoA.instructionContent, makeADR(ldrInfoC.baseReg, infoA.targetAddress, infoA.instructionAddress));
+							set32LE(infoB.instructionContent, makeNOP());	
+							set32LE(infoC.instructionContent, makeLoadOrStore(ldrInfoC));
+							if ( _options.verboseOptimizationHints() ) {
+								fprintf(stderr, "adrp-ldr-got-str at 0x%08llX T4 transformed to ADR/STR\n", infoC.instructionAddress);
+							}
+						}
+						else if ( ((infoA.targetAddress % ldrInfoC.size) == 0) && (ldrInfoC.offset == 0) ) {
+							// can do T2 transform
+							set32LE(infoB.instructionContent, makeNOP());
+							ldrInfoC.baseReg = adrpInfoA.destReg;
+							ldrInfoC.offset = addInfoB.addend;
+							set32LE(infoC.instructionContent, makeLoadOrStore(ldrInfoC));
+							if ( _options.verboseOptimizationHints() ) {
+								fprintf(stderr, "adrp-ldr-got-str at 0x%08llX T4 transformed to ADRP/NOP/STR\n", infoC.instructionAddress);
+							}
+						}
+						else {
+							// T3 transform already done by ld::passes:got:doPass()
+							if ( _options.verboseOptimizationHints() ) {
+								fprintf(stderr, "adrp-ldr-got-str at 0x%08llX T3 transformed to ADRP/ADD/STR\n", infoC.instructionAddress);
+							}
+						}
+					}
+					else {
+						if ( _options.verboseOptimizationHints() ) 							
+							fprintf(stderr, "adrp-ldr-got-str at 0x%08llX not ADD or LDR\n", infoC.instructionAddress);
+					}
+					break;
+				case LOH_ARM64_ADRP_LDR_GOT:
+					LOH_ASSERT(alt.info.count == 1);
+					LOH_ASSERT(isPageKind(infoA.fixup, true));
+					LOH_ASSERT(isPageOffsetKind(infoB.fixup, true));
+					LOH_ASSERT(infoA.target == infoB.target);
+					LOH_ASSERT(infoA.targetAddress == infoB.targetAddress);
+					isADRP = parseADRP(infoA.instruction, adrpInfoA);
+					isADD = parseADD(infoB.instruction, addInfoB);
+					isLDR = parseLoadOrStore(infoB.instruction, ldrInfoB);
+					usableSegment = ( !_options.sharedRegionEligible() || (strcmp(atom->section().segmentName(), infoB.target->section().segmentName()) == 0) );
+					if ( isADRP ) {
+						if ( isLDR ) {
+							if ( usableSegment && withinOneMeg(infoB.instructionAddress, infoA.targetAddress) ) {
+								// can do T5 transform (LDR literal load of GOT)
+								set32LE(infoA.instructionContent, makeNOP());
+								set32LE(infoB.instructionContent, makeLDR_literal(ldrInfoB, infoA.targetAddress, infoB.instructionAddress));
+								if ( _options.verboseOptimizationHints() ) {
+									fprintf(stderr, "adrp-ldr-got at 0x%08llX T5 transformed to NOP/LDR\n", infoC.instructionAddress);
+								}
+							}
+						}
+						else if ( isADD ) {
+							if ( usableSegment && withinOneMeg(infoA.instructionAddress, infoA.targetAddress) ) {
+								// can do T4 transform (ADR to compute local address)
+								set32LE(infoA.instructionContent, makeADR(addInfoB.destReg, infoA.targetAddress, infoA.instructionAddress));
+								set32LE(infoB.instructionContent, makeNOP());
+								if ( _options.verboseOptimizationHints() ) {
+									fprintf(stderr, "adrp-ldr-got at 0x%08llX T4 transformed to ADR/STR\n", infoC.instructionAddress);
+								}
+							}
+						}
+						else {
+							if ( _options.verboseOptimizationHints() )
+								fprintf(stderr, "adrp-ldr-got at 0x%08llX not LDR or ADD\n", infoB.instructionAddress);
+						}
+					}
+					else {
+						if ( _options.verboseOptimizationHints() )
+							fprintf(stderr, "adrp-ldr-got at 0x%08llX not ADRP\n", infoA.instructionAddress);
+					}
+					break;
+				default:
+						if ( _options.verboseOptimizationHints() ) 							
+							fprintf(stderr, "unknown hint kind %d alt.info.kind at 0x%08llX\n", alt.info.kind, infoA.instructionAddress);
+					break;
+			}
+		}
+		// apply hints pass 2
+		for (ld::Fixup::iterator fit = atom->fixupsBegin(), end=atom->fixupsEnd(); fit != end; ++fit) {
+			if ( fit->kind != ld::Fixup::kindLinkerOptimizationHint ) 
+				continue;
+			InstructionInfo infoA;
+			InstructionInfo infoB;
+			ld::Fixup::LOH_arm64 alt;
+			alt.addend = fit->u.addend;
+			setInfo(state, atom, buffer, usedByHints, fit->offsetInAtom, (alt.info.delta1 << 2), &infoA);
+			if ( alt.info.count > 0 ) 
+				setInfo(state, atom, buffer, usedByHints, fit->offsetInAtom, (alt.info.delta2 << 2), &infoB);
+
+			switch ( alt.info.kind ) {
+				case LOH_ARM64_ADRP_ADRP:
+					LOH_ASSERT(isPageKind(infoA.fixup));
+					LOH_ASSERT(isPageKind(infoB.fixup));
+					if ( (infoA.instruction & 0x9F000000) != 0x90000000 ) {
+						if ( _options.verboseOptimizationHints() )
+							fprintf(stderr, "may-reused-adrp at 0x%08llX no longer an ADRP, now 0x%08X\n", infoA.instructionAddress, infoA.instruction);
+						sAdrpNA++;
+						break;
+					}
+					if ( (infoB.instruction & 0x9F000000) != 0x90000000 ) {
+						if ( _options.verboseOptimizationHints() )
+							fprintf(stderr, "may-reused-adrp at 0x%08llX no longer an ADRP, now 0x%08X\n", infoB.instructionAddress, infoA.instruction);
+						sAdrpNA++;
+						break;
+					}
+					if ( (infoA.targetAddress & (-4096)) == (infoB.targetAddress & (-4096)) ) {
+						set32LE(infoB.instructionContent, 0xD503201F);
+						sAdrpNoped++;
+					}
+					else {
+						sAdrpNotNoped++;
+					}
+					break;
+			}				
+		}
+	}
+
+
+	
+
 }
 
 void OutputFile::copyNoOps(uint8_t* from, uint8_t* to, bool thumb)
@@ -1611,6 +2558,12 @@ void OutputFile::writeAtoms(ld::Internal& state, uint8_t* wholeBuffer)
 					throwf("%s in '%s'", msg, atom->name());
 			}
 		}
+	}
+	
+	if ( _options.verboseOptimizationHints() ) {
+		//fprintf(stderr, "ADRP optimized away:   %d\n", sAdrpNA);
+		//fprintf(stderr, "ADRPs changed to NOPs: %d\n", sAdrpNoped);
+		//fprintf(stderr, "ADRPs unchanged:       %d\n", sAdrpNotNoped);
 	}
 }
 
@@ -1756,8 +2709,15 @@ void OutputFile::writeOutputFile(ld::Internal& state)
 			fd = open(tmpOutput, O_RDWR|O_CREAT, permissions);
 		}
 		if ( fd == -1 ) 
-			throwf("can't open output file for writing: %s, errno=%d", tmpOutput, errno);
-		ftruncate(fd, _fileSize);
+			throwf("can't open output file for writing '%s', errno=%d", tmpOutput, errno);
+		if ( ftruncate(fd, _fileSize) == -1 ) {
+			int err = errno;
+			unlink(tmpOutput);
+			if ( err == ENOSPC )
+				throwf("not enough disk space for writing '%s'", _options.outputFilePath());
+			else
+				throwf("can't grow file for writing '%s', errno=%d", _options.outputFilePath(), err);
+		}
 		
 		wholeBuffer = (uint8_t *)mmap(NULL, _fileSize, PROT_WRITE|PROT_READ, MAP_SHARED, fd, 0);
 		if ( wholeBuffer == MAP_FAILED )
@@ -1802,6 +2762,10 @@ void OutputFile::writeOutputFile(ld::Internal& state)
 		if ( ::write(fd, wholeBuffer, _fileSize) == -1 ) {
 			throwf("can't write to output file: %s, errno=%d", _options.outputFilePath(), errno);
 		}
+		::close(fd);
+		// <rdar://problem/13118223> NFS: iOS incremental builds in Xcode 4.6 fail with codesign error
+		// NFS seems to pad the end of the file sometimes.  Calling trunc seems to correct it...
+		::truncate(_options.outputFilePath(), _fileSize);
 	}
 }
 
@@ -1847,7 +2811,7 @@ void OutputFile::buildSymbolTable(ld::Internal& state)
 				
 			// in -r mode, clarify symbolTableNotInFinalLinkedImages
 			if ( _options.outputKind() == Options::kObjectFile ) {
-				if ( _options.architecture() == CPU_TYPE_X86_64 ) {
+				if ( (_options.architecture() == CPU_TYPE_X86_64) || (_options.architecture() == CPU_TYPE_ARM64) ) {
 					// x86_64 .o files need labels on anonymous literal strings
 					if ( (sect->type() == ld::Section::typeCString) && (atom->combine() == ld::Atom::combineByNameAndContent) ) {
 						(const_cast<ld::Atom*>(atom))->setSymbolTableInclusion(ld::Atom::symbolTableIn);
@@ -1939,7 +2903,6 @@ void OutputFile::buildSymbolTable(ld::Internal& state)
 				case ld::Atom::scopeLinkageUnit:
 					if ( _options.outputKind() == Options::kObjectFile ) {
 						if ( _options.keepPrivateExterns() ) {
-							assert( (atom->combine() == ld::Atom::combineNever) || (atom->combine() == ld::Atom::combineByName) );
 							_exportedAtoms.push_back(atom);
 						}
 						else if ( _options.keepLocalSymbol(atom->name()) ) {
@@ -2059,8 +3022,28 @@ void OutputFile::addPreloadLinkEdit(ld::Internal& state)
 			}
 			break;
 #endif
+#if SUPPORT_ARCH_arm64
+		case CPU_TYPE_ARM64:
+			if ( _hasLocalRelocations ) {
+				_localRelocsAtom = new LocalRelocationsAtom<arm64>(_options, state, *this);
+				localRelocationsSection = state.addAtom(*_localRelocsAtom);
+			}
+			if ( _hasExternalRelocations ) {
+				_externalRelocsAtom = new ExternalRelocationsAtom<arm64>(_options, state, *this);
+				externalRelocationsSection = state.addAtom(*_externalRelocsAtom);
+			}
+			if ( _hasSymbolTable ) {
+				_indirectSymbolTableAtom = new IndirectSymbolTableAtom<arm64>(_options, state, *this);
+				indirectSymbolTableSection = state.addAtom(*_indirectSymbolTableAtom);
+				_symbolTableAtom = new SymbolTableAtom<arm64>(_options, state, *this);
+				symbolTableSection = state.addAtom(*_symbolTableAtom);
+				_stringPoolAtom = new StringPoolAtom(_options, state, *this, 4);
+				stringPoolSection = state.addAtom(*_stringPoolAtom);
+			}
+			break;
+#endif
 		default:
-			throw "architecture not supported for -preload";
+			throw "-preload not supported";
 	}
 
 }
@@ -2110,6 +3093,10 @@ void OutputFile::addLinkEdit(ld::Internal& state)
 			if ( _hasDataInCodeInfo ) {
 				_dataInCodeAtom = new DataInCodeAtom<x86>(_options, state, *this);
 				dataInCodeSection = state.addAtom(*_dataInCodeAtom);
+			}
+			if ( _hasOptimizationHints ) {
+				_optimizationHintsAtom = new OptimizationHintsAtom<x86>(_options, state, *this);
+				optimizationHintsSection = state.addAtom(*_optimizationHintsAtom);
 			}
 			if ( _hasDependentDRInfo ) {
 				_dependentDRInfoAtom = new DependentDRAtom<x86>(_options, state, *this);
@@ -2169,6 +3156,10 @@ void OutputFile::addLinkEdit(ld::Internal& state)
 				_dataInCodeAtom = new DataInCodeAtom<x86_64>(_options, state, *this);
 				dataInCodeSection = state.addAtom(*_dataInCodeAtom);
 			}
+			if ( _hasOptimizationHints ) {
+				_optimizationHintsAtom = new OptimizationHintsAtom<x86_64>(_options, state, *this);
+				optimizationHintsSection = state.addAtom(*_optimizationHintsAtom);
+			}
 			if ( _hasDependentDRInfo ) {
 				_dependentDRInfoAtom = new DependentDRAtom<x86_64>(_options, state, *this);
 				dependentDRsSection = state.addAtom(*_dependentDRInfoAtom);
@@ -2227,6 +3218,10 @@ void OutputFile::addLinkEdit(ld::Internal& state)
 				_dataInCodeAtom = new DataInCodeAtom<arm>(_options, state, *this);
 				dataInCodeSection = state.addAtom(*_dataInCodeAtom);
 			}
+			if ( _hasOptimizationHints ) {
+				_optimizationHintsAtom = new OptimizationHintsAtom<arm>(_options, state, *this);
+				optimizationHintsSection = state.addAtom(*_optimizationHintsAtom);
+			}
 			if ( _hasDependentDRInfo ) {
 				_dependentDRInfoAtom = new DependentDRAtom<arm>(_options, state, *this);
 				dependentDRsSection = state.addAtom(*_dependentDRInfoAtom);
@@ -2241,6 +3236,68 @@ void OutputFile::addLinkEdit(ld::Internal& state)
 			}
 			if ( _hasSymbolTable ) {
 				_indirectSymbolTableAtom = new IndirectSymbolTableAtom<arm>(_options, state, *this);
+				indirectSymbolTableSection = state.addAtom(*_indirectSymbolTableAtom);
+				_stringPoolAtom = new StringPoolAtom(_options, state, *this, 4);
+				stringPoolSection = state.addAtom(*_stringPoolAtom);
+			}
+			break;
+#endif
+#if SUPPORT_ARCH_arm64
+		case CPU_TYPE_ARM64:
+			if ( _hasSectionRelocations ) {
+				_sectionsRelocationsAtom = new SectionRelocationsAtom<arm64>(_options, state, *this);
+				sectionRelocationsSection = state.addAtom(*_sectionsRelocationsAtom);
+			}
+			if ( _hasDyldInfo ) {
+				_rebasingInfoAtom = new RebaseInfoAtom<arm64>(_options, state, *this);
+				rebaseSection = state.addAtom(*_rebasingInfoAtom);
+				
+				_bindingInfoAtom = new BindingInfoAtom<arm64>(_options, state, *this);
+				bindingSection = state.addAtom(*_bindingInfoAtom);
+				
+				_weakBindingInfoAtom = new WeakBindingInfoAtom<arm64>(_options, state, *this);
+				weakBindingSection = state.addAtom(*_weakBindingInfoAtom);
+				
+				_lazyBindingInfoAtom = new LazyBindingInfoAtom<arm64>(_options, state, *this);
+				lazyBindingSection = state.addAtom(*_lazyBindingInfoAtom);
+				
+				_exportInfoAtom = new ExportInfoAtom<arm64>(_options, state, *this);
+				exportSection = state.addAtom(*_exportInfoAtom);
+			}
+			if ( _hasLocalRelocations ) {
+				_localRelocsAtom = new LocalRelocationsAtom<arm64>(_options, state, *this);
+				localRelocationsSection = state.addAtom(*_localRelocsAtom);
+			}
+			if  ( _hasSplitSegInfo ) {
+				_splitSegInfoAtom = new SplitSegInfoAtom<arm64>(_options, state, *this);
+				splitSegInfoSection = state.addAtom(*_splitSegInfoAtom);
+			}
+			if ( _hasFunctionStartsInfo ) {
+				_functionStartsAtom = new FunctionStartsAtom<arm64>(_options, state, *this);
+				functionStartsSection = state.addAtom(*_functionStartsAtom);
+			}
+			if ( _hasDataInCodeInfo ) {
+				_dataInCodeAtom = new DataInCodeAtom<arm64>(_options, state, *this);
+				dataInCodeSection = state.addAtom(*_dataInCodeAtom);
+			}
+			if ( _hasOptimizationHints ) {
+				_optimizationHintsAtom = new OptimizationHintsAtom<arm64>(_options, state, *this);
+				optimizationHintsSection = state.addAtom(*_optimizationHintsAtom);
+			}
+			if ( _hasDependentDRInfo ) {
+				_dependentDRInfoAtom = new DependentDRAtom<arm64>(_options, state, *this);
+				dependentDRsSection = state.addAtom(*_dependentDRInfoAtom);
+			}
+			if ( _hasSymbolTable ) {
+				_symbolTableAtom = new SymbolTableAtom<arm64>(_options, state, *this);
+				symbolTableSection = state.addAtom(*_symbolTableAtom);
+			}
+			if ( _hasExternalRelocations ) {
+				_externalRelocsAtom = new ExternalRelocationsAtom<arm64>(_options, state, *this);
+				externalRelocationsSection = state.addAtom(*_externalRelocsAtom);
+			}
+			if ( _hasSymbolTable ) {
+				_indirectSymbolTableAtom = new IndirectSymbolTableAtom<arm64>(_options, state, *this);
 				indirectSymbolTableSection = state.addAtom(*_indirectSymbolTableAtom);
 				_stringPoolAtom = new StringPoolAtom(_options, state, *this, 4);
 				stringPoolSection = state.addAtom(*_stringPoolAtom);
@@ -2264,6 +3321,12 @@ void OutputFile::addLoadCommands(ld::Internal& state)
 #if SUPPORT_ARCH_arm_any
 		case CPU_TYPE_ARM:
 			_headersAndLoadCommandAtom = new HeaderAndLoadCommandsAtom<arm>(_options, state, *this);
+			headerAndLoadCommandsSection = state.addAtom(*_headersAndLoadCommandAtom);
+			break;
+#endif
+#if SUPPORT_ARCH_arm64
+		case CPU_TYPE_ARM64:
+			_headersAndLoadCommandAtom = new HeaderAndLoadCommandsAtom<arm64>(_options, state, *this);
 			headerAndLoadCommandsSection = state.addAtom(*_headersAndLoadCommandAtom);
 			break;
 #endif
@@ -2440,8 +3503,26 @@ bool OutputFile::isPcRelStore(ld::Fixup::Kind kind)
 		case ld::Fixup::kindStoreTargetAddressARMBranch24:
 		case ld::Fixup::kindStoreTargetAddressThumbBranch22:
 		case ld::Fixup::kindStoreTargetAddressARMLoad12:
+#if SUPPORT_ARCH_arm64
+		case ld::Fixup::kindStoreARM64Page21:
+		case ld::Fixup::kindStoreARM64PageOff12:
+		case ld::Fixup::kindStoreARM64GOTLoadPage21:
+		case ld::Fixup::kindStoreARM64GOTLoadPageOff12:
+		case ld::Fixup::kindStoreARM64GOTLeaPage21:
+		case ld::Fixup::kindStoreARM64GOTLeaPageOff12:
+		case ld::Fixup::kindStoreARM64PCRelToGOT:
+		case ld::Fixup::kindStoreTargetAddressARM64Page21:
+		case ld::Fixup::kindStoreTargetAddressARM64PageOff12:
+		case ld::Fixup::kindStoreTargetAddressARM64GOTLoadPage21:
+		case ld::Fixup::kindStoreTargetAddressARM64GOTLoadPageOff12:
+		case ld::Fixup::kindStoreTargetAddressARM64GOTLeaPage21:
+		case ld::Fixup::kindStoreTargetAddressARM64GOTLeaPageOff12:
+#endif
 			return true;
 		case ld::Fixup::kindStoreTargetAddressX86BranchPCRel32:
+#if SUPPORT_ARCH_arm64
+		case ld::Fixup::kindStoreTargetAddressARM64Branch26:
+#endif
 			return (_options.outputKind() != Options::kKextBundle);
 		default:
 			break;
@@ -2486,15 +3567,27 @@ bool OutputFile::setsTarget(ld::Fixup::Kind kind)
 		case ld::Fixup::kindStoreTargetAddressX86PCRel32GOTLoad:
 		case ld::Fixup::kindStoreTargetAddressX86PCRel32GOTLoadNowLEA:
 		case ld::Fixup::kindStoreTargetAddressX86PCRel32TLVLoad:
+		case ld::Fixup::kindStoreTargetAddressX86PCRel32TLVLoadNowLEA:
 		case ld::Fixup::kindStoreTargetAddressX86Abs32TLVLoad:
 		case ld::Fixup::kindStoreTargetAddressARMBranch24:
 		case ld::Fixup::kindStoreTargetAddressThumbBranch22:
 		case ld::Fixup::kindStoreTargetAddressARMLoad12:
+#if SUPPORT_ARCH_arm64
+		case ld::Fixup::kindStoreTargetAddressARM64Branch26:
+		case ld::Fixup::kindStoreTargetAddressARM64Page21:
+		case ld::Fixup::kindStoreTargetAddressARM64PageOff12:
+		case ld::Fixup::kindStoreTargetAddressARM64GOTLoadPage21:
+		case ld::Fixup::kindStoreTargetAddressARM64GOTLoadPageOff12:
+		case ld::Fixup::kindStoreTargetAddressARM64GOTLeaPage21:
+		case ld::Fixup::kindStoreTargetAddressARM64GOTLeaPageOff12:
+#endif
 			return true;
 		case ld::Fixup::kindStoreX86DtraceCallSiteNop:
 		case ld::Fixup::kindStoreX86DtraceIsEnableSiteClear:
 		case ld::Fixup::kindStoreARMDtraceCallSiteNop:
 		case ld::Fixup::kindStoreARMDtraceIsEnableSiteClear:
+		case ld::Fixup::kindStoreARM64DtraceCallSiteNop:
+		case ld::Fixup::kindStoreARM64DtraceIsEnableSiteClear:
 		case ld::Fixup::kindStoreThumbDtraceCallSiteNop:
 		case ld::Fixup::kindStoreThumbDtraceIsEnableSiteClear:
 			return (_options.outputKind() == Options::kObjectFile);
@@ -2572,13 +3665,14 @@ uint64_t OutputFile::lookBackAddend(ld::Fixup::iterator fit)
 }
 
 
-
-
-
 void OutputFile::generateLinkEditInfo(ld::Internal& state)
 {
 	for (std::vector<ld::Internal::FinalSection*>::iterator sit = state.sections.begin(); sit != state.sections.end(); ++sit) {
 		ld::Internal::FinalSection* sect = *sit;
+		// record end of last __TEXT section encrypted iPhoneOS apps.
+		if ( _options.makeEncryptable() && (strcmp(sect->segmentName(), "__TEXT") == 0) ) { 
+			_encryptedTEXTendOffset = pageAlign(sect->fileOffset + sect->size);
+		}
 		bool objc1ClassRefSection = ( (sect->type() == ld::Section::typeCStringPointer) 
 									&& (strcmp(sect->sectionName(), "__cls_refs") == 0)
 									&& (strcmp(sect->segmentName(), "__OBJC") == 0) );
@@ -2600,6 +3694,7 @@ void OutputFile::generateLinkEditInfo(ld::Internal& state)
 			ld::Fixup*			fixupWithTarget = NULL;
 			ld::Fixup*			fixupWithMinusTarget = NULL;
 			ld::Fixup*			fixupWithStore = NULL;
+			ld::Fixup*			fixupWithAddend = NULL;
 			const ld::Atom*		target = NULL;
 			const ld::Atom*		minusTarget = NULL;
 			uint64_t			targetAddend = 0;
@@ -2634,9 +3729,11 @@ void OutputFile::generateLinkEditInfo(ld::Internal& state)
 				switch ( fit->kind ) {
 					case ld::Fixup::kindAddAddend:
 						targetAddend = fit->u.addend;
+						fixupWithAddend = fit;
 						break;
 					case ld::Fixup::kindSubtractAddend:
 						minusTargetAddend = fit->u.addend;
+						fixupWithAddend = fit;
 						break;
 					case ld::Fixup::kindSubtractTargetAddress:
 						switch ( fit->binding ) {
@@ -2672,7 +3769,7 @@ void OutputFile::generateLinkEditInfo(ld::Internal& state)
 				if ( fit->lastInCluster() ) {
 					if ( (fixupWithStore != NULL) && (target != NULL) ) {
 						if ( _options.outputKind() == Options::kObjectFile ) {
-							this->addSectionRelocs(state, sect, atom, fixupWithTarget, fixupWithMinusTarget, fixupWithStore,
+							this->addSectionRelocs(state, sect, atom, fixupWithTarget, fixupWithMinusTarget, fixupWithAddend, fixupWithStore,
 													target, minusTarget, targetAddend, minusTargetAddend);
 						}
 						else {
@@ -2711,10 +3808,19 @@ void OutputFile::noteTextReloc(const ld::Atom* atom, const ld::Atom* target)
 	else if ( _options.positionIndependentExecutable() && (_options.outputKind() == Options::kDynamicExecutable) 
 		&& ((_options.iOSVersionMin() >= ld::iOS_4_3) || (_options.macosxVersionMin() >= ld::mac10_7)) ) {
 		if ( ! this->pieDisabled ) {
-			warning("PIE disabled. Absolute addressing (perhaps -mdynamic-no-pic) not allowed in code signed PIE, "
+#if SUPPORT_ARCH_arm64
+			if ( _options.architecture() == CPU_TYPE_ARM64 ) {
+				const char* demangledName = strdup(_options.demangleSymbol(atom->name()));
+				throwf("Absolute addressing not allowed in arm64 code but used in '%s' referencing '%s'", demangledName, _options.demangleSymbol(target->name()));
+			}
+			else
+#endif
+			 {
+				warning("PIE disabled. Absolute addressing (perhaps -mdynamic-no-pic) not allowed in code signed PIE, "
 				"but used in %s from %s. " 
 				"To fix this warning, don't compile with -mdynamic-no-pic or link with -Wl,-no_pie", 
 				atom->name(), atom->file()->path());
+			}
 		}
 		this->pieDisabled = true;
 	}
@@ -2722,7 +3828,10 @@ void OutputFile::noteTextReloc(const ld::Atom* atom, const ld::Atom* target)
 		throwf("illegal text-relocoation (direct reference) to (global,weak) %s in %s from %s in %s", target->name(), target->file()->path(), atom->name(), atom->file()->path());
 	}
 	else {
-		throwf("illegal text-relocation to %s in %s from %s in %s", target->name(), target->file()->path(), atom->name(), atom->file()->path());
+		if ( (target->file() != NULL) && (atom->file() != NULL) )
+			throwf("illegal text-relocation to '%s' in %s from '%s' in %s", target->name(), target->file()->path(), atom->name(), atom->file()->path());
+        else
+            throwf("illegal text reloc in '%s' to '%s'", atom->name(), target->name());
 	}
 }
 
@@ -2744,6 +3853,11 @@ void OutputFile::addDyldInfo(ld::Internal& state,  ld::Internal::FinalSection* s
 					|| (atom->section().type() == ld::Section::typeDtraceDOF)
 					|| (atom->section().type() == ld::Section::typeUnwindInfo) ) {
 					// ok for __eh_frame and __uwind_info to use pointer diffs to global weak symbols
+					return;
+				}
+				// <rdar://problem/13700961> spurious warning when weak function has reference to itself
+				if ( fixupWithTarget->binding == ld::Fixup::bindingDirectlyBound ) {
+					// ok to ignore pc-rel references within a weak function to itself
 					return;
 				}
 				// Have direct reference to weak-global.  This should be an indrect reference
@@ -2792,7 +3906,7 @@ void OutputFile::addDyldInfo(ld::Internal& state,  ld::Internal::FinalSection* s
 	if ( target == NULL )
 		return; 
 
-	bool inReadOnlySeg = ( strcmp(sect->segmentName(), "__TEXT") == 0 );
+	bool inReadOnlySeg = ((_options.initialSegProtection(sect->segmentName()) & VM_PROT_WRITE) == 0);
 	bool needsRebase = false;
 	bool needsBinding = false;
 	bool needsLazyBinding = false;
@@ -2827,8 +3941,11 @@ void OutputFile::addDyldInfo(ld::Internal& state,  ld::Internal::FinalSection* s
 				// this will be done by other cluster on lazy pointer atom
 			}
 		}
-		else if ( (target->contentType() == ld::Atom::typeResolver) && (target->scope() != ld::Atom::scopeGlobal) ) {
+		else if ( target->contentType() == ld::Atom::typeResolver ) {
 			// <rdar://problem/8553647> Hidden resolver functions should not have lazy binding info
+			// <rdar://problem/12629331> Resolver function run before initializers when overriding the dyld shared cache
+			// The lazy pointers used by stubs used when non-lazy binding to a resolver are not normal lazy pointers
+			// and should not be in lazy binding info.
 			needsLazyBinding = false;
 		}
 		else {
@@ -2883,6 +4000,9 @@ void OutputFile::addDyldInfo(ld::Internal& state,  ld::Internal::FinalSection* s
 						needsRebase = false;
 						needsBinding = true;
 					}
+					else if ( _options.forceCoalesce(target->name()) ) {
+						needsWeakBinding = true;
+					}
 				}
 				break;
 			case ld::Atom::definitionAbsolute:
@@ -2890,6 +4010,20 @@ void OutputFile::addDyldInfo(ld::Internal& state,  ld::Internal::FinalSection* s
 		}
 	}
 	
+	// <rdar://problem/13828711> if target is an import alias, use base of alias
+	if ( target->isAlias() && (target->definition() == ld::Atom::definitionProxy) ) {
+		for (ld::Fixup::iterator fit = target->fixupsBegin(), end=target->fixupsEnd(); fit != end; ++fit) {
+			if ( fit->firstInCluster() ) {
+				if ( fit->kind == ld::Fixup::kindNoneFollowOn ) {
+					if ( fit->binding == ld::Fixup::bindingDirectlyBound ) {
+						//fprintf(stderr, "switching import of %s to import of %s\n", target->name(),  fit->u.target->name());
+						target = fit->u.target;
+					}
+				}
+			}
+		}
+	} 
+
 	// record dyld info for this cluster
 	if ( needsRebase ) {
 		if ( inReadOnlySeg ) {
@@ -2897,18 +4031,24 @@ void OutputFile::addDyldInfo(ld::Internal& state,  ld::Internal::FinalSection* s
 			sect->hasLocalRelocs = true;  // so dyld knows to change permissions on __TEXT segment
 			rebaseType = REBASE_TYPE_TEXT_ABSOLUTE32;
 		}
-		if ( (addend != 0) && _options.sharedRegionEligible() ) {
-			// make sure the addend does not cause the pointer to point outside the target's segment
-			// if it does, update_dyld_shared_cache will not be able to put this dylib into the shared cache
-			uint64_t targetAddress = target->finalAddress();
-			for (std::vector<ld::Internal::FinalSection*>::iterator sit = state.sections.begin(); sit != state.sections.end(); ++sit) {
-				ld::Internal::FinalSection* sct = *sit;
-				uint64_t sctEnd = (sct->address+sct->size);
-				if ( (sct->address <= targetAddress) && (targetAddress < sctEnd) ) {
-					if ( (targetAddress+addend) > sctEnd ) {
-						warning("data symbol %s from %s has pointer to %s + 0x%08llX. "  
-								"That large of an addend may disable %s from being put in the dyld shared cache.", 
-								atom->name(), atom->file()->path(), target->name(), addend, _options.installPath() );
+		if ( _options.sharedRegionEligible() ) {
+			// <rdar://problem/13287063> when range checking, ignore high byte of arm64 addends
+			uint64_t checkAddend = addend;
+			if ( _options.architecture() == CPU_TYPE_ARM64 )
+				checkAddend &= 0x0FFFFFFFFFFFFFFFULL;
+			if ( checkAddend != 0 ) {
+				// make sure the addend does not cause the pointer to point outside the target's segment
+				// if it does, update_dyld_shared_cache will not be able to put this dylib into the shared cache
+				uint64_t targetAddress = target->finalAddress();
+				for (std::vector<ld::Internal::FinalSection*>::iterator sit = state.sections.begin(); sit != state.sections.end(); ++sit) {
+					ld::Internal::FinalSection* sct = *sit;
+					uint64_t sctEnd = (sct->address+sct->size);
+					if ( (sct->address <= targetAddress) && (targetAddress < sctEnd) ) {
+						if ( (targetAddress+checkAddend) > sctEnd ) {
+							warning("data symbol %s from %s has pointer to %s + 0x%08llX. "  
+									"That large of an addend may disable %s from being put in the dyld shared cache.", 
+									atom->name(), atom->file()->path(), target->name(), addend, _options.installPath() );
+						}
 					}
 				}
 			}
@@ -3023,7 +4163,8 @@ void OutputFile::addClassicRelocs(ld::Internal& state, ld::Internal::FinalSectio
 					if ( (target->combine() == ld::Atom::combineByName) 
 						&& (target->definition() == ld::Atom::definitionRegular)
 						&& (_options.outputKind() != Options::kStaticExecutable)
-						&& (_options.outputKind() != Options::kPreload) ) {
+						&& (_options.outputKind() != Options::kPreload) 
+						&& (atom != target) ) {
 						needsExternReloc = true;
 					}
 					else if ( _options.outputKind() == Options::kDynamicExecutable ) {
@@ -3067,6 +4208,9 @@ void OutputFile::addClassicRelocs(ld::Internal& state, ld::Internal::FinalSectio
 			}
 			break;
 		case ld::Fixup::kindStoreTargetAddressX86BranchPCRel32:
+#if SUPPORT_ARCH_arm64
+		case ld::Fixup::kindStoreTargetAddressARM64Branch26:
+#endif
 			if ( _options.outputKind() == Options::kKextBundle ) {
 				assert(target != NULL);
 				if ( target->definition() == ld::Atom::definitionProxy ) {
@@ -3098,8 +4242,8 @@ void OutputFile::addClassicRelocs(ld::Internal& state, ld::Internal::FinalSectio
 
 bool OutputFile::useExternalSectionReloc(const ld::Atom* atom, const ld::Atom* target, ld::Fixup* fixupWithTarget)
 {
-	if ( _options.architecture() == CPU_TYPE_X86_64 ) {
-		// x86_64 uses external relocations for everthing that has a symbol
+	if ( (_options.architecture() == CPU_TYPE_X86_64) || (_options.architecture() == CPU_TYPE_ARM64) ) {
+		// x86_64 and ARM64 use external relocations for everthing that has a symbol
 		return ( target->symbolTableInclusion() != ld::Atom::symbolTableNotIn );
 	}
 	
@@ -3137,11 +4281,29 @@ bool OutputFile::useExternalSectionReloc(const ld::Atom* atom, const ld::Atom* t
 	return false;
 }
 
+bool OutputFile::useSectionRelocAddend(ld::Fixup* fixupWithTarget)
+{
+#if SUPPORT_ARCH_arm64
+	if ( _options.architecture() == CPU_TYPE_ARM64 ) {
+		switch ( fixupWithTarget->kind ) {
+			case ld::Fixup::kindStoreARM64Branch26:
+			case ld::Fixup::kindStoreARM64Page21:
+			case ld::Fixup::kindStoreARM64PageOff12:
+				return true;
+			default:
+				return false;
+		}
+	}
+#endif
+	return false;
+}
+
 
 
 
 void OutputFile::addSectionRelocs(ld::Internal& state, ld::Internal::FinalSection* sect, const ld::Atom* atom, 
-								ld::Fixup* fixupWithTarget, ld::Fixup* fixupWithMinusTarget, ld::Fixup* fixupWithStore,
+								ld::Fixup* fixupWithTarget, ld::Fixup* fixupWithMinusTarget,  
+								ld::Fixup* fixupWithAddend, ld::Fixup* fixupWithStore, 
 								const ld::Atom* target, const ld::Atom* minusTarget, 
 								uint64_t targetAddend, uint64_t minusTargetAddend)
 {
@@ -3165,11 +4327,13 @@ void OutputFile::addSectionRelocs(ld::Internal& state, ld::Internal::FinalSectio
 	bool targetUsesExternalReloc = this->useExternalSectionReloc(atom, target, fixupWithTarget);
 	bool minusTargetUsesExternalReloc = (minusTarget != NULL) && this->useExternalSectionReloc(atom, minusTarget, fixupWithMinusTarget);
 	
-	// in x86_64 .o files an external reloc means the content contains just the addend
-	if ( _options.architecture() == CPU_TYPE_X86_64 ) {
+	// in x86_64 and arm64 .o files an external reloc means the content contains just the addend
+	if ( (_options.architecture() == CPU_TYPE_X86_64) ||(_options.architecture() == CPU_TYPE_ARM64)  ) {
 		if ( targetUsesExternalReloc ) {
 			fixupWithTarget->contentAddendOnly = true;
 			fixupWithStore->contentAddendOnly = true;
+			if ( this->useSectionRelocAddend(fixupWithStore) && (fixupWithAddend != NULL) )
+				fixupWithAddend->contentIgnoresAddend = true;
 		}
 		if ( minusTargetUsesExternalReloc )
 			fixupWithMinusTarget->contentAddendOnly = true;
@@ -3262,11 +4426,25 @@ void OutputFile::makeSplitSegInfo(ld::Internal& state)
 					case ld::Fixup::kindStoreX86PCRel32GOTLoad:
 					case ld::Fixup::kindStoreX86PCRel32GOTLoadNowLEA:
 					case ld::Fixup::kindStoreX86PCRel32GOT:
+					case ld::Fixup::kindStoreX86PCRel32TLVLoad:
+					case ld::Fixup::kindStoreX86PCRel32TLVLoadNowLEA:
 					case ld::Fixup::kindStoreTargetAddressX86PCRel32:
 					case ld::Fixup::kindStoreTargetAddressX86PCRel32GOTLoad:
 					case ld::Fixup::kindStoreTargetAddressX86PCRel32GOTLoadNowLEA:
+					case ld::Fixup::kindStoreTargetAddressX86PCRel32TLVLoad:
+					case ld::Fixup::kindStoreTargetAddressX86PCRel32TLVLoadNowLEA:
                     case ld::Fixup::kindStoreARMLow16:
                     case ld::Fixup::kindStoreThumbLow16: 
+#if SUPPORT_ARCH_arm64
+					case ld::Fixup::kindStoreARM64Page21:
+					case ld::Fixup::kindStoreARM64GOTLoadPage21:
+					case ld::Fixup::kindStoreARM64GOTLeaPage21:
+					case ld::Fixup::kindStoreARM64TLVPLoadPage21:
+					case ld::Fixup::kindStoreTargetAddressARM64Page21:
+					case ld::Fixup::kindStoreTargetAddressARM64GOTLoadPage21:
+					case ld::Fixup::kindStoreTargetAddressARM64GOTLeaPage21:
+					case ld::Fixup::kindStoreARM64PCRelToGOT:
+#endif
 						assert(target != NULL);
 						if ( strcmp(sect->segmentName(), target->section().segmentName()) != 0 ) {	
 							_splitSegInfos.push_back(SplitSegInfoEntry(atom->finalAddress()+fit->offsetInAtom,fit->kind));

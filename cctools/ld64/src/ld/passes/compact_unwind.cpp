@@ -156,11 +156,10 @@ UnwindInfoAtom<A>::UnwindInfoAtom(const std::vector<UnwindEntry>& entries, uint6
 	std::vector<LSDAEntry>	lsdaIndex;
 	makeLsdaIndex(uniqueEntries, lsdaIndex, lsdaIndexOffsetMap);
 	
-	
 	// calculate worst case size for all unwind info pages when allocating buffer
 	const unsigned int entriesPerRegularPage = (4096-sizeof(unwind_info_regular_second_level_page_header))/sizeof(unwind_info_regular_second_level_entry);
 	assert(uniqueEntries.size() > 0);
-	const unsigned int pageCount = ((uniqueEntries.size() - 1)/entriesPerRegularPage) + 1;
+	const unsigned int pageCount = ((uniqueEntries.size() - 1)/entriesPerRegularPage) + 2;
 	_pagesForDelete = (uint8_t*)calloc(pageCount,4096);
 	if ( _pagesForDelete == NULL ) {
 		warning("could not allocate space for compact unwind info");
@@ -187,7 +186,11 @@ UnwindInfoAtom<A>::UnwindInfoAtom(const std::vector<UnwindEntry>& entries, uint6
 		secondLevelPagesStarts[secondLevelPageCount] = pageEnd;
 		secondLevelFirstFuncs[secondLevelPageCount] = uniqueEntries[endIndex].func;
 		++secondLevelPageCount;
-		pageSize = 4096;  // last page can be odd size, make rest up to 4096 bytes in size
+		// if this requires more than one page, align so that next starts on page boundary
+		if ( (pageSize != 4096) && (endIndex > 0) ) {
+			pageEnd = (uint8_t*)((uintptr_t)(pageEnd) & -4096);
+			pageSize = 4096;  // last page can be odd size, make rest up to 4096 bytes in size
+		}
 	}
 	_pages = pageEnd;
 	_pagesSize = &_pagesForDelete[pageCount*4096] - pageEnd;
@@ -292,6 +295,12 @@ template <>
 bool UnwindInfoAtom<x86_64>::encodingMeansUseDwarf(compact_unwind_encoding_t enc)
 {
 	return ((enc & UNWIND_X86_64_MODE_MASK) == UNWIND_X86_64_MODE_DWARF);
+}
+
+template <>
+bool UnwindInfoAtom<arm64>::encodingMeansUseDwarf(compact_unwind_encoding_t enc)
+{
+	return ((enc & UNWIND_ARM64_MODE_MASK) == UNWIND_ARM64_MODE_DWARF);
 }
 
 template <typename A>
@@ -401,6 +410,14 @@ void UnwindInfoAtom<x86_64>::addCompressedAddressOffsetFixup(uint32_t offset, co
 }
 
 template <>
+void UnwindInfoAtom<arm64>::addCompressedAddressOffsetFixup(uint32_t offset, const ld::Atom* func, const ld::Atom* fromFunc)
+{
+	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k1of3, ld::Fixup::kindSetTargetAddress, func));
+	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k2of3, ld::Fixup::kindSubtractTargetAddress, fromFunc));
+	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k3of3, ld::Fixup::kindStoreLittleEndianLow24of32));
+}
+
+template <>
 void UnwindInfoAtom<x86>::addCompressedEncodingFixup(uint32_t offset, const ld::Atom* fde)
 {
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k1of2, ld::Fixup::kindSetTargetSectionOffset, fde));
@@ -414,6 +431,12 @@ void UnwindInfoAtom<x86_64>::addCompressedEncodingFixup(uint32_t offset, const l
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k2of2, ld::Fixup::kindStoreLittleEndianLow24of32));
 }
 
+template <>
+void UnwindInfoAtom<arm64>::addCompressedEncodingFixup(uint32_t offset, const ld::Atom* fde)
+{
+	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k1of2, ld::Fixup::kindSetTargetSectionOffset, fde));
+	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k2of2, ld::Fixup::kindStoreLittleEndianLow24of32));
+}
 
 template <>
 void UnwindInfoAtom<x86>::addRegularAddressFixup(uint32_t offset, const ld::Atom* func)
@@ -424,6 +447,13 @@ void UnwindInfoAtom<x86>::addRegularAddressFixup(uint32_t offset, const ld::Atom
 
 template <>
 void UnwindInfoAtom<x86_64>::addRegularAddressFixup(uint32_t offset, const ld::Atom* func)
+{
+	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k1of2, ld::Fixup::kindSetTargetImageOffset, func));
+	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k2of2, ld::Fixup::kindStoreLittleEndian32));
+}
+
+template <>
+void UnwindInfoAtom<arm64>::addRegularAddressFixup(uint32_t offset, const ld::Atom* func)
 {
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k1of2, ld::Fixup::kindSetTargetImageOffset, func));
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k2of2, ld::Fixup::kindStoreLittleEndian32));
@@ -444,6 +474,13 @@ void UnwindInfoAtom<x86_64>::addRegularFDEOffsetFixup(uint32_t offset, const ld:
 }
 
 template <>
+void UnwindInfoAtom<arm64>::addRegularFDEOffsetFixup(uint32_t offset, const ld::Atom* fde)
+{
+	_fixups.push_back(ld::Fixup(offset+4, ld::Fixup::k1of2, ld::Fixup::kindSetTargetSectionOffset, fde));
+	_fixups.push_back(ld::Fixup(offset+4, ld::Fixup::k2of2, ld::Fixup::kindStoreLittleEndianLow24of32));
+}
+
+template <>
 void UnwindInfoAtom<x86>::addImageOffsetFixup(uint32_t offset, const ld::Atom* targ)
 {
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k1of2, ld::Fixup::kindSetTargetImageOffset, targ));
@@ -452,6 +489,13 @@ void UnwindInfoAtom<x86>::addImageOffsetFixup(uint32_t offset, const ld::Atom* t
 
 template <>
 void UnwindInfoAtom<x86_64>::addImageOffsetFixup(uint32_t offset, const ld::Atom* targ)
+{
+	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k1of2, ld::Fixup::kindSetTargetImageOffset, targ));
+	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k2of2, ld::Fixup::kindStoreLittleEndian32));
+}
+
+template <>
+void UnwindInfoAtom<arm64>::addImageOffsetFixup(uint32_t offset, const ld::Atom* targ)
 {
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k1of2, ld::Fixup::kindSetTargetImageOffset, targ));
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k2of2, ld::Fixup::kindStoreLittleEndian32));
@@ -473,6 +517,13 @@ void UnwindInfoAtom<x86_64>::addImageOffsetFixupPlusAddend(uint32_t offset, cons
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k3of3, ld::Fixup::kindStoreLittleEndian32));
 }
 
+template <>
+void UnwindInfoAtom<arm64>::addImageOffsetFixupPlusAddend(uint32_t offset, const ld::Atom* targ, uint32_t addend)
+{
+	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k1of3, ld::Fixup::kindSetTargetImageOffset, targ));
+	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k2of3, ld::Fixup::kindAddAddend, addend));
+	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k3of3, ld::Fixup::kindStoreLittleEndian32));
+}
 
 
 
@@ -552,6 +603,7 @@ unsigned int UnwindInfoAtom<A>::makeCompressedSecondLevelPage(const std::vector<
 				encodingIndex = commonEncodings.size() + pageSpecificEncodings.size();
 				if ( encodingIndex <= 255 ) {
 					pageSpecificEncodings[encoding] = encodingIndex;
+					if (_s_log) fprintf(stderr, "makeCompressedSecondLevelPage(): pageSpecificEncodings[%d]=0x%08X\n", encodingIndex, encoding); 
 				}
 				else {
 					canDo = false; // case 3)
@@ -685,7 +737,7 @@ static void getAllUnwindInfos(const ld::Internal& state, std::vector<UnwindEntry
 
 			if ( atom->beginUnwind() == atom->endUnwind() ) {
 				// be sure to mark that we have no unwind info for stuff in the TEXT segment without unwind info
-				if ( atom->section().type() == ld::Section::typeCode ) {
+				if ( (atom->section().type() == ld::Section::typeCode) && (atom->size() !=0) ) {
 					entries.push_back(UnwindEntry(atom, address, 0, NULL, NULL, NULL, 0));
 				}
 			}
@@ -782,6 +834,11 @@ static void makeFinalLinkedImageCompactUnwindSection(const Options& opts, ld::In
 			state.addAtom(*new UnwindInfoAtom<x86>(entries, ehFrameSize));
 			break;
 #endif
+#if SUPPORT_ARCH_arm64
+		case CPU_TYPE_ARM64:
+			state.addAtom(*new UnwindInfoAtom<arm64>(entries, ehFrameSize));
+			break;
+#endif
 		default:
 			assert(0 && "no compact unwind for arch");
 	}	
@@ -830,13 +887,17 @@ template <> ld::Fixup::Kind CompactUnwindAtom<x86>::_s_pointerKind = ld::Fixup::
 template <> ld::Fixup::Kind CompactUnwindAtom<x86>::_s_pointerStoreKind = ld::Fixup::kindStoreTargetAddressLittleEndian32;
 template <> ld::Fixup::Kind CompactUnwindAtom<x86_64>::_s_pointerKind = ld::Fixup::kindStoreLittleEndian64;
 template <> ld::Fixup::Kind CompactUnwindAtom<x86_64>::_s_pointerStoreKind = ld::Fixup::kindStoreTargetAddressLittleEndian64;
+#if SUPPORT_ARCH_arm64
+template <> ld::Fixup::Kind CompactUnwindAtom<arm64>::_s_pointerKind = ld::Fixup::kindStoreLittleEndian64;
+template <> ld::Fixup::Kind CompactUnwindAtom<arm64>::_s_pointerStoreKind = ld::Fixup::kindStoreTargetAddressLittleEndian64;
+#endif
 
 template <typename A>
 CompactUnwindAtom<A>::CompactUnwindAtom(ld::Internal& state,const ld::Atom* funcAtom, uint32_t startOffset,
 										uint32_t len, uint32_t cui)
 	: ld::Atom(_s_section, ld::Atom::definitionRegular, ld::Atom::combineNever,
 				ld::Atom::scopeTranslationUnit, ld::Atom::typeUnclassified, 
-				symbolTableNotIn, false, false, false, ld::Atom::Alignment(0)),
+				symbolTableNotIn, false, false, false, ld::Atom::Alignment(log2(sizeof(pint_t)))),
 	_atom(funcAtom), _startOffset(startOffset), _len(len), _compactUnwindInfo(cui)
 {
 	_fixups.push_back(ld::Fixup(macho_compact_unwind_entry<P>::codeStartFieldOffset(), ld::Fixup::k1of3, ld::Fixup::kindSetTargetAddress, funcAtom));
@@ -884,6 +945,11 @@ static void makeCompactUnwindAtom(const Options& opts, ld::Internal& state, cons
 #if SUPPORT_ARCH_i386
 		case CPU_TYPE_I386:
 			state.addAtom(*new CompactUnwindAtom<x86>(state, atom, startOffset, endOffset-startOffset, cui));
+			break;
+#endif
+#if SUPPORT_ARCH_arm64
+		case CPU_TYPE_ARM64:
+			state.addAtom(*new CompactUnwindAtom<arm64>(state, atom, startOffset, endOffset-startOffset, cui));
 			break;
 #endif
 	}

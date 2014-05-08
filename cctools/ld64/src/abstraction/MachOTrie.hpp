@@ -329,7 +329,7 @@ static inline void processExportNode(const uint8_t* const start, const uint8_t* 
 {
 	if ( p >= end )
 		throw "malformed trie, node past end";
-	const uint8_t terminalSize = read_uleb128(p, end);
+	const uint64_t terminalSize = read_uleb128(p, end);
 	const uint8_t* children = p + terminalSize;
 	if ( terminalSize != 0 ) {
 		EntryWithOffset e;

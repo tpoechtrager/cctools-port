@@ -31,6 +31,7 @@
 
 #include <vector>
 #include <map>
+#include <set>
 #include <unordered_map>
 
 #include "ld.hpp"
@@ -122,7 +123,7 @@ bool Layout::Comparer::operator()(const ld::Atom* left, const ld::Atom* right)
 {
 	if ( left == right )
 		return false;
-	
+
 	// magic section$start symbol always sorts to the start of its section
 	if ( left->contentType() == ld::Atom::typeSectionStart )
 		return true;
@@ -161,6 +162,32 @@ bool Layout::Comparer::operator()(const ld::Atom* left, const ld::Atom* right)
 		return false;
 	if ( right->contentType() == ld::Atom::typeSectionEnd )
 		return true;
+
+	// aliases sort before their target
+	bool leftIsAlias = left->isAlias();
+	if ( leftIsAlias ) {
+		for (ld::Fixup::iterator fit=left->fixupsBegin(); fit != left->fixupsEnd(); ++fit) {
+			if ( fit->kind == ld::Fixup::kindNoneFollowOn ) {
+				assert(fit->binding == ld::Fixup::bindingDirectlyBound);
+			    if ( fit->u.target == right )
+					return true; // left already before right
+				left = fit->u.target; // sort as if alias was its target
+				break;
+		    }
+		}
+	}
+	bool rightIsAlias = right->isAlias();
+    if ( rightIsAlias ) {
+        for (ld::Fixup::iterator fit=right->fixupsBegin(); fit != right->fixupsEnd(); ++fit) {
+			if ( fit->kind == ld::Fixup::kindNoneFollowOn ) {
+				assert(fit->binding == ld::Fixup::bindingDirectlyBound);
+                if ( fit->u.target == left )
+                    return false; // need to swap, alias is after target
+				right = fit->u.target; // continue with sort as if right was target
+                break;
+			}       
+		}
+    }
 
 	// the __common section can have real or tentative definitions
 	// we want the real ones to sort before tentative ones
@@ -204,8 +231,6 @@ bool Layout::Comparer::operator()(const ld::Atom* left, const ld::Atom* right)
 	int64_t addrDiff = left->objectAddress() - right->objectAddress();
 	if ( addrDiff == 0 ) {
 		// have same address so one might be an alias, and aliases need to sort before target
-		bool leftIsAlias = left->isAlias();
-		bool rightIsAlias = right->isAlias();
 		if ( leftIsAlias != rightIsAlias )
 			return leftIsAlias;
 
@@ -506,22 +531,32 @@ void Layout::buildOrdinalOverrideMap()
 		warning("only %u out of %lu order_file symbols were applicable", matchCount, _options.orderedSymbolsCount() );
 	}
 
-
 	// <rdar://problem/8612550> When order file used on data, turn ordered zero fill symbols into zeroed data
 	if ( ! moveToData.empty() ) {
+		// <rdar://problem/14919139> only move zero fill symbols to __data if there is a __data section
+		ld::Internal::FinalSection* dataSect = NULL;
 		for (std::vector<ld::Internal::FinalSection*>::iterator sit=_state.sections.begin(); sit != _state.sections.end(); ++sit) {
 			ld::Internal::FinalSection* sect = *sit;
-			switch ( sect->type() ) {
-				case ld::Section::typeZeroFill:
-				case ld::Section::typeTentativeDefs:
-					sect->atoms.erase(std::remove_if(sect->atoms.begin(), sect->atoms.end(), InSet(moveToData)), sect->atoms.end());
-					break;
-				case ld::Section::typeUnclassified:
-					if ( (strcmp(sect->sectionName(), "__data") == 0) && (strcmp(sect->segmentName(), "__DATA") == 0) )
-						sect->atoms.insert(sect->atoms.end(), moveToData.begin(), moveToData.end());
-					break;
-				default:
-					break;
+			if ( sect->type() == ld::Section::typeUnclassified ) {
+				if ( (strcmp(sect->sectionName(), "__data") == 0) && (strcmp(sect->segmentName(), "__DATA") == 0) )
+					dataSect = sect;
+			}
+		}
+
+		if ( dataSect != NULL ) {
+			// add atoms to __data
+			dataSect->atoms.insert(dataSect->atoms.end(), moveToData.begin(), moveToData.end());
+			// remove atoms from original sections
+			for (std::vector<ld::Internal::FinalSection*>::iterator sit=_state.sections.begin(); sit != _state.sections.end(); ++sit) {
+				ld::Internal::FinalSection* sect = *sit;
+				switch ( sect->type() ) {
+					case ld::Section::typeZeroFill:
+					case ld::Section::typeTentativeDefs:
+						sect->atoms.erase(std::remove_if(sect->atoms.begin(), sect->atoms.end(), InSet(moveToData)), sect->atoms.end());
+						break;
+					default:
+						break;
+				}
 			}
 		}
 	}
@@ -539,6 +574,7 @@ void Layout::doPass()
 	// sort atoms in each section
 	for (std::vector<ld::Internal::FinalSection*>::iterator sit=_state.sections.begin(); sit != _state.sections.end(); ++sit) {
 		ld::Internal::FinalSection* sect = *sit;
+		//fprintf(stderr, "sorting section %s\n", sect->sectionName());
 		std::sort(sect->atoms.begin(), sect->atoms.end(), _comparer);
 	}
 
@@ -547,7 +583,7 @@ void Layout::doPass()
 	//	ld::Internal::FinalSection* sect = *sit;
 	//	for (std::vector<const ld::Atom*>::iterator ait=sect->atoms.begin(); ait != sect->atoms.end(); ++ait) {
 	//		const ld::Atom* atom = *ait;
-	//		fprintf(stderr, "\t%s\t%s\n", sect->sectionName(), atom->name());
+	//		fprintf(stderr, "\t%p\t%s\t%s\n", atom, sect->sectionName(), atom->name());
 	//	}
 	//}
 

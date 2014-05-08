@@ -264,11 +264,34 @@ bool MachOChecker<arm>::validFile(const uint8_t* fileContent)
 	return false;
 }
 
+#if SUPPORT_ARCH_arm64
+template <>
+bool MachOChecker<arm64>::validFile(const uint8_t* fileContent)
+{	
+	const macho_header<P>* header = (const macho_header<P>*)fileContent;
+	if ( header->magic() != MH_MAGIC_64 )
+		return false;
+	if ( header->cputype() != CPU_TYPE_ARM64 )
+		return false;
+	switch (header->filetype()) {
+		case MH_EXECUTE:
+		case MH_DYLIB:
+		case MH_BUNDLE:
+		case MH_DYLINKER:
+			return true;
+	}
+	return false;
+}
+#endif
+
 template <> uint8_t MachOChecker<ppc>::loadCommandSizeMask()	{ return 0x03; }
 template <> uint8_t MachOChecker<ppc64>::loadCommandSizeMask()	{ return 0x07; }
 template <> uint8_t MachOChecker<x86>::loadCommandSizeMask()	{ return 0x03; }
 template <> uint8_t MachOChecker<x86_64>::loadCommandSizeMask() { return 0x07; }
 template <> uint8_t MachOChecker<arm>::loadCommandSizeMask()	{ return 0x03; }
+#if SUPPORT_ARCH_arm64
+template <> uint8_t MachOChecker<arm64>::loadCommandSizeMask()	{ return 0x07; }
+#endif
 
 
 template <>
@@ -301,9 +324,13 @@ arm::P::uint_t MachOChecker<arm>::getInitialStackPointer(const macho_thread_comm
 	return threadInfo->thread_register(13);
 }
 
-
-
-
+#if SUPPORT_ARCH_arm64
+template <>
+arm64::P::uint_t MachOChecker<arm64>::getInitialStackPointer(const macho_thread_command<arm64::P>* threadInfo)
+{
+	throw "LC_UNIXTHREAD not supported for arm64";
+}
+#endif
 
 template <>
 ppc::P::uint_t MachOChecker<ppc>::getEntryPoint(const macho_thread_command<ppc::P>* threadInfo)
@@ -335,6 +362,13 @@ arm::P::uint_t MachOChecker<arm>::getEntryPoint(const macho_thread_command<arm::
 	return threadInfo->thread_register(15);
 }
 
+#if SUPPORT_ARCH_arm64
+template <>
+arm64::P::uint_t MachOChecker<arm64>::getEntryPoint(const macho_thread_command<arm64::P>* threadInfo)
+{
+	throw "LC_UNIXTHREAD not supported for arm64";
+}
+#endif
 
 template <typename A>
 MachOChecker<A>::MachOChecker(const uint8_t* fileContent, uint32_t fileLength, const char* path)
@@ -447,6 +481,7 @@ void MachOChecker<A>::checkLoadCommands()
 				fDyldInfo = (macho_dyld_info_command<P>*)cmd;
 				break;
 			case LC_ENCRYPTION_INFO:
+			case LC_ENCRYPTION_INFO_64:
 				encryption_info = (macho_encryption_info_command<P>*)cmd;
 				break;
 			case LC_SUB_UMBRELLA:
@@ -993,6 +1028,15 @@ arm::P::uint_t MachOChecker<arm>::relocBase()
 		return fFirstSegment->vmaddr();
 }
 
+#if SUPPORT_ARCH_arm64
+template <>
+arm64::P::uint_t MachOChecker<arm64>::relocBase()
+{
+	return fFirstWritableSegment->vmaddr();
+}
+#endif
+
+
 
 template <typename A>
 bool MachOChecker<A>::addressInWritableSegment(pint_t address)
@@ -1107,6 +1151,14 @@ void MachOChecker<arm>::checkExternalReloation(const macho_relocation_info<P>* r
 }
 #endif
 
+#if SUPPORT_ARCH_arm64
+template <>
+void MachOChecker<arm64>::checkExternalReloation(const macho_relocation_info<P>* reloc)
+{
+  throw "external relocations not used for arm64";
+}
+#endif
+
 
 template <>
 void MachOChecker<ppc>::checkLocalReloation(const macho_relocation_info<P>* reloc)
@@ -1183,6 +1235,15 @@ void MachOChecker<arm>::checkLocalReloation(const macho_relocation_info<P>* relo
 	}
 }
 #endif
+
+#if SUPPORT_ARCH_arm64
+template <>
+void MachOChecker<arm64>::checkLocalReloation(const macho_relocation_info<P>* reloc)
+{
+  throw "local relocations not used for arm64";
+}
+#endif
+
 
 template <typename A>
 void MachOChecker<A>::checkRelocations()
@@ -1601,6 +1662,11 @@ static void check(const char* path)
 #if SUPPORT_ARCH_arm_any
 		else if ( MachOChecker<arm>::validFile(p) ) {
 			MachOChecker<arm>::make(p, length, path);
+		}
+#endif
+#if SUPPORT_ARCH_arm64
+		else if ( MachOChecker<arm64>::validFile(p) ) {
+			MachOChecker<arm64>::make(p, length, path);
 		}
 #endif
 		else {

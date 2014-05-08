@@ -31,8 +31,10 @@
 #include <vector>
 #include <map>
 
+#include "MachOFileAbstraction.hpp"
 #include "ld.hpp"
 #include "got.h"
+#include "configure.h"
 
 namespace ld {
 namespace passes {
@@ -42,17 +44,18 @@ class File; // forward reference
 
 class GOTEntryAtom : public ld::Atom {
 public:
-											GOTEntryAtom(ld::Internal& internal, const ld::Atom* target, bool weakImport)
+											GOTEntryAtom(ld::Internal& internal, const ld::Atom* target, bool weakImport, bool is64)
 				: ld::Atom(_s_section, ld::Atom::definitionRegular, ld::Atom::combineNever,
 							ld::Atom::scopeLinkageUnit, ld::Atom::typeNonLazyPointer, 
-							symbolTableNotIn, false, false, false, ld::Atom::Alignment(3)), 
-				_fixup(0, ld::Fixup::k1of1, ld::Fixup::kindStoreTargetAddressLittleEndian64, target),
-				_target(target)
+							symbolTableNotIn, false, false, false, (is64 ? ld::Atom::Alignment(3) : ld::Atom::Alignment(2))),
+				_fixup(0, ld::Fixup::k1of1, (is64 ? ld::Fixup::kindStoreTargetAddressLittleEndian64 : ld::Fixup::kindStoreTargetAddressLittleEndian32), target),
+				_target(target),
+				_is64(is64)
 					{ _fixup.weakImport = weakImport; internal.addAtom(*this); }
 
 	virtual const ld::File*					file() const					{ return NULL; }
 	virtual const char*						name() const					{ return _target->name(); }
-	virtual uint64_t						size() const					{ return 8; }
+	virtual uint64_t						size() const					{ return (_is64 ? 8 : 4); }
 	virtual uint64_t						objectAddress() const			{ return 0; }
 	virtual void							copyRawContent(uint8_t buffer[]) const { }
 	virtual void							setScope(Scope)					{ }
@@ -62,6 +65,7 @@ public:
 private:
 	mutable ld::Fixup						_fixup;
 	const ld::Atom*							_target;
+	bool									_is64;
 	
 	static ld::Section						_s_section;
 };
@@ -73,6 +77,10 @@ static bool gotFixup(const Options& opts, ld::Internal& internal, const ld::Atom
 {
 	switch (fixup->kind) {
 		case ld::Fixup::kindStoreTargetAddressX86PCRel32GOTLoad:
+#if SUPPORT_ARCH_arm64
+		case ld::Fixup::kindStoreTargetAddressARM64GOTLoadPage21:
+		case ld::Fixup::kindStoreTargetAddressARM64GOTLoadPageOff12:
+#endif
 			// start by assuming this can be optimized
 			*optimizable = true;
 			// cannot do LEA optimization if target is in another dylib
@@ -122,6 +130,9 @@ static bool gotFixup(const Options& opts, ld::Internal& internal, const ld::Atom
 			}
 			return true;
 		case ld::Fixup::kindStoreX86PCRel32GOT:
+#if SUPPORT_ARCH_arm64
+		case ld::Fixup::kindStoreARM64PCRelToGOT:
+#endif
 			*optimizable = false;
 			return true;
 		case ld::Fixup::kindNoneGroupSubordinatePersonality:
@@ -189,7 +200,22 @@ void doPass(const Options& opts, ld::Internal& internal)
 						case ld::Fixup::bindingDirectlyBound:
 							fit->binding = ld::Fixup::bindingDirectlyBound;
 							fit->u.target = targetOfGOT;
-							fit->kind = ld::Fixup::kindStoreTargetAddressX86PCRel32GOTLoadNowLEA;
+							switch ( fit->kind ) {
+								case ld::Fixup::kindStoreTargetAddressX86PCRel32GOTLoad:
+									fit->kind = ld::Fixup::kindStoreTargetAddressX86PCRel32GOTLoadNowLEA;
+									break;
+#if SUPPORT_ARCH_arm64
+								case ld::Fixup::kindStoreTargetAddressARM64GOTLoadPage21:
+									fit->kind = ld::Fixup::kindStoreTargetAddressARM64GOTLeaPage21;
+									break;
+								case ld::Fixup::kindStoreTargetAddressARM64GOTLoadPageOff12:
+									fit->kind = ld::Fixup::kindStoreTargetAddressARM64GOTLeaPageOff12;
+									break;
+#endif
+								default:
+									assert(0 && "unsupported GOT reference kind");
+									break;
+							}
 							break;
 						default:
 							assert(0 && "unsupported GOT reference");
@@ -232,9 +258,33 @@ void doPass(const Options& opts, ld::Internal& internal)
 		}
 	}
 	
+	bool is64 = false;
+	switch ( opts.architecture() ) {
+#if SUPPORT_ARCH_i386
+		case CPU_TYPE_I386:
+			is64 = false;
+			break;
+#endif
+#if SUPPORT_ARCH_x86_64
+		case CPU_TYPE_X86_64:
+			is64 = true;
+			break;
+#endif
+#if SUPPORT_ARCH_arm_any
+		case CPU_TYPE_ARM: 
+			is64 = false;
+			break;
+#endif
+#if SUPPORT_ARCH_arm64
+		case CPU_TYPE_ARM64: 
+			is64 = true;
+			break;
+#endif
+	}
+	
 	// make GOT entries	
 	for (std::map<const ld::Atom*,ld::Atom*>::iterator it = gotMap.begin(); it != gotMap.end(); ++it) {
-		it->second = new GOTEntryAtom(internal, it->first, weakImportMap[it->first]);
+		it->second = new GOTEntryAtom(internal, it->first, weakImportMap[it->first], is64);
 	}
 	
 	// update atoms to use GOT entries

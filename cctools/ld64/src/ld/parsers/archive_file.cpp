@@ -111,7 +111,7 @@ private:
 
 	};
 
-	struct MemberState { ld::relocatable::File* file; const Entry *entry; bool logged; bool loaded; uint16_t index;};
+	struct MemberState { ld::relocatable::File* file; const Entry *entry; bool logged; bool loaded; uint32_t index;};
 	bool											loadMember(MemberState& state, ld::File::AtomHandler& handler, const char *format, ...) const;
 
 	typedef std::unordered_map<const char*, const struct ranlib*, ld::CStringHash, ld::CStringEquals> NameToEntryMap;
@@ -225,6 +225,7 @@ const class File<A>::Entry* File<A>::Entry::next() const
 template <> cpu_type_t File<x86>::architecture()    { return CPU_TYPE_I386; }
 template <> cpu_type_t File<x86_64>::architecture() { return CPU_TYPE_X86_64; }
 template <> cpu_type_t File<arm>::architecture()    { return CPU_TYPE_ARM; }
+template <> cpu_type_t File<arm64>::architecture()  { return CPU_TYPE_ARM64; }
 
 
 template <typename A>
@@ -331,13 +332,13 @@ bool File<A>::memberHasObjCCategories(const Entry* member) const
 template <typename A>
 typename File<A>::MemberState& File<A>::makeObjectFileForMember(const Entry* member) const
 {
-	uint16_t memberIndex = 0;
+	uint32_t memberIndex = 0;
 	// in case member was instantiated earlier but not needed yet
 	typename MemberToStateMap::iterator pos = _instantiatedEntries.find(member);
 	if ( pos == _instantiatedEntries.end() ) {
 		// Have to find the index of this member
 		const Entry* start;
-		uint16_t index;
+		uint32_t index;
 		if (_instantiatedEntries.size() == 0) {
 			start = (Entry*)&_archiveFileContent[8];
 			index = 1;
@@ -389,7 +390,7 @@ typename File<A>::MemberState& File<A>::makeObjectFileForMember(const Entry* mem
 		// see if member is llvm bitcode file
 		result = lto::parse(member->content(), member->contentSize(), 
 								mPath, member->modificationTime(), ordinal, 
-								_objOpts.architecture, _objOpts.subType, _logAllFiles);
+								_objOpts.architecture, _objOpts.subType, _logAllFiles, _objOpts.verboseOptimizationHints);
 		if ( result != NULL ) {
 			MemberState state = {result, member, false, false, memberIndex};
 			_instantiatedEntries[member] = state;
@@ -607,6 +608,12 @@ ld::archive::File* parse(const uint8_t* fileContent, uint64_t fileLength,
 		case CPU_TYPE_ARM:
 			if ( archive::Parser<arm>::validFile(fileContent, fileLength, opts.objOpts) )
 				return archive::Parser<arm>::parse(fileContent, fileLength, path, modTime, ordinal, opts);
+			break;
+#endif
+#if SUPPORT_ARCH_arm64
+		case CPU_TYPE_ARM64:
+			if ( archive::Parser<arm64>::validFile(fileContent, fileLength, opts.objOpts) )
+				return archive::Parser<arm64>::parse(fileContent, fileLength, path, modTime, ordinal, opts);
 			break;
 #endif
 	}

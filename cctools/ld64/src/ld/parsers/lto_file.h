@@ -39,7 +39,8 @@ extern bool isObjectFile(const uint8_t* fileContent, uint64_t fileLength, cpu_ty
 
 extern ld::relocatable::File* parse(const uint8_t* fileContent, uint64_t fileLength, 
 									const char* path, time_t modTime, ld::File::Ordinal ordinal,
-									cpu_type_t architecture, cpu_subtype_t subarch, bool logAllFiles);
+									cpu_type_t architecture, cpu_subtype_t subarch, bool logAllFiles,
+									bool verboseOptimizationHints);
 
 struct OptimizeOptions {
 	const char*							outputFilePath;
@@ -53,7 +54,11 @@ struct OptimizeOptions {
 	bool								relocatable;
 	bool								allowTextRelocs; 
 	bool								linkerDeadStripping; 
+	bool								needsUnwindInfoSection; 
+	bool								keepDwarfUnwind; 
+	bool								verboseOptimizationHints;
 	cpu_type_t							arch;
+	const char*							mcpu;
 	const std::vector<const char*>*		llvmOptions;
 };
 
