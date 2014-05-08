@@ -46,6 +46,8 @@
 #include "lto_file.h"
 
 // #defines are a work around for <rdar://problem/8760268>
+#undef __STDC_LIMIT_MACROS
+#undef __STDC_CONSTANT_MACROS
 #define __STDC_LIMIT_MACROS 1
 #define __STDC_CONSTANT_MACROS 1
 #include "llvm-c/lto.h"

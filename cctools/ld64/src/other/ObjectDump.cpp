@@ -35,6 +35,10 @@
 #include "parsers/macho_relocatable_file.h"
 #include "parsers/lto_file.h"
 
+#ifdef __GLIBCXX__
+#include <algorithm>
+#endif
+
 static bool			sDumpContent= true;
 static bool			sDumpStabs	= false;
 static bool			sSort		= true;

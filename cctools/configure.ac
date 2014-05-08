@@ -12,7 +12,7 @@ CXX=clang++
 
 CFLAGS="$CFLAGS `cat tmp/cflags 2>/dev/null`"
 CFLAGS="$CFLAGS -isystem /usr/local/include -isystem /usr/pkg/include -O3"
-CXXFLAGS="$CXXFLAGS `cat tmp/libcxx-conf 2>/dev/null || echo -stdlib=libc++` `cat tmp/cxxflags 2>/dev/null`"
+CXXFLAGS="$CXXFLAGS -std=gnu++0x `cat tmp/cxxflags 2>/dev/null`"
 CXXFLAGS="$CXXFLAGS -isystem /usr/local/include -isystem /usr/pkg/include -O3"
 
 LDFLAGS="$LDFLAGS -L/usr/local/lib `cat tmp/ldflags 2>/dev/null`"
@@ -20,7 +20,8 @@ export LD_LIBRARY_PATH="`cat tmp/ldpath 2>/dev/null`"
 
 CPP="clang -E"
 
-AM_INIT_AUTOMAKE([1.10 no-define no-dist-gzip dist-bzip2 tar-ustar])
+# FIXME 'subdir-objects' breaks dependency tracking
+AM_INIT_AUTOMAKE([1.10 no-define no-dist-gzip dist-bzip2 tar-ustar subdir-objects no-dependencies])
 
 AC_CONFIG_MACRO_DIR([m4])
 AM_MAINTAINER_MODE
@@ -241,28 +242,26 @@ CFLAGS=$ORIGCFLAGS
 AC_SUBST([WARNINGS], [$WARNINGS])
 
 
-AC_CHECK_LIB([dl],[dlopen],[
-         DL_LIBS=-ldl
-         ])
+AC_CHECK_LIB([dl],[dlopen],[DL_LIBS=-ldl])
 AC_SUBST(DL_LIBS)
 
-AC_CHECK_LIB([pthread],[pthread_create],[
-         PTHREAD_FLAGS=-pthread
-         ])
+AC_CHECK_LIB([pthread],[pthread_create],[PTHREAD_FLAGS=-pthread])
 AC_SUBST(PTHREAD_FLAGS)
 
-AC_CHECK_LIB([uuid],[uuid_generate_random],[
-         UUID_LIBS=-luuid
-         ])
+AC_CHECK_LIB([uuid],[uuid_generate_random],[UUID_LIBS=-luuid])
 AC_SUBST(UUID_LIBS)
 
-AC_CHECK_LIB([crypto],[MD5_Init],[
-         CRYPT_LIBS=-lcrypto
-         ])
+AC_CHECK_LIB([crypto],[MD5_Init],[CRYPT_LIBS=-lcrypto])
 AC_SUBST(CRYPT_LIBS)
 
+AC_CHECK_LIB([supc++],[__cxa_demangle],[CXXABI_LIB=-lsupc++])
+AC_SUBST(CXXABI_LIB)
+
+AC_CHECK_LIB([c++abi],[__cxa_demangle],[CXXABI_LIB=-lc++abi])
+AC_SUBST(CXXABI_LIB)
+
 AC_C_BIGENDIAN([AC_SUBST([ENDIAN_FLAG],[-D__BIG_ENDIAN__=1])],
-			[AC_SUBST([ENDIAN_FLAG],[-D__LITTLE_ENDIAN__=1])])
+      [AC_SUBST([ENDIAN_FLAG],[-D__LITTLE_ENDIAN__=1])])
 
 AC_CHECK_FUNCS([strmode])
 

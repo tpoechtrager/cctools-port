@@ -16,6 +16,10 @@ extern "C" {
 #include "helper.h"
 }
 
+#ifdef __GLIBCXX__
+#include <algorithm>
+#endif
+
 #define CPU_SUBTYPE_X86_ALL     ((cpu_subtype_t)3)
 
 #define SUPPORT_ARCH_armv4t 1

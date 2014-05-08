@@ -46,12 +46,13 @@ namespace LowLevelMemoryUtilities {
 //
 static const size_t systemAlignment = 4;
 
-
+#ifndef __GXX_EXPERIMENTAL_CXX0X__
 //
 // Get the local alignment for a type, as used by the acting compiler.
 //
 template <class T>
 inline size_t alignof() { struct { char c; T t; } s; return sizeof(s) - sizeof(T); }
+#endif
 
 
 //
