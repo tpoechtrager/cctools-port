@@ -38,6 +38,7 @@
 #include "stuff/bytesex.h"
 #include "stuff/hppa.h"
 #include "otool.h"
+#include "dyld_bind_info.h"
 #include "ofile_print.h"
 #include "../as/hppa-opcode.h"
 

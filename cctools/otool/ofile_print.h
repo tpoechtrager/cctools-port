@@ -183,6 +183,10 @@ extern void print_hints(
     uint32_t strings_size,
     enum bool verbose);
 
+extern void print_link_opt_hints(
+    char *loh,
+    uint32_t nloh);
+
 extern void print_dices(
     struct data_in_code_entry *dices,
     uint32_t ndices,
@@ -474,6 +478,8 @@ extern void print_objc2_64bit(
     uint32_t next_relocs,
     struct relocation_info *loc_relocs,
     uint32_t nloc_relocs,
+    struct dyld_bind_info *dbi,
+    uint64_t ndbi,
     enum bool verbose,
     enum bool Vflag);
 
@@ -542,6 +548,24 @@ extern void print_objc_runtime_setup_section(
     uint32_t object_size,
     enum bool verbose);
 
+extern char *get_objc2_64bit_cfstring_name(
+    uint64_t p,
+    struct load_command *load_commands,
+    uint32_t ncmds,
+    uint32_t sizeofcmds,
+    enum byte_sex object_byte_sex,
+    char *object_addr,
+    uint32_t object_size);
+
+extern char *get_objc2_64bit_class_name(
+    uint64_t p,
+    struct load_command *load_commands,
+    uint32_t ncmds,
+    uint32_t sizeofcmds,
+    enum byte_sex object_byte_sex,
+    char *object_addr,
+    uint32_t object_size);
+
 extern void print_coff_reloc_section(
     struct load_command *load_commands,
     uint32_t ncmds,
@@ -557,7 +581,7 @@ extern char *get_label(
     struct symbol *sorted_symbols,
     uint32_t nsorted_symbols);
 
-extern void print_label(
+extern enum bool print_label(
     uint64_t addr,
     enum bool colon_and_newline,
     struct symbol *sorted_symbols,

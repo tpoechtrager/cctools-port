@@ -80,6 +80,7 @@ enum mach_o_part_type {
     MP_FUNCTION_STARTS,
     MP_DATA_IN_CODE,
     MP_CODE_SIGN_DRS,
+    MP_LINK_OPT_HINT,
     MP_DYLD_INFO_REBASE,
     MP_DYLD_INFO_BIND,
     MP_DYLD_INFO_WEAK_BIND,
@@ -112,6 +113,7 @@ static char *mach_o_part_type_names[] = {
     "MP_FUNCTION_STARTS",
     "MP_DATA_IN_CODE",
     "MP_CODE_SIGN_DRS",
+    "MP_LINK_OPT_HINT",
     "MP_DYLD_INFO_REBASE",
     "MP_DYLD_INFO_BIND",
     "MP_DYLD_INFO_WEAK_BIND",
@@ -502,6 +504,7 @@ struct file_part *fp)
     struct dylib_module_64 *modtab64;
     struct linkedit_data_command *split_info, *code_sig, *func_starts,
 			         *data_in_code, *code_sign_drs;
+    struct linkedit_data_command *link_opt_hint;
     enum bool dylib_stub;
 
 	mp = new_mach_o_part();
@@ -542,6 +545,7 @@ struct file_part *fp)
 	func_starts = NULL;
 	data_in_code = NULL;
 	code_sign_drs = NULL;
+	link_opt_hint = NULL;
 
 	lc = ofile.load_commands;
 	for(i = 0; i < ncmds; i++){
@@ -571,6 +575,10 @@ struct file_part *fp)
 	    }
 	    else if(code_sign_drs == NULL && lc->cmd == LC_DYLIB_CODE_SIGN_DRS){
 		code_sign_drs = (struct linkedit_data_command *)lc;
+	    }
+	    else if(link_opt_hint == NULL &&
+		    lc->cmd == LC_LINKER_OPTIMIZATION_HINT){
+		link_opt_hint = (struct linkedit_data_command *)lc;
 	    }
 	    else if(lc->cmd == LC_SEGMENT && dylib_stub == FALSE){
 		sg = (struct segment_command *)lc;
@@ -1013,6 +1021,13 @@ struct file_part *fp)
 	    mp->type = MP_CODE_SIGN_DRS;
 	    insert_mach_o_part(fp, mp);
 	}
+	if(link_opt_hint != NULL && link_opt_hint->datasize != 0){
+	    mp = new_mach_o_part();
+	    mp->offset = fp->offset + link_opt_hint->dataoff;
+	    mp->size = link_opt_hint->datasize;
+	    mp->type = MP_LINK_OPT_HINT;
+	    insert_mach_o_part(fp, mp);
+	}
 }
 
 static
@@ -1389,6 +1404,12 @@ uint32_t page_number)
 			print_arch(fp);
 			printed = TRUE;
 			break;
+		    case MP_LINK_OPT_HINT:
+			printf("File Page %u contains info for linker "
+			       "optimization hints", page_number);
+			print_arch(fp);
+			printed = TRUE;
+			break;
 		    case MP_DYLD_INFO_REBASE:
 			printf("File Page %u contains dyld info for sliding "
 			       "an image", page_number);
@@ -1627,6 +1648,9 @@ struct mach_o_part *mp)
 	    break;
 	case MP_CODE_SIGN_DRS:
 	    printf("info for code signing DRs copied from linked dylibs");
+	    break;
+	case MP_LINK_OPT_HINT:
+	    printf("info for linker optimization hints");
 	    break;
 	case MP_DYLD_INFO_REBASE:
 	    printf("dyld info for sliding an image");

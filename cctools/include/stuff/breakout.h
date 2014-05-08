@@ -48,8 +48,8 @@ struct toc_entry {
 struct arch {
     char *file_name;		/* name of file this arch came from */
     enum ofile_type type;	/* The type of file for this architecture */
-				/*  can be OFILE_ARCHIVE, OFILE_Mach_O or */
-    				/*  OFILE_UNKNOWN. */
+				/*  can be OFILE_ARCHIVE, OFILE_Mach_O, */
+    				/*  OFILE_LLVM_BITCODE or OFILE_UNKNOWN. */
     struct fat_arch *fat_arch;	/* If this came from fat file this is valid */
 			        /*  and not NULL (needed for the align value */
 				/*  and to output a fat file if only one arch)*/
@@ -84,6 +84,11 @@ struct arch {
     /* if this is an object file: the object file */
     struct object *object;	/* the object file */
 
+#ifdef LTO_SUPPORT
+    /* if this member is an llvm bit code file: the lto module */
+    void *lto;                  /* lto module */
+#endif /* LTO_SUPPORT */
+
     /* if this is an unknown file: the addr and size of the file */
     char *unknown_addr;
     uint32_t unknown_size;
@@ -94,7 +99,7 @@ struct arch {
 
 struct member {
     enum ofile_type type;	/* the type of this member can be OFILE_Mach_O*/
-				/*  or OFILE_UNKNOWN */
+				/*  OFILE_LLVM_BITCODE or OFILE_UNKNOWN */
     struct ar_hdr *ar_hdr;	/* the archive header for this member */
     uint32_t offset;		/* current working offset and final offset */
 				/*  use in creating the table of contents */
@@ -107,6 +112,11 @@ struct member {
 
     /* if this member is an object file: the object file */
     struct object *object;	/* the object file */
+
+#ifdef LTO_SUPPORT
+    /* if this member is an llvm bit code file: the lto module */
+    void *lto;                  /* lto module */
+#endif /* LTO_SUPPORT */
 
     /* if this member is an unknown file: the addr and size of the member */
     char *unknown_addr;
@@ -152,6 +162,9 @@ struct object {
 	*data_in_code_cmd;	    /* the data in code load command, if any */
     struct linkedit_data_command
 	*code_sign_drs_cmd;	    /* the code signing DRs command, if any */
+    struct linkedit_data_command
+	*link_opt_hint_cmd;	    /* the linker optimization hint command,
+				       if any */
     struct section **sections;	    /* array of 32-bit section structs */
     struct section_64 **sections64; /* array of 64-bit section structs */
     struct dyld_info_command
@@ -200,6 +213,8 @@ struct object {
     uint32_t      output_data_in_code_info_data_size;
     char *output_code_sign_drs_info_data;
     uint32_t      output_code_sign_drs_info_data_size;
+    char *output_link_opt_hint_info_data;
+    uint32_t      output_link_opt_hint_info_data_size;
 
     uint32_t      output_ilocalsym;
     uint32_t      output_nlocalsym;

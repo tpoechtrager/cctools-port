@@ -36,8 +36,10 @@
 #include "stuff/symbol.h"
 #include "stuff/llvm.h"
 #include "otool.h"
+#include "dyld_bind_info.h"
 #include "ofile_print.h"
 #include "arm_disasm.h"
+#include "cxa_demangle.h"
 
 /* Used by otool(1) to stay or switch out of thumb mode */
 enum bool in_thumb = FALSE;
@@ -157,6 +159,7 @@ struct disassemble_info { /* HACK'ed up for just what we need here */
   struct inst *inst;
   struct inst *insts;
   uint32_t ninsts;
+  char *demangled_name;
 } dis_info;
 
 /*
@@ -826,6 +829,16 @@ const char **ReferenceName)
 		    info->nsymbols, info->strings, info->strings_size);
 	    if(*ReferenceName != NULL)
 		*ReferenceType = LLVMDisassembler_ReferenceType_Out_SymbolStub;
+	    else if(SymbolName != NULL && strncmp(SymbolName, "__Z", 3) == 0){
+		if(info->demangled_name != NULL)
+		    free(info->demangled_name);
+		info->demangled_name = __cxa_demangle(SymbolName + 1, 0, 0, 0);
+		if(info->demangled_name != NULL){
+		    *ReferenceName = info->demangled_name;
+		    *ReferenceType =
+			LLVMDisassembler_ReferenceType_DeMangled_Name;
+		}
+	    }
 	    else
 		*ReferenceType = LLVMDisassembler_ReferenceType_InOut_None;
 	    if(info->inst != NULL && SymbolName == NULL){
@@ -838,6 +851,16 @@ const char **ReferenceName)
 						   ReferenceType, info);
 	    if(*ReferenceName == NULL)
 		*ReferenceType = LLVMDisassembler_ReferenceType_InOut_None;
+	}
+	else if(SymbolName != NULL && strncmp(SymbolName, "__Z", 3) == 0){
+	    if(info->demangled_name != NULL)
+		free(info->demangled_name);
+	    info->demangled_name = __cxa_demangle(SymbolName + 1, 0, 0, 0);
+	    if(info->demangled_name != NULL){
+		*ReferenceName = info->demangled_name;
+		*ReferenceType =
+		    LLVMDisassembler_ReferenceType_DeMangled_Name;
+	    }
 	}
 	else{
 	    *ReferenceName = NULL;
@@ -852,7 +875,9 @@ cpu_subtype_t cpusubtype)
 {
     LLVMDisasmContextRef dc;
     char *TripleName;
+    char *mcpu_default;
 
+	mcpu_default = mcpu;
 	switch(cpusubtype){
 	case CPU_SUBTYPE_ARM_V4T:
 	    TripleName = "armv4t-apple-darwin10";
@@ -868,6 +893,8 @@ cpu_subtype_t cpusubtype)
 	    break;
 	case CPU_SUBTYPE_ARM_V6M:
 	    TripleName = "armv6m-apple-darwin10";
+	    if(*mcpu_default == '\0')
+		mcpu_default = "cortex-m0";
 	    break;
 	default:
 	case CPU_SUBTYPE_ARM_V7:
@@ -884,9 +911,13 @@ cpu_subtype_t cpusubtype)
 	    break;
 	case CPU_SUBTYPE_ARM_V7M:
 	    TripleName = "armv7m-apple-darwin10";
+	    if(*mcpu_default == '\0')
+		mcpu_default = "cortex-m3";
 	    break;
 	case CPU_SUBTYPE_ARM_V7EM:
 	    TripleName = "armv7em-apple-darwin10";
+	    if(*mcpu_default == '\0')
+		mcpu_default = "cortex-m4";
 	    break;
 	}
 
@@ -896,7 +927,7 @@ cpu_subtype_t cpusubtype)
 #else
 	    llvm_create_disasm
 #endif
-		(TripleName, mcpu, &dis_info, 1, GetOpInfo, SymbolLookUp);
+		(TripleName, mcpu_default, &dis_info, 1, GetOpInfo, SymbolLookUp);
 	return(dc);
 }
 
@@ -918,7 +949,9 @@ cpu_subtype_t cpusubtype)
 {
     LLVMDisasmContextRef dc;
     char *TripleName;
+    char *mcpu_default;
 
+	mcpu_default = mcpu;
 	switch(cpusubtype){
 	case CPU_SUBTYPE_ARM_V4T:
 	    TripleName = "thumbv4t-apple-darwin10";
@@ -934,6 +967,8 @@ cpu_subtype_t cpusubtype)
 	    break;
 	case CPU_SUBTYPE_ARM_V6M:
 	    TripleName = "thumbv6m-apple-darwin10";
+	    if(*mcpu_default == '\0')
+		mcpu_default = "cortex-m0";
 	    break;
 	default:
 	case CPU_SUBTYPE_ARM_V7:
@@ -950,9 +985,13 @@ cpu_subtype_t cpusubtype)
 	    break;
 	case CPU_SUBTYPE_ARM_V7M:
 	    TripleName = "thumbv7m-apple-darwin10";
+	    if(*mcpu_default == '\0')
+		mcpu_default = "cortex-m3";
 	    break;
 	case CPU_SUBTYPE_ARM_V7EM:
 	    TripleName = "thumbv7em-apple-darwin10";
+	    if(*mcpu_default == '\0')
+		mcpu_default = "cortex-m4";
 	    break;
 	}
 
@@ -962,7 +1001,7 @@ cpu_subtype_t cpusubtype)
 #else
 	    llvm_create_disasm
 #endif
-		(TripleName, mcpu, &dis_info, 1, GetOpInfo,
+		(TripleName, mcpu_default, &dis_info, 1, GetOpInfo,
 		 SymbolLookUp);
 	return(dc);
 }
@@ -5795,6 +5834,8 @@ uint32_t ninsts)
 	dis_info.inst = inst;
 	dis_info.insts = insts;
 	dis_info.ninsts = ninsts;
+
+	dis_info.demangled_name = NULL;
 
 	/*
 	 * If we have at least 4 bytes left, see if these 4 bytes are a pointer

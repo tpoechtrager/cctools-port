@@ -243,6 +243,12 @@ struct object *object)
 		object->output_code_sign_drs_info_data_size = 
 		    object->code_sign_drs_cmd->datasize;
 	    }
+	    if(object->link_opt_hint_cmd != NULL){
+		object->output_link_opt_hint_info_data = 
+		(object->object_addr + object->link_opt_hint_cmd->dataoff);
+		object->output_link_opt_hint_info_data_size = 
+		    object->link_opt_hint_cmd->datasize;
+	    }
 	    object->output_ext_relocs = (struct relocation_info *)
 		(object->object_addr + object->dyst->extreloff);
 	    object->output_tocs =
@@ -294,6 +300,9 @@ struct object *object)
 	    if(object->code_sign_drs_cmd != NULL)
 		object->input_sym_info_size +=
 		    object->code_sign_drs_cmd->datasize;
+	    if(object->link_opt_hint_cmd != NULL)
+		object->input_sym_info_size +=
+		    object->link_opt_hint_cmd->datasize;
 	    if(object->mh != NULL){
 		object->input_sym_info_size +=
 		    object->dyst->nmodtab *

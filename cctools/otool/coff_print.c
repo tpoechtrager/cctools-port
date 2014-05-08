@@ -32,6 +32,7 @@
 #include <string.h>
 #include "mach-o/loader.h"
 #include "stuff/bytesex.h"
+#include "dyld_bind_info.h"
 #include "ofile_print.h"
 #include "coff/base_relocs.h"
 #include "coff/bytesex.h"

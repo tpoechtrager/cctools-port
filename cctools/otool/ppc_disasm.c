@@ -37,6 +37,7 @@
 #include "stuff/bytesex.h"
 #include "stuff/symbol.h"
 #include "otool.h"
+#include "dyld_bind_info.h"
 #include "ofile_print.h"
 #include "ppc_disasm.h"
 
@@ -209,6 +210,9 @@ enum bool verbose)
 	memcpy(&opcode, sect, sizeof(uint32_t));
 	if(swapped)
 	    opcode = SWAP_INT(opcode);
+
+	if(!Xflag && jflag)
+	    printf("%08x\t", opcode);
 
 	switch(opcode & 0xfc000000){
 	case 0x00000000:

@@ -37,6 +37,7 @@
 #include "stuff/bytesex.h"
 #include "stuff/symbol.h"
 #include "otool.h"
+#include "dyld_bind_info.h"
 #include "ofile_print.h"
 #include "../as/sparc-opcode.h"
 

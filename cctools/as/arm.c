@@ -188,13 +188,17 @@ static arm_feature_set thumb_arch_used;
 #endif /* INSNS_TABLE_ONLY */
 
 /* Constants for known architecture features.  */
+#ifdef UNUSED
 static const arm_feature_set fpu_arch_vfp_v1 = FPU_ARCH_VFP_V1;
 static const arm_feature_set fpu_arch_vfp_v2 = FPU_ARCH_VFP_V2;
 static const arm_feature_set fpu_arch_vfp_v3 = FPU_ARCH_VFP_V3;
 static const arm_feature_set fpu_arch_neon_v1 = FPU_ARCH_NEON_V1;
 static const arm_feature_set fpu_arch_fpa = FPU_ARCH_FPA;
+#endif /* UNUSED */
 static const arm_feature_set fpu_any_hard = FPU_ANY_HARD;
+#ifdef UNUSED
 static const arm_feature_set fpu_arch_maverick = FPU_ARCH_MAVERICK;
+#endif /* UNUSED */
 static const arm_feature_set fpu_endian_pure = FPU_ARCH_ENDIAN_PURE;
 
 static const arm_feature_set arm_ext_v1 = ARM_FEATURE (ARM_EXT_V1, 0);
@@ -218,14 +222,20 @@ static const arm_feature_set arm_ext_v6t2 = ARM_FEATURE (ARM_EXT_V6T2, 0);
 static const arm_feature_set arm_ext_v6_notm = ARM_FEATURE (ARM_EXT_V6_NOTM, 0);
 static const arm_feature_set arm_ext_div = ARM_FEATURE (ARM_EXT_DIV, 0);
 static const arm_feature_set arm_ext_v7 = ARM_FEATURE (ARM_EXT_V7, 0);
+#ifdef UNUSED
 static const arm_feature_set arm_ext_v7a = ARM_FEATURE (ARM_EXT_V7A, 0);
 static const arm_feature_set arm_ext_v7r = ARM_FEATURE (ARM_EXT_V7R, 0);
+#endif /* UNUSED */
 static const arm_feature_set arm_ext_v7m = ARM_FEATURE (ARM_EXT_V7M, 0);
 
+#ifdef UNUSED
 static const arm_feature_set arm_arch_any = ARM_ANY;
+#endif /* UNUSED */
 static const arm_feature_set arm_arch_full = ARM_FEATURE (-1, -1);
 static const arm_feature_set arm_arch_t2 = ARM_ARCH_THUMB2;
+#ifdef UNUSED
 static const arm_feature_set arm_arch_none = ARM_ARCH_NONE;
+#endif /* UNUSED */
 
 static const arm_feature_set arm_cext_iwmmxt2 =
   ARM_FEATURE (0, ARM_CEXT_IWMMXT2);

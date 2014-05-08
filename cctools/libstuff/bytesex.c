@@ -2345,6 +2345,22 @@ enum byte_sex target_byte_sex)
 	cpu->__cpsr = SWAP_INT(cpu->__cpsr);
 }
 
+void
+swap_arm_thread_state64_t(
+arm_thread_state64_t *cpu,
+enum byte_sex target_byte_sex)
+{
+    int i;
+
+	for(i = 0; i < 29; i++)
+	    cpu->__x[i] = SWAP_LONG_LONG(cpu->__x[i]);
+	cpu->__fp = SWAP_LONG_LONG(cpu->__fp);
+	cpu->__lr = SWAP_LONG_LONG(cpu->__lr);
+	cpu->__sp = SWAP_LONG_LONG(cpu->__sp);
+	cpu->__pc = SWAP_LONG_LONG(cpu->__pc);
+	cpu->__cpsr = SWAP_INT(cpu->__cpsr);
+}
+
 __private_extern__
 void
 swap_ident_command(

@@ -159,6 +159,7 @@ extern vm_offset_t		interrupt_stack[];
 #define CPU_ARCH_ABI64		 0x1000000
 #define CPU_TYPE_POWERPC64	((cpu_type_t)(CPU_TYPE_POWERPC | CPU_ARCH_ABI64))
 #define CPU_TYPE_VEO		((cpu_type_t) 255)
+#define CPU_TYPE_ARM64		((cpu_type_t)(CPU_TYPE_ARM | CPU_ARCH_ABI64))
 		
 
 /*
@@ -250,6 +251,7 @@ extern vm_offset_t		interrupt_stack[];
 #define CPU_SUBTYPE_INTEL_MODEL(x)	((x) >> 4)
 #define CPU_SUBTYPE_INTEL_MODEL_ALL	0
 
+#define CPU_SUBTYPE_X86_64_H	((cpu_subtype_t)8) /* Haswell and compatible */
 
 /*
  *	Mips subtypes.
@@ -313,7 +315,10 @@ extern vm_offset_t		interrupt_stack[];
 #define CPU_SUBTYPE_ARM_V6M		((cpu_subtype_t) 14) /* Not meant to be run under xnu */
 #define CPU_SUBTYPE_ARM_V7M		((cpu_subtype_t) 15) /* Not meant to be run under xnu */
 #define CPU_SUBTYPE_ARM_V7EM		((cpu_subtype_t) 16) /* Not meant to be run under xnu */
+#define CPU_SUBTYPE_ARM_V8		((cpu_subtype_t) 13)
 
+#define	CPU_SUBTYPE_ARM64_ALL		((cpu_subtype_t) 0)
+#define	CPU_SUBTYPE_ARM64_V8		((cpu_subtype_t) 1)
 
 /*
  *	MC88000 subtypes
@@ -390,5 +395,6 @@ extern vm_offset_t		interrupt_stack[];
 #define CPU_SUBTYPE_VEO_3	((cpu_subtype_t) 3)
 #define CPU_SUBTYPE_VEO_4	((cpu_subtype_t) 4)
 #define CPU_SUBTYPE_VEO_ALL	CPU_SUBTYPE_VEO_2
+
 
 #endif	/* _MACH_MACHINE_H_ */

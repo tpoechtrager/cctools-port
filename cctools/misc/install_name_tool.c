@@ -595,6 +595,16 @@ struct object *object)
 		object->output_sym_info_size +=
 		    object->code_sign_drs_cmd->datasize;
 	    }
+	    if(object->link_opt_hint_cmd != NULL){
+		object->output_link_opt_hint_info_data = 
+		(object->object_addr + object->link_opt_hint_cmd->dataoff);
+		object->output_link_opt_hint_info_data_size = 
+		    object->link_opt_hint_cmd->datasize;
+		object->input_sym_info_size +=
+		    object->link_opt_hint_cmd->datasize;
+		object->output_sym_info_size +=
+		    object->link_opt_hint_cmd->datasize;
+	    }
 	    if(object->hints_cmd != NULL){
 		object->output_hints = (struct twolevel_hint *)
 		    (object->object_addr +
@@ -1060,6 +1070,10 @@ uint32_t *header_size)
 		break;
 	    case LC_DYLIB_CODE_SIGN_DRS:
 		arch->object->code_sign_drs_cmd =
+		    (struct linkedit_data_command *)lc1;
+		break;
+	    case LC_LINKER_OPTIMIZATION_HINT:
+		arch->object->link_opt_hint_cmd =
 		    (struct linkedit_data_command *)lc1;
 		break;
 	    }

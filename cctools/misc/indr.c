@@ -1305,6 +1305,13 @@ struct object *object)
 		object->code_sign_drs_cmd->datasize;
 	}
 
+	if(object->link_opt_hint_cmd != NULL){
+	    object->input_sym_info_size +=
+		object->link_opt_hint_cmd->datasize;
+	    object->output_sym_info_size +=
+		object->link_opt_hint_cmd->datasize;
+	}
+
 	if(object->hints_cmd != NULL){ 
 	    object->input_sym_info_size +=
 		object->hints_cmd->nhints * sizeof(struct twolevel_hint);
@@ -1364,6 +1371,12 @@ struct object *object)
 	    (object->object_addr + object->code_sign_drs_cmd->dataoff);
 	    object->output_code_sign_drs_info_data_size = 
 		object->code_sign_drs_cmd->datasize;
+	}
+	if(object->link_opt_hint_cmd != NULL){
+	    object->output_link_opt_hint_info_data = 
+	    (object->object_addr + object->link_opt_hint_cmd->dataoff);
+	    object->output_link_opt_hint_info_data_size = 
+		object->link_opt_hint_cmd->datasize;
 	}
 	object->output_ext_relocs = ext_relocs;
 	object->output_indirect_symtab = indirect_symtab;
@@ -1425,6 +1438,10 @@ struct object *object)
 	if(object->code_sign_drs_cmd != NULL){
 	    object->code_sign_drs_cmd->dataoff = offset;
 	    offset += object->code_sign_drs_cmd->datasize;
+	}
+	if(object->link_opt_hint_cmd != NULL){
+	    object->link_opt_hint_cmd->dataoff = offset;
+	    offset += object->link_opt_hint_cmd->datasize;
 	}
 	if(object->st->nsyms != 0){
 	    object->st->symoff = offset;

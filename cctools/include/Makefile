@@ -12,7 +12,7 @@ FILES = mach-o/ldsyms.h mach-o/reloc.h \
 	mach-o/dyld_debug.h mach-o/arch.h mach-o/gmon.h mach-o/ranlib.h \
 	mach-o/swap.h mach-o/getsect.h mach-o/i386/swap.h \
 	mach-o/ppc/swap.h mach-o/ppc/reloc.h mach-o/x86_64/reloc.h \
-	mach-o/dyld.h mach-o/dyld_gdb.h mach-o/arm/reloc.h
+	mach-o/dyld.h mach-o/dyld_gdb.h mach-o/arm/reloc.h mach-o/arm64/reloc.h
 
 LOCFILES = mach-o/rld_state.h mach-o/rld.h mach-o/sarld.h mach-o/kld.h \
 	   mach-o/redo_prebinding.h \
@@ -62,6 +62,8 @@ GAS_MISSING_SRCS = mach/m68k/thread_status.h \
 
 MISSING_SRCS = mach/machine.h \
 	       architecture/i386/fpu.h architecture/i386/frame.h \
+	       i386/eflags.h mach/i386/_structs.h mach/i386/fp_reg.h \
+	       mach/i386/thread_state.h mach/i386/thread_status.h \
 	       standalone/libsa.h \
 	       $(GAS_MISSING_SRCS)
 		
@@ -136,6 +138,9 @@ common_install:
 	cd mach-o/arm; \
 	    install -c -m 444 ${IFLAGS} reloc.h \
 	    ${DSTROOT}${$(RC_OS)_INCDIR}/mach-o/arm
+	cd mach-o/arm64; \
+	    install -c -m 444 ${IFLAGS} reloc.h \
+	    ${DSTROOT}${$(RC_OS)_INCDIR}/mach-o/arm64
 	cd mach-o/m68k; \
 	    install -c -m 444 ${IFLAGS} swap.h \
 	    ${DSTROOT}${$(RC_OS)_LOCINCDIR}/mach-o/m68k
@@ -174,6 +179,7 @@ dirs:
 	$(MKDIRS) ${DSTROOT}${$(RC_OS)_INCDIR}/mach-o/ppc
 	$(MKDIRS) ${DSTROOT}${$(RC_OS)_INCDIR}/mach-o/x86_64
 	$(MKDIRS) ${DSTROOT}${$(RC_OS)_INCDIR}/mach-o/arm
+	$(MKDIRS) ${DSTROOT}${$(RC_OS)_INCDIR}/mach-o/arm64
 	$(MKDIRS) ${DSTROOT}${$(RC_OS)_LOCINCDIR}/mach-o/m68k
 	$(MKDIRS) ${DSTROOT}${$(RC_OS)_LOCINCDIR}/mach-o/sparc
 	$(MKDIRS) ${DSTROOT}${$(RC_OS)_LOCINCDIR}/mach-o/hppa

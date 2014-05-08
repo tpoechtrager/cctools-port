@@ -90,6 +90,11 @@
 
 #if	defined(KERNEL) || (!defined(_POSIX_C_SOURCE) || defined(_DARWIN_C_SOURCE))
 
+#undef LITTLE_ENDIAN
+#undef BIG_ENDIAN
+#undef PDP_ENDIAN
+#undef BYTE_ORDER
+
 #define	LITTLE_ENDIAN	__DARWIN_LITTLE_ENDIAN
 #define	BIG_ENDIAN	__DARWIN_BIG_ENDIAN
 #define	PDP_ENDIAN	__DARWIN_PDP_ENDIAN

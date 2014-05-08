@@ -310,6 +310,7 @@ struct object *object)
     uint32_t flags, linkedit_end;
     uint32_t dyld_info_start;
     uint32_t dyld_info_end;
+    uint32_t align_delta;
 
 	linkedit_end = 0;
 	/*
@@ -418,6 +419,12 @@ struct object *object)
 		object->output_code_sign_drs_info_data_size = 
 		    object->code_sign_drs_cmd->datasize;
 	    }
+	    if(object->link_opt_hint_cmd != NULL){
+		object->output_link_opt_hint_info_data = 
+		(object->object_addr + object->link_opt_hint_cmd->dataoff);
+		object->output_link_opt_hint_info_data_size = 
+		    object->link_opt_hint_cmd->datasize;
+	    }
 	    object->output_ext_relocs = (struct relocation_info *)
 		(object->object_addr + object->dyst->extreloff);
 	    object->output_tocs =
@@ -470,6 +477,9 @@ struct object *object)
 	    if(object->code_sign_drs_cmd != NULL)
 		object->input_sym_info_size +=
 		    object->code_sign_drs_cmd->datasize;
+	    if(object->link_opt_hint_cmd != NULL)
+		object->input_sym_info_size +=
+		    object->link_opt_hint_cmd->datasize;
 	    if(object->mh != NULL){
 		object->input_sym_info_size +=
 		    object->dyst->nmodtab *
@@ -602,10 +612,15 @@ struct object *object)
 	    object->code_sig_cmd->dataoff = rnd(linkedit_end, 16);
 	    object->output_code_sig_data_size = arch_signs[i].datasize;
 	    object->output_code_sig_data = NULL;
+	    align_delta = object->code_sig_cmd->dataoff - linkedit_end;
 
-	    object->output_sym_info_size = rnd(object->output_sym_info_size,
-						 16);
+	    if(object->output_sym_info_size != 0)
+	        object->output_sym_info_size = rnd(object->output_sym_info_size,
+						   16);
+	    else
+		object->output_sym_info_size = align_delta;
 	    object->output_sym_info_size += object->code_sig_cmd->datasize;
+
 	    if(object->seg_linkedit != NULL){
 		object->seg_linkedit->filesize =
 		    rnd(object->seg_linkedit->filesize, 16) +

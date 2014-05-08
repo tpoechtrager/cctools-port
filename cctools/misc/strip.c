@@ -1365,6 +1365,17 @@ struct object *object)
 		    object->code_sign_drs_cmd->datasize;
 	    }
 
+	    if(object->link_opt_hint_cmd != NULL){
+		object->output_link_opt_hint_info_data = object->object_addr +
+		    object->link_opt_hint_cmd->dataoff;
+		object->output_link_opt_hint_info_data_size = 
+		    object->link_opt_hint_cmd->datasize;
+		object->input_sym_info_size +=
+		    object->link_opt_hint_cmd->datasize;
+		object->output_sym_info_size +=
+		    object->link_opt_hint_cmd->datasize;
+	    }
+
 	    if(object->mh != NULL){
 		object->input_sym_info_size += nsyms * sizeof(struct nlist);
 		object->output_symbols = new_symbols;
@@ -1610,6 +1621,11 @@ struct object *object)
 		if(object->code_sign_drs_cmd != NULL){
 		    object->code_sign_drs_cmd->dataoff = offset;
 		    offset += object->code_sign_drs_cmd->datasize;
+		}
+
+		if(object->link_opt_hint_cmd != NULL){
+		    object->link_opt_hint_cmd->dataoff = offset;
+		    offset += object->link_opt_hint_cmd->datasize;
 		}
 
 		if(object->st->nsyms != 0){
@@ -2151,6 +2167,10 @@ struct object *object)
 	       object->data_in_code_cmd->datasize != 0 &&
 	       object->data_in_code_cmd->dataoff < offset)
 	        offset = object->data_in_code_cmd->dataoff;
+	    if(object->link_opt_hint_cmd != NULL &&
+	       object->link_opt_hint_cmd->datasize != 0 &&
+	       object->link_opt_hint_cmd->dataoff < offset)
+	        offset = object->link_opt_hint_cmd->dataoff;
 	    if(object->st->nsyms != 0 &&
 	       object->st->symoff < offset)
 		offset = object->st->symoff;
@@ -2574,10 +2594,7 @@ uint32_t nextrefsyms)
 	}
 
 	new_nsyms = 0;
-	if(object->mh != NULL)
-	    new_strsize = sizeof(int32_t);
-	else
-	    new_strsize = sizeof(int64_t);
+	new_strsize = sizeof(int32_t);
 	new_nlocalsym = 0;
 	new_nextdefsym = 0;
 	new_nundefsym = 0;
@@ -2587,7 +2604,8 @@ uint32_t nextrefsyms)
 	 * If this an object file that has DWARF debugging sections to strip
 	 * then we have to run ld -r on it.  We also have to do this for
 	 * ARM objects because thumb symbols can't be stripped as they are
-	 * needed for proper linking in .o files.
+	 * needed for proper linking in .o files.  And we need to for i386
+	 * objects to not mess up compact unwind info.
 	 */
 	if(object->mh_filetype == MH_OBJECT && (Sflag || xflag)){
 	    has_dwarf = FALSE;
@@ -2624,11 +2642,13 @@ uint32_t nextrefsyms)
 		lc = (struct load_command *)((char *)lc + lc->cmdsize);
 	    }
 	    /*
-	     * If the file has dwarf symbols or is an ARM object then have
-	     * ld(1) do the "stripping" and make an ld -r version of the object.
+	     * If the file has dwarf symbols or is an ARM or i386 object then
+	     * have ld(1) do the "stripping" and make an ld -r version of the
+	     * object.
 	     */
 	    if(has_dwarf == TRUE ||
-	       object->mh_cputype == CPU_TYPE_ARM)
+	       object->mh_cputype == CPU_TYPE_ARM ||
+	       object->mh_cputype == CPU_TYPE_I386)
 		make_ld_r_object(arch, member, object);
 	}
 	/*
@@ -2758,10 +2778,12 @@ uint32_t nextrefsyms)
 	    }
 	    if((n_type & N_EXT) == 0){ /* local symbol */
 		/*
-		 * For x86_64 .o or ARM files we have run ld -r on them
+		 * For x86_64, i386 .o or ARM files we have run ld -r on them
 		 * we keeping all resulting symbols.
 		 */
 		if((object->mh_cputype == CPU_TYPE_X86_64 ||
+		    object->mh_cputype == CPU_TYPE_I386 ||
+                    object->mh_cputype == CPU_TYPE_ARM64 ||
 		    object->mh_cputype == CPU_TYPE_ARM) &&
 		   object->mh_filetype == MH_OBJECT){
 		    if(n_strx != 0)
@@ -3104,13 +3126,16 @@ uint32_t nextrefsyms)
 		    saves[i] = new_nsyms;
 		}
 		/*
-		 * For x86_64 .o files we have run ld -r on them and are stuck
-		 * keeping all resulting symbols.
+		 * For x86_64 and i386 .o files we have run ld -r on them and
+		 * are stuck keeping all resulting symbols.
 		 */
 		if(saves[i] == 0 &&
-		   object->mh == NULL && 
-		   object->mh64->cputype == CPU_TYPE_X86_64 &&
-		   object->mh64->filetype == MH_OBJECT){
+		   ((object->mh == NULL && 
+		     object->mh64->cputype == CPU_TYPE_X86_64 &&
+		     object->mh64->filetype == MH_OBJECT) ||
+		    (object->mh64 == NULL && 
+		     object->mh->cputype == CPU_TYPE_I386 &&
+		     object->mh->filetype == MH_OBJECT))){
 		    len = strlen(strings + n_strx) + 1;
 		    new_strsize += len;
 		    new_ext_strsize += len;
@@ -4137,6 +4162,10 @@ struct object *object)
 		object->code_sign_drs_cmd =
 				         (struct linkedit_data_command *)lc1;
 		break;
+	    case LC_LINKER_OPTIMIZATION_HINT:
+		object->link_opt_hint_cmd =
+				         (struct linkedit_data_command *)lc1;
+		break;
 	    case LC_CODE_SIGNATURE:
 		object->code_sig_cmd = (struct linkedit_data_command *)lc1;
 		break;
@@ -4256,6 +4285,10 @@ struct object *object)
 		break;
 	    case LC_DYLIB_CODE_SIGN_DRS:
 		object->code_sign_drs_cmd =
+				         (struct linkedit_data_command *)lc1;
+		break;
+	    case LC_LINKER_OPTIMIZATION_HINT:
+		object->link_opt_hint_cmd =
 				         (struct linkedit_data_command *)lc1;
 		break;
 	    }

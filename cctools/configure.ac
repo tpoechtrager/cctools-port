@@ -1,4 +1,4 @@
-AC_INIT([cctools], [845], [cjacker@gmail.com])
+AC_INIT([cctools], [855], [t.poechtrager@gmail.com])
 
 AC_CANONICAL_BUILD
 AC_CANONICAL_HOST
@@ -160,7 +160,7 @@ CFLAGS=$ORIGCFLAGS
 
 ORIGCFLAGS=$CFLAGS
 CFLAGS="$CFLAGS -Wno-unused-private-field"
-AC_MSG_CHECKING([if -Wno-unused-variable is supported])
+AC_MSG_CHECKING([if -Wno-unused-private-field is supported])
 AC_COMPILE_IFELSE(
    [AC_LANG_SOURCE([[const char hw[] = "Hello, World\n";]])],
    [WARNINGS="$WARNINGS -Wno-unused-private-field"
@@ -171,7 +171,7 @@ CFLAGS=$ORIGCFLAGS
 
 ORIGCFLAGS=$CFLAGS
 CFLAGS="$CFLAGS -Wno-unused-function"
-AC_MSG_CHECKING([if -Wno-unused-variable is supported])
+AC_MSG_CHECKING([if -Wno-unused-function is supported])
 AC_COMPILE_IFELSE(
    [AC_LANG_SOURCE([[const char hw[] = "Hello, World\n";]])],
    [WARNINGS="$WARNINGS -Wno-unused-function"
@@ -182,7 +182,7 @@ CFLAGS=$ORIGCFLAGS
 
 ORIGCFLAGS=$CFLAGS
 CFLAGS="$CFLAGS -Wno-objc-root-class"
-AC_MSG_CHECKING([if -Wno-unused-variable is supported])
+AC_MSG_CHECKING([if -Wno-objc-root-class is supported])
 AC_COMPILE_IFELSE(
    [AC_LANG_SOURCE([[const char hw[] = "Hello, World\n";]])],
    [WARNINGS="$WARNINGS -Wno-objc-root-class"
@@ -193,7 +193,7 @@ CFLAGS=$ORIGCFLAGS
 
 ORIGCFLAGS=$CFLAGS
 CFLAGS="$CFLAGS -Wno-deprecated-objc-isa-usage"
-AC_MSG_CHECKING([if -Wno-unused-variable is supported])
+AC_MSG_CHECKING([if -Wno-deprecated-objc-isa-usage is supported])
 AC_COMPILE_IFELSE(
    [AC_LANG_SOURCE([[const char hw[] = "Hello, World\n";]])],
    [WARNINGS="$WARNINGS -Wno-deprecated-objc-isa-usage"
@@ -215,7 +215,7 @@ CFLAGS=$ORIGCFLAGS
 
 ORIGCFLAGS=$CFLAGS
 CFLAGS="$CFLAGS -Wno-int-conversion"
-AC_MSG_CHECKING([if -Wno-invalid-offsetof is supported])
+AC_MSG_CHECKING([if -Wno-int-conversion is supported])
 AC_COMPILE_IFELSE(
    [AC_LANG_SOURCE([[const char hw[] = "Hello, World\n";]])],
    [WARNINGS="$WARNINGS -Wno-int-conversion"

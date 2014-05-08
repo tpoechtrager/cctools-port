@@ -44,6 +44,12 @@ extern uint32_t i386_disassemble(
     enum byte_sex object_byte_sex,
     struct relocation_info *sorted_relocs,
     uint32_t nsorted_relocs,
+    struct relocation_info *ext_relocs,
+    uint32_t next_relocs,
+    struct relocation_info *loc_relocs,
+    uint32_t nloc_relocs,
+    struct dyld_bind_info *dbi,
+    uint64_t ndbi,
     struct nlist *symbols,
     struct nlist_64 *symbols64,
     uint32_t nsymbols,
@@ -65,8 +71,7 @@ extern uint32_t i386_disassemble(
     uint32_t object_size,
     struct inst *inst,
     struct inst *insts,
-    uint32_t ninsts,
-    uint32_t filetype);
+    uint32_t ninsts);
 
 extern LLVMDisasmContextRef create_i386_llvm_disassembler(void);
 extern void delete_i386_llvm_disassembler(LLVMDisasmContextRef dc);

@@ -33,6 +33,9 @@
 #include "stuff/allocate.h"
 #include "stuff/rnd.h"
 #include "stuff/errors.h"
+#ifdef LTO_SUPPORT
+#include "stuff/lto.h"
+#endif /* LTO_SUPPORT */
 
 static void copy_new_symbol_info(
     char *p,
@@ -773,6 +776,12 @@ struct object *object)
 			   object->output_code_sign_drs_info_data_size);
 		*size += object->output_code_sign_drs_info_data_size;
 	    }
+	    if(object->output_link_opt_hint_info_data_size != 0){
+		if(object->output_link_opt_hint_info_data != NULL)
+		    memcpy(p + *size, object->output_link_opt_hint_info_data,
+			   object->output_link_opt_hint_info_data_size);
+		*size += object->output_link_opt_hint_info_data_size;
+	    }
 	    if(object->mh != NULL){
 		memcpy(p + *size, object->output_symbols,
 		       object->output_nsymbols * sizeof(struct nlist));
@@ -842,6 +851,12 @@ struct object *object)
 		    memcpy(p + *size, object->output_data_in_code_info_data,
 			   object->output_data_in_code_info_data_size);
 		*size += object->output_data_in_code_info_data_size;
+	    }
+	    if(object->output_link_opt_hint_info_data_size != 0){
+		if(object->output_link_opt_hint_info_data != NULL)
+		    memcpy(p + *size, object->output_link_opt_hint_info_data,
+			   object->output_link_opt_hint_info_data_size);
+		*size += object->output_link_opt_hint_info_data_size;
 	    }
 	    if(object->mh != NULL){
 		memcpy(p + *size, object->output_symbols,
@@ -1020,6 +1035,18 @@ enum bool library_warnings)
 		    }
 		}
 	    }
+#ifdef LTO_SUPPORT
+	    else if(member->type == OFILE_LLVM_BITCODE){
+                nsymbols = lto_get_nsyms(member->lto);
+                for(j = 0; j < nsymbols; j++){
+                    if(lto_toc_symbol(member->lto, j, commons_in_toc) == TRUE){
+			arch->ntocs++;
+			arch->toc_strsize +=
+                            strlen(lto_symbol_name(member->lto, j)) + 1;
+                    }
+                }
+	    }
+#endif /* LTO_SUPPORT */
 	}
 
 	/*
@@ -1117,6 +1144,22 @@ enum bool library_warnings)
 		    }
 		}
 	    }
+#ifdef LTO_SUPPORT
+	    else if(member->type == OFILE_LLVM_BITCODE){
+                nsymbols = lto_get_nsyms(member->lto);
+                for(j = 0; j < nsymbols; j++){
+                    if(lto_toc_symbol(member->lto, j, commons_in_toc) == TRUE){
+			strcpy(arch->toc_strings + s, 
+			       lto_symbol_name(member->lto, j));
+			arch->toc_entries[r].symbol_name =
+						    arch->toc_strings + s;
+			arch->toc_entries[r].member_index = i + 1;
+			r++;
+			s += strlen(lto_symbol_name(member->lto, j)) + 1;
+                    }
+                }
+	    }
+#endif /* LTO_SUPPORT */
 	}
 
 	/*

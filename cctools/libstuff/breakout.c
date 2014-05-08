@@ -30,6 +30,9 @@
 #include "stuff/errors.h"
 #include "stuff/rnd.h"
 #include "stuff/crc32.h"
+#ifdef LTO_SUPPORT
+#include "stuff/lto.h"
+#endif /* LTO_SUPPORT */
 
 static void breakout_internal(
     char *filename,
@@ -170,6 +173,14 @@ struct ofile *ofile)
 		    arch->object->load_commands = ofile->load_commands;
 		    cksum_object(arch, calculate_input_prebind_cksum);
 		}
+#ifdef LTO_SUPPORT
+		else if(ofile->arch_type == OFILE_LLVM_BITCODE){
+		    arch->lto = ofile->lto;
+		    arch->unknown_addr = ofile->file_addr +
+					 arch->fat_arch->offset;
+		    arch->unknown_size = arch->fat_arch->size;
+		}
+#endif /* LTO_SUPPORT */
 		else{ /* ofile->arch_type == OFILE_UNKNOWN */
 		    arch->unknown_addr = ofile->file_addr +
 					 arch->fat_arch->offset;
@@ -201,6 +212,16 @@ struct ofile *ofile)
 	    arch->object->load_commands = ofile->load_commands;
 	    cksum_object(arch, calculate_input_prebind_cksum);
 	}
+#ifdef LTO_SUPPORT
+	else if(ofile->file_type == OFILE_LLVM_BITCODE && errors == 0){
+	    arch = new_arch(archs, narchs);
+	    arch->file_name = savestr(filename);
+	    arch->type = ofile->file_type;
+	    arch->lto = ofile->lto;
+	    arch->unknown_addr = ofile->file_addr;
+	    arch->unknown_size = ofile->file_size;
+	}
+#endif /* LTO_SUPPORT */
 	else if(errors == 0){ /* ofile->file_type == OFILE_UNKNOWN */
 	    arch = new_arch(archs, narchs);
 	    arch->file_name = savestr(filename);
@@ -327,6 +348,13 @@ struct ofile *ofile)
 		    member->object->mh_cpusubtype = ofile->mh_cpusubtype;
 		    member->object->load_commands = ofile->load_commands;
 		}
+#ifdef LTO_SUPPORT
+		else if(ofile->member_type == OFILE_LLVM_BITCODE){
+		    member->lto = ofile->lto;
+		    member->unknown_addr = ofile->member_addr;
+		    member->unknown_size = ofile->member_size;
+		}
+#endif /* LTO_SUPPORT */
 		else{ /* ofile->member_type == OFILE_UNKNOWN */
 		    member->unknown_addr = ofile->member_addr;
 		    member->unknown_size = ofile->member_size;
@@ -436,6 +464,12 @@ uint32_t narchs)
 			   ofile_unmap(archs[i].members[j].object->ld_r_ofile);
 			free(archs[i].members[j].object);
 		    }
+#ifdef LTO_SUPPORT
+		    else if(archs[i].members[j].type == OFILE_LLVM_BITCODE){
+			if(archs[i].members[j].lto != NULL)
+			    lto_free(archs[i].members[j].lto);
+		    }
+#endif /* LTO_SUPPORT */
 		}
 		if(archs[i].nmembers > 0 && archs[i].members != NULL)
 		    free(archs[i].members);
@@ -445,6 +479,12 @@ uint32_t narchs)
 		    ofile_unmap(archs[i].object->ld_r_ofile);
 		free(archs[i].object);
 	    }
+#ifdef LTO_SUPPORT
+	    else if(archs[i].type == OFILE_LLVM_BITCODE){
+		if(archs[i].lto != NULL)
+		    lto_free(archs[i].lto);
+	    }
+#endif /* LTO_SUPPORT */
 	}
 	if(narchs > 0 && archs != NULL)
 	    free(archs);

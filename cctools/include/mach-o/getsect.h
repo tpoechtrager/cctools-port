@@ -110,6 +110,12 @@ extern const struct section *getsectbynamefromheader(
     const char *segname,
     const char *sectname);
 
+extern const struct section *getsectbynamefromheaderwithswap(
+    struct mach_header *mhp,
+    const char *segname,
+    const char *sectname,
+    int fSwap);
+
 /*
  * Interfaces for tools working with 64-bit Mach-O files.
  */
@@ -123,6 +129,12 @@ extern const struct section_64 *getsectbynamefromheader_64(
     const struct mach_header_64 *mhp,
     const char *segname,
     const char *sectname);
+
+extern const struct section *getsectbynamefromheaderwithswap_64(
+    struct mach_header_64 *mhp,
+    const char *segname,
+    const char *sectname,
+    int fSwap);
 
 #ifdef __cplusplus
 }

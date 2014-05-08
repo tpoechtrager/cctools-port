@@ -45,7 +45,7 @@ const char *format,
     va_list ap;
 
 	va_start(ap, format);
-        fprintf(stderr, "%s: ", progname);
+        fprintf(stderr, "warning: %s: ", progname);
 	vfprintf(stderr, format, ap);
         fprintf(stderr, "\n");
 	va_end(ap);
@@ -64,7 +64,7 @@ const char *format,
     va_list ap;
 
 	va_start(ap, format);
-        fprintf(stderr, "%s: ", progname);
+        fprintf(stderr, "error: %s: ", progname);
 	vfprintf(stderr, format, ap);
         fprintf(stderr, "\n");
 	va_end(ap);
@@ -85,7 +85,7 @@ const char *format,
     va_list ap;
 
 	va_start(ap, format);
-        fprintf(stderr, "%s: ", progname);
+        fprintf(stderr, "error: %s: ", progname);
 	if(arch_name != NULL)
 	    fprintf(stderr, "for architecture: %s ", arch_name);
 	vfprintf(stderr, format, ap);
@@ -107,7 +107,7 @@ const char *format,
     va_list ap;
 
 	va_start(ap, format);
-        fprintf(stderr, "%s: ", progname);
+        fprintf(stderr, "error: %s: ", progname);
 	vfprintf(stderr, format, ap);
 	fprintf(stderr, " (%s)\n", strerror(errno));
 	va_end(ap);
@@ -127,7 +127,7 @@ char *format,
     va_list ap;
 
 	va_start(ap, format);
-        fprintf(stderr, "%s: ", progname);
+        fprintf(stderr, "error: %s: ", progname);
 	vfprintf(stderr, format, ap);
 	fprintf(stderr, " (%s)\n", mach_error_string(r));
 	va_end(ap);

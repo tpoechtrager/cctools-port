@@ -82,26 +82,26 @@
  */
 #if defined(__i386__)
 #define NESTED_FUNCTION_PROLOGUE(localvarsize)			\
-	.set	__framesize,ROUND_TO_STACK(localvarsize)	;\
-	.set	__nested_function, 1				;\
+	.set	L__framesize,ROUND_TO_STACK(localvarsize)	;\
+	.set	L__nested_function, 1				;\
 	CALL_MCOUNT						\
-	.if __framesize						;\
+	.if L__framesize						;\
 	  pushl	%ebp						;\
 	  movl	%esp, %ebp					;\
-	  subl	$__framesize, %esp				;\
+	  subl	$L__framesize, %esp				;\
 	.endif							;\
 	pushl	%edi						;\
 	pushl	%esi						;\
 	pushl	%ebx
 #elif defined(__x86_64__)
 #define NESTED_FUNCTION_PROLOGUE(localvarsize)			\
-	.set	__framesize,ROUND_TO_STACK(localvarsize)	;\
-	.set	__nested_function, 1				;\
+	.set	L__framesize,ROUND_TO_STACK(localvarsize)	;\
+	.set	L__nested_function, 1				;\
 	CALL_MCOUNT						\
-	.if __framesize						;\
+	.if L__framesize						;\
 	  pushq	%rbp						;\
 	  movq	%rsp, %rbp					;\
-	  subq	$__framesize, %rsp				;\
+	  subq	$L__framesize, %rsp				;\
 	.endif							;
 #endif
 
@@ -112,23 +112,23 @@
  */
 #if defined(__i386__)
 #define LEAF_FUNCTION_PROLOGUE(localvarsize)			\
-	.set	__framesize,ROUND_TO_STACK(localvarsize)	;\
-	.set	__nested_function, 0				;\
+	.set	L__framesize,ROUND_TO_STACK(localvarsize)	;\
+	.set	L__nested_function, 0				;\
 	CALL_MCOUNT						\
-	.if __framesize						;\
+	.if L__framesize						;\
 	  pushl	%ebp						;\
 	  movl	%esp, %ebp					;\
-	  subl	$__framesize, %esp				;\
+	  subl	$L__framesize, %esp				;\
 	.endif
 #elif defined(__x86_64__)
 #define LEAF_FUNCTION_PROLOGUE(localvarsize)			\
-	.set	__framesize,ROUND_TO_STACK(localvarsize)	;\
-	.set	__nested_function, 0				;\
+	.set	L__framesize,ROUND_TO_STACK(localvarsize)	;\
+	.set	L__nested_function, 0				;\
 	CALL_MCOUNT						\
-	.if __framesize						;\
+	.if L__framesize						;\
 	  pushq	%rbp						;\
 	  movq	%rsp, %rbp					;\
-	  subq	$__framesize, %rsp				;\
+	  subq	$L__framesize, %rsp				;\
 	.endif
 #endif
 
@@ -140,19 +140,19 @@
  */
 #if defined(__i386__)
 #define FUNCTION_EPILOGUE					\
-	.if __nested_function					;\
+	.if L__nested_function					;\
 	  popl	%ebx						;\
 	  popl	%esi						;\
 	  popl	%edi						;\
 	.endif							;\
-	.if __framesize						;\
+	.if L__framesize						;\
 	  movl	%ebp, %esp					;\
 	  popl	%ebp						;\
 	.endif							;\
 	ret
 #elif defined(__x86_64__)
 #define FUNCTION_EPILOGUE					\
-	.if __framesize						;\
+	.if L__framesize						;\
 	  movq	%rbp, %rsp					;\
 	  popq	%rbp						;\
 	.endif							;\

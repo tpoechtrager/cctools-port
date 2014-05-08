@@ -73,6 +73,12 @@ cpu_type_t cputype)
 	case CPU_TYPE_ARM:
 	    return(ARM_RELOC_PAIR);
 	    break;
+	case CPU_TYPE_ARM64:
+	    /*
+	     * We should never hit this case for arm64, so drop down to the
+	     * fatal error below.
+	     */
+	    break;
 	}
 	fatal("internal error: reloc_pair_r_type() called with unknown "
 	      "cputype (%u)", cputype);
@@ -153,6 +159,8 @@ uint32_t r_type)
 	       r_type == ARM_RELOC_HALF_SECTDIFF)
 		return(TRUE);
 	    break;
+	case CPU_TYPE_ARM64:
+	    return(FALSE);
 	default:
 	    fatal("internal error: reloc_has_pair() called with unknown "
 		  "cputype (%u)", cputype);
@@ -217,6 +225,10 @@ uint32_t r_type)
 	       r_type == ARM_RELOC_HALF_SECTDIFF)
 		return(TRUE);
 	    break;
+	case CPU_TYPE_ARM64:
+		/* No sectdiff relocs for arm64. */
+		return(FALSE);
+		break;
 	default:
 	    fatal("internal error: reloc_is_sectdiff() called with unknown "
 		  "cputype (%u)", cputype);

@@ -1,4 +1,4 @@
-.TH OTOOL 1 "December 11, 2012" "Apple, Inc."
+.TH OTOOL 1 "November 21, 2013" "Apple, Inc."
 .SH NAME
 otool \- object file displaying tool
 .SH SYNOPSIS
@@ -106,6 +106,9 @@ Display the two-level namespace hints table.
 .TP
 .B \-G
 Display the data in code table.
+.TP
+.B \-C
+Display the linker optimization hints (-v for verbose mode can also be added).
 
 .PP
 The following options may also be given:
@@ -142,6 +145,12 @@ and arm architectures.  This is the default.
 When doing disassembly using the llvm disassembler use the cpu
 .I arg.
 .TP
+.B \-function_offsets
+When doing disassembly print the decimal offset from the last label printed.
+.TP
+.TP
+.B \-j
+When doing disassembly print the print the opcode bytes of the instructions.
 .B \-Q
 Use
 .IR otool (1)'s

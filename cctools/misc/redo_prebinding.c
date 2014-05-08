@@ -5448,6 +5448,11 @@ enum bool missing_arch)
 		arch->object->code_sign_drs_cmd->datasize;
 	}
 
+	if(arch->object->link_opt_hint_cmd != NULL){
+	    sym_info_size +=
+		arch->object->link_opt_hint_cmd->datasize;
+	}
+
 	if(arch->object->code_sig_cmd != NULL){
 	    sym_info_size =
 		rnd(sym_info_size, 16);
@@ -5512,6 +5517,13 @@ enum bool missing_arch)
 		arch->object->code_sign_drs_cmd->dataoff;
 	    arch->object->output_code_sign_drs_info_data_size = 
 		arch->object->code_sign_drs_cmd->datasize;
+	}
+	if(arch->object->link_opt_hint_cmd != NULL){
+	    arch->object->output_link_opt_hint_info_data =
+		arch->object->object_addr +
+		arch->object->link_opt_hint_cmd->dataoff;
+	    arch->object->output_link_opt_hint_info_data_size = 
+		arch->object->link_opt_hint_cmd->datasize;
 	}
 	if(arch->object->code_sig_cmd != NULL){
 	    arch->object->output_code_sig_data = arch->object->object_addr +
@@ -9297,6 +9309,10 @@ uint32_t vmslide)
 		break;
 	    case LC_DYLIB_CODE_SIGN_DRS:
 		arch->object->code_sign_drs_cmd =
+		    (struct linkedit_data_command *)lc1;
+		break;
+	    case LC_LINKER_OPTIMIZATION_HINT:
+		arch->object->link_opt_hint_cmd =
 		    (struct linkedit_data_command *)lc1;
 		break;
 	    }
