@@ -33,6 +33,7 @@
 #include <stdlib.h>
 #include <algorithm>
 
+using namespace __gnu_cxx;
 
 //
 // Encapsulate these very sharp tools in a separate (ugly-named) namespace

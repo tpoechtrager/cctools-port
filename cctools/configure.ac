@@ -12,7 +12,7 @@ CXX=clang++
 
 CFLAGS="$CFLAGS `cat tmp/cflags 2>/dev/null`"
 CFLAGS="$CFLAGS -isystem /usr/local/include -isystem /usr/pkg/include -O3"
-CXXFLAGS="$CXXFLAGS -std=gnu++0x `cat tmp/cxxflags 2>/dev/null`"
+CXXFLAGS="$CXXFLAGS -std=c++0x `cat tmp/cxxflags 2>/dev/null`"
 CXXFLAGS="$CXXFLAGS -isystem /usr/local/include -isystem /usr/pkg/include -O3"
 
 LDFLAGS="$LDFLAGS -L/usr/local/lib `cat tmp/ldflags 2>/dev/null`"
