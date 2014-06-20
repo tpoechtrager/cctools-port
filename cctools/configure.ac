@@ -254,10 +254,12 @@ AC_SUBST(UUID_LIBS)
 AC_CHECK_LIB([crypto],[MD5_Init],[CRYPT_LIBS=-lcrypto])
 AC_SUBST(CRYPT_LIBS)
 
-AC_CHECK_LIB([supc++],[__cxa_demangle],[CXXABI_LIB=-lsupc++])
-AC_SUBST(CXXABI_LIB)
+AC_CHECK_LIB([c++abi],[__cxa_demangle],[CXXABI_LIB=-lc++abi],[
+  AC_CHECK_LIB([supc++],[__cxa_demangle],[CXXABI_LIB=-lsupc++],[
+    AC_CHECK_LIB([stdc++],[__cxa_demangle],[CXXABI_LIB=-lstdc++],[exit 1])
+  ])
+])
 
-AC_CHECK_LIB([c++abi],[__cxa_demangle],[CXXABI_LIB=-lc++abi])
 AC_SUBST(CXXABI_LIB)
 
 AC_C_BIGENDIAN([AC_SUBST([ENDIAN_FLAG],[-D__BIG_ENDIAN__=1])],
