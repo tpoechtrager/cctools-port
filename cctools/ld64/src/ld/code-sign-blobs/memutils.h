@@ -33,6 +33,9 @@
 #include <stdlib.h>
 #include <algorithm>
 
+#ifdef __GLIBCXX__
+using namespace __gnu_cxx;
+#endif
 
 //
 // Encapsulate these very sharp tools in a separate (ugly-named) namespace

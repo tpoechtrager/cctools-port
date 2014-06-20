@@ -239,25 +239,25 @@ CFLAGS=$ORIGCFLAGS
 AC_SUBST([WARNINGS], [$WARNINGS])
 
 
-AC_CHECK_LIB([dl],[dlopen],[
-         DL_LIBS=-ldl
-         ])
+AC_CHECK_LIB([dl],[dlopen],[DL_LIBS=-ldl])
 AC_SUBST(DL_LIBS)
 
-AC_CHECK_LIB([pthread],[pthread_create],[
-         PTHREAD_FLAGS=-pthread
-         ])
+AC_CHECK_LIB([pthread],[pthread_create],[PTHREAD_FLAGS=-pthread])
 AC_SUBST(PTHREAD_FLAGS)
 
-AC_CHECK_LIB([uuid],[uuid_generate_random],[
-         UUID_LIBS=-luuid
-         ])
+AC_CHECK_LIB([uuid],[uuid_generate_random],[UUID_LIBS=-luuid])
 AC_SUBST(UUID_LIBS)
 
-AC_CHECK_LIB([crypto],[MD5_Init],[
-         CRYPT_LIBS=-lcrypto
-         ])
+AC_CHECK_LIB([crypto],[MD5_Init],[CRYPT_LIBS=-lcrypto])
 AC_SUBST(CRYPT_LIBS)
+
+AC_CHECK_LIB([c++abi],[__cxa_demangle],[CXXABI_LIB=-lc++abi],[
+  AC_CHECK_LIB([supc++],[__cxa_demangle],[CXXABI_LIB=-lsupc++],[
+    AC_CHECK_LIB([stdc++],[__cxa_demangle],[CXXABI_LIB=-lstdc++],[exit 1])
+  ])
+])
+
+AC_SUBST(CXXABI_LIB)
 
 AC_C_BIGENDIAN([AC_SUBST([ENDIAN_FLAG],[-D__BIG_ENDIAN__=1])],
 			[AC_SUBST([ENDIAN_FLAG],[-D__LITTLE_ENDIAN__=1])])
