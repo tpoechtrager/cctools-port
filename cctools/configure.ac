@@ -6,16 +6,17 @@ AC_CANONICAL_TARGET
 
 AC_ARG_PROGRAM
 
-#force compiler to clang
+# force compiler to clang
 CC=clang
 CXX=clang++
+CPP="clang -E"
 
 CFLAGS="$CFLAGS `cat tmp/cflags 2>/dev/null` -isystem /usr/local/include -isystem /usr/pkg/include -O3"
 CXXFLAGS="$CXXFLAGS `cat tmp/cxxflags 2>/dev/null` -isystem /usr/local/include -isystem /usr/pkg/include -O3"
 LDFLAGS="$LDFLAGS -L/usr/local/lib `cat tmp/ldflags 2>/dev/null`"
-export LD_LIBRARY_PATH="`cat tmp/ldpath 2>/dev/null`"
 
-CPP="clang -E"
+LD_LIBRARY_PATH="$LD_LIBRARY_PATH:`cat tmp/ldpath 2>/dev/null`"
+export LD_LIBRARY_PATH
 
 AM_INIT_AUTOMAKE([1.10 no-define no-dist-gzip dist-bzip2 tar-ustar])
 
