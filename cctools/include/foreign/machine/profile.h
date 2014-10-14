@@ -33,12 +33,8 @@
 #ifndef _BSD_MACHINE_PROFILE_H_
 #define _BSD_MACHINE_PROFILE_H_
 
-#if defined (__ppc__) || defined (__ppc64__)
-#include "ppc/profile.h"
-#elif defined (__i386__) || defined(__x86_64__)
+#if defined (__i386__) || defined(__x86_64__)
 #include "i386/profile.h"
-#elif defined (__arm__)
-#include "arm/profile.h"
 #else
 #error architecture not supported
 #endif

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2007 Apple Inc. All rights reserved.
+ * Copyright (c) 2000-2011 Apple Inc. All rights reserved.
  *
  * @APPLE_OSREFERENCE_LICENSE_HEADER_START@
  * 
@@ -28,17 +28,9 @@
 /*
  * Copyright (c) 1995 NeXT Computer, Inc. All Rights Reserved
  */
-#ifndef	_MACHINE_SETJMP_H_
-#define	_MACHINE_SETJMP_H_
+#ifndef _MACHINE_SETJMP_H_
+#define _MACHINE_SETJMP_H_
 
-#if defined (__ppc__) || defined (__ppc64__)
-#include "ppc/setjmp.h"
-#elif defined (__i386__) || defined(__x86_64__)
-#include "i386/setjmp.h"
-#elif defined (__arm__)
-#include "arm/setjmp.h"
-#else
-#error architecture not supported
-#endif
+#include <setjmp.h>
 
-#endif	/* _MACHINE_SETJMP_H_ */
+#endif  /* _MACHINE_SETJMP_H_ */

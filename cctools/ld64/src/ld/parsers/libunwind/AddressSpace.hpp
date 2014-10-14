@@ -36,6 +36,14 @@
 #include <mach-o/loader.h>
 #include <mach-o/getsect.h>
 #include <mach-o/dyld_priv.h>
+
+#if defined(__arm__) || defined(__arm64__)
+#undef THREAD_STATE_NONE
+#undef VALID_THREAD_STATE_FLAVOR
+#undef MACHINE_THREAD_STATE
+#undef MACHINE_THREAD_STATE_COUNT
+#endif
+
 #include <mach/i386/thread_status.h>
 #include <Availability.h>
 

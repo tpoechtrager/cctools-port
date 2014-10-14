@@ -1,8 +1,8 @@
 bin_PROGRAMS = ld_classic 
 ld_classic_LDADD =  \
-        $(top_srcdir)/libstuff/libstuff.la   $(UUID_LIBS)
+        $(top_srcdir)/libstuff/libstuff.la   $(UUID_LIB)
 
-ld_classic_CFLAGS = -D__DARWIN_UNIX03 -I$(top_srcdir)/include -I$(top_srcdir)/include/foreign -I$(top_srcdir)/libstuff $(WARNINGS) $(LTO_DEFS) $(ENDIAN_FLAG) -DDEBUG
+ld_classic_CFLAGS = -D__DARWIN_UNIX03 -I$(top_srcdir)/include -I$(top_srcdir)/include/foreign -I$(top_srcdir)/libstuff $(WARNINGS) $(LTO_DEF) $(ENDIAN_FLAG) -DDEBUG
 
 ld_classic_SOURCES =  \
 	ld.c pass1.c objects.c sections.c cstring_literals.c symbols.c \

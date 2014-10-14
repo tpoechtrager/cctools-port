@@ -7,4 +7,5 @@ libhelper_la_SOURCES =  \
 	helper.c  \
 	qsort_r.c  \
 	strlcat.c  \
-	strlcpy.c
+	strlcpy.c \
+	eprintf.c

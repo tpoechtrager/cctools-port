@@ -63,10 +63,10 @@
 #define SHARED_REGION_NESTING_MIN_PPC64		0x0000000010000000ULL
 #define SHARED_REGION_NESTING_MAX_PPC64		0x0000000010000000ULL
 
-#define SHARED_REGION_BASE_ARM			0x30000000ULL
-#define SHARED_REGION_SIZE_ARM			0x10000000ULL
-#define SHARED_REGION_NESTING_BASE_ARM		0x30000000ULL
-#define SHARED_REGION_NESTING_SIZE_ARM		0x08000000ULL
+#define SHARED_REGION_BASE_ARM			0x2C000000ULL
+#define SHARED_REGION_SIZE_ARM			0x14000000ULL
+#define SHARED_REGION_NESTING_BASE_ARM		0x2C000000ULL
+#define SHARED_REGION_NESTING_SIZE_ARM		0x14000000ULL
 #define SHARED_REGION_NESTING_MIN_ARM		?
 #define SHARED_REGION_NESTING_MAX_ARM		?
 
@@ -84,29 +84,20 @@
 #define SHARED_REGION_NESTING_SIZE		SHARED_REGION_NESTING_SIZE_X86_64
 #define SHARED_REGION_NESTING_MIN		SHARED_REGION_NESTING_MIN_X86_64
 #define SHARED_REGION_NESTING_MAX		SHARED_REGION_NESTING_MAX_X86_64
-#elif defined(__ppc__)
-#define SHARED_REGION_BASE			SHARED_REGION_BASE_PPC
-#define SHARED_REGION_SIZE			SHARED_REGION_SIZE_PPC
-#define SHARED_REGION_NESTING_BASE		SHARED_REGION_NESTING_BASE_PPC
-#define SHARED_REGION_NESTING_SIZE		SHARED_REGION_NESTING_SIZE_PPC
-#define SHARED_REGION_NESTING_MIN		SHARED_REGION_NESTING_MIN_PPC
-#define SHARED_REGION_NESTING_MAX		SHARED_REGION_NESTING_MAX_PPC
-#elif defined(__ppc64__)
-#define SHARED_REGION_BASE			SHARED_REGION_BASE_PPC64
-#define SHARED_REGION_SIZE			SHARED_REGION_SIZE_PPC64
-#define SHARED_REGION_NESTING_BASE		SHARED_REGION_NESTING_BASE_PPC64
-#define SHARED_REGION_NESTING_SIZE		SHARED_REGION_NESTING_SIZE_PPC64
-#define SHARED_REGION_NESTING_MIN		SHARED_REGION_NESTING_MIN_PPC64
-#define SHARED_REGION_NESTING_MAX		SHARED_REGION_NESTING_MAX_PPC64
-#elif defined(__arm__)
-#define SHARED_REGION_BASE			SHARED_REGION_BASE_ARM
-#define SHARED_REGION_SIZE			SHARED_REGION_SIZE_ARM
-#define SHARED_REGION_NESTING_BASE		SHARED_REGION_NESTING_BASE_ARM
-#define SHARED_REGION_NESTING_SIZE		SHARED_REGION_NESTING_SIZE_ARM
-#define SHARED_REGION_NESTING_MIN		SHARED_REGION_NESTING_MIN_ARM
-#define SHARED_REGION_NESTING_MAX		SHARED_REGION_NESTING_MAX_ARM
 #endif
 
+#ifdef KERNEL_PRIVATE
+
+/*
+ * This is routine sets  the current source of power.
+ * Arguments:
+ * 0 if it is external source (connected to power )
+ * 1 if it is internal power source ie battery
+ */
+
+void post_sys_powersource(int);
+
+#endif /* KERNEL_PRIVATE */
 /* 
  * All shared_region_* declarations are a private interface
  * between dyld and the kernel.
@@ -121,14 +112,18 @@ struct shared_file_mapping_np {
 };
 #define VM_PROT_COW  0x8  /* must not interfere with normal prot assignments */
 #define VM_PROT_ZF  0x10  /* must not interfere with normal prot assignments */
+#define VM_PROT_SLIDE  0x20  /* must not interfere with normal prot assignments */
 
+#ifndef KERNEL
 
 __BEGIN_DECLS
 int	shared_region_check_np(uint64_t	*startaddress);
 int	shared_region_map_np(int fd,
 			     uint32_t mappingCount,
 			     const struct shared_file_mapping_np *mappings);
+int	shared_region_slide_np(void);
 __END_DECLS
 
+#endif /* !KERNEL */
 
 #endif /* _MACH_SHARED_REGION_H_ */

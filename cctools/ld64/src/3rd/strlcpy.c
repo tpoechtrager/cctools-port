@@ -21,6 +21,8 @@
  * @APPLE_LICENSE_HEADER_END@
  */
 
+#ifndef __APPLE__
+
 #include <string.h>
 
 size_t
@@ -35,3 +37,4 @@ strlcpy(char * restrict dst, const char * restrict src, size_t maxlen) {
     return srclen;
 }
 
+#endif /* ! __APPLE__ */

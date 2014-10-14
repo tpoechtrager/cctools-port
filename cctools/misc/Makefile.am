@@ -16,12 +16,12 @@ bin_PROGRAMS =  \
 	pagestuff \
 	ranlib \
 	codesign_allocate
- 
+
 LDADD =  \
-        $(top_srcdir)/libstuff/libstuff.la \
-		$(DL_LIBS) 
-		
-AM_CFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/include/foreign -I$(top_srcdir)/libstuff $(WARNINGS) $(LTO_DEFS) -D__DARWIN_UNIX03 $(ENDIAN_FLAG)
+	$(top_srcdir)/libstuff/libstuff.la \
+	$(DL_LIB)
+
+AM_CFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/include/foreign -I$(top_srcdir)/libstuff $(WARNINGS) $(LTO_DEF) -D__DARWIN_UNIX03 $(ENDIAN_FLAG)
 
 checksyms_SOURCES = checksyms.c
 lipo_SOURCES = lipo.c
