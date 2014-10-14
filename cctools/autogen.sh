@@ -11,5 +11,14 @@ fi
 mkdir -p m4
 aclocal
 autoconf
-libtoolize -c -i
+
+which glibtoolize &>/dev/null
+
+if [ $? -eq 0 ]; then
+    glibtoolize -c -i
+else
+    libtoolize -c -i
+fi
+
 automake -a -c
+
