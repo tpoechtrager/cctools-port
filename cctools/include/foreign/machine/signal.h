@@ -32,7 +32,7 @@
 #include "ppc/signal.h"
 #elif defined (__i386__) || defined(__x86_64__)
 #include "i386/signal.h"
-#elif defined (__arm__)
+#elif defined (__arm__) || defined(__arm64__)
 #include "arm/signal.h"
 #else
 #error architecture not supported

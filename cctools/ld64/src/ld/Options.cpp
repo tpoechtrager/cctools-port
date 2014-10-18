@@ -50,7 +50,12 @@ namespace lto {
 // magic to place command line in crash reports
 const int crashreporterBufferSize = 2000;
 static char crashreporterBuffer[crashreporterBufferSize];
-#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 1070
+#if defined(__has_include) && __has_include(<CrashReporterClient.h>)
+#define HAVE_CRASHREPORTER_HEADER 1
+#else
+#define HAVE_CRASHREPORTER_HEADER 0
+#endif
+#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 1070 && HAVE_CRASHREPORTER_HEADER
 	#include <CrashReporterClient.h>
 	// hack until ld does not need to build on 10.6 anymore
     struct crashreporter_annotations_t gCRAnnotations 
@@ -1658,7 +1663,7 @@ void Options::addSection(const char* segment, const char* section, const char* p
 	::close(fd);
 
 	// record section to create
-	ExtraSection info = { segment, section, path, (uint8_t*)p, stat_buf.st_size };
+	ExtraSection info = { segment, section, path, (uint8_t*)p, static_cast<uint64_t>(stat_buf.st_size) };
 	fExtraSections.push_back(info);
 }
 
@@ -4261,7 +4266,7 @@ void Options::checkForClassic(int argc, const char* argv[])
 	bool newLinker = false;
 	
 	// build command line buffer in case ld crashes
-#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 1070
+#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 1070 && HAVE_CRASHREPORTER_HEADER
 	CRSetCrashLogMessage(crashreporterBuffer);
 #endif
 	const char* srcRoot = getenv("SRCROOT");

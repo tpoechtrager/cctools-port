@@ -55,21 +55,12 @@
 #define VM_PROT_COW  0x8  /* must not interfere with normal prot assignments */
 #define VM_PROT_ZF  0x10  /* must not interfere with normal prot assignments */
 
-#ifdef	__arm__
-#define GLOBAL_SHARED_TEXT_SEGMENT	0x30000000U
-#define GLOBAL_SHARED_DATA_SEGMENT	0x38000000U
-#define GLOBAL_SHARED_SEGMENT_MASK	0xF8000000U
-
-#define	SHARED_TEXT_REGION_SIZE		0x08000000
-#define	SHARED_DATA_REGION_SIZE		0x08000000
-#else
 #define GLOBAL_SHARED_TEXT_SEGMENT	0x90000000U
 #define GLOBAL_SHARED_DATA_SEGMENT	0xA0000000U
 #define GLOBAL_SHARED_SEGMENT_MASK	0xF0000000U
 
 #define	SHARED_TEXT_REGION_SIZE		0x10000000
 #define	SHARED_DATA_REGION_SIZE		0x10000000
-#endif
 
 #if !defined(__LP64__)
 
@@ -83,13 +74,8 @@
  *  i.e. if the size is 0x10000000 the object can be mapped at 
  *  0x20000000, or 0x30000000, but not 0x1000000
  */
-#ifdef	__arm__
-#define	SHARED_TEXT_REGION_MASK		0x07FFFFFF
-#define	SHARED_DATA_REGION_MASK		0x07FFFFFF
-#else
 #define	SHARED_TEXT_REGION_MASK		0x0FFFFFFF
 #define	SHARED_DATA_REGION_MASK		0x0FFFFFFF
-#endif
 
 
 /* flags field aliases for copyin_shared_file and load_shared_file */
@@ -133,6 +119,7 @@ struct shared_region_range_np {
 	mach_vm_size_t		srr_size;
 };
 
+#ifndef KERNEL
 
 __BEGIN_DECLS
 int	shared_region_map_file_np(int fd,
@@ -143,5 +130,6 @@ int	shared_region_make_private_np(uint32_t rangeCount,
 				      const struct shared_region_range_np *ranges);
 __END_DECLS
 
+#endif /* !KERNEL */
 
 #endif /* _MACH_SHARED_MEMORY_SERVER_H_ */

@@ -15,7 +15,7 @@ libPasses_la_CXXFLAGS = \
 	-fblocks \
 	-D__DARWIN_UNIX03 \
 	$(WARNINGS) \
-	$(LTO_DEFS) \
+	$(LTO_DEF) \
 	$(ENDIAN_FLAGS) \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/include/foreign \

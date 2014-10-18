@@ -33,7 +33,7 @@
 #include "mach/ppc/processor_info.h"
 #elif defined (__i386__) || defined(__x86_64__)
 #include "mach/i386/processor_info.h"
-#elif defined (__arm__)
+#elif defined (__arm__) || defined(__arm64__)
 #include "mach/arm/processor_info.h"
 #else
 #error architecture not supported

@@ -8,7 +8,8 @@ AM_CXXFLAGS = \
 	-fblocks \
 	-D__DARWIN_UNIX03 \
 	$(WARNINGS) \
-	$(LTO_DEFS) \
+	-Wno-switch \
+	$(LTO_DEF) \
 	$(ENDIAN_FLAGS) \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/include/foreign \
@@ -23,7 +24,7 @@ AM_CFLAGS = \
     -fblocks \
     -D__DARWIN_UNIX03 \
     $(WARNINGS) \
-    $(LTO_DEFS) \
+    $(LTO_DEF) \
     $(ENDIAN_FLAGS) \
     -I$(top_srcdir)/include \
     -I$(top_srcdir)/include/foreign \
@@ -41,7 +42,7 @@ ObjectDump_SOURCES = \
 	$(top_srcdir)/ld64/src/ld/debugline.c 
 ObjectDump_LDADD =  \
 	$(top_srcdir)/ld64/src/ld/parsers/libParsers.la \
-	$(LTO_LIBS)  
+	$(LTO_LIB)
 
 
 dyldinfo_SOURCES =  dyldinfo.cpp

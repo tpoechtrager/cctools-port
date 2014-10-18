@@ -6,17 +6,37 @@ AC_CANONICAL_TARGET
 
 AC_ARG_PROGRAM
 
-# force compiler to clang
-CC=clang
-CXX=clang++
-CPP="clang -E"
+case $host_os in
+  darwin* )
+    isdarwin=yes
+    AM_CONDITIONAL([ISDARWIN], [true])
+    ;;
+  * )
+    AM_CONDITIONAL([ISDARWIN], [false])
+    ;;
+esac
 
-CFLAGS="$CFLAGS `cat tmp/cflags 2>/dev/null` -isystem /usr/local/include -isystem /usr/pkg/include -O3"
-CXXFLAGS="$CXXFLAGS `cat tmp/cxxflags 2>/dev/null` -isystem /usr/local/include -isystem /usr/pkg/include -O3"
-LDFLAGS="$LDFLAGS -L/usr/local/lib `cat tmp/ldflags 2>/dev/null`"
+if test "x$CFLAGS" = "x"; then
+  CFLAGS="-O3"
+fi
 
-LD_LIBRARY_PATH="$LD_LIBRARY_PATH:`cat tmp/ldpath 2>/dev/null`"
-export LD_LIBRARY_PATH
+if test "x$CXXFLAGS" = "x"; then
+  CXXFLAGS="-O3"
+fi
+
+if test "x$build" = "x$host"; then
+  CC="clang"
+  CXX="clang++"
+  CFLAGS="$CFLAGS -isystem /usr/local/include -isystem /usr/pkg/include"
+  CXXFLAGS="$CXXFLAGS -isystem /usr/local/include -isystem /usr/pkg/include"
+  LDFLAGS="$LDFLAGS -L/usr/local/lib"
+else
+  CC="`which ${host_alias}-clang 2>/dev/null || echo clang`"
+  CXX="`which ${host_alias}-clang++ 2>/dev/null || echo clang++`"
+fi
+
+CPP="$CC -E"
+OBJC="$CC"
 
 # FIXME 'subdir-objects' breaks dependency tracking
 AM_INIT_AUTOMAKE([1.10 no-define no-dist-gzip dist-bzip2 tar-ustar subdir-objects no-dependencies])
@@ -31,7 +51,6 @@ AC_CONFIG_SRCDIR([APPLE_LICENSE])
 LT_PREREQ([2.2.6])
 LT_INIT(disable-static)
 
-
 AC_PROG_INSTALL
 
 AC_PROG_CC([clang])
@@ -43,8 +62,15 @@ AM_PROG_AS([clang])
 AC_CHECK_TOOL([HOST_RANLIB], [ranlib], :)
 AC_CHECK_TOOL([HOST_AR], [ar], :)
 
-AC_CHECK_HEADERS([openssl/md5.h], [], [AC_MSG_ERROR([*** md5.h not found, Please install ssl dev packages according to your system])])
-AC_CHECK_HEADERS([uuid/uuid.h], [], [AC_MSG_ERROR([*** uuid.h not found, Please install uuid dev packages according to your system])])
+if test "x$isdarwin" != "xyes"; then
+  AC_CHECK_HEADERS([openssl/md5.h], [], [AC_MSG_ERROR([*** md5.h not found, please install ssl dev packages according to your system])])
+  CRYPTO_LIB=-lcrypto
+  SSL_LIB=-lssl
+  AC_SUBST([CRYPTO_LIB])
+  AC_SUBST([SSL_LIB])
+fi
+
+AC_CHECK_HEADERS([uuid/uuid.h], [], [AC_MSG_ERROR([*** uuid.h not found, please install uuid dev packages according to your system])])
 
 #for libstuff emulated.c
 case $target_cpu in
@@ -64,7 +90,11 @@ case $target_cpu in
         AC_DEFINE(EMULATED_HOST_CPU_TYPE, 16777223, [Emulated CPU type])
         AC_DEFINE(EMULATED_HOST_CPU_SUBTYPE, 3, [Emulated CPU subtype])
     ;;
-     arm)
+     arm64*)
+        AC_DEFINE(EMULATED_HOST_CPU_TYPE, 16777228, [Emulated CPU type])
+        AC_DEFINE(EMULATED_HOST_CPU_SUBTYPE, 0, [Emulated CPU subtype])
+    ;;
+     arm*)
         AC_DEFINE(EMULATED_HOST_CPU_TYPE, 12, [Emulated CPU type])
         AC_DEFINE(EMULATED_HOST_CPU_SUBTYPE, 0, [Emulated CPU subtype])
     ;;
@@ -73,23 +103,20 @@ case $target_cpu in
     ;;
 esac
 
-#as reported, some users may use llvm-c/Disassembler.h instead of local copy in include dir.
-#add these macros for avoid compilation failed.
+# as reported, some users may use llvm-c/Disassembler.h instead of a local copy in include dir.
+# add these macros to avoid compilation failures.
 
 AC_DEFINE(__STDC_LIMIT_MACROS)
 AC_DEFINE(__STDC_CONSTANT_MACROS)
 
-
-
-#for as wrapper.
 AC_SUBST([ASLIBEXECDIR], ['${libexecdir}/as'])
 
-#for ld_class involk in ld64 and other command call.
+# set PROGRAM PREFIX
 if test "$target_alias"; then
 AC_SUBST([PROGRAM_PREFIX], ['${target_alias}-'])
 fi
 
-#disable warnings.
+# disable certain warnings.
 
 WARNINGS=""
 
@@ -240,17 +267,18 @@ CFLAGS=$ORIGCFLAGS
 AC_SUBST([WARNINGS], [$WARNINGS])
 
 
-AC_CHECK_LIB([dl],[dlopen],[DL_LIBS=-ldl])
-AC_SUBST(DL_LIBS)
+AC_CHECK_LIB([dl],[dlopen],[DL_LIB=-ldl])
+AC_SUBST(DL_LIB)
 
 AC_CHECK_LIB([pthread],[pthread_create],[PTHREAD_FLAGS=-pthread])
 AC_SUBST(PTHREAD_FLAGS)
 
-AC_CHECK_LIB([uuid],[uuid_generate_random],[UUID_LIBS=-luuid])
-AC_SUBST(UUID_LIBS)
+AC_CHECK_LIB([uuid],[uuid_generate_random],[UUID_LIB=-luuid])
+AC_SUBST(UUID_LIB)
 
-AC_CHECK_LIB([crypto],[MD5_Init],[CRYPT_LIBS=-lcrypto])
-AC_SUBST(CRYPT_LIBS)
+AC_CHECK_FUNCS([strmode])
+
+### Check for __cxa_demangle in various C++ ABI libs ###
 
 AC_CHECK_LIB([c++abi],[__cxa_demangle],[CXXABI_LIB=-lc++abi],[
   AC_CHECK_LIB([supc++],[__cxa_demangle],[CXXABI_LIB=-lsupc++],[
@@ -260,10 +288,26 @@ AC_CHECK_LIB([c++abi],[__cxa_demangle],[CXXABI_LIB=-lc++abi],[
 
 AC_SUBST(CXXABI_LIB)
 
+### Check for libLTO ###
+
+ORIGLDFLAGS=$LDFLAGS
+LDFLAGS="$LDFLAGS -Wl,-rpath,/usr/local/lib,--enable-new-dtags"
+AC_MSG_CHECKING([if -Wl,-rpath,<path>,--enable-new-dtags is supported])
+AC_LINK_IFELSE(
+  [AC_LANG_SOURCE([[int main(){}]])],
+  [rpathlink=yes
+  AC_MSG_RESULT([yes])],
+  [AC_MSG_RESULT([no])]
+)
+LDFLAGS=$ORIGLDFLAGS
+
+CHECK_LLVM
+
+### Check endianness ###
+
 AC_C_BIGENDIAN([AC_SUBST([ENDIAN_FLAG],[-D__BIG_ENDIAN__=1])],
 			[AC_SUBST([ENDIAN_FLAG],[-D__LITTLE_ENDIAN__=1])])
 
-AC_CHECK_FUNCS([strmode])
 
 AC_CONFIG_FILES([Makefile libstuff/Makefile])
 AC_CONFIG_FILES([ar/Makefile])
@@ -276,9 +320,12 @@ AC_CONFIG_FILES([as/ppc64/Makefile])
 #AC_CONFIG_FILES([man/Makefile])
 AC_CONFIG_FILES([misc/Makefile])
 AC_CONFIG_FILES([otool/Makefile])
-AC_CONFIG_FILES([libobjc2/Makefile])
-AC_CONFIG_FILES([ld/Makefile])
 
+if test "x$isdarwin" != "xyes"; then
+  AC_CONFIG_FILES([libobjc2/Makefile])
+fi
+
+AC_CONFIG_FILES([ld/Makefile])
 
 AC_CONFIG_FILES([ld64/Makefile])
 AC_CONFIG_FILES([ld64/src/Makefile])

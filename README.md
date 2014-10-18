@@ -1,16 +1,33 @@
 # Apple cctools port for Linux, FreeBSD and NetBSD #
 
-Current Version: 855 + ld64-134.9  
-Originally ported by cjacker from the [ios-toolchain-for-linux](https://code.google.com/p/ios-toolchain-based-on-clang-for-linux/) project.
+Current Version: 855 + ld64-134.9.  
+Originally ported by [cjacker](http://ios-toolchain-based-on-clang-for-linux.googlecode.com).
 
-## INSTALLATION ##
+## SUPPORTED HOSTS ##
 
-Make sure you have the following installed on your Linux box:
+Linux  
+FreeBSD  
+NetBSD  
+Mac OS X  
+iOS (partially)
 
-`Clang 3.2+`, `llvm-devel`, `automake`, `autogen`, `libtool`,  
+## SUPPORTED TARGETS ##
+
+armv4t, armv5, armv6, armv7, armv7f, armv7k, armv7s, i386 and x86_64.
+
+## DEPENDENCIES ##
+
+`Clang 3.2+`, `automake`, `autogen` and `libtool`.
+
+On Linux / FreeBSD / NetBSD you also need to install:
+
 `uuid-devel` and `openssl-devel`.
 
-Then type:
+Optional, but recommended deps:
+
+`llvm-devel` (Enables Link Time Optimization)
+
+## INSTALLATION ##
 
 * `cd cctools`
 * `./autogen.sh`
@@ -21,4 +38,4 @@ Then type:
 target = `i386-apple-darwin11`, `x86_64-apple-darwin11`, `arm-apple-darwin11`, ...
 
 If you get compile errors because of `unistd.h`, then please run  
-`../tools/fix-unistd-issue.sh` in the cctools directory and restart compiling.
+`../tools/fix_unistd_issue.sh` and restart compiling.

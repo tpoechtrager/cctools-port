@@ -1,3 +1,7 @@
+const char ldVersionString[] = "134.9\n";
+
+#ifndef __APPLE__
+
 #include <unistd.h> 
 #include <mach/mach.h>
 #include <mach/mach_error.h>
@@ -19,9 +23,6 @@
 #endif
 
 #include "helper.h"
-
-const char ldVersionString[] = "134.9\n";
-
 
 void __assert_rtn(const char *func, const char *file, int line, const char *msg)
 {
@@ -100,3 +101,5 @@ int64_t OSAtomicAdd64(int64_t theAmount, volatile int64_t *theValue) {
    __sync_fetch_and_add(theValue, theAmount);
    return *theValue; 
 }
+
+#endif /* __APPLE__ */
