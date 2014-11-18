@@ -1,7 +1,14 @@
-// On some platforms, we need _GNU_SOURCE to expose asprintf()
+// On some platforms, we need _GNU_SOURCE / _NETBSD_SOURCE to expose asprintf()
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE 1
 #endif
+
+#ifdef __NetBSD__
+#ifndef _NETBSD_SOURCE
+#define _NETBSD_SOURCE 1
+#endif
+#endif
+
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -55,7 +62,7 @@ static void initTmpFile(void)
 }
 static int getAnonMemFd(void)
 {
-	const char *pattern = strdup(tmpPattern);
+	char *pattern = strdup(tmpPattern);
 	int fd = mkstemp(pattern);
 	unlink(pattern);
 	free(pattern);
