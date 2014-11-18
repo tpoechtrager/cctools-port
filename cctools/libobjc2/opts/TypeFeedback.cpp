@@ -1,11 +1,5 @@
-#include "llvm/Constants.h"
-#include "llvm/Pass.h"
-#include "llvm/Module.h"
-#include "llvm/Function.h"
-#include "llvm/Instructions.h"
-#include "llvm/Support/CallSite.h"
-#include "llvm/Support/IRBuilder.h"
-#include "llvm/Linker.h"
+#include <llvm/Support/CallSite.h>
+#include <llvm/Linker.h>
 #include <vector>
 
 using namespace llvm;
@@ -18,7 +12,7 @@ namespace {
     typedef std::vector<callPair > replacementVector;
       static char ID;
     uint32_t callsiteCount;
-    LLVMIntegerType *Int32Ty;
+    LLVMIntegerTy *Int32Ty;
       GNUObjCTypeFeedback() : ModulePass(ID), callsiteCount(0) {}
 
     void profileFunction(Function &F, Constant *ModuleID) {
@@ -53,7 +47,7 @@ namespace {
     {
       LLVMContext &VMContext = M.getContext();
       Int32Ty = IntegerType::get(VMContext, 32);
-      LLVMPointerType *PtrTy = Type::getInt8PtrTy(VMContext);
+      LLVMPointerTy *PtrTy = Type::getInt8PtrTy(VMContext);
       Constant *moduleName = 
 #if (LLVM_MAJOR > 3) || ((LLVM_MAJOR == 3) && (LLVM_MINOR > 0))
         ConstantDataArray::getString(VMContext, M.getModuleIdentifier(), true);
@@ -131,7 +125,12 @@ namespace {
             ctors.size()), ctors));
       // Create the new global and replace the old one
       GlobalVariable *NGV = new GlobalVariable(CA->getType(),
-          GCL->isConstant(), GCL->getLinkage(), CA, "", GCL->isThreadLocal());
+          GCL->isConstant(), GCL->getLinkage(), CA, "", 
+#if LLVM_MAJOR < 3 || (LLVM_MAJOR == 3 && LLVM_MINOR < 2)
+          GCL->isThreadLocal());
+#else
+          GCL->	getThreadLocalMode());
+#endif
       GCL->getParent()->getGlobalList().insert(GCL, NGV);
       NGV->takeName(GCL);
       GCL->replaceAllUsesWith(NGV);

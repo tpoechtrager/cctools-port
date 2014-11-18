@@ -29,6 +29,9 @@ static const int32_t caps =
 #ifdef ENABLE_GC
 	(1<<OBJC_CAP_GARBAGE_COLLECTION) |
 #endif
+#if defined(WITH_TRACING) && defined (__x86_64)
+	(1<<OBJC_CAP_TRACING) |
+#endif
 	0;
 
 int objc_test_capability(int x)

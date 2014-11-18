@@ -1,3 +1,7 @@
+#if defined(__clang__) && !defined(__OBJC_RUNTIME_INTERNAL__)
+#pragma clang system_header
+#endif
+
 /**
  * capabilities.h - This file defines the list of capabilities.  Runtime
  * capabilities can be checked.  You may use #ifdef to test at compile time
@@ -108,6 +112,10 @@ extern "C" {
  * The runtime provides APIs for debugging ARC-managed autorelease pools.
  */
 #define OBJC_ARC_AUTORELEASE_DEBUG 16
+/**
+ * The runtime provides support for tracing message sends.
+ */
+#define OBJC_CAP_TRACING 17
 
 /**
  * Macro used to require the existence of a specific capability.  This creates

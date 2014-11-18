@@ -4,6 +4,7 @@
 #include "class.h"
 #include "ivar.h"
 #include "visibility.h"
+#include "gc_ops.h"
 
 ptrdiff_t objc_alignof_type(const char *);
 ptrdiff_t objc_sizeof_type(const char *);
@@ -28,6 +29,7 @@ PRIVATE void objc_compute_ivar_offsets(Class class)
 			}
 			ivar_start = super->instance_size;
 		}
+		long class_size = 0 - class->instance_size;
 		class->instance_size = ivar_start - class->instance_size;
 		/* For each instance variable, we add the offset if required (it will be zero
 		* if this class is compiled with a static ivar layout).  We then set the
@@ -45,6 +47,37 @@ PRIVATE void objc_compute_ivar_offsets(Class class)
 			for (i = 0 ; i < class->ivars->count ; i++)
 			{
 				struct objc_ivar *ivar = &class->ivars->ivar_list[i];
+				// We are going to be allocating an extra word for the reference count
+				// in front of the object.  This doesn't matter for aligment most of
+				// the time, but if we have an instance variable that is a vector type
+				// then we will need to ensure that we are properly aligned again.
+				long ivar_size = (i+1 == class->ivars->count)
+					? (class_size - ivar->offset)
+					: ivar->offset - class->ivars->ivar_list[i+1].offset;
+#if 0
+				// We only need to do the realignment for things that are
+				// bigger than a pointer, and we don't need to do it in GC mode
+				// where we don't add any extra padding.
+				if (!isGCEnabled && (ivar_size > sizeof(void*)))
+				{
+					long fudge = (ivar_start +ivar->offset + sizeof(void*)) % 16;
+					if (fudge != 0)
+					{
+						// If this is the first ivar in the class, then
+						// we can eat some of the padding that the compiler
+						// added...
+						if ((i == 0) && (ivar->offset > 0) && ((ivar_start + sizeof(void*) %16) == 0))
+						{
+							ivar->offset = 0;
+						}
+						else
+						{
+							ivar_start += fudge;
+							class->instance_size += fudge;
+						}
+					}
+				}
+#endif
 				ivar->offset += ivar_start;
 				/* If we're using the new ABI then we also set up the faster ivar
 				* offset variables.
