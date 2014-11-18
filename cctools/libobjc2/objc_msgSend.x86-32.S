@@ -15,8 +15,6 @@
 1:                                        # classLoaded
 	movl  \sel(%esp), %ecx
 	mov   DTABLE_OFFSET(%eax), %eax       # Load the dtable from the class
-	cmpl  uninstalled_dtable, %eax        # If this is not (yet) a valid dtable
-	je    5f                              # Do a slow lookup
 	
 	mov   (%ecx), %ecx                    # Load the selector index
 
@@ -76,25 +74,28 @@
 
 
 	jmp   *%eax
-6:                                        # smallObject:
+6:                                       # smallObject:
 	push  %ebx                           # Save old %ebx
-	call  __i686.get_pc_thunk.bx
-	addl  $_GLOBAL_OFFSET_TABLE_, %ebx
-	mov   SmallObjectClasses@GOT(%ebx), %eax
+	calll 7f
+7:
+	popl  %ebx;
+8:
+	addl  $_GLOBAL_OFFSET_TABLE_+(8b-7b), %ebx
+	leal  SmallObjectClasses@GOTOFF(%ebx), %eax
 	mov   (%eax), %eax
 	popl  %ebx
 	jmp   1b 
 	.cfi_endproc
 .endm
-.globl objc_msgSend_fpret
-	.type	objc_msgSend_fpret, @function
-objc_msgSend_fpret:
+.globl CDECL(objc_msgSend_fpret)
+TYPE_DIRECTIVE(CDECL(objc_msgSend_fpret), @function)
+CDECL(objc_msgSend_fpret):
 	MSGSEND 4, 8, 1
-.globl objc_msgSend
-	.type	objc_msgSend, @function
-objc_msgSend:
+.globl CDECL(objc_msgSend)
+TYPE_DIRECTIVE(CDECL(objc_msgSend), @function)
+CDECL(objc_msgSend):
 	MSGSEND 4, 8, 0
-.globl objc_msgSend_stret
-	.type	objc_msgSend_stret, @function
-objc_msgSend_stret:
+.globl CDECL(objc_msgSend_stret)
+TYPE_DIRECTIVE(CDECL(objc_msgSend_stret), @function)
+CDECL(objc_msgSend_stret):
 	MSGSEND 8, 12, 0

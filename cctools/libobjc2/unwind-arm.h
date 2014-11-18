@@ -1,3 +1,5 @@
+#include <stdint.h>
+
 /**
  * ARM-specific unwind definitions.  These are taken from the ARM EHABI
  * specification.
@@ -19,11 +21,15 @@ typedef uint32_t _Unwind_State;
 static const _Unwind_State _US_VIRTUAL_UNWIND_FRAME  = 0;
 static const _Unwind_State _US_UNWIND_FRAME_STARTING = 1;
 static const _Unwind_State _US_UNWIND_FRAME_RESUME   = 2;
+static const _Unwind_State _US_FORCE_UNWIND = 8;
 #else // GCC fails at knowing what a constant expression is
 #	define _US_VIRTUAL_UNWIND_FRAME  0
 #	define _US_UNWIND_FRAME_STARTING 1
 #	define _US_UNWIND_FRAME_RESUME 2
+#   define _US_FORCE_UNWIND 8
 #endif
+
+typedef int _Unwind_Action;
 
 typedef struct _Unwind_Context _Unwind_Context;
 
@@ -167,7 +173,7 @@ _Unwind_Reason_Code name(_Unwind_State state,\
 	int version = 1;\
 	uint64_t exceptionClass = exceptionObject->exception_class;\
 	int actions;\
-	switch (state)\
+	switch (state & ~_US_FORCE_UNWIND)\
 	{\
 		default: return _URC_FAILURE;\
 		case _US_VIRTUAL_UNWIND_FRAME:\

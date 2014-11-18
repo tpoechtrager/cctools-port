@@ -1,6 +1,8 @@
 #include <stdlib.h>
 #include <assert.h>
 #include "objc/runtime.h"
+#include "objc/objc-auto.h"
+#include "objc/objc-arc.h"
 #include "lock.h"
 #include "loader.h"
 #include "visibility.h"
@@ -25,8 +27,21 @@ void init_selector_tables(void);
 void init_trampolines(void);
 void objc_send_load_message(Class class);
 
+void log_selector_memory_usage(void);
+
+static void log_memory_stats(void)
+{
+	log_selector_memory_usage();
+}
+
 /* Number of threads that are alive.  */
 int __objc_runtime_threads_alive = 1;			/* !T:MUTEX */
+
+// libdispatch hooks for registering threads
+__attribute__((weak)) void (*dispatch_begin_thread_4GC)(void);
+__attribute__((weak)) void (*dispatch_end_thread_4GC)(void);
+__attribute__((weak)) void *(*_dispatch_begin_NSAutoReleasePool)(void);
+__attribute__((weak)) void (*_dispatch_end_NSAutoReleasePool)(void *);
 
 void __objc_exec_class(struct objc_module_abi_8 *module)
 {
@@ -62,6 +77,22 @@ void __objc_exec_class(struct objc_module_abi_8 *module)
 		init_arc();
 		init_trampolines();
 		first_run = NO;
+		if (getenv("LIBOBJC_MEMORY_PROFILE"))
+		{
+			atexit(log_memory_stats);
+		}
+		if (dispatch_begin_thread_4GC != 0) {
+			dispatch_begin_thread_4GC = objc_registerThreadWithCollector;
+		}
+		if (dispatch_end_thread_4GC != 0) {
+			dispatch_end_thread_4GC = objc_unregisterThreadWithCollector;
+		}
+		if (_dispatch_begin_NSAutoReleasePool != 0) {
+			_dispatch_begin_NSAutoReleasePool = objc_autoreleasePoolPush;
+		}
+		if (_dispatch_end_NSAutoReleasePool != 0) {
+			_dispatch_end_NSAutoReleasePool = objc_autoreleasePoolPop;
+		}
 	}
 
 	// The runtime mutex is held for the entire duration of a load.  It does

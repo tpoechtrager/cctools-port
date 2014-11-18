@@ -52,7 +52,7 @@ static void call_cxx_construct_for_class(Class cls, id obj)
 	static SEL cxx_construct;
 	if (NULL == cxx_construct)
 	{
-		cxx_construct = sel_registerName(".cxx_contruct");
+		cxx_construct = sel_registerName(".cxx_construct");
 	}
 	struct objc_slot *slot = objc_get_slot(cls, cxx_construct);
 	if (NULL != slot)
@@ -143,13 +143,17 @@ BOOL class_addIvar(Class cls, const char *name, size_t size, uint8_t alignment,
 	ivar->name = strdup(name);
 	ivar->type = strdup(types);
 	// Round up the offset of the ivar so it is correctly aligned.
-	long offset = cls->instance_size >> alignment;
-
-	if (offset << alignment != cls->instance_size)
+	long offset = cls->instance_size;
+	if (alignment != 0)
 	{
-		offset++;
+		offset >>= alignment;
+
+		if (offset << alignment != cls->instance_size)
+		{
+			offset++;
+		}
+		offset <<= alignment;
 	}
-	offset <<= alignment;
 
 	ivar->offset = offset;
 	// Increase the instance size to make space for this.
@@ -570,7 +574,7 @@ IMP method_setImplementation(Method method, IMP imp)
 {
 	if (NULL == method) { return (IMP)NULL; }
 	IMP old = (IMP)method->imp;
-	method->imp = old;
+	method->imp = imp;
 	objc_updateDtableForClassContainingMethod(method);
 	return old;
 }
@@ -698,6 +702,8 @@ Class objc_allocateClassPair(Class superclass, const char *name, size_t extraByt
 		// Initialize the metaclass
 		// Set the meta-metaclass pointer to the name.  The runtime will fix this
 		// in objc_resolve_class().
+		// If the superclass is not yet resolved, then we need to look it up
+		// via the class table.
 		metaClass->isa = (Class)superclass->isa->isa->name;
 		metaClass->super_class = superclass->isa;
 	}
@@ -765,8 +771,7 @@ Class object_setClass(id obj, Class cls)
 {
 	CHECK_ARG(obj);
 	// If this is a small object, then don't set its class.
-	uintptr_t addr = (uintptr_t)obj;
-	if (addr & 1) { return classForObject(obj); }
+	if (isSmallObject(obj)) { return classForObject(obj); }
 	Class oldClass =  obj->isa;
 	obj->isa = cls;
 	return oldClass;
@@ -778,9 +783,12 @@ const char *object_getClassName(id obj)
 	return class_getName(object_getClass(obj));
 }
 
+PRIVATE void objc_resolve_class(Class);
+
 void objc_registerClassPair(Class cls)
 {
 	LOCK_RUNTIME_FOR_SCOPE();
 	class_table_insert(cls);
+	objc_resolve_class(cls);
 }
 

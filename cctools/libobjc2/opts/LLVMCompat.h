@@ -7,11 +7,39 @@
 
 #ifndef __LANGUAGEKIT_LLVM_HACKS__
 #define __LANGUAGEKIT_LLVM_HACKS__
+#if LLVM_MAJOR < 3 || (LLVM_MAJOR >=3 && LLVM_MINOR <= 2)
+#if LLVM_MAJOR < 3 || (LLVM_MAJOR >=3 && LLVM_MINOR <= 1)
+#include <llvm/Support/IRBuilder.h>
+#else
+#include <llvm/IRBuilder.h>
+#endif
+#include <llvm/Function.h>
+#include <llvm/Module.h>
+#include <llvm/LLVMContext.h>
 #include <llvm/Instructions.h>
 #include <llvm/Metadata.h>
 #include <llvm/Intrinsics.h>
-#include <llvm/Support/IRBuilder.h>
+#include <llvm/Constants.h>
+#include <llvm/GlobalAlias.h>
+#include <llvm/GlobalVariable.h>
+#include <llvm/DefaultPasses.h>
+#else
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/Function.h>
+#include <llvm/IR/Module.h>
+#include <llvm/IR/LLVMContext.h>
+#include <llvm/IR/Instructions.h>
+#include <llvm/IR/Metadata.h>
+#include <llvm/IR/Intrinsics.h>
+#include <llvm/IR/Constants.h>
+#include <llvm/IR/GlobalVariable.h>
+#include <llvm/IR/GlobalAlias.h>
+#include <llvm/PassSupport.h>
+#endif
 
+#if (LLVM_MAJOR > 3) || ((LLVM_MAJOR == 3) && (LLVM_MINOR >= 3))
+#	define InlineCostAnalyzer InlineCostAnalysis
+#endif
 
 // Only preserve names in a debug build.  This simplifies the
 // IR in a release build, but makes it much harder to debug.
@@ -129,16 +157,16 @@ llvm::Constant* GetConstantStruct(llvm::LLVMContext &C, const std::vector<llvm::
 
 #if LLVM_MAJOR < 3
 typedef const llvm::Type LLVMType;
-typedef const llvm::StructType LLVMStructType;
-typedef const llvm::ArrayType LLVMArrayType;
-typedef const llvm::PointerType LLVMPointerType;
-typedef const llvm::IntegerType LLVMIntegerType;
+typedef const llvm::StructType LLVMStructTy;
+typedef const llvm::ArrayType LLVMArrayTy;
+typedef const llvm::PointerType LLVMPointerTy;
+typedef const llvm::IntegerType LLVMIntegerTy;
 #else
 typedef llvm::Type LLVMType;
-typedef llvm::StructType LLVMStructType;
-typedef llvm::ArrayType LLVMArrayType;
-typedef llvm::PointerType LLVMPointerType;
-typedef llvm::IntegerType LLVMIntegerType;
+typedef llvm::StructType LLVMStructTy;
+typedef llvm::ArrayType LLVMArrayTy;
+typedef llvm::PointerType LLVMPointerTy;
+typedef llvm::IntegerType LLVMIntegerTy;
 #endif
 
 #endif
