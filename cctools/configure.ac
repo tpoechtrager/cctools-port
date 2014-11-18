@@ -24,6 +24,10 @@ if test "x$CXXFLAGS" = "x"; then
   CXXFLAGS="-O3"
 fi
 
+if test "x$OBJCFLAGS" = "x"; then
+  OBJCFLAGS="-O3"
+fi
+
 if test "x$build" = "x$host"; then
   CC="clang"
   CXX="clang++"
@@ -119,6 +123,7 @@ fi
 # disable certain warnings.
 
 WARNINGS=""
+OBJCWARNINGS=""
 
 ORIGCFLAGS=$CFLAGS
 CFLAGS="$CFLAGS -Wall"
@@ -210,28 +215,6 @@ AC_COMPILE_IFELSE(
 CFLAGS=$ORIGCFLAGS
 
 ORIGCFLAGS=$CFLAGS
-CFLAGS="$CFLAGS -Wno-objc-root-class"
-AC_MSG_CHECKING([if -Wno-objc-root-class is supported])
-AC_COMPILE_IFELSE(
-   [AC_LANG_SOURCE([[const char hw[] = "Hello, World\n";]])],
-   [WARNINGS="$WARNINGS -Wno-objc-root-class"
-    AC_MSG_RESULT([yes])],
-   [AC_MSG_RESULT([no])]
-)
-CFLAGS=$ORIGCFLAGS
-
-ORIGCFLAGS=$CFLAGS
-CFLAGS="$CFLAGS -Wno-deprecated-objc-isa-usage"
-AC_MSG_CHECKING([if -Wno-deprecated-objc-isa-usage is supported])
-AC_COMPILE_IFELSE(
-   [AC_LANG_SOURCE([[const char hw[] = "Hello, World\n";]])],
-   [WARNINGS="$WARNINGS -Wno-deprecated-objc-isa-usage"
-    AC_MSG_RESULT([yes])],
-   [AC_MSG_RESULT([no])]
-)
-CFLAGS=$ORIGCFLAGS
-
-ORIGCFLAGS=$CFLAGS
 CFLAGS="$CFLAGS -Wno-invalid-offsetof"
 AC_MSG_CHECKING([if -Wno-invalid-offsetof is supported])
 AC_COMPILE_IFELSE(
@@ -260,12 +243,34 @@ AC_COMPILE_IFELSE(
    [AC_LANG_SOURCE([[const char hw[] = "Hello, World\n";]])],
    [WARNINGS="$WARNINGS -Wno-char-subscripts"
     AC_MSG_RESULT([yes])],
-   [AC_MSG_RESULT([no])]  
-)  
+   [AC_MSG_RESULT([no])]
+)
+CFLAGS=$ORIGCFLAGS
+
+ORIGCFLAGS=$CFLAGS
+CFLAGS="$CFLAGS -Wno-objc-root-class"
+AC_MSG_CHECKING([if -Wno-objc-root-class is supported])
+AC_COMPILE_IFELSE(
+   [AC_LANG_SOURCE([[const char hw[] = "Hello, World\n";]])],
+   [OBJCWARNINGS="$OBJCWARNINGS -Wno-objc-root-class"
+    AC_MSG_RESULT([yes])],
+   [AC_MSG_RESULT([no])]
+)
+CFLAGS=$ORIGCFLAGS
+
+ORIGCFLAGS=$CFLAGS
+CFLAGS="$CFLAGS -Wno-deprecated-objc-isa-usage"
+AC_MSG_CHECKING([if -Wno-deprecated-objc-isa-usage is supported])
+AC_COMPILE_IFELSE(
+   [AC_LANG_SOURCE([[const char hw[] = "Hello, World\n";]])],
+   [OBJCWARNINGS="$OBJCWARNINGS -Wno-deprecated-objc-isa-usage"
+    AC_MSG_RESULT([yes])],
+   [AC_MSG_RESULT([no])]
+)
 CFLAGS=$ORIGCFLAGS
 
 AC_SUBST([WARNINGS], [$WARNINGS])
-
+AC_SUBST([OBJCWARNINGS], [$OBJCWARNINGS])
 
 AC_CHECK_LIB([dl],[dlopen],[DL_LIB=-ldl])
 AC_SUBST(DL_LIB)
