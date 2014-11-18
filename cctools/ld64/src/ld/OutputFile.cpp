@@ -36,11 +36,7 @@
 #include <mach/vm_statistics.h>
 #include <mach/mach_init.h>
 #include <mach/mach_host.h>
-#ifdef __FreeBSD__
-#include </usr/local/include/uuid/uuid.h>
-#else
 #include <uuid/uuid.h>
-#endif
 #include <dlfcn.h>
 #include <mach-o/dyld.h>
 #include <mach-o/fat.h>
