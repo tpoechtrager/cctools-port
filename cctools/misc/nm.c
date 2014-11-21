@@ -1106,8 +1106,6 @@ struct process_flags *process_flags)
 		symbol->nl.n_value == 0) ||
 	       symbol->nl.n_type == (N_PBUD | N_EXT))
 		return(FALSE);
-	    else
-		return(TRUE);
 	}
 	if(cmd_flags->g == TRUE && (symbol->nl.n_type & N_EXT) == 0)
 	    return(FALSE);
@@ -1365,6 +1363,11 @@ char *arch_name)
 	       ((symbols[i].nl.n_type & N_TYPE) != N_UNDF) &&
 	       (symbols[i].nl.n_desc & N_SYMBOL_RESOLVER) == N_SYMBOL_RESOLVER)
 		    printf("[symbol resolver] ");
+
+	    if(ofile->mh_filetype == MH_OBJECT &&
+	       ((symbols[i].nl.n_type & N_TYPE) != N_UNDF) &&
+	       (symbols[i].nl.n_desc & N_ALT_ENTRY) == N_ALT_ENTRY)
+		    printf("[alt entry] ");
 
 	    if((symbols[i].nl.n_desc & N_ARM_THUMB_DEF) == N_ARM_THUMB_DEF)
 		    printf("[Thumb] ");

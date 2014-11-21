@@ -320,8 +320,9 @@ char **envp)
     uint32_t j, nfiles;
     struct arch_flag *arch_flags;
     uint32_t narch_flags;
-    enum bool all_archs, use_member_syntax;
+    enum bool all_archs, use_member_syntax, version;
     char **files;
+    const char *disssembler_version;
 
 	progname = argv[0];
 	arch_flags = NULL;
@@ -329,6 +330,7 @@ char **envp)
 	all_archs = TRUE;
 	use_member_syntax = TRUE;
 	llvm_mc = FALSE;
+	version = FALSE;
 
 	if(argc <= 1)
 	    usage();
@@ -346,6 +348,15 @@ char **envp)
 	    }
 	    if(argv[i][0] != '-'){
 		files[nfiles++] = argv[i];
+		continue;
+	    }
+	    if(strcmp(argv[i], "--version") == 0){
+		fprintf(stderr, "otool(1): Apple Inc. version %s\n",
+			apple_version);
+		disssembler_version = llvm_disasm_version_string();
+		if(disssembler_version != NULL)
+		    fprintf(stderr, "disassmbler: %s\n", disssembler_version);
+		version = TRUE;
 		continue;
 	    }
 	    if(strcmp(argv[i], "-arch") == 0){
@@ -550,9 +561,10 @@ char **envp)
 	 */
 	if(!fflag && !aflag && !hflag && !lflag && !Lflag && !tflag && !dflag &&
 	   !oflag && !Oflag && !rflag && !Tflag && !Mflag && !Rflag && !Iflag &&
-	   !Cflag && !print_bind_info &&
+	   !Cflag && !print_bind_info && !version &&
 	   !Hflag && !Gflag && !Sflag && !cflag && !iflag && !Dflag &&!segname){
-	    error("one of -fahlLtdoOrTMRIHCGScis must be specified");
+	    error("one of -fahlLtdoOrTMRIHCGScis or --version must be "
+		  "specified");
 	    usage();
 	}
 	if(qflag && Qflag){
@@ -565,7 +577,7 @@ char **envp)
 	 */
 	if(!Qflag)
 	    qflag = TRUE;
-	if(nfiles == 0){
+	if(nfiles == 0 && version == FALSE){
 	    error("at least one file must be specified");
 	    usage();
 	}
@@ -607,7 +619,7 @@ void)
 {
 	fprintf(stderr,
 		"Usage: %s [-arch arch_type] [-fahlLDtdorSTMRIHGvVcXmqQjC] "
-		"[-mcpu=arg] <object file> ...\n", progname);
+		"[-mcpu=arg] [--version] <object file> ...\n", progname);
 
 	fprintf(stderr, "\t-f print the fat headers\n");
 	fprintf(stderr, "\t-a print the archive header\n");
@@ -644,6 +656,7 @@ void)
 	fprintf(stderr, "\t-mcpu=arg use `arg' as the cpu for disassembly\n");
 	fprintf(stderr, "\t-j print opcode bytes\n");
 	fprintf(stderr, "\t-C print linker optimization hints\n");
+	fprintf(stderr, "\t--version print the version of %s\n", progname);
 	exit(EXIT_FAILURE);
 }
 
@@ -3180,6 +3193,8 @@ uint64_t seg_addr)
 		}
 		llvm_disasm_set_options(i386_dc,
 		    LLVMDisassembler_Option_PrintImmHex);
+		llvm_disasm_set_options(i386_dc,
+		    LLVMDisassembler_Option_SetInstrComments);
 		if(eflag)
 		    llvm_disasm_set_options(i386_dc,
 			LLVMDisassembler_Option_UseMarkup);
@@ -3192,6 +3207,8 @@ uint64_t seg_addr)
 		}
 		llvm_disasm_set_options(x86_64_dc,
 		    LLVMDisassembler_Option_PrintImmHex);
+		llvm_disasm_set_options(x86_64_dc,
+		    LLVMDisassembler_Option_SetInstrComments);
 		if(eflag)
 		    llvm_disasm_set_options(x86_64_dc,
 			LLVMDisassembler_Option_UseMarkup);

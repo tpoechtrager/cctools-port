@@ -1812,6 +1812,10 @@ NS32:
 		printf(" MH_NO_HEAP_EXECUTION");
 		f &= ~MH_NO_HEAP_EXECUTION;
 	    }
+	    if(f & MH_APP_EXTENSION_SAFE){
+		printf(" APP_EXTENSION_SAFE");
+		f &= ~MH_APP_EXTENSION_SAFE;
+	    }
 	    if(f != 0 || flags == 0)
 		printf(" 0x%08x", (unsigned int)f);
 	    printf("\n");

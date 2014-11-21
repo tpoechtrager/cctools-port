@@ -2925,9 +2925,17 @@ struct ofile *ofile)
 	        if(is_llvm_bitcode(ofile, ofile->file_addr +
 		   ofile->member_offset + ofile->fat_archs[i].offset,
 		   ofile->fat_archs[i].size) == TRUE){
-		    ofile->member_type = OFILE_LLVM_BITCODE;
-		    ofile->object_addr = ofile->member_addr;
-		    ofile->object_size = ofile->member_size;
+#ifdef ALIGNMENT_CHECKS_ARCHIVE_64_BIT
+		    if(archive_64_bit_align_warning == FALSE &&
+		       (ofile->member_offset + ofile->fat_archs[i].offset) %
+		       8 != 0){
+			temporary_archive_member_warning(ofile, "fat object "
+			    "file's offset in archive not a multiple of 8) "
+			    "(must be since member is a 64-bit object file)");
+			archive_64_bit_align_warning = TRUE;
+			/* return(CHECK_BAD); */
+		    }
+#endif
 	        }
 		else
 #endif /* LTO_SUPPORT */

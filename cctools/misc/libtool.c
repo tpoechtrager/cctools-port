@@ -149,6 +149,8 @@ struct cmd_flags {
     enum bool noflush;	/* don't use the output_flush routine to flush the
 			   static library output file by pages */
     uint32_t debug;	/* debug value to debug output_flush() routine */
+    enum bool		/* don't warn if members have no symbols */
+	no_warning_for_no_symbols;
 };
 static struct cmd_flags cmd_flags = { 0 };
 
@@ -975,6 +977,9 @@ char **envp)
 		else if(strcmp(argv[i], "-noflush") == 0){
 		    cmd_flags.noflush = TRUE;
 		}
+		else if(strcmp(argv[i], "-no_warning_for_no_symbols") == 0){
+		    cmd_flags.no_warning_for_no_symbols = TRUE;
+		}
 #ifdef DEBUG
 		else if(strcmp(argv[i], "-debug") == 0){
 		    if(i + 1 >= argc){
@@ -1264,7 +1269,7 @@ void)
 	else{
 	    fprintf(stderr, "Usage: %s -static [-] file [...] "
 		    "[-filelist listfile[,dirname]] [-arch_only arch] "
-		    "[-sacLT]\n", progname);
+		    "[-sacLT] [-no_warning_for_no_symbols]\n", progname);
 	    fprintf(stderr, "Usage: %s -dynamic [-] file [...] "
 		    "[-filelist listfile[,dirname]] [-arch_only arch] "
 		    "[-o output] [-install_name name] "
@@ -1720,8 +1725,16 @@ struct ofile *ofile)
 	if(ofile->mh != NULL || ofile->mh64 != NULL)
 	    size = rnd(ofile->object_size, 8);
 #ifdef LTO_SUPPORT
-	else if(ofile->lto != NULL && ofile->file_type == OFILE_LLVM_BITCODE)
-	    size = rnd(ofile->file_size, 8);
+        else if(ofile->lto != NULL){
+            if(ofile->file_type == OFILE_LLVM_BITCODE)
+                size = rnd(ofile->file_size, 8);
+            else if(ofile->file_type == OFILE_FAT ||
+                    (ofile->file_type == OFILE_ARCHIVE &&
+                     ofile->member_type == OFILE_FAT))
+                size = rnd(ofile->object_size, 8);
+            else
+                size = rnd(ofile->member_size, 8);
+        }
 #endif /* LTO_SUPPORT */
 	else
 	    size = rnd(ofile->member_size, 8);
@@ -2160,6 +2173,16 @@ struct ofile *ofile)
 	    member->lto = ofile->lto;
 	    member->object_byte_sex = get_byte_sex_from_flag(&arch->arch_flag);
 	}
+        else if((ofile->file_type == OFILE_FAT &&
+                 ofile->arch_type == OFILE_LLVM_BITCODE) ||
+                (ofile->file_type == OFILE_ARCHIVE &&
+                 ofile->member_type == OFILE_FAT &&
+                 ofile->arch_type == OFILE_LLVM_BITCODE)){
+            member->object_addr = ofile->object_addr;
+            member->object_size = ofile->object_size;
+            member->lto = ofile->lto;
+            member->object_byte_sex = get_byte_sex_from_flag(&arch->arch_flag);
+        }
 #endif /* LTO_SUPPORT */
 	else{
 	    member->object_addr = ofile->member_addr;
@@ -3553,8 +3576,10 @@ char *output)
 			}
 		    }
 		}
-		else
-		    warn_member(arch, member, "has no symbols");
+		else{
+		    if(cmd_flags.no_warning_for_no_symbols == FALSE)
+			warn_member(arch, member, "has no symbols");
+		}
 	    }
 #ifdef LTO_SUPPORT
 	    else if(member->lto != NULL){
