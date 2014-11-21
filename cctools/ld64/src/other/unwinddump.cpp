@@ -221,7 +221,14 @@ const char* UnwindPrinter<A>::functionName(pint_t addr, uint32_t* offset)
 	for (uint32_t i=0; i < fSymbolCount; ++i) {
 		uint8_t type = fSymbols[i].n_type();
 		if ( ((type & N_STAB) == 0) && ((type & N_TYPE) == N_SECT) ) {
-			if ( fSymbols[i].n_value() == addr ) {
+			uint32_t value = fSymbols[i].n_value();
+			if ( value == addr ) {
+				const char* r = &fStrings[fSymbols[i].n_strx()];
+				return r;
+			}
+			if ( fSymbols[i].n_desc() & N_ARM_THUMB_DEF ) 
+				value |= 1;
+			if ( value == addr ) {
 				const char* r = &fStrings[fSymbols[i].n_strx()];
 				//fprintf(stderr, "addr=0x%08llX, i=%u, n_type=0x%0X, r=%s\n", (long long)(fSymbols[i].n_value()), i,  fSymbols[i].n_type(), r);
 				return r;
@@ -730,6 +737,8 @@ void UnwindPrinter<arm64>::decode(uint32_t encoding, const uint8_t* funcStart, c
 }
 #endif
 
+
+
 template <>
 const char* UnwindPrinter<x86_64>::personalityName(const macho_relocation_info<x86_64::P>* reloc)
 {
@@ -758,6 +767,7 @@ const char* UnwindPrinter<arm64>::personalityName(const macho_relocation_info<ar
 	return &fStrings[sym.n_strx()];
 }
 #endif
+
 
 template <typename A>
 bool UnwindPrinter<A>::hasExernReloc(uint64_t sectionOffset, const char** personalityStr, pint_t* addr)
@@ -795,6 +805,7 @@ void UnwindPrinter<A>::printObjectUnwindSection(bool showFunctionNames)
 		}
 		else {
 			functionNameStr = this->functionName(entry->codeStart(), &offsetInFunction);
+			funcAddress = entry->codeStart();
 		}
 		if ( offsetInFunction == 0 )
 			printf("  start:        0x%08llX   %s\n", (uint64_t)funcAddress, functionNameStr);
@@ -990,7 +1001,7 @@ static void dump(const char* path, const std::set<cpu_type_t>& onlyArchs, bool s
 						if ( UnwindPrinter<arm64>::validFile(p + offset) )
 							UnwindPrinter<arm64>::make(p + offset, size, path, showFunctionNames);
 						else
-							throw "in universal file, arm64 slice does not contain arm mach-o";
+							throw "in universal file, arm64 slice does not contain arm64 mach-o";
 						break;
 #endif
 					default:
@@ -1062,6 +1073,7 @@ int main(int argc, const char* argv[])
 #if SUPPORT_ARCH_arm64
 			onlyArchs.insert(CPU_TYPE_ARM64);
 #endif
+			onlyArchs.insert(CPU_TYPE_ARM);
 		}
 		
 		// process each file

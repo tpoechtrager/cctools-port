@@ -363,6 +363,8 @@ void OutputFile::setLoadCommandsPadding(ld::Internal& state)
 			// work backwards from end of segment and lay out sections so that extra room goes to padding atom
 			uint64_t addr = 0;
 			uint64_t textSegPageSize = _options.segPageSize("__TEXT");
+			if ( _options.sharedRegionEligible() && (_options.iOSVersionMin() >= ld::iOS_8_0) && (textSegPageSize == 0x4000) )
+				textSegPageSize = 0x1000;
 			for (std::vector<ld::Internal::FinalSection*>::reverse_iterator it = state.sections.rbegin(); it != state.sections.rend(); ++it) {
 				ld::Internal::FinalSection* sect = *it;
 				if ( strcmp(sect->segmentName(), "__TEXT") != 0 ) 
@@ -778,6 +780,8 @@ void     OutputFile::set32BE(uint8_t* loc, uint32_t value) { BigEndian::set32(*(
 uint64_t OutputFile::get64BE(uint8_t* loc) { return BigEndian::get64(*(uint64_t*)loc); }
 void     OutputFile::set64BE(uint8_t* loc, uint64_t value) { BigEndian::set64(*(uint64_t*)loc, value); }
 
+#if SUPPORT_ARCH_arm64
+
 static uint32_t makeNOP() {
 	return 0xD503201F;
 }
@@ -1187,6 +1191,7 @@ static bool withinOneMeg(uint64_t addr1, uint64_t addr2) {
 	int64_t delta = (addr2 - addr1);
 	return ( (delta < 1024*1024) && (delta > -1024*1024) );
 }
+#endif // SUPPORT_ARCH_arm64
 
 void OutputFile::setInfo(ld::Internal& state, const ld::Atom* atom, uint8_t* buffer, const std::map<uint32_t, const Fixup*>& usedByHints, 
 						uint32_t offsetInAtom, uint32_t delta, InstructionInfo* info) 
@@ -1217,6 +1222,7 @@ void OutputFile::setInfo(ld::Internal& state, const ld::Atom* atom, uint8_t* buf
 	info->instruction = get32LE(info->instructionContent);
 }	
 
+#if SUPPORT_ARCH_arm64
 static bool isPageKind(const ld::Fixup* fixup, bool mustBeGOT=false)
 {
 	if ( fixup == NULL )
@@ -1280,6 +1286,7 @@ static bool isPageOffsetKind(const ld::Fixup* fixup, bool mustBeGOT=false)
 	}
 	return false;
 }
+#endif // SUPPORT_ARCH_arm64
 
 
 #define LOH_ASSERT(cond) \
@@ -1346,6 +1353,9 @@ void OutputFile::applyFixUps(ld::Internal& state, uint64_t mhAddress, const ld::
 				break;
 			case ld::Fixup::kindSetTargetImageOffset:
 				accumulator = addressOf(state, fit, &toTarget) - mhAddress;
+				thumbTarget = targetIsThumb(state, fit);
+				if ( thumbTarget ) 
+					accumulator |= 1;
 				break;
 			case ld::Fixup::kindSetTargetSectionOffset:
 				accumulator = sectionOffsetOf(state, fit);
@@ -1724,6 +1734,21 @@ void OutputFile::applyFixUps(ld::Internal& state, uint64_t mhAddress, const ld::
 						if ( islandfit->kind == ld::Fixup::kindIslandTarget ) {
 							const ld::Atom* islandTarget = NULL;
 							uint64_t islandTargetAddress = addressOf(state, islandfit, &islandTarget);
+							if ( !fit->contentDetlaToAddendOnly ) {
+								if ( targetIsThumb(state, islandfit) ) {
+									// Thumb to thumb branch, we will be generating a bl instruction.
+									// Delta is always even, so mask out thumb bit in target.
+									islandTargetAddress &= -2ULL;
+								}
+								else {
+									// Target is not thumb, we will be generating a blx instruction
+									// Since blx cannot have the low bit set, set bit[1] of the target to
+									// bit[1] of the base address, so that the difference is a multiple of
+									// 4 bytes.
+									islandTargetAddress &= -3ULL;
+									islandTargetAddress |= ((atom->finalAddress() + fit->offsetInAtom ) & 2LL);
+								}
+							}
 							delta = islandTargetAddress - (atom->finalAddress() + fit->offsetInAtom + 4);
 							if ( checkThumbBranch22Displacement(delta) ) {
 								toTarget = islandTarget;
@@ -1744,16 +1769,28 @@ void OutputFile::applyFixUps(ld::Internal& state, uint64_t mhAddress, const ld::
 				is_bl = ((instruction & 0xD000F800) == 0xD000F000);
 				is_blx = ((instruction & 0xD000F800) == 0xC000F000);
 				is_b = ((instruction & 0xD000F800) == 0x9000F000);
-				// If the target is not thumb, we will be generating a blx instruction
-				// Since blx cannot have the low bit set, set bit[1] of the target to
-				// bit[1] of the base address, so that the difference is a multiple of
-				// 4 bytes.
-				if ( !thumbTarget && !fit->contentDetlaToAddendOnly ) {
-				  accumulator &= -3ULL;
-				  accumulator |= ((atom->finalAddress() + fit->offsetInAtom ) & 2LL);
+				if ( !fit->contentDetlaToAddendOnly ) {
+					if ( thumbTarget ) {
+						// Thumb to thumb branch, we will be generating a bl instruction.
+						// Delta is always even, so mask out thumb bit in target.
+						accumulator &= -2ULL;
+					}
+					else {
+						// Target is not thumb, we will be generating a blx instruction
+						// Since blx cannot have the low bit set, set bit[1] of the target to
+						// bit[1] of the base address, so that the difference is a multiple of
+						// 4 bytes.
+						accumulator &= -3ULL;
+						accumulator |= ((atom->finalAddress() + fit->offsetInAtom ) & 2LL);
+					}
 				}
 				// The pc added will be +4 from the pc
 				delta = accumulator - (atom->finalAddress() + fit->offsetInAtom + 4);
+				// <rdar://problem/16652542> support bl in very large .o files
+				if ( fit->contentDetlaToAddendOnly ) {
+					while ( delta < (-16777216LL) ) 
+						delta += 0x2000000;
+				}
 				rangeCheckThumbBranch22(delta, state, atom, fit);
 				if ( _options.preferSubArchitecture() && _options.archSupportsThumb2() ) {
 					// The instruction is really two instructions:
@@ -2010,6 +2047,7 @@ void OutputFile::applyFixUps(ld::Internal& state, uint64_t mhAddress, const ld::
 		}
 	}
 	
+#if SUPPORT_ARCH_arm64
 	// after all fixups are done on atom, if there are potential optimizations, do those
 	if ( (usedByHints.size() != 0) && (_options.outputKind() != Options::kObjectFile) && !_options.ignoreOptimizationHints() ) {
 		// fill in second part of usedByHints map, so we can see the target of fixups that might be optimized
@@ -2449,9 +2487,7 @@ void OutputFile::applyFixUps(ld::Internal& state, uint64_t mhAddress, const ld::
 			}				
 		}
 	}
-
-
-	
+#endif // SUPPORT_ARCH_arm64
 
 }
 
@@ -2820,6 +2856,11 @@ void OutputFile::buildSymbolTable(ld::Internal& state)
 						(const_cast<ld::Atom*>(atom))->setSymbolTableInclusion(ld::Atom::symbolTableNotIn);
 					else
 						(const_cast<ld::Atom*>(atom))->setSymbolTableInclusion(ld::Atom::symbolTableIn);
+				}
+				else if ( sect->type() == ld::Section::typeTempAlias ) {
+					assert(_options.outputKind() == Options::kObjectFile);
+					_importedAtoms.push_back(atom);
+					continue;
 				}
 				if ( atom->symbolTableInclusion() == ld::Atom::symbolTableNotInFinalLinkedImages )
 					(const_cast<ld::Atom*>(atom))->setSymbolTableInclusion(ld::Atom::symbolTableIn);
@@ -4546,8 +4587,8 @@ void OutputFile::writeMapFile(ld::Internal& state)
 					else if ( (atom->contentType() == ld::Atom::typeCFI) && (strcmp(name, "FDE") == 0) ) {
 						for (ld::Fixup::iterator fit = atom->fixupsBegin(); fit != atom->fixupsEnd(); ++fit) {
 							if ( (fit->kind == ld::Fixup::kindSetTargetAddress) && (fit->clusterSize == ld::Fixup::k1of4) ) {
-								assert(fit->binding == ld::Fixup::bindingDirectlyBound);
-								if ( fit->u.target->section().type() == ld::Section::typeCode) {
+								if ( (fit->binding == ld::Fixup::bindingDirectlyBound)
+								 &&  (fit->u.target->section().type() == ld::Section::typeCode) ) {
 									strcpy(buffer, "FDE for: ");
 									strlcat(buffer, fit->u.target->name(), 4096);
 									name = buffer;
@@ -4618,6 +4659,15 @@ const char* OutputFile::assureFullPath(const char* path)
 	return path;
 }
 
+static time_t fileModTime(const char* path) {
+	struct stat statBuffer;
+	if ( stat(path, &statBuffer) == 0 ) {
+		return statBuffer.st_mtime;
+	}
+	return 0;
+}
+
+
 void OutputFile::synthesizeDebugNotes(ld::Internal& state)
 {
 	// -S means don't synthesize debug map
@@ -4684,6 +4734,21 @@ void OutputFile::synthesizeDebugNotes(ld::Internal& state)
 	// sort by file ordinal then atom ordinal
 	std::sort(atomsNeedingDebugNotes.begin(), atomsNeedingDebugNotes.end(), DebugNoteSorter());
 
+	// <rdar://problem/17689030> Add -add_ast_path option to linker which add N_AST stab entry to output
+	const std::vector<const char*>&	astPaths = _options.astFilePaths();
+	for (std::vector<const char*>::const_iterator it=astPaths.begin(); it != astPaths.end(); it++) {
+		const char* path = *it;
+		//  emit N_AST
+		ld::relocatable::File::Stab astStab;
+		astStab.atom	= NULL;
+		astStab.type	= N_AST;
+		astStab.other	= 0;
+		astStab.desc	= 0;
+		astStab.value	= fileModTime(path);
+		astStab.string	= path;
+		state.stabs.push_back(astStab);
+	}
+	
 	// synthesize "debug notes" and add them to master stabs vector
 	const char* dirPath = NULL;
 	const char* filename = NULL;
@@ -4695,20 +4760,20 @@ void OutputFile::synthesizeDebugNotes(ld::Internal& state)
 		const ld::File* atomFile = atom->file();
 		const ld::relocatable::File* atomObjFile = dynamic_cast<const ld::relocatable::File*>(atomFile);
 		//fprintf(stderr, "debug note for %s\n", atom->name());
-    const char* newPath = atom->translationUnitSource();
-    if ( newPath != NULL ) {
-      const char* newDirPath;
-      const char* newFilename;
-      const char* lastSlash = strrchr(newPath, '/');
-      if ( lastSlash == NULL ) 
-        continue;
-      newFilename = lastSlash+1;
-      char* temp = strdup(newPath);
-      newDirPath = temp;
-      // gdb like directory SO's to end in '/', but dwarf DW_AT_comp_dir usually does not have trailing '/'
-      temp[lastSlash-newPath+1] = '\0';
+		const char* newPath = atom->translationUnitSource();
+		if ( newPath != NULL ) {
+			const char* newDirPath;
+			const char* newFilename;
+			const char* lastSlash = strrchr(newPath, '/');
+			if ( lastSlash == NULL ) 
+				continue;
+			newFilename = lastSlash+1;
+			char* temp = strdup(newPath);
+			newDirPath = temp;
+			// gdb like directory SO's to end in '/', but dwarf DW_AT_comp_dir usually does not have trailing '/'
+			temp[lastSlash-newPath+1] = '\0';
 			// need SO's whenever the translation unit source file changes
-			if ( (filename == NULL) || (strcmp(newFilename,filename) != 0) ) {
+			if ( (filename == NULL) || (strcmp(newFilename,filename) != 0) || (strcmp(newDirPath,dirPath) != 0)) {
 				if ( filename != NULL ) {
 					// translation unit change, emit ending SO
 					ld::relocatable::File::Stab endFileStab;
@@ -4881,7 +4946,7 @@ void OutputFile::synthesizeDebugNotes(ld::Internal& state)
 			}
 		}
 	}
-	
+
 }
 
 

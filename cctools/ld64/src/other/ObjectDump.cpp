@@ -835,6 +835,12 @@ void dumper::dumpFixup(const ld::Fixup* ref)
 		case ld::Fixup::kindStoreARM64TLVPLoadPageOff12:
 			printf(", then store as ARM64 12-bit page offset of TLVP");
 			break;
+		case ld::Fixup::kindStoreARM64TLVPLoadNowLeaPage21:
+			printf(", then store as ARM64 21-bit pcrel ADRP of lea of TLVP");
+			break;
+		case ld::Fixup::kindStoreARM64TLVPLoadNowLeaPageOff12:
+			printf(", then store as ARM64 12-bit page offset of lea of TLVP");
+			break;
 		case ld::Fixup::kindStoreARM64PointerToGOT:
 			printf(", then store as 64-bit pointer to GOT entry");
 			break;
@@ -994,15 +1000,6 @@ void dumper::dumpFixup(const ld::Fixup* ref)
 		case ld::Fixup::kindStoreTargetAddressARM64PageOff12:
 			printf("ARM64 store 12-bit page offset of %s", referenceTargetAtomName(ref));
 			break;
-#if 0
-/* PORT FIXME (may not even be porting bug) */
-		case ld::Fixup::kindStoreTargetAddressARM64TLVPage21:
-			printf("ARM64 store 21-bit pcrel ADRP to TLV for %s", referenceTargetAtomName(ref));
-			break;
-		case ld::Fixup::kindStoreTargetAddressARM64TLVPageOff12:
-			printf("ARM64 store 12-bit page offset of TLV of %s", referenceTargetAtomName(ref));
-			break;
-#endif
 		case ld::Fixup::kindStoreTargetAddressARM64GOTLoadPage21:
 			printf("ARM64 store 21-bit pcrel ADRP to GOT for %s", referenceTargetAtomName(ref));
 			break;
@@ -1010,10 +1007,22 @@ void dumper::dumpFixup(const ld::Fixup* ref)
 			printf("ARM64 store 12-bit page offset of GOT of %s", referenceTargetAtomName(ref));
 			break;
 		case ld::Fixup::kindStoreTargetAddressARM64GOTLeaPage21:
-			printf("ARM64 store 21-bit pcrel ADRP for lea of %s", referenceTargetAtomName(ref));
+			printf("ARM64 store 21-bit pcrel ADRP to GOT lea for %s", referenceTargetAtomName(ref));
 			break;
 		case ld::Fixup::kindStoreTargetAddressARM64GOTLeaPageOff12:
-			printf("ARM64 store 12-bit page offset of lea of %s", referenceTargetAtomName(ref));
+			printf("ARM64 store 12-bit page offset of GOT lea of %s", referenceTargetAtomName(ref));
+			break;
+		case ld::Fixup::kindStoreTargetAddressARM64TLVPLoadPage21:
+			printf("ARM64 store 21-bit pcrel ADRP to TLV for %s", referenceTargetAtomName(ref));
+			break;
+		case ld::Fixup::kindStoreTargetAddressARM64TLVPLoadPageOff12:
+			printf("ARM64 store 12-bit page offset of TLV of %s", referenceTargetAtomName(ref));
+			break;
+		case ld::Fixup::kindStoreTargetAddressARM64TLVPLoadNowLeaPage21:
+			printf("ARM64 store 21-bit pcrel ADRP to lea for TLV for %s", referenceTargetAtomName(ref));
+			break;
+		case ld::Fixup::kindStoreTargetAddressARM64TLVPLoadNowLeaPageOff12:
+			printf("ARM64 store 12-bit page offset of lea for TLV of %s", referenceTargetAtomName(ref));
 			break;
 		//default:
 		//	printf("unknown fixup");

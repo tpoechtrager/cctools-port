@@ -134,7 +134,7 @@ Options::Options(int argc, const char* argv[])
 	  fHasPreferredSubType(false), fArchSupportsThumb2(false), fPrebind(false), fBindAtLoad(false), fKeepPrivateExterns(false),
 	  fNeedsModuleTable(false), fIgnoreOtherArchFiles(false), fErrorOnOtherArchFiles(false), fForceSubtypeAll(false), 
 	  fInterposeMode(kInterposeNone), fDeadStrip(false), fNameSpace(kTwoLevelNameSpace),
-	  fDylibCompatVersion(0), fDylibCurrentVersion(0), fDylibInstallName(NULL), fFinalName(NULL), fEntryName("start"), 
+	  fDylibCompatVersion(0), fDylibCurrentVersion(0), fDylibInstallName(NULL), fFinalName(NULL), fEntryName(NULL), 
 	  fBaseAddress(0), fMaxAddress(0x7FFFFFFFFFFFFFFFLL), 
 	  fBaseWritableAddress(0), fSplitSegs(false),
 	  fExportMode(kExportDefault), fLibrarySearchMode(kSearchDylibAndArchiveInEachDir),
@@ -183,7 +183,8 @@ Options::Options(int argc, const char* argv[])
 	  fAllowSimulatorToLinkWithMacOSX(false), fKeepDwarfUnwind(true),
 	  fKeepDwarfUnwindForcedOn(false), fKeepDwarfUnwindForcedOff(false),
 	  fVerboseOptimizationHints(false), fIgnoreOptimizationHints(false),
-	  fGenerateDtraceDOF(true), fAllowBranchIslands(true),
+	  fGenerateDtraceDOF(true), fAllowBranchIslands(true), fTraceSymbolLayout(false), 
+	  fMarkAppExtensionSafe(false), fCheckAppExtensionSafe(false), fForceLoadSwiftLibs(false), 
 	  fDebugInfoStripping(kDebugInfoMinimal), fTraceOutputFile(NULL), 
 	  fMacVersionMin(ld::macVersionUnset), fIOSVersionMin(ld::iOSVersionUnset), 
 	  fSaveTempFiles(false), fSnapshotRequested(false), fPipelineFifo(NULL), 
@@ -545,6 +546,17 @@ bool Options::keepLocalSymbol(const char* symbolName) const
 	}
 	throw "internal error";
 }
+
+const std::vector<const char*>* Options::sectionOrder(const char* segName) const
+{ 
+	for (std::vector<SectionOrderList>::const_iterator it=fSectionOrder.begin(); it != fSectionOrder.end(); ++it) {
+		if ( strcmp(it->segmentName, segName) == 0 )
+			return &it->sectionOrder;
+	}
+	return NULL;
+}
+
+
 
 void Options::setArchitecture(cpu_type_t type, cpu_subtype_t subtype)
 {
@@ -1019,17 +1031,38 @@ void Options::SetWithWildcards::insert(const char* symbol)
 		fRegular.insert(symbol);
 }
 
-bool Options::SetWithWildcards::contains(const char* symbol) const
+bool Options::SetWithWildcards::contains(const char* symbol, bool* matchBecauseOfWildcard) const
 {
+	if ( matchBecauseOfWildcard != NULL )
+		*matchBecauseOfWildcard = false;
 	// first look at hash table on non-wildcard symbols
 	if ( fRegular.find(symbol) != fRegular.end() )
 		return true;
 	// next walk list of wild card symbols looking for a match
 	for(std::vector<const char*>::const_iterator it = fWildCard.begin(); it != fWildCard.end(); ++it) {
-		if ( wildCardMatch(*it, symbol) )
+		if ( wildCardMatch(*it, symbol) ) {
+			if ( matchBecauseOfWildcard != NULL )
+				*matchBecauseOfWildcard = true;
 			return true;
+		}
 	}
 	return false;
+}
+
+// Support "foo.o:_bar" to mean symbol _bar in file foo.o
+bool Options::SetWithWildcards::containsWithPrefix(const char* symbol, const char* file, bool& wildCardMatch) const
+{
+	wildCardMatch = false;
+	if ( contains(symbol, &wildCardMatch) )
+		return true;
+	if ( file == NULL )
+		return false;
+	const char* s = strrchr(file, '/');
+	if ( s != NULL )
+		file = s+1;
+	char buff[strlen(file)+strlen(symbol)+2];
+	sprintf(buff, "%s:%s", file, symbol);
+	return contains(buff, &wildCardMatch);
 }
 
 bool Options::SetWithWildcards::containsNonWildcard(const char* symbol) const
@@ -1759,6 +1792,59 @@ void Options::addSectionRename(const char* srcSegment, const char* srcSection, c
 	fSectionRenames.push_back(info);
 }
 
+
+void Options::addSegmentRename(const char* srcSegment, const char* dstSegment)
+{
+	if ( strlen(srcSegment) > 16 )
+		throw "-rename_segment segment name max 16 chars";
+	if ( strlen(dstSegment) > 16 )
+		throw "-rename_segment segment name max 16 chars";
+
+	SegmentRename info;
+	info.fromSegment = srcSegment;
+	info.toSegment = dstSegment;
+
+	fSegmentRenames.push_back(info);
+}
+
+
+
+void Options::addSymbolMove(const char* dstSegment, const char* symbolList,
+							std::vector<SymbolsMove>& list, const char* optionName)
+{
+	if ( strlen(dstSegment) > 16 )
+		throwf("%s segment name max 16 chars", optionName);
+	
+	SymbolsMove tmp;
+	list.push_back(tmp);
+	SymbolsMove& info = list.back();
+	info.toSegment = dstSegment;
+	loadExportFile(symbolList, optionName, info.symbols);
+}
+		
+bool Options::moveRwSymbol(const char* symName, const char* filePath, const char*& seg, bool& wildCardMatch) const
+{
+	for (std::vector<SymbolsMove>::const_iterator it=fSymbolsMovesData.begin(); it != fSymbolsMovesData.end(); ++it) {
+		const SymbolsMove& info = *it;
+		if ( info.symbols.containsWithPrefix(symName, filePath, wildCardMatch)) {
+			seg  = info.toSegment;
+			return true;
+		}
+	}
+	return false;
+}
+
+bool Options::moveRoSymbol(const char* symName, const char* filePath, const char*& seg, bool& wildCardMatch) const
+{
+	for (std::vector<SymbolsMove>::const_iterator it=fSymbolsMovesCode.begin(); it != fSymbolsMovesCode.end(); ++it) {
+		const SymbolsMove& info = *it;
+		if ( info.symbols.containsWithPrefix(symName, filePath, wildCardMatch)) {
+			seg  = info.toSegment;
+			return true;
+		}
+	}
+	return false;
+}
 
 void Options::addSectionAlignment(const char* segment, const char* section, const char* alignmentStr)
 {
@@ -2915,6 +3001,7 @@ void Options::parse(int argc, const char* argv[])
 				fKextsUseStubs = true;
 			}
 			else if ( strcmp(argv[i], "-dependency_info") == 0 ) {
+                snapshotArgCount = 0;
 				++i;
 				// previously handled by buildSearchPaths()
 			}
@@ -2973,8 +3060,95 @@ void Options::parse(int argc, const char* argv[])
 				addSectionRename(argv[i+1], argv[i+2], argv[i+3], argv[i+4]);
 				i += 4;
 			}
+			else if ( strcmp(arg, "-rename_segment") == 0 ) {
+				 if ( (argv[i+1]==NULL) || (argv[i+2]==NULL) )
+					throw "-rename_segment missing <existing-segment> <new-segment>";
+				addSegmentRename(argv[i+1], argv[i+2]);
+				i += 2;
+			}
+			else if ( strcmp(arg, "-move_to_ro_segment") == 0 ) {
+				 if ( (argv[i+1]==NULL) || (argv[i+2]==NULL) )
+					throw "-move_to_ro_segment missing <segment> <symbol-list-file>";
+				addSymbolMove(argv[i+1], argv[i+2], fSymbolsMovesCode, "-move_to_ro_segment");
+				i += 2;
+			}
+			else if ( strcmp(arg, "-move_to_rw_segment") == 0 ) {
+				 if ( (argv[i+1]==NULL) || (argv[i+2]==NULL) )
+					throw "-move_to_rw_segment missing <segment> <symbol-list-file>";
+				addSymbolMove(argv[i+1], argv[i+2], fSymbolsMovesData, "-move_to_rw_segment");
+				i += 2;
+			}
+			else if ( strcmp(arg, "-trace_symbol_layout") == 0 ) {
+				fTraceSymbolLayout = true;
+			}
 			else if ( strcmp(arg, "-no_branch_islands") == 0 ) {
 				fAllowBranchIslands = false;
+			}
+			else if ( strcmp(arg, "-segment_order") == 0 ) {
+				// ex: -segment_order __TEXT:__DATA:__JUNK
+				const char* optString = argv[++i];
+				if ( optString == NULL )
+					throw "-segment_order missing colon separated <segment-list>";
+				if ( !fSegmentOrder.empty() )
+					throw "-segment_order used more than once";
+				// break up into list of tokens at colon
+				char* buffer = strdup(optString);
+				char* start = buffer;
+				for (char* s = buffer; ; ++s) {
+					if ( *s == ':'  ) {
+						*s = '\0';
+						fSegmentOrder.push_back(start);
+						start = s+1;
+					}
+					else if ( *s == '\0' ) {
+						fSegmentOrder.push_back(start);
+						break;
+					}
+				}
+			}
+			else if ( strcmp(arg, "-section_order") == 0 ) {
+				// ex: -section_order __DATA  __data:__const:__nl_pointers
+				 if ( (argv[i+1]==NULL) || (argv[i+2]==NULL) )
+					throw "-section_order missing <segment> <section-list>";
+				const char* segName = argv[++i];
+				const char* optString = argv[++i];
+				if ( sectionOrder(segName) != NULL )
+					throwf("-section_order %s ... used more than once", segName);
+				SectionOrderList dummy;
+				fSectionOrder.push_back(dummy);
+				SectionOrderList& entry = fSectionOrder.back();
+				entry.segmentName = segName;
+				// break up into list of tokens at colon
+				char* buffer = strdup(optString);
+				char* start = buffer;
+				for (char* s = buffer; ; ++s) {
+					if ( *s == ':'  ) {
+						*s = '\0';
+						entry.sectionOrder.push_back(start);
+						start = s+1;
+					}
+					else if ( *s == '\0' ) {
+						entry.sectionOrder.push_back(start);
+						break;
+					}
+				}
+			}			
+			else if ( strcmp(arg, "-application_extension") == 0 ) {
+				fMarkAppExtensionSafe = true;
+				fCheckAppExtensionSafe = true;
+			}
+			else if ( strcmp(arg, "-no_application_extension") == 0 ) {
+				fMarkAppExtensionSafe = false;
+				fCheckAppExtensionSafe = false;
+			}
+			else if ( strcmp(arg, "-add_ast_path") == 0 ) {
+				const char* path = argv[++i];
+				if ( path == NULL )
+					throw "-add_ast_path missing <option>";
+				fASTFilePaths.push_back(path);
+			}
+			else if ( strcmp(arg, "-force_load_swift_libs") == 0 ) {
+				fForceLoadSwiftLibs = true;
 			}
 			// put this last so that it does not interfer with other options starting with 'i'
 			else if ( strncmp(arg, "-i", 2) == 0 ) {
@@ -3266,8 +3440,16 @@ void Options::parsePreCommandLineEnvironmentSettings()
 	if (getenv("LD_SPLITSEGS_NEW_LIBRARIES") != NULL)
 		fSplitSegs = true;
 		
-	if (getenv("LD_NO_ENCRYPT") != NULL)
+	if (getenv("LD_NO_ENCRYPT") != NULL) {
 		fEncryptable = false;
+		fMarkAppExtensionSafe = true; // temporary
+		fCheckAppExtensionSafe = false;
+	}
+
+	if (getenv("LD_APPLICATION_EXTENSION_SAFE") != NULL) {
+		fMarkAppExtensionSafe = true;
+		fCheckAppExtensionSafe = false;
+	}
 	
 	if (getenv("LD_ALLOW_CPU_SUBTYPE_MISMATCHES") != NULL)
 		fAllowCpuSubtypeMismatches = true;
@@ -3729,9 +3911,24 @@ void Options::reconfigureDefaults()
 			break;
 	}
 		
-	// only iOS main executables should be encrypted
-	if ( fOutputKind != Options::kDynamicExecutable )
-		fEncryptable = false;
+	// only iOS executables should be encryptable
+	switch ( fOutputKind ) {
+		case Options::kObjectFile:
+		case Options::kDyld:
+		case Options::kStaticExecutable:
+		case Options::kPreload:
+		case Options::kKextBundle:
+			fEncryptable = false;
+			break;
+		case Options::kDynamicExecutable:
+			break;
+		case Options::kDynamicLibrary:
+		case Options::kDynamicBundle:
+			// <rdar://problem/16293398> Add LC_ENCRYPTION_INFO load command to bundled frameworks
+			if ( fIOSVersionMin < ld::iOS_8_0 )
+				fEncryptable = false;
+			break;
+	}
 	if ( (fArchitecture != CPU_TYPE_ARM) && (fArchitecture != CPU_TYPE_ARM64) )
 		fEncryptable = false;
 
@@ -3842,6 +4039,10 @@ void Options::reconfigureDefaults()
 			fPositionIndependentExecutable = true;
 	}
 
+	// Simulator defaults to PIE
+	if ( fTargetIOSSimulator && (fOutputKind == kDynamicExecutable) )
+		fPositionIndependentExecutable = true;
+
 	// -no_pie anywhere on command line disable PIE
 	if ( fDisablePositionIndependentExecutable )
 		fPositionIndependentExecutable = false;
@@ -3875,7 +4076,7 @@ void Options::reconfigureDefaults()
 	if ( fMacVersionMin >= ld::mac10_7 ) {
 		fTLVSupport = true;
 	}
-	else if ( (fArchitecture == CPU_TYPE_ARM64) && (fIOSVersionMin >= 0x00080000) ) {
+	else if ( (fArchitecture == CPU_TYPE_ARM64) && (fIOSVersionMin >= ld::iOS_8_0) ) {
 		fTLVSupport = true;
 	}
 
@@ -3929,18 +4130,30 @@ void Options::reconfigureDefaults()
 		case Options::kDynamicExecutable:
 			if ( fEntryPointLoadCommandForceOn ) {
 				fEntryPointLoadCommand = true;
-				fEntryName = "_main";
+				if ( fEntryName == NULL ) 
+					fEntryName = "_main";
 			}
 			else if ( fEntryPointLoadCommandForceOff ) {
 				fNeedsThreadLoadCommand = true;
+				if ( fEntryName == NULL ) 
+					fEntryName = "start";
 			}
 			else {
-				if ( minOS(ld::mac10_8, ld::iOS_6_0) ) {
+				// <rdar://problem/16310363> Linker should look for "_main" not "start" when building for sim regardless of min OS
+				if ( minOS(ld::mac10_8, ld::iOS_6_0) || fTargetIOSSimulator ) {
 					fEntryPointLoadCommand = true;
-					fEntryName = "_main";
-				}
-				else
+					if ( fEntryName == NULL ) 
+						fEntryName = "_main";
+					if ( strcmp(fEntryName, "start") == 0 ) {
+						warning("Ignoring '-e start' because entry point 'start' is not used for the targeted OS version");
+						fEntryName = "_main";
+					}
+				} 
+				else {
 					fNeedsThreadLoadCommand = true;
+					if ( fEntryName == NULL ) 
+						fEntryName = "start";
+				}
 			}
 			break;
 		case Options::kObjectFile:
@@ -3953,6 +4166,8 @@ void Options::reconfigureDefaults()
 		case Options::kPreload:
 		case Options::kDyld:
 			fNeedsThreadLoadCommand = true;
+			if ( fEntryName == NULL ) 
+				fEntryName = "start";  // Perhaps these should have no default and require -e
 			break;
 	}
 	
@@ -4066,8 +4281,11 @@ void Options::reconfigureDefaults()
 	}
   
 	// <rdar://problem/12258065> ARM64 needs 16KB page size for user land code
-	if ( fArchitecture == CPU_TYPE_ARM64 ) {
-		if ( fSegmentAlignment == 4096 ) {
+	// <rdar://problem/15974532> make armv7[s] use 16KB pages in user land code for iOS 8 or later
+	if ( fSegmentAlignment == 4096 ) {
+		if ( (fArchitecture == CPU_TYPE_ARM64) 
+		|| ((fArchitecture == CPU_TYPE_ARM) && (fIOSVersionMin >= ld::iOS_8_0) && 
+			((fSubArchitecture == CPU_SUBTYPE_ARM_V7S) || (fSubArchitecture == CPU_SUBTYPE_ARM_V7))) ) {
 			switch ( fOutputKind ) {
 				case Options::kDynamicExecutable:
 				case Options::kDynamicLibrary:
@@ -4083,7 +4301,7 @@ void Options::reconfigureDefaults()
 			}
 		}
 	}
-	
+
 	// <rdar://problem/13624134> linker should not convert dwarf unwind if .o file has compact unwind section
 	switch ( fOutputKind ) {
 		case Options::kDynamicExecutable:
@@ -4551,9 +4769,15 @@ void Options::checkIllegalOptionCombinations()
 	if ( (fOutputKind != Options::kDynamicExecutable) && (fDyldEnvironExtras.size() != 0) )
 		throw "-dyld_env can only used used when created main executables";
 
-	// -rename_sections can only be used in -r mode
-	if ( (fSectionRenames.size() != 0) && (fOutputKind != Options::kObjectFile) )
-		throw "-rename_sections can only used used in -r mode";
+	// -segment_order can only be used with -preload
+	if ( !fSegmentOrder.empty() && (fOutputKind != Options::kPreload) )
+		throw "-segment_order can only used used with -preload output";
+
+	// <rdar://problem/17598404> warn if building an embedded iOS dylib for pre-iOS 8
+	if ( (fOutputKind == Options::kDynamicLibrary) && (fIOSVersionMin != ld::iOSVersionUnset) && (fDylibInstallName != NULL) ) {
+		if ( (fIOSVersionMin < ld::iOS_8_0) && (fDylibInstallName[0] == '@') ) 
+			warning("embedded dylibs/frameworks only run on iOS 8 or later");
+	}
 }	
 
 

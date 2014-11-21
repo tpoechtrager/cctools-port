@@ -140,6 +140,11 @@ public:
 		uint8_t					alignment;
 	};
 
+	struct SectionOrderList {
+		const char*					segmentName;
+		std::vector<const char*>	sectionOrder;
+	};
+
 	struct OrderedSymbol {
 		const char*				symbolName;
 		const char*				objectFileName;
@@ -179,6 +184,10 @@ public:
 		const char*			toSection;
 	};
 
+	struct SegmentRename {
+		const char*			fromSegment;
+		const char*			toSegment;
+	};
 
 	enum { depLinkerVersion=0x00, depObjectFile=0x10, depDirectDylib=0x10, depIndirectDylib=0x10, 
 		  depUpwardDirectDylib=0x10, depUpwardIndirectDylib=0x10, depArchive=0x10,
@@ -248,6 +257,7 @@ public:
 	bool						hasNonExecutableHeap() const { return fNonExecutableHeap; }
 	UndefinesIterator			initialUndefinesBegin() const { return &fInitialUndefines[0]; }
 	UndefinesIterator			initialUndefinesEnd() const { return &fInitialUndefines[fInitialUndefines.size()]; }
+	const std::vector<const char*>&	initialUndefines() const { return fInitialUndefines; }
 	bool						printWhyLive(const char* name) const;
 	uint32_t					minimumHeaderPad() const { return fMinimumHeaderPad; }
 	bool						maxMminimumHeaderPad() const { return fMaxMinimumHeaderPad; }
@@ -300,7 +310,10 @@ public:
 	bool						makeEncryptable() const { return fEncryptable; }
 	bool						needsUnwindInfoSection() const { return fAddCompactUnwindEncoding; }
 	const std::vector<const char*>&	llvmOptions() const{ return fLLVMOptions; }
+	const std::vector<const char*>&	segmentOrder() const{ return fSegmentOrder; }
+	const std::vector<const char*>* sectionOrder(const char* segName) const;
 	const std::vector<const char*>&	dyldEnvironExtras() const{ return fDyldEnvironExtras; }
+	const std::vector<const char*>&	astFilePaths() const{ return fASTFilePaths; }
 	bool						makeCompressedDyldInfo() const { return fMakeCompressedDyldInfo; }
 	bool						hasExportedSymbolOrder();
 	bool						exportedSymbolOrder(const char* sym, unsigned int* order) const;
@@ -347,6 +360,10 @@ public:
 	bool						ignoreOptimizationHints() const { return fIgnoreOptimizationHints; }
 	bool						generateDtraceDOF() const { return fGenerateDtraceDOF; }
 	bool						allowBranchIslands() const { return fAllowBranchIslands; }
+	bool						traceSymbolLayout() const { return fTraceSymbolLayout; }
+	bool						markAppExtensionSafe() const { return fMarkAppExtensionSafe; }
+	bool						checkDylibsAreAppExtensionSafe() const { return fCheckAppExtensionSafe; }
+	bool						forceLoadSwiftLibs() const { return fForceLoadSwiftLibs; }
 	bool						hasWeakBitTweaks() const;
 	bool						forceWeak(const char* symbolName) const;
 	bool						forceNotWeak(const char* symbolName) const;
@@ -374,6 +391,9 @@ public:
 	FileInfo					findFramework(const char* frameworkName) const;
 	FileInfo					findLibrary(const char* rootName, bool dylibsOnly=false) const;
 	const std::vector<SectionRename>& sectionRenames() const { return fSectionRenames; }
+	const std::vector<SegmentRename>& segmentRenames() const { return fSegmentRenames; }
+	bool						moveRoSymbol(const char* symName, const char* filePath, const char*& seg, bool& wildCardMatch) const;
+	bool						moveRwSymbol(const char* symName, const char* filePath, const char*& seg, bool& wildCardMatch) const;
 
 private:
 	typedef std::unordered_map<const char*, unsigned int, ld::CStringHash, ld::CStringEquals> NameToOrder;
@@ -385,7 +405,8 @@ private:
 	class SetWithWildcards {
 	public:
 		void					insert(const char*);
-		bool					contains(const char*) const;
+		bool					contains(const char*, bool* wildCardMatch=NULL) const;
+		bool					containsWithPrefix(const char* symbol, const char* file, bool& wildCardMatch) const;
 		bool					containsNonWildcard(const char*) const;
 		bool					empty() const			{ return fRegular.empty() && fWildCard.empty(); }
 		bool					hasWildCards() const	{ return !fWildCard.empty(); }
@@ -401,6 +422,10 @@ private:
 		std::vector<const char*>		fWildCard;
 	};
 
+	struct SymbolsMove {
+		const char*			toSegment;
+		SetWithWildcards	symbols;
+	};
 
 	void						parse(int argc, const char* argv[]);
 	void						checkIllegalOptionCombinations();
@@ -437,7 +462,8 @@ private:
 	uint32_t					parseProtection(const char* prot);
 	void						loadSymbolOrderFile(const char* fileOfExports, NameToOrder& orderMapping);
 	void						addSectionRename(const char* srcSegment, const char* srcSection, const char* dstSegment, const char* dstSection);
-
+	void						addSegmentRename(const char* srcSegment, const char* dstSegment);
+	void						addSymbolMove(const char* dstSegment, const char* symbolList, std::vector<SymbolsMove>& list, const char* optionName);
 
 
 //	ObjectFile::ReaderOptions			fReaderOptions;
@@ -608,6 +634,10 @@ private:
 	bool								fIgnoreOptimizationHints;
 	bool								fGenerateDtraceDOF;
 	bool								fAllowBranchIslands;
+	bool								fTraceSymbolLayout;
+	bool								fMarkAppExtensionSafe;
+	bool								fCheckAppExtensionSafe;
+	bool								fForceLoadSwiftLibs;
 	DebugInfoStripping					fDebugInfoStripping;
 	const char*							fTraceOutputFile;
 	ld::MacVersionMin					fMacVersionMin;
@@ -628,8 +658,15 @@ private:
 	std::vector<const char*>			fFrameworkSearchPaths;
 	std::vector<const char*>			fSDKPaths;
 	std::vector<const char*>			fDyldEnvironExtras;
+	std::vector<const char*>			fSegmentOrder;
+	std::vector<const char*>			fASTFilePaths;
+	std::vector<SectionOrderList>		fSectionOrder;
 	std::vector< std::vector<const char*> > fLinkerOptions;
 	std::vector<SectionRename>			fSectionRenames;
+	std::vector<SegmentRename>			fSegmentRenames;
+	std::vector<SymbolsMove>			fSymbolsMovesData;
+	std::vector<SymbolsMove>			fSymbolsMovesCode;
+	std::vector<SymbolsMove>			fSymbolsMovesZeroFill;
 	bool								fSaveTempFiles;
     mutable Snapshot					fLinkSnapshot;
     bool								fSnapshotRequested;

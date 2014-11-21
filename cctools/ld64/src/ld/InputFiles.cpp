@@ -257,8 +257,17 @@ ld::File* InputFiles::makeFile(const Options::FileInfo& info, bool indirectDylib
 			uint32_t fileOffset = OSSwapBigToHostInt32(archs[sliceToUse].offset);
 			len = OSSwapBigToHostInt32(archs[sliceToUse].size);
 			if ( fileOffset+len > info.fileLen ) {
-				throwf("truncated fat file. Slice from %u to %llu is past end of file with length %llu", 
+				// <rdar://problem/17593430> file size was read awhile ago.  If file is being written, wait a second to see if big enough now
+				sleep(1);
+				uint64_t newFileLen = info.fileLen;
+				struct stat statBuffer;
+				if ( stat(info.path, &statBuffer) == 0 ) {
+					newFileLen = statBuffer.st_size;
+				}
+				if ( fileOffset+len > newFileLen ) {
+					throwf("truncated fat file. Slice from %u to %llu is past end of file with length %llu", 
 						fileOffset, fileOffset+len, info.fileLen);
+				}
 			}
 			// if requested architecture is page aligned within fat file, then remap just that portion of file
 			if ( (fileOffset & 0x00000FFF) == 0 ) {
@@ -305,10 +314,26 @@ ld::File* InputFiles::makeFile(const Options::FileInfo& info, bool indirectDylib
 #endif /* LTO_SUPPORT */
 	
 	// see if it is a dynamic library
-	ld::dylib::File* dylibResult = mach_o::dylib::parse(p, len, info.path, info.modTime, _options, info.ordinal, info.options.fBundleLoader, indirectDylib);
-	if ( dylibResult != NULL ) {
-		return dylibResult;
+	ld::dylib::File* dylibResult;
+	bool dylibsNotAllowed = false;
+	switch ( _options.outputKind() ) {
+		case Options::kDynamicExecutable:
+		case Options::kDynamicLibrary:
+		case Options::kDynamicBundle:	
+			dylibResult = mach_o::dylib::parse(p, len, info.path, info.modTime, _options, info.ordinal, info.options.fBundleLoader, indirectDylib);
+			if ( dylibResult != NULL ) {
+				return dylibResult;
+			}
+			break;
+		case Options::kStaticExecutable:
+		case Options::kDyld:
+		case Options::kPreload:
+		case Options::kObjectFile:
+		case Options::kKextBundle:
+			dylibsNotAllowed = true;
+			break;
 	}
+
 
 	// see if it is a static library
 	::archive::ParserOptions archOpts;
@@ -355,6 +380,13 @@ ld::File* InputFiles::makeFile(const Options::FileInfo& info, bool indirectDylib
 		}
 	}
 #endif /* LTO_SUPPORT */
+
+	if ( dylibsNotAllowed ) {
+		cpu_type_t dummy1;
+		cpu_type_t dummy2;
+		if ( mach_o::dylib::isDylibFile(p, &dummy1, &dummy2) )
+			throw "ignoring unexpected dylib file";
+	}
 
 	// error handling
 	if ( ((fat_header*)p)->magic == OSSwapBigToHostInt32(FAT_MAGIC) ) {
@@ -544,7 +576,7 @@ bool InputFiles::libraryAlreadyLoaded(const char* path)
 }
 
 
-void InputFiles::addLinkerOptionLibraries(ld::Internal& state)
+void InputFiles::addLinkerOptionLibraries(ld::Internal& state, ld::File::AtomHandler& handler)
 {	
     if ( _options.outputKind() == Options::kObjectFile ) 
 		return;
@@ -560,6 +592,7 @@ void InputFiles::addLinkerOptionLibraries(ld::Internal& state)
 				ld::dylib::File* dylibReader = dynamic_cast<ld::dylib::File*>(reader);
 				if ( dylibReader != NULL ) {
 					if ( ! dylibReader->installPathVersionSpecific() ) {
+						dylibReader->forEachAtom(handler);
 						dylibReader->setImplicitlyLinked();
 						this->addDylib(dylibReader, info);
 					}
@@ -580,10 +613,13 @@ void InputFiles::addLinkerOptionLibraries(ld::Internal& state)
 		if ( ! this->libraryAlreadyLoaded(info.path) ) {
 			info.ordinal = _linkerOptionOrdinal.nextLinkerOptionOrdinal();
 			try {
+				//<rdar://problem/17787306> -force_load_swift_libs
+				info.options.fForceLoad = _options.forceLoadSwiftLibs() && (strncmp(libName, "swift", 5) == 0);
 				ld::File* reader = this->makeFile(info, true);
 				ld::dylib::File* dylibReader = dynamic_cast<ld::dylib::File*>(reader);
 				ld::archive::File* archiveReader = dynamic_cast<ld::archive::File*>(reader);
 				if ( dylibReader != NULL ) {
+					dylibReader->forEachAtom(handler);
 					dylibReader->setImplicitlyLinked();
 					this->addDylib(dylibReader, info);
 				}
@@ -591,6 +627,10 @@ void InputFiles::addLinkerOptionLibraries(ld::Internal& state)
 					_searchLibraries.push_back(LibraryInfo(archiveReader));
 					if ( _options.dumpDependencyInfo() )
 						_options.dumpDependency(Options::depArchive, archiveReader->path());
+					//<rdar://problem/17787306> -force_load_swift_libs
+					if (info.options.fForceLoad) {
+						archiveReader->forEachAtom(handler);
+					}
 				}
 				else {
 					throwf("linker option dylib at %s is not a dylib", info.path);
@@ -903,6 +943,9 @@ void InputFiles::parseWorkerThread() {
 						warning("ignoring file %s, %s", entry.path, msg);
 					}
 				} 
+				else if ( strstr(msg, "ignoring unexpected") != NULL ) {
+					warning("%s, %s", entry.path, msg);
+				}
 				else {
 					asprintf((char**)&exception, "%s file '%s'", msg, entry.path);
 				}
@@ -1135,7 +1178,7 @@ void InputFiles::forEachInitialAtom(ld::File::AtomHandler& handler, ld::Internal
 	}
 
 	markExplicitlyLinkedDylibs();
-	addLinkerOptionLibraries(state);
+	addLinkerOptionLibraries(state, handler);
 	createIndirectDylibs();
 	createOpaqueFileSections();
 	
@@ -1284,6 +1327,14 @@ static bool vectorContains(const std::vector<ld::dylib::File*>& vec, ld::dylib::
 	return std::find(vec.begin(), vec.end(), key) != vec.end();
 }
 
+struct DylibByInstallNameSorter
+{	
+	 bool operator()(const ld::dylib::File* left, const ld::dylib::File* right)
+	 {
+          return (strcmp(left->installPath(), right->installPath()) < 0);
+	 }
+};
+
 void InputFiles::dylibs(ld::Internal& state)
 {
 	bool dylibsOK = false;
@@ -1318,14 +1369,18 @@ void InputFiles::dylibs(ld::Internal& state)
 	}
 	// add implicitly linked dylibs
 	if ( _options.nameSpace() == Options::kTwoLevelNameSpace ) {
+		std::vector<ld::dylib::File*> implicitDylibs;
 		for (InstallNameToDylib::const_iterator it=_installPathToDylibs.begin(); it != _installPathToDylibs.end(); ++it) {
 			ld::dylib::File* dylibFile = it->second;
 			if ( dylibFile->implicitlyLinked() && dylibsOK ) {
-				if ( ! vectorContains(state.dylibs, dylibFile) ) {
-					state.dylibs.push_back(dylibFile);
+				if ( ! vectorContains(implicitDylibs, dylibFile) ) {
+					implicitDylibs.push_back(dylibFile);
 				}
 			}
 		}
+		// <rdar://problem/15002251> make implicit dylib order be deterministic by sorting by install_name
+		std::sort(implicitDylibs.begin(), implicitDylibs.end(), DylibByInstallNameSorter());
+		state.dylibs.insert(state.dylibs.end(), implicitDylibs.begin(), implicitDylibs.end());
 	}
 
 	//fprintf(stderr, "all dylibs:\n");

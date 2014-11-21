@@ -74,7 +74,7 @@ public:
 	
 	bool						inferredArch() const { return _inferredArch; }
 	
-	void						addLinkerOptionLibraries(ld::Internal& state);
+	void						addLinkerOptionLibraries(ld::Internal& state, ld::File::AtomHandler& handler);
 	void						createIndirectDylibs();
 
 	// for -print_statistics

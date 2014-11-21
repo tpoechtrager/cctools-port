@@ -1325,6 +1325,38 @@ inline void Registers_arm64::setVectorRegister(int regNum, v128 value)
 }
 
 
+///
+/// Registers_arm holds the register state of a thread in a 32-bit arm process.  
+///
+class Registers_arm {
+public:
+                Registers_arm();
+
+    bool        validRegister(int num) const;
+    uint32_t    getRegister(int num) const;
+    void        setRegister(int num, uint32_t value);
+    bool        validFloatRegister(int num) const;
+    unw_fpreg_t getFloatRegister(int num) const;
+    void        setFloatRegister(int num, unw_fpreg_t value);
+    bool        validVectorRegister(int num) const;
+    v128        getVectorRegister(int num) const;
+    void        setVectorRegister(int num, v128 value);
+    const char *getRegisterName(int num);
+    void        jumpto();
+
+    uint32_t    getSP() const         { return _registers[13]; }
+    void        setSP(uint32_t value) { _registers[13] = value; }
+    uint32_t    getIP() const         { return _registers[15]; }
+    void        setIP(uint32_t value) { _registers[15] = value; }
+
+private:
+  uint32_t    _registers[16];
+};
+
+inline Registers_arm::Registers_arm() {
+  bzero(&_registers, sizeof(_registers));
+}
+
 
 } // namespace libunwind 
 

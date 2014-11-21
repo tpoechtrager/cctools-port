@@ -60,6 +60,7 @@ struct OptimizeOptions {
 	cpu_type_t							arch;
 	const char*							mcpu;
 	const std::vector<const char*>*		llvmOptions;
+	const std::vector<const char*>*		initialUndefines;
 };
 
 extern bool	optimize(   const std::vector<const ld::Atom*>&	allAtoms,

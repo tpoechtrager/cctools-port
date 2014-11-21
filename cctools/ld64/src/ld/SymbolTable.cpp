@@ -590,6 +590,8 @@ SymbolTable::IndirectBindingSlot SymbolTable::findSlotForName(const char* name)
 
 void SymbolTable::removeDeadAtoms()
 {
+	// remove dead atoms from: _byNameTable, _byNameReverseTable, and _indirectBindingTable
+	std::vector<const char*> namesToRemove;
 	for (NameToSlot::iterator it=_byNameTable.begin(); it != _byNameTable.end(); ++it) {
 		IndirectBindingSlot slot = it->second;
 		const ld::Atom* atom = _indirectBindingTable[slot];
@@ -597,10 +599,88 @@ void SymbolTable::removeDeadAtoms()
 			if ( !atom->live() && !atom->dontDeadStrip() ) {
 				//fprintf(stderr, "removing from symbolTable[%u] %s\n", slot, atom->name());
 				_indirectBindingTable[slot] = NULL;
+				// <rdar://problem/16025786> need to completely remove dead atoms from symbol table
+				_byNameReverseTable.erase(slot);
+				// can't remove while iterating, do it after iteration
+				namesToRemove.push_back(it->first);
 			}
 		}
 	}
+	for (std::vector<const char*>::iterator it = namesToRemove.begin(); it != namesToRemove.end(); ++it) {
+		_byNameTable.erase(*it);
+	}
+
+	// remove dead atoms from _nonLazyPointerTable
+	for (ReferencesToSlot::iterator it=_nonLazyPointerTable.begin(); it != _nonLazyPointerTable.end(); ) {
+		const ld::Atom* atom = it->first;
+		assert(atom != NULL);
+		if ( !atom->live() && !atom->dontDeadStrip() )
+			it = _nonLazyPointerTable.erase(it);
+		else
+			++it;
+	}
+
+	// remove dead atoms from _cstringTable
+	for (CStringToSlot::iterator it=_cstringTable.begin(); it != _cstringTable.end(); ) {
+		const ld::Atom* atom = it->first;
+		assert(atom != NULL);
+		if ( !atom->live() && !atom->dontDeadStrip() )
+			it = _cstringTable.erase(it);
+		else
+			++it;
+	}
+
+	// remove dead atoms from _utf16Table
+	for (UTF16StringToSlot::iterator it=_utf16Table.begin(); it != _utf16Table.end(); ) {
+		const ld::Atom* atom = it->first;
+		assert(atom != NULL);
+		if ( !atom->live() && !atom->dontDeadStrip() )
+			it = _utf16Table.erase(it);
+		else
+			++it;
+	}
+
+	// remove dead atoms from _cfStringTable
+	for (ReferencesToSlot::iterator it=_cfStringTable.begin(); it != _cfStringTable.end(); ) {
+		const ld::Atom* atom = it->first;
+		assert(atom != NULL);
+		if ( !atom->live() && !atom->dontDeadStrip() )
+			it = _cfStringTable.erase(it);
+		else
+			++it;
+	}
+
+	// remove dead atoms from _literal4Table
+	for (ContentToSlot::iterator it=_literal4Table.begin(); it != _literal4Table.end(); ) {
+		const ld::Atom* atom = it->first;
+		assert(atom != NULL);
+		if ( !atom->live() && !atom->dontDeadStrip() )
+			it = _literal4Table.erase(it);
+		else
+			++it;
+	}
+
+	// remove dead atoms from _literal8Table
+	for (ContentToSlot::iterator it=_literal8Table.begin(); it != _literal8Table.end(); ) {
+		const ld::Atom* atom = it->first;
+		assert(atom != NULL);
+		if ( !atom->live() && !atom->dontDeadStrip() )
+			it = _literal8Table.erase(it);
+		else
+			++it;
+	}
+
+	// remove dead atoms from _literal16Table
+	for (ContentToSlot::iterator it=_literal16Table.begin(); it != _literal16Table.end(); ) {
+		const ld::Atom* atom = it->first;
+		assert(atom != NULL);
+		if ( !atom->live() && !atom->dontDeadStrip() )
+			it = _literal16Table.erase(it);
+		else
+			++it;
+	}
 }
+
 
 // find existing or create new slot
 SymbolTable::IndirectBindingSlot SymbolTable::findSlotForContent(const ld::Atom* atom, const ld::Atom** existingAtom)

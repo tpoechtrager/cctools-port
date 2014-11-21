@@ -108,6 +108,7 @@ public:
 											InternalState(const Options& opts) : _options(opts), _atomsOrderedInSections(false) { }
 	virtual	ld::Internal::FinalSection*		addAtom(const ld::Atom& atom);
 	virtual ld::Internal::FinalSection*		getFinalSection(const ld::Section&);
+			ld::Internal::FinalSection*     getFinalSection(const char* seg, const char* sect, ld::Section::Type type);
 	
 	uint64_t								assignFileOffsets();
 	void									setSectionSizesAndAlignments();
@@ -119,14 +120,14 @@ private:
 	class FinalSection : public ld::Internal::FinalSection 
 	{
 	public:
-							FinalSection(const ld::Section& sect, uint32_t sectionsSeen, bool objFile);
+									FinalSection(const ld::Section& sect, uint32_t sectionsSeen, const Options&);
 		static int					sectionComparer(const void* l, const void* r);
 		static const ld::Section&	outputSection(const ld::Section& sect, bool mergeZeroFill);
 		static const ld::Section&	objectOutputSection(const ld::Section& sect, const Options&);
 	private:
 		friend class InternalState;
-		static uint32_t		sectionOrder(const ld::Section& sect, uint32_t sectionsSeen);
-		static uint32_t		segmentOrder(const ld::Section& sect, bool objFile);
+		static uint32_t		sectionOrder(const ld::Section& sect, uint32_t sectionsSeen, const Options& options);
+		static uint32_t		segmentOrder(const ld::Section& sect, const Options& options);
 		uint32_t			_segmentOrder;
 		uint32_t			_sectionOrder;
 
@@ -183,10 +184,10 @@ bool InternalState::SectionEquals::operator()(const ld::Section* left, const ld:
 }
 
 
-InternalState::FinalSection::FinalSection(const ld::Section& sect, uint32_t sectionsSeen, bool objFile)
+InternalState::FinalSection::FinalSection(const ld::Section& sect, uint32_t sectionsSeen, const Options& opts)
 	: ld::Internal::FinalSection(sect), 
-	  _segmentOrder(segmentOrder(sect, objFile)),
-	  _sectionOrder(sectionOrder(sect, sectionsSeen))
+	  _segmentOrder(segmentOrder(sect, opts)),
+	  _sectionOrder(sectionOrder(sect, sectionsSeen, opts))
 {
 	//fprintf(stderr, "FinalSection(%s, %s) _segmentOrder=%d, _sectionOrder=%d\n", 
 	//		this->segmentName(), this->sectionName(), _segmentOrder, _sectionOrder);
@@ -199,7 +200,9 @@ const ld::Section& InternalState::FinalSection::outputSection(const ld::Section&
 		case ld::Section::typeLiteral4:
 		case ld::Section::typeLiteral8:
 		case ld::Section::typeLiteral16:
-			return _s_TEXT_const;
+			if ( strcmp(sect.segmentName(), "__TEXT") == 0 )
+				return _s_TEXT_const;
+			break;
 		case ld::Section::typeUnclassified:
 			if ( strcmp(sect.segmentName(), "__DATA") == 0 ) {
 				if ( strcmp(sect.sectionName(), "__datacoal_nt") == 0 )
@@ -235,10 +238,12 @@ const ld::Section& InternalState::FinalSection::outputSection(const ld::Section&
 			}
 			break;
 		case ld::Section::typeTentativeDefs:
-			if ( mergeZeroFill )
-				return _s_DATA_zerofill;
-			else
-				return _s_DATA_common;
+			if ( (strcmp(sect.segmentName(), "__DATA") == 0) && (strcmp(sect.sectionName(), "__comm/tent") == 0) ) {
+				if ( mergeZeroFill )
+					return _s_DATA_zerofill;
+				else
+					return _s_DATA_common;
+			}
 			break;
 			// FIX ME: more 
 		default:
@@ -249,47 +254,50 @@ const ld::Section& InternalState::FinalSection::outputSection(const ld::Section&
 
 const ld::Section& InternalState::FinalSection::objectOutputSection(const ld::Section& sect, const Options& options)
 {
-  	const std::vector<Options::SectionRename>& renames = options.sectionRenames();
-	for ( std::vector<Options::SectionRename>::const_iterator it=renames.begin(); it != renames.end(); ++it) {
-	  if ( (strcmp(sect.sectionName(), it->fromSection) == 0) && (strcmp(sect.segmentName(), it->fromSegment) == 0) ) {
-		ld::Section* s = new ld::Section(it->toSegment, it->toSection, sect.type());
-		return *s;
-	  }
-	}
-
-
 	// in -r mode the only section that ever changes is __tenative -> __common with -d option
 	if ( (sect.type() == ld::Section::typeTentativeDefs) && options.makeTentativeDefinitionsReal())
 		return _s_DATA_common;
 	return sect;
 }
 
-uint32_t InternalState::FinalSection::segmentOrder(const ld::Section& sect, bool objFile)
+uint32_t InternalState::FinalSection::segmentOrder(const ld::Section& sect, const Options& options)
 {
-	if ( strcmp(sect.segmentName(), "__PAGEZERO") == 0 ) 
-		return 0;
-	if ( strcmp(sect.segmentName(), "__HEADER") == 0 ) // only used with -preload
-		return 0;
-	if ( strcmp(sect.segmentName(), "__TEXT") == 0 ) 
-		return 1;
-	// in -r mode, want __DATA  last so zerofill sections are at end
-	if ( strcmp(sect.segmentName(), "__DATA") == 0 ) 
-		return (objFile ? 5 : 2);
-	if ( strcmp(sect.segmentName(), "__OBJC") == 0 ) 
-		return 3;
-	if ( strcmp(sect.segmentName(), "__IMPORT") == 0 ) 
-		return 4;
-	
-	// layout non-standard segments in order seen (+10 to shift beyond standard segments)
+	if ( options.outputKind() == Options::kPreload ) {
+		if ( strcmp(sect.segmentName(), "__HEADER") == 0 ) 
+			return 0;
+		const std::vector<const char*>& order = options.segmentOrder();
+		for (size_t i=0; i != order.size(); ++i) {
+			if ( strcmp(sect.segmentName(), order[i]) == 0 ) 
+				return i+1;
+		}
+		if ( strcmp(sect.segmentName(), "__TEXT") == 0 ) 
+			return order.size()+1;
+		if ( strcmp(sect.segmentName(), "__DATA") == 0 ) 
+			return order.size()+2;
+	}
+	else {
+		if ( strcmp(sect.segmentName(), "__PAGEZERO") == 0 ) 
+			return 0;
+		if ( strcmp(sect.segmentName(), "__TEXT") == 0 ) 
+			return 1;
+		// in -r mode, want __DATA  last so zerofill sections are at end
+		if ( strcmp(sect.segmentName(), "__DATA") == 0 ) 
+			return (options.outputKind() == Options::kObjectFile) ? 5 : 2;
+		if ( strcmp(sect.segmentName(), "__OBJC") == 0 ) 
+			return 3;
+		if ( strcmp(sect.segmentName(), "__IMPORT") == 0 ) 
+			return 4;
+	}
+	// layout non-standard segments in order seen (+100 to shift beyond standard segments)
 	for (uint32_t i=0; i < _s_segmentsSeen.size(); ++i) {
 		if ( strcmp(_s_segmentsSeen[i], sect.segmentName()) == 0 )
-			return i+10;
+			return i+100;
 	}
 	_s_segmentsSeen.push_back(sect.segmentName());
-	return _s_segmentsSeen.size()-1+10;
+	return _s_segmentsSeen.size()-1+100;
 }
 
-uint32_t InternalState::FinalSection::sectionOrder(const ld::Section& sect, uint32_t sectionsSeen)
+uint32_t InternalState::FinalSection::sectionOrder(const ld::Section& sect, uint32_t sectionsSeen, const Options& options)
 {
 	if ( sect.type() == ld::Section::typeFirstSection )
 		return 0;
@@ -297,6 +305,14 @@ uint32_t InternalState::FinalSection::sectionOrder(const ld::Section& sect, uint
 		return 1;
 	if ( sect.type() == ld::Section::typeLastSection )
 		return INT_MAX;
+	const std::vector<const char*>* sectionList = options.sectionOrder(sect.segmentName());
+	if ( (options.outputKind() == Options::kPreload) && (sectionList != NULL) ) {
+		uint32_t count = 10;
+		for (std::vector<const char*>::const_iterator it=sectionList->begin(); it != sectionList->end(); ++it, ++count) {
+			if ( strcmp(*it, sect.sectionName()) == 0 ) 
+				return count;
+		}
+	}
 	if ( strcmp(sect.segmentName(), "__TEXT") == 0 ) {
 		switch ( sect.type() ) {
 			case ld::Section::typeCode:
@@ -349,6 +365,9 @@ uint32_t InternalState::FinalSection::sectionOrder(const ld::Section& sect, uint
 				// <rdar://problem/14348664> __DATA,__const section should be near __mod_init_func not __data
 				if ( strcmp(sect.sectionName(), "__const") == 0 )
 					return 14;
+				// <rdar://problem/17125893> Linker should put __cfstring near __const
+				if ( strcmp(sect.sectionName(), "__cfstring") == 0 )
+					return 15;
 				// <rdar://problem/7435296> Reorder sections to reduce page faults in object files
 				else if ( strcmp(sect.sectionName(), "__objc_classlist") == 0 ) 
 					return 20;
@@ -356,24 +375,28 @@ uint32_t InternalState::FinalSection::sectionOrder(const ld::Section& sect, uint
 					return 21;
 				else if ( strcmp(sect.sectionName(), "__objc_catlist") == 0 ) 
 					return 22;
-				else if ( strcmp(sect.sectionName(), "__objc_protolist") == 0 ) 
+				else if ( strcmp(sect.sectionName(), "__objc_nlcatlist") == 0 ) 
 					return 23;
-				else if ( strcmp(sect.sectionName(), "__objc_imageinfo") == 0 ) 
+				else if ( strcmp(sect.sectionName(), "__objc_protolist") == 0 ) 
 					return 24;
-				else if ( strcmp(sect.sectionName(), "__objc_const") == 0 ) 
+				else if ( strcmp(sect.sectionName(), "__objc_imageinfo") == 0 ) 
 					return 25;
-				else if ( strcmp(sect.sectionName(), "__objc_selrefs") == 0 ) 
+				else if ( strcmp(sect.sectionName(), "__objc_const") == 0 ) 
 					return 26;
-				else if ( strcmp(sect.sectionName(), "__objc_msgrefs") == 0 ) 
+				else if ( strcmp(sect.sectionName(), "__objc_selrefs") == 0 ) 
 					return 27;
-				else if ( strcmp(sect.sectionName(), "__objc_protorefs") == 0 ) 
+				else if ( strcmp(sect.sectionName(), "__objc_msgrefs") == 0 ) 
 					return 28;
-				else if ( strcmp(sect.sectionName(), "__objc_classrefs") == 0 ) 
+				else if ( strcmp(sect.sectionName(), "__objc_protorefs") == 0 ) 
 					return 29;
-				else if ( strcmp(sect.sectionName(), "__objc_superrefs") == 0 ) 
+				else if ( strcmp(sect.sectionName(), "__objc_classrefs") == 0 ) 
 					return 30;
-				else if ( strcmp(sect.sectionName(), "__objc_data") == 0 ) 
+				else if ( strcmp(sect.sectionName(), "__objc_superrefs") == 0 ) 
 					return 31;
+				else if ( strcmp(sect.sectionName(), "__objc_ivar") == 0 ) 
+					return 32;
+				else if ( strcmp(sect.sectionName(), "__objc_data") == 0 ) 
+					return 33;
 				else
 					return sectionsSeen+40;
 		}
@@ -473,7 +496,79 @@ static void validateFixups(const ld::Atom& atom)
 
 ld::Internal::FinalSection* InternalState::addAtom(const ld::Atom& atom)
 {
-	ld::Internal::FinalSection* fs = this->getFinalSection(atom.section());
+	ld::Internal::FinalSection* fs = NULL;
+	const char* sectName = atom.section().sectionName();
+	ld::Section::Type sectType = atom.section().type();
+	const ld::File* f = atom.file();
+	const char* path = (f != NULL) ? f->path() : NULL;
+	if ( atom.section().type() == ld::Section::typeTentativeDefs ) {
+		// tentative defintions don't have a real section name yet
+		sectType = ld::Section::typeZeroFill;
+		if ( _options.mergeZeroFill() )
+			sectName = FinalSection::_s_DATA_zerofill.sectionName();
+		else
+			sectName = FinalSection::_s_DATA_common.sectionName();
+	}
+	// Support for -move_to_r._segment
+	if ( atom.symbolTableInclusion() == ld::Atom::symbolTableIn ) {
+		const char* dstSeg;
+		//fprintf(stderr, "%s\n", atom.name());
+		bool wildCardMatch;
+		if ( _options.moveRwSymbol(atom.name(), path, dstSeg, wildCardMatch) ) {
+			if ( (sectType != ld::Section::typeZeroFill) 
+			  && (sectType != ld::Section::typeUnclassified) 
+			  && (sectType != ld::Section::typeTentativeDefs) ) {
+				if ( !wildCardMatch )
+					warning("cannot move symbol '%s' from file %s to segment '%s' because symbol is not data (is %d)", atom.name(), path, dstSeg, sectType);
+			}
+			else {
+				if ( _options.traceSymbolLayout() )
+					printf("symbol '%s', -move_to_rw_segment mapped it to %s/%s\n", atom.name(), dstSeg, sectName);
+				fs = this->getFinalSection(dstSeg, sectName, sectType);
+			}
+		}
+		if ( (fs == NULL) && _options.moveRoSymbol(atom.name(), path, dstSeg, wildCardMatch) ) {
+			if ( atom.section().type() != ld::Section::typeCode ) {
+				if ( !wildCardMatch )
+					warning("cannot move symbol '%s' from file %s to segment '%s' because symbol is not code (is %d)", atom.name(), path, dstSeg, sectType);
+			}
+			else {
+				if ( _options.traceSymbolLayout() )
+					printf("symbol '%s', -move_to_ro_segment mapped it to %s/%s\n", atom.name(), dstSeg, sectName);
+				fs = this->getFinalSection(dstSeg, sectName, ld::Section::typeCode);
+			}
+		}
+	}
+	// support for -rename_section and -rename_segment
+	if ( fs == NULL ) {
+		const std::vector<Options::SectionRename>& sectRenames = _options.sectionRenames();
+		const std::vector<Options::SegmentRename>& segRenames = _options.segmentRenames();
+		for ( std::vector<Options::SectionRename>::const_iterator it=sectRenames.begin(); it != sectRenames.end(); ++it) {
+			if ( (strcmp(sectName, it->fromSection) == 0) && (strcmp(atom.section().segmentName(), it->fromSegment) == 0) ) {
+				if ( _options.traceSymbolLayout() )
+					printf("symbol '%s', -rename_section mapped it to %s/%s\n", atom.name(), it->toSegment, it->toSection);
+				fs = this->getFinalSection(it->toSegment, it->toSection, sectType);
+			}
+		}
+		if ( fs == NULL ) {
+			for ( std::vector<Options::SegmentRename>::const_iterator it=segRenames.begin(); it != segRenames.end(); ++it) {
+				if ( strcmp(atom.section().segmentName(), it->fromSegment) == 0 ) {
+					if ( _options.traceSymbolLayout() )
+						printf("symbol '%s', -rename_segment mapped it to %s/%s\n", atom.name(), it->toSegment, sectName);
+					fs = this->getFinalSection(it->toSegment, sectName, sectType);
+				}
+			}
+		}
+	}
+	
+	
+	// if no override, use default location
+	if ( fs == NULL ) {
+		fs = this->getFinalSection(atom.section());
+		if ( _options.traceSymbolLayout() && (atom.symbolTableInclusion() == ld::Atom::symbolTableIn) )
+			printf("symbol '%s', use default mapping to %s/%s\n", atom.name(), fs->segmentName(), fs->sectionName());
+	}
+
 	//fprintf(stderr, "InternalState::doAtom(%p), name=%s, sect=%s, finalsect=%p\n", &atom, atom.name(), atom.section().sectionName(), fs);
 #ifndef NDEBUG
 	validateFixups(atom);
@@ -499,6 +594,17 @@ ld::Internal::FinalSection* InternalState::addAtom(const ld::Atom& atom)
 	return fs;
 }
 
+
+
+ld::Internal::FinalSection* InternalState::getFinalSection(const char* seg, const char* sect, ld::Section::Type type)
+{	
+	for (std::vector<ld::Internal::FinalSection*>::iterator it=sections.begin(); it != sections.end(); ++it) {
+		if ( (strcmp((*it)->segmentName(),seg) == 0) && (strcmp((*it)->sectionName(),sect) == 0) )
+			return *it;
+	}
+	return this->getFinalSection(*new ld::Section(seg, sect, type, false));
+}
+
 ld::Internal::FinalSection* InternalState::getFinalSection(const ld::Section& inputSection)
 {	
 	const ld::Section* baseForFinalSection = &inputSection;
@@ -510,7 +616,6 @@ ld::Internal::FinalSection* InternalState::getFinalSection(const ld::Section& in
 	}
 
 	// otherwise, create a new final section
-	bool objFile = false;
 	switch ( _options.outputKind() ) {
 		case Options::kStaticExecutable:
 		case Options::kDynamicExecutable:
@@ -542,14 +647,13 @@ ld::Internal::FinalSection* InternalState::getFinalSection(const ld::Section& in
 				//fprintf(stderr, "_sectionInToFinalMap[%p] = %p\n", &inputSection, pos->second);
 				return pos->second;
 			}
-			objFile = true;
 			break;
 	}
 
 	InternalState::FinalSection* result = new InternalState::FinalSection(*baseForFinalSection, 
-																	_sectionInToFinalMap.size(), objFile);
+																	_sectionInToFinalMap.size(), _options);
 	_sectionInToFinalMap[baseForFinalSection] = result;
-	//fprintf(stderr, "_sectionInToFinalMap[%p] = %p\n", baseForFinalSection, result);
+	//fprintf(stderr, "_sectionInToFinalMap[%p(%s)] = %p\n", baseForFinalSection, baseForFinalSection->sectionName(), result);
 	sections.push_back(result);
 	return result;
 }
@@ -794,6 +898,10 @@ uint64_t InternalState::assignFileOffsets()
 			ld::Internal::FinalSection* otherSect = *sit;
 			if ( ! _options.hasCustomSegmentAddress(otherSect->segmentName()) ) 
 				continue;
+			if ( otherSect->size == 0 )
+				continue;
+			if ( sect->size == 0 )
+				continue;
 			if ( sect->address > otherSect->address ) {
 				if ( (otherSect->address+otherSect->size) > sect->address ) {
 					overlappingFixedSection = otherSect;
@@ -819,8 +927,8 @@ uint64_t InternalState::assignFileOffsets()
 		fprintf(stderr, "Section layout:\n");
 		for (std::vector<ld::Internal::FinalSection*>::iterator it = sections.begin(); it != sections.end(); ++it) {
 			ld::Internal::FinalSection* sect = *it;
-			if ( sect->isSectionHidden() )
-				continue;
+			//if ( sect->isSectionHidden() )
+			//	continue;
 			fprintf(stderr, "  address:0x%08llX, alignment:2^%d, size:0x%08llX, padBytes:%d, section:%s/%s\n",
 							sect->address, sect->alignment, sect->size, sect->alignmentPaddingBytes, 
 							sect->segmentName(), sect->sectionName());

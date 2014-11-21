@@ -79,7 +79,7 @@ public:
 	// for adding references to symbols outside bitcode file
 	void										addReference(const char* nm)
 																	{ _undefs.push_back(ld::Fixup(0, ld::Fixup::k1of1, 
-																				ld::Fixup::kindNone, false, nm)); }
+																				ld::Fixup::kindNone, false, strdup(nm))); }
 private:
 
 	ld::File&									_file;
@@ -113,6 +113,7 @@ public:
 	virtual LinkerOptionsList*							linkerOptions() const		{ return NULL; }
 
 
+	void												release();
 	lto_module_t										module()					{ return _module; }
 	class InternalAtom&									internalAtom()				{ return _internalAtom; }
 	void												setDebugInfo(ld::relocatable::File::DebugInfoKind k,
@@ -233,6 +234,7 @@ private:
 		virtual void		doAtom(const class ld::Atom&);
 		virtual void		doFile(const class ld::File&) { }
 		
+
 		const OptimizeOptions&			_options;
 		std::vector<const char*>&		_additionalUndefines;
 		std::vector<const ld::Atom*>&	_newAtoms;
@@ -305,6 +307,7 @@ ld::relocatable::File* Parser::parseMachOFile(const uint8_t* p, size_t len, cons
 	objOpts.forceDwarfConversion = false;
 	objOpts.neverConvertDwarf   = false;
 	objOpts.verboseOptimizationHints = options.verboseOptimizationHints;
+
 	objOpts.subType				= 0;
 	
 	// mach-o parsing is done in-memory, but need path for debug notes
@@ -335,6 +338,10 @@ File::File(const char* pth, time_t mTime, ld::File::Ordinal ordinal, const uint8
 	const bool log = false;
 	
 	// create llvm module
+#if LTO_API_VERSION >= 9
+	_module = ::lto_module_create_from_memory_with_path(content, contentLength, pth);
+	if ( _module == NULL )
+#endif
 	_module = ::lto_module_create_from_memory(content, contentLength);
     if ( _module == NULL )
 		throwf("could not parse object file %s: '%s', using libLTO version '%s'", pth, ::lto_get_error_message(), ::lto_get_version());
@@ -418,8 +425,14 @@ File::File(const char* pth, time_t mTime, ld::File::Ordinal ordinal, const uint8
 
 File::~File()
 {
+	this->release();
+}
+
+void File::release()
+{
 	if ( _module != NULL )
 		::lto_module_dispose(_module);
+	_module = NULL;
 }
 
 bool File::forEachAtom(ld::File::AtomHandler& handler) const
@@ -442,7 +455,7 @@ Atom::Atom(File& f, const char* nm, ld::Atom::Scope s, ld::Atom::Definition d, l
 			ld::Atom::Alignment a, bool ah)
 	: ld::Atom(f._section, d, c, s, ld::Atom::typeLTOtemporary, 
 				ld::Atom::symbolTableIn, false, false, false, a),
-		_file(f), _name(nm), _compiledAtom(NULL)
+		_file(f), _name(strdup(nm)), _compiledAtom(NULL)
 {
 	if ( ah )
 		this->setAutoHide();
@@ -475,6 +488,17 @@ struct CommandLineOrderFileSorter
 void Parser::ltoDiagnosticHandler(lto_codegen_diagnostic_severity_t severity, const char* message, void*) 
 {
 	switch ( severity ) {
+#if LTO_API_VERSION >= 10
+		case LTO_DS_REMARK:
+		{
+			// PORT HACK: LLVM 3.5 prints thousands of lines about inlining, loop vectorization etc. by default
+			// this is a bug (fixed in 3.6/trunk), so for LLVM 3.5, just break
+			static bool printremarks = ( getenv("LD64_PRINT_LTO_REMARKS") || !strstr(::lto_get_version(), "3.5") );
+			if ( !printremarks ) break;
+			fprintf(stderr, "ld: LTO remark: %s\n", message);
+			break;
+		}
+#endif
 		case LTO_DS_NOTE:
 		case LTO_DS_WARNING:
 			warning("%s", message);
@@ -520,6 +544,8 @@ bool Parser::optimize(  const std::vector<const ld::Atom*>&	allAtoms,
 		if ( logBitcodeFiles ) fprintf(stderr, "lto_codegen_add_module(%s)\n", f->path());
 		if ( ::lto_codegen_add_module(generator, f->module()) )
 			throwf("lto: could not merge in %s because '%s', using libLTO version '%s'", f->path(), ::lto_get_error_message(), ::lto_get_version());
+		// <rdar://problem/15471128> linker should release module as soon as possible
+		f->release();
 		lastOrdinal = f->ordinal();
 	}
 
@@ -564,7 +590,7 @@ bool Parser::optimize(  const std::vector<const ld::Atom*>&	allAtoms,
 				}
 			}
 		}
-		else {
+		else if ( atom->scope() >= ld::Atom::scopeLinkageUnit ) {
 			llvmAtoms[atom->name()] = (Atom*)atom;
 		}
 	}
@@ -624,8 +650,19 @@ bool Parser::optimize(  const std::vector<const ld::Atom*>&	allAtoms,
 			if ( logMustPreserve ) fprintf(stderr, "lto_codegen_add_must_preserve_symbol(%s) because referenced by a mach-o atom\n", name);
 			::lto_codegen_add_must_preserve_symbol(generator, name);
 		}
+		else if ( options.relocatable && hasNonllvmAtoms ) {
+			// <rdar://problem/14334895> ld -r mode but merging in some mach-o files, so need to keep libLTO from optimizing away anything
+			if ( logMustPreserve ) fprintf(stderr, "lto_codegen_add_must_preserve_symbol(%s) because -r mode disable LTO dead stripping\n", name);
+			::lto_codegen_add_must_preserve_symbol(generator, name);
+		}
 	}
 	
+	// <rdar://problem/16165191> tell code generator to preserve initial undefines
+	for( std::vector<const char*>::const_iterator it=options.initialUndefines->begin(); it != options.initialUndefines->end(); ++it) {
+		if ( logMustPreserve ) fprintf(stderr, "lto_codegen_add_must_preserve_symbol(%s) because it is an initial undefine\n", *it);
+		::lto_codegen_add_must_preserve_symbol(generator, *it);
+	}
+
     // special case running ld -r on all bitcode files to produce another bitcode file (instead of mach-o)
     if ( options.relocatable && !hasNonllvmAtoms ) {
 		if ( ! ::lto_codegen_write_merged_modules(generator, options.outputFilePath) ) {
@@ -726,14 +763,14 @@ bool Parser::optimize(  const std::vector<const ld::Atom*>&	allAtoms,
 		fprintf(stderr, "llvmAtoms:\n");
 		for (CStringToAtom::iterator it = llvmAtoms.begin(); it != llvmAtoms.end(); ++it) {
 			const char* name = it->first;
-			//Atom* atom = it->second;
-			fprintf(stderr, "\t%s\n", name);
+			Atom* atom = it->second;
+			fprintf(stderr, "\t%p\t%s\n", atom, name);
 		}
 		fprintf(stderr, "deadllvmAtoms:\n");
 		for (CStringToAtom::iterator it = deadllvmAtoms.begin(); it != deadllvmAtoms.end(); ++it) {
 			const char* name = it->first;
-			//Atom* atom = it->second;
-			fprintf(stderr, "\t%s\n", name);
+			Atom* atom = it->second;
+			fprintf(stderr, "\t%p\t%s\n", atom, name);
 		}
 	}
 	AtomSyncer syncer(additionalUndefines, newAtoms, llvmAtoms, deadllvmAtoms, options);
@@ -767,51 +804,50 @@ bool Parser::optimize(  const std::vector<const ld::Atom*>&	allAtoms,
 
 void Parser::AtomSyncer::doAtom(const ld::Atom& machoAtom)
 {
+	static const bool log = false;
 	static const ld::Atom* lastProxiedAtom = NULL;
 	static const ld::File* lastProxiedFile = NULL;
 	// update proxy atoms to point to real atoms and find new atoms
 	const char* name = machoAtom.name();
-	if ( machoAtom.scope() >= ld::Atom::scopeLinkageUnit ) {
-		CStringToAtom::iterator pos = _llvmAtoms.find(name);
-		if ( pos != _llvmAtoms.end() ) {
-			// turn Atom into a proxy for this mach-o atom
-			pos->second->setCompiledAtom(machoAtom);
-			lastProxiedAtom = &machoAtom;
-			lastProxiedFile = pos->second->file();
-		}
-		else {
-			// an atom of this name was not in the allAtoms list the linker gave us
-			if ( _deadllvmAtoms.find(name) != _deadllvmAtoms.end() ) {
-				// this corresponding to an atom that the linker coalesced away or marked not-live
-				if ( _options.linkerDeadStripping ) {
-					// llvm seems to want this atom and -dead_strip is enabled, so it will be deleted if not needed, so add back
-					Atom* llvmAtom = _deadllvmAtoms[name];
-					llvmAtom->setCompiledAtom(machoAtom);
-					_newAtoms.push_back(&machoAtom);
-				}
-				else {
-					// Don't pass it back as a new atom
-				} 
-			}
-			else
-			{
-				// this is something new that lto conjured up, tell ld its new
-				_newAtoms.push_back(&machoAtom);
-			}
-		}
+	CStringToAtom::iterator pos = _llvmAtoms.find(name);
+	if ( pos != _llvmAtoms.end() ) {
+		// turn Atom into a proxy for this mach-o atom
+		pos->second->setCompiledAtom(machoAtom);
+		lastProxiedAtom = &machoAtom;
+		lastProxiedFile = pos->second->file();
+		if (log) fprintf(stderr, "AtomSyncer, mach-o atom %p synced to lto atom %p (name=%s)\n", &machoAtom, pos->second, machoAtom.name());
 	}
 	else {
-		// ld only knew about non-static atoms, so this one must be new
-		_newAtoms.push_back(&machoAtom);
-		// <rdar://problem/15469363> if new static atom in same section as previous non-static atom, assign to same file as previous
-		if ( (lastProxiedAtom != NULL) && (lastProxiedAtom->section() == machoAtom.section()) ) {
-			ld::Atom* ma = const_cast<ld::Atom*>(&machoAtom);
-			ma->setFile(lastProxiedFile);
+		// an atom of this name was not in the allAtoms list the linker gave us
+		if ( _deadllvmAtoms.find(name) != _deadllvmAtoms.end() ) {
+			// this corresponding to an atom that the linker coalesced away or marked not-live
+			if ( _options.linkerDeadStripping ) {
+				// llvm seems to want this atom and -dead_strip is enabled, so it will be deleted if not needed, so add back
+				Atom* llvmAtom = _deadllvmAtoms[name];
+				llvmAtom->setCompiledAtom(machoAtom);
+				_newAtoms.push_back(&machoAtom);
+				if (log) fprintf(stderr, "AtomSyncer, mach-o atom %p matches dead lto atom %p but adding back (name=%s)\n", &machoAtom, llvmAtom, machoAtom.name());
+			}
+			else {
+				// Don't pass it back as a new atom
+				if (log) fprintf(stderr, "AtomSyncer, mach-o atom %p matches dead lto atom %p (name=%s)\n", &machoAtom, _deadllvmAtoms[name], machoAtom.name());
+			} 
+		}
+		else
+		{
+			// this is something new that lto conjured up, tell ld its new
+			_newAtoms.push_back(&machoAtom);
+			// <rdar://problem/15469363> if new static atom in same section as previous non-static atom, assign to same file as previous
+			if ( (lastProxiedAtom != NULL) && (lastProxiedAtom->section() == machoAtom.section()) ) {
+				ld::Atom* ma = const_cast<ld::Atom*>(&machoAtom);
+				ma->setFile(lastProxiedFile);
+			}
+			if (log) fprintf(stderr, "AtomSyncer, mach-o atom %p is totally new (name=%s)\n", &machoAtom, machoAtom.name());
 		}
 	}
 	
 	// adjust fixups to go through proxy atoms
-	//fprintf(stderr, "adjusting fixups in atom: %s\n", machoAtom.name());
+	if (log) fprintf(stderr, "  adjusting fixups in atom: %s\n", machoAtom.name());
 	for (ld::Fixup::iterator fit=machoAtom.fixupsBegin(); fit != machoAtom.fixupsEnd(); ++fit) {
 		switch ( fit->binding ) {
 			case ld::Fixup::bindingNone:
@@ -820,17 +856,19 @@ void Parser::AtomSyncer::doAtom(const ld::Atom& machoAtom)
 				// don't know if this target has been seen by linker before or if it is new
 				// be conservative and tell linker it is new
 				_additionalUndefines.push_back(fit->u.name);
-				//fprintf(stderr, "    by name ref to: %s\n", fit->u.name);
+				if (log) fprintf(stderr, "    adding by-name symbol %s\n", fit->u.name);
 				break;
 			case ld::Fixup::bindingDirectlyBound:
 				// If mach-o atom is referencing another mach-o atom then 
 				// reference is not going through Atom proxy. Fix it here to ensure that all
 				// llvm symbol references always go through Atom proxy.
-				if (  fit->u.target->scope() != ld::Atom::scopeTranslationUnit ) {
+				{
 					const char* targetName = fit->u.target->name();
-					CStringToAtom::iterator pos = _llvmAtoms.find(targetName);
-					if ( pos != _llvmAtoms.end() ) {
-						fit->u.target = pos->second;
+					CStringToAtom::iterator post = _llvmAtoms.find(targetName);
+					if ( post != _llvmAtoms.end() ) {
+						const ld::Atom* t = post->second;
+						if (log) fprintf(stderr, "    updating direct reference to %p to be ref to %p: %s\n", fit->u.target, t, targetName);
+						fit->u.target = t;
 					}
 					else {
 						// <rdar://problem/12859831> Don't unbind follow-on reference into by-name reference 

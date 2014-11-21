@@ -600,6 +600,8 @@ uint32_t HeaderAndLoadCommandsAtom<A>::flags() const
 				bits |= MH_HAS_TLV_DESCRIPTORS;
 			if ( _options.hasNonExecutableHeap() )
 				bits |= MH_NO_HEAP_EXECUTION;
+			if ( _options.markAppExtensionSafe() && (_options.outputKind() == Options::kDynamicLibrary) )
+				bits |= MH_APP_EXTENSION_SAFE;
 		}
 		if ( _options.hasExecutableStack() )
 			bits |= MH_ALLOW_STACK_EXECUTION;
@@ -758,6 +760,9 @@ uint32_t HeaderAndLoadCommandsAtom<A>::sectionFlags(ld::Internal::FinalSection* 
 			return S_REGULAR;
 		case ld::Section::typeTempLTO:
 			assert(0 && "typeTempLTO should not make it to final linked image");
+			return S_REGULAR;
+		case ld::Section::typeTempAlias:
+			assert(0 && "typeAlias should not make it to final linked image");
 			return S_REGULAR;
 		case ld::Section::typeAbsoluteSymbols:
 			assert(0 && "typeAbsoluteSymbols should not make it to final linked image");

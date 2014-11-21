@@ -192,6 +192,10 @@
 	#define N_SYMBOL_RESOLVER 0x100
 #endif
 
+#ifndef N_AST
+	#define N_AST 0x32
+#endif
+
 #ifndef LC_FUNCTION_STARTS
 	#define	LC_FUNCTION_STARTS 	0x26
 #endif
@@ -229,7 +233,13 @@
   };
 #endif
 
+#ifndef MH_APP_EXTENSION_SAFE
+	#define MH_APP_EXTENSION_SAFE 0x02000000
+#endif
 
+#ifndef N_ALT_ENTRY
+	#define N_ALT_ENTRY 0x0200
+#endif
 
 #ifndef CPU_SUBTYPE_ARM_V7F
   #define CPU_SUBTYPE_ARM_V7F    ((cpu_subtype_t) 10)
@@ -364,6 +374,7 @@
 
 #define UNWIND_ARM64_DWARF_SECTION_OFFSET               0x00FFFFFF
 
+
 #ifndef LC_SOURCE_VERSION
 	#define LC_SOURCE_VERSION 0x2A
 	struct source_version_command {
@@ -434,6 +445,7 @@
 #ifndef CPU_SUBTYPE_X86_64_H
 	#define CPU_SUBTYPE_X86_64_H	((cpu_subtype_t) 8) 
 #endif	
+
 
 struct ArchInfo {
 	const char*			archName;

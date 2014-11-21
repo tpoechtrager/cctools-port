@@ -224,7 +224,7 @@ private:
 	uint32_t						stringOffsetForStab(const ld::relocatable::File::Stab& stab, StringPoolAtom* pool);
 	uint64_t						valueForStab(const ld::relocatable::File::Stab& stab);
 	uint8_t							sectionIndexForStab(const ld::relocatable::File::Stab& stab);
-	
+	bool							isAltEntry(const ld::Atom* atom);
 
 	mutable std::vector<macho_nlist<P> >	_globals;
 	mutable std::vector<macho_nlist<P> >	_locals;
@@ -246,6 +246,29 @@ ld::Section SymbolTableAtom<A>::_s_section("__LINKEDIT", "__symbol_table", ld::S
 template <typename A>
 int	 SymbolTableAtom<A>::_s_anonNameIndex = 1;
 
+
+template <typename A>
+bool SymbolTableAtom<A>::isAltEntry(const ld::Atom* atom) 
+{
+	// alt entries have a group subordinate reference to the previous atom
+	for (ld::Fixup::iterator fit = atom->fixupsBegin(); fit != atom->fixupsEnd(); ++fit) {
+		if ( fit->kind == ld::Fixup::kindNoneGroupSubordinate ) {
+			if ( fit->binding == Fixup::bindingDirectlyBound ) {
+				const Atom* prevAtom = fit->u.target;
+				assert(prevAtom != NULL);
+				for (ld::Fixup::iterator fit2 = prevAtom->fixupsBegin(); fit2 != prevAtom->fixupsEnd(); ++fit2) {
+					if ( fit2->kind == ld::Fixup::kindNoneFollowOn ) {
+						if ( fit2->binding == Fixup::bindingDirectlyBound ) {
+							if ( fit2->u.target == atom )
+								return true;
+						}
+					}
+				}
+			}
+		}
+	}
+	return false;
+}
 
 template <typename A>
 bool SymbolTableAtom<A>::addLocal(const ld::Atom* atom, StringPoolAtom* pool) 
@@ -312,6 +335,8 @@ bool SymbolTableAtom<A>::addLocal(const ld::Atom* atom, StringPoolAtom* pool)
 		desc |= N_WEAK_DEF;
 	if ( atom->isThumb() )
 		desc |= N_ARM_THUMB_DEF;
+    if ( (this->_options.outputKind() == Options::kObjectFile) && this->_state.allObjectFilesScatterable && isAltEntry(atom) )
+        desc |= N_ALT_ENTRY;
 	entry.set_n_desc(desc);
 
 	// set n_value ( address this symbol will be at if this executable is loaded at it preferred address )
@@ -387,6 +412,8 @@ void SymbolTableAtom<A>::addGlobal(const ld::Atom* atom, StringPoolAtom* pool)
         desc |= N_SYMBOL_RESOLVER;
     if ( atom->dontDeadStrip() && (this->_options.outputKind() == Options::kObjectFile) )
         desc |= N_NO_DEAD_STRIP;
+    if ( (this->_options.outputKind() == Options::kObjectFile) && this->_state.allObjectFilesScatterable && isAltEntry(atom) )
+        desc |= N_ALT_ENTRY;
 	if ( (atom->definition() == ld::Atom::definitionRegular) && (atom->combine() == ld::Atom::combineByName) ) {
 		desc |= N_WEAK_DEF;
 		// <rdar://problem/6783167> support auto hidden weak symbols: .weak_def_can_be_hidden
@@ -451,7 +478,13 @@ void SymbolTableAtom<A>::addImport(const ld::Atom* atom, StringPoolAtom* pool)
 
 	// set n_type
 	if ( this->_options.outputKind() == Options::kObjectFile ) {
-		if ( (atom->scope() == ld::Atom::scopeLinkageUnit) 
+		if ( atom->section().type() == ld::Section::typeTempAlias ) {
+			if ( atom->scope() == ld::Atom::scopeLinkageUnit )
+				entry.set_n_type(N_INDR | N_EXT | N_PEXT);
+			else
+				entry.set_n_type(N_INDR | N_EXT);
+		}
+		else if ( (atom->scope() == ld::Atom::scopeLinkageUnit) 
 				&& (atom->definition() == ld::Atom::definitionTentative) )
 			entry.set_n_type(N_UNDF | N_EXT | N_PEXT);
 		else 
@@ -500,8 +533,24 @@ void SymbolTableAtom<A>::addImport(const ld::Atom* atom, StringPoolAtom* pool)
 	// set n_value, zero for import proxy and size for tentative definition
 	if ( atom->definition() == ld::Atom::definitionTentative )
 		entry.set_n_value(atom->size());
-	else
+	else if ( atom->section().type() != ld::Section::typeTempAlias )
 		entry.set_n_value(0);
+	else {
+		assert(atom->fixupsBegin() != atom->fixupsEnd());
+		for (ld::Fixup::iterator fit = atom->fixupsBegin(); fit != atom->fixupsEnd(); ++fit) {
+			assert(fit->kind == ld::Fixup::kindNoneFollowOn);
+			switch ( fit->binding ) {
+				case ld::Fixup::bindingByNameUnbound:
+					entry.set_n_value(pool->add(fit->u.name));
+					break;
+				case ld::Fixup::bindingsIndirectlyBound:
+					entry.set_n_value(pool->add((_state.indirectBindingTable[fit->u.bindingIndex])->name()));
+					break;
+				default:
+					assert(0 && "internal error: unexpected alias binding");
+			}
+		}
+	}
 	
 	// add to array
 	_imports.push_back(entry);
@@ -775,13 +824,13 @@ uint64_t LocalRelocationsAtom<x86_64>::relocBaseAddress(ld::Internal& state)
 		// for kext bundles the reloc base address starts at __TEXT segment
 		return _options.baseAddress();
 	}
-	// for all other kinds, the x86_64 reloc base address starts at __DATA segment
+	// for all other kinds, the x86_64 reloc base address starts at first writable segment (usually __DATA)
 	for (std::vector<ld::Internal::FinalSection*>::iterator sit = state.sections.begin(); sit != state.sections.end(); ++sit) {
 		ld::Internal::FinalSection* sect = *sit;
-		if ( strcmp(sect->segmentName(), "__DATA") == 0 )
+		if ( !sect->isSectionHidden() && _options.initialSegProtection(sect->segmentName()) & VM_PROT_WRITE )
 			return sect->address;
 	}
-	throw "__DATA segment not found";
+	throw "writable (__DATA) segment not found";
 }
 
 template <typename A>
@@ -892,10 +941,10 @@ uint64_t ExternalRelocationsAtom<x86_64>::relocBaseAddress(ld::Internal& state)
 	// for x86_64 the reloc base address starts at __DATA segment
 	for (std::vector<ld::Internal::FinalSection*>::iterator sit = state.sections.begin(); sit != state.sections.end(); ++sit) {
 		ld::Internal::FinalSection* sect = *sit;
-		if ( strcmp(sect->segmentName(), "__DATA") == 0 )
+		if ( !sect->isSectionHidden() && _options.initialSegProtection(sect->segmentName()) & VM_PROT_WRITE )
 			return sect->address;
 	}
-	throw "__DATA segment not found";
+	throw "writable (__DATA) segment not found";
 }
 
 template <typename A>

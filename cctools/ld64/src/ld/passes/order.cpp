@@ -78,10 +78,11 @@ private:
 
 	class Comparer {
 	public:
-					Comparer(const Layout& l) : _layout(l) {}
+					Comparer(const Layout& l, ld::Internal& s) : _layout(l), _state(s) {}
 		bool		operator()(const ld::Atom* left, const ld::Atom* right);
 	private:
 		const Layout&	_layout;
+		ld::Internal&	_state;
 	};
 				
 	typedef std::unordered_map<const char*, const ld::Atom*, CStringHash, CStringEquals> NameToAtom;
@@ -114,7 +115,7 @@ private:
 bool Layout::_s_log = false;
 
 Layout::Layout(const Options& opts, ld::Internal& state)
-	: _options(opts), _state(state), _comparer(*this), _haveOrderFile(opts.orderedSymbolsCount() != 0)
+	: _options(opts), _state(state), _comparer(*this, state), _haveOrderFile(opts.orderedSymbolsCount() != 0)
 {
 }
 
@@ -167,11 +168,21 @@ bool Layout::Comparer::operator()(const ld::Atom* left, const ld::Atom* right)
 	bool leftIsAlias = left->isAlias();
 	if ( leftIsAlias ) {
 		for (ld::Fixup::iterator fit=left->fixupsBegin(); fit != left->fixupsEnd(); ++fit) {
+			const ld::Atom* target = NULL;
 			if ( fit->kind == ld::Fixup::kindNoneFollowOn ) {
-				assert(fit->binding == ld::Fixup::bindingDirectlyBound);
-			    if ( fit->u.target == right )
+				switch ( fit->binding ) {
+					case ld::Fixup::bindingsIndirectlyBound:
+						target = _state.indirectBindingTable[fit->u.bindingIndex];
+						break;
+					case ld::Fixup::bindingDirectlyBound:
+						target = fit->u.target;
+						break;
+                    default:
+                        break;   
+				}
+			    if ( target == right )
 					return true; // left already before right
-				left = fit->u.target; // sort as if alias was its target
+				left = target; // sort as if alias was its target
 				break;
 		    }
 		}
@@ -179,11 +190,21 @@ bool Layout::Comparer::operator()(const ld::Atom* left, const ld::Atom* right)
 	bool rightIsAlias = right->isAlias();
     if ( rightIsAlias ) {
         for (ld::Fixup::iterator fit=right->fixupsBegin(); fit != right->fixupsEnd(); ++fit) {
+			const ld::Atom* target = NULL;
 			if ( fit->kind == ld::Fixup::kindNoneFollowOn ) {
-				assert(fit->binding == ld::Fixup::bindingDirectlyBound);
-                if ( fit->u.target == left )
+				switch ( fit->binding ) {
+					case ld::Fixup::bindingsIndirectlyBound:
+						target = _state.indirectBindingTable[fit->u.bindingIndex];
+						break;
+					case ld::Fixup::bindingDirectlyBound:
+						target = fit->u.target;
+						break;
+                    default:
+                        break;   
+				}
+			    if ( target == left )
                     return false; // need to swap, alias is after target
-				right = fit->u.target; // continue with sort as if right was target
+				right = target; // continue with sort as if right was target
                 break;
 			}       
 		}
@@ -565,6 +586,18 @@ void Layout::buildOrdinalOverrideMap()
 
 void Layout::doPass()
 {
+	const bool log = false;
+	if ( log ) {
+		fprintf(stderr, "Unordered atoms:\n");
+		for (std::vector<ld::Internal::FinalSection*>::iterator sit=_state.sections.begin(); sit != _state.sections.end(); ++sit) {
+			ld::Internal::FinalSection* sect = *sit;
+			for (std::vector<const ld::Atom*>::iterator ait=sect->atoms.begin(); ait != sect->atoms.end(); ++ait) {
+				const ld::Atom* atom = *ait;
+				fprintf(stderr, "\t%p\t%s\t%s\n", atom, sect->sectionName(), atom->name());
+			}
+		}
+	}
+	
 	// handle .o files that cannot have their atoms rearranged
 	this->buildFollowOnTables();
 
@@ -574,19 +607,22 @@ void Layout::doPass()
 	// sort atoms in each section
 	for (std::vector<ld::Internal::FinalSection*>::iterator sit=_state.sections.begin(); sit != _state.sections.end(); ++sit) {
 		ld::Internal::FinalSection* sect = *sit;
-		//fprintf(stderr, "sorting section %s\n", sect->sectionName());
+		if ( sect->type() ==  ld::Section::typeTempAlias )
+			continue;
+		if ( log ) fprintf(stderr, "sorting section %s\n", sect->sectionName());
 		std::sort(sect->atoms.begin(), sect->atoms.end(), _comparer);
 	}
 
-	//fprintf(stderr, "Sorted atoms:\n");
-	//for (std::vector<ld::Internal::FinalSection*>::iterator sit=_state.sections.begin(); sit != _state.sections.end(); ++sit) {
-	//	ld::Internal::FinalSection* sect = *sit;
-	//	for (std::vector<const ld::Atom*>::iterator ait=sect->atoms.begin(); ait != sect->atoms.end(); ++ait) {
-	//		const ld::Atom* atom = *ait;
-	//		fprintf(stderr, "\t%p\t%s\t%s\n", atom, sect->sectionName(), atom->name());
-	//	}
-	//}
-
+	if ( log ) {
+		fprintf(stderr, "Sorted atoms:\n");
+		for (std::vector<ld::Internal::FinalSection*>::iterator sit=_state.sections.begin(); sit != _state.sections.end(); ++sit) {
+			ld::Internal::FinalSection* sect = *sit;
+			for (std::vector<const ld::Atom*>::iterator ait=sect->atoms.begin(); ait != sect->atoms.end(); ++ait) {
+				const ld::Atom* atom = *ait;
+				fprintf(stderr, "\t%p\t%s\t%s\n", atom, sect->sectionName(), atom->name());
+			}
+		}
+	}
 }
 
 

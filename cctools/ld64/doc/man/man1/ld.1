@@ -384,8 +384,6 @@ Don't turn private external (aka visibility=hidden) symbols into static symbols,
 but rather leave them as private external in the resulting object file.
 .It Fl d
 Force definition of common symbols.  That is, transform tentative definitions into real definitions.
-.It Fl rename_section Ar fromSegment fromSection toSegment toSection
-Renames section fromSegment/fromSection to toSegment/toSection.
 .El
 .Ss Options that control symbol resolution
 .Bl -tag
@@ -521,10 +519,49 @@ of wildcards.
 .Bl -tag
 .It Fl v
 Prints the version of the linker.
+.It Fl move_to_rw_segment Ar segment_name Ar filename
+Moves data symbols to another segment.  The command line option specifies the
+target segment name and a path to a file containing a list of symbols to move.
+Comments can be added to the symbol file by starting a line with a #.
+If there are multiple instances of a symbol name (for instance a "static int foo=5;" in multiple files)
+the symbol name in the symbol list file can be prefixed with the object file name 
+(e.g. "init.o:_foo") to move a specific instance.
+.It Fl move_to_ro_section Ar segment_name Ar section_name Ar filename
+Moves code symbols to another segment.  The command line option specifies the
+target segment name and a path to a file containing a list of symbols to move.
+Comments can be added to the symbol file by starting a line with a #.
+If there are multiple instances of a symbol name (for instance a "static int foo() {}" in multiple files)
+the symbol name in the symbol list file can be prefixed with the object file name 
+(e.g. "init.o:_foo") to move a specific instance.
+.It Fl rename_section Ar orgSegment orgSection newSegment newSection
+Renames section orgSegment/orgSection to newSegment/newSection.
+.It Fl rename_segment Ar orgSegment newSegment 
+Renames all sections with orgSegment segment name to have newSegment segment name.
+.It Fl trace_symbol_layout
+For using in debugging -rename_section, -rename_segment, -move_to_ro_segment, and -move_to_rw_segment.
+This option prints out a line show where and why each symbol was moved.
+Note: These options do not chain.  For each symbol, the linker first checks
+-move_to_ro_segment and -move_to_rw_segment.  If the symbol is not moved,
+it checks for an applicable -rename_section.  Only if the symbol still has
+not been moved, does the linker look for an applicable -rename_segment option.
+.It Fl section_order Ar segname Ar colon_separated_section_list
+Only for use with -preload.  Specifies the order that sections with the specified segment should be layout out.
+For example: "-section_order __ROM __text:__const:__cstring". 
+.It Fl segment_order Ar colon_separated_segment_list
+Only for use with -preload.  Specifies the order segments should be layout out.
+For example: "-segment_order __ROM:__ROM2:__RAM". 
 .It Fl allow_heap_execute
 Normally i386 main executables will be marked so that the Mac OS X 10.7 and later kernel 
 will only allow pages with the x-bit to execute instructions. This option overrides that
 behavior and allows instructions on any page to be executed.
+.It Fl application_extension
+Specifies that the code is being linked for use in an application extension.  The linker
+will then validiate that any dynamic libraries linked against are safe for use in
+application extensions.
+.It Fl no_application_extension
+Specifies that the code is being linked is not safe for use in an application extension. 
+For instance, can be used when creating a framework that should not be used in
+an application extension.
 .It Fl fatal_warnings
 Causes the linker to exit with a non-zero value if any warnings were emitted.
 .It Fl no_eh_labels

@@ -151,6 +151,7 @@ public:
 	virtual bool							forEachAtom(ld::File::AtomHandler&) const;
 	virtual bool							justInTimeforEachAtom(const char* name, ld::File::AtomHandler&) const;
 	virtual ld::File::ObjcConstraint		objCConstraint() const		{ return _objcContraint; }
+	virtual uint8_t							swiftVersion() const		{ return _swiftVersion; }
 	
 	// overrides of ld::dylib::File
 	virtual void							processIndirectLibraries(ld::dylib::File::DylibHandler*, bool);
@@ -164,6 +165,9 @@ public:
 	virtual bool							allSymbolsAreWeakImported() const;
 	virtual const void*						codeSignatureDR() const		{ return _codeSignatureDR; }
 	virtual bool							installPathVersionSpecific() const { return _installPathOverride; }
+	virtual bool							appExtensionSafe() const	{ return _appExtensionSafe; };
+	virtual ld::MacVersionMin				macMinVersion() const		{ return _macMinVersionInDylib; }
+	virtual ld::IOSVersionMin				iOSMinVersion() const		{ return _iOSMinVersionInDylib; }
 
 
 protected:
@@ -215,6 +219,7 @@ private:
 	bool										_linkingFlat;
 	bool										_implicitlyLinkPublicDylibs;
 	ld::File::ObjcConstraint					_objcContraint;
+	uint8_t										_swiftVersion;
 	ld::Section									_importProxySection;
 	ld::Section									_flatDummySection;
 	std::vector<Dependent>						_dependentDylibs;
@@ -233,6 +238,9 @@ private:
 	bool										_wrongOS;
 	bool										_installPathOverride;
 	bool										_indirectDylibsProcessed;
+	bool										_appExtensionSafe;
+	ld::MacVersionMin							_macMinVersionInDylib;
+	ld::IOSVersionMin							_iOSMinVersionInDylib;
 	
 	static bool									_s_logHashtable;
 };
@@ -256,13 +264,15 @@ File<A>::File(const uint8_t* fileContent, uint64_t fileLength, const char* pth, 
 	: ld::dylib::File(strdup(pth), mTime, ord), 
 	_macVersionMin(macMin), _iOSVersionMin(iOSMin), _allowSimToMacOSXLinking(allowSimToMacOSX), _addVersionLoadCommand(addVers), 
 	_linkingFlat(linkingFlatNamespace), _implicitlyLinkPublicDylibs(hoistImplicitPublicDylibs),
-	_objcContraint(ld::File::objcConstraintNone),
+	_objcContraint(ld::File::objcConstraintNone), _swiftVersion(0),
 	_importProxySection("__TEXT", "__import", ld::Section::typeImportProxies, true),
 	_flatDummySection("__LINKEDIT", "__flat_dummy", ld::Section::typeLinkEdit, true),
 	_parentUmbrella(NULL), _importAtom(NULL), _codeSignatureDR(NULL), 
 	_noRexports(false), _hasWeakExports(false), 
 	_deadStrippable(false), _hasPublicInstallName(false), 
-	 _providedAtom(false), _explictReExportFound(false), _wrongOS(false), _installPathOverride(false), _indirectDylibsProcessed(false)
+	 _providedAtom(false), _explictReExportFound(false), _wrongOS(false), _installPathOverride(false), 
+	_indirectDylibsProcessed(false), _appExtensionSafe(false),
+	_macMinVersionInDylib(ld::macVersionUnset), _iOSMinVersionInDylib(ld::iOSVersionUnset)
 {
 	const macho_header<P>* header = (const macho_header<P>*)fileContent;
 	const uint32_t cmd_count = header->ncmds();
@@ -287,6 +297,7 @@ File<A>::File(const uint8_t* fileContent, uint64_t fileLength, const char* pth, 
 					|| (header->filetype() == MH_EXECUTE);  // bundles and exectuables can be used via -bundle_loader
 	_hasWeakExports = (header->flags() & MH_WEAK_DEFINES);
 	_deadStrippable = (header->flags() & MH_DEAD_STRIPPABLE_DYLIB);
+	_appExtensionSafe = (header->flags() & MH_APP_EXTENSION_SAFE);
 	
 	// pass 1: get pointers, and see if this dylib uses compressed LINKEDIT format
 	const macho_dysymtab_command<P>* dynamicInfo = NULL;
@@ -344,6 +355,7 @@ File<A>::File(const uint8_t* fileContent, uint64_t fileLength, const char* pth, 
 					if ( _addVersionLoadCommand && !indirectDylib )
 						throw "building for iOS Simulator, but linking against dylib built for MacOSX";
 				}
+				_macMinVersionInDylib = (ld::MacVersionMin)((macho_version_min_command<P>*)cmd)->version();
 				break;
 			case LC_VERSION_MIN_IPHONEOS:
 				if ( _macVersionMin != ld::macVersionUnset ) {
@@ -351,6 +363,7 @@ File<A>::File(const uint8_t* fileContent, uint64_t fileLength, const char* pth, 
 					if ( _addVersionLoadCommand && !indirectDylib )
 						throw "building for MacOSX, but linking against dylib built for iOS Simulator";
 				}
+				_iOSMinVersionInDylib = (ld::IOSVersionMin)((macho_version_min_command<P>*)cmd)->version();
 				break;
 			case LC_CODE_SIGNATURE:
 				codeSignature = (macho_linkedit_data_command<P>* )cmd;
@@ -382,6 +395,7 @@ File<A>::File(const uint8_t* fileContent, uint64_t fileLength, const char* pth, 
 									_objcContraint = ld::File::objcConstraintRetainReleaseForSimulator;
 								else
 									_objcContraint = ld::File::objcConstraintRetainRelease;
+								_swiftVersion = ((flags >> 8) & 0xFF);
 							}
 							else if ( sect->size() > 0 ) {
 								warning("can't parse %s/%s section in %s", objCInfoSegmentName(), objCInfoSectionName(), this->path());
@@ -1074,20 +1088,6 @@ bool isDylibFile(const uint8_t* fileContent, cpu_type_t* result, cpu_subtype_t* 
 		*subResult = CPU_SUBTYPE_ARM64_ALL;
 		return true;
 	}
-#if 0
-/* PORT FIXME (may not even be porting bug) */
-	if ( Parser<ppc>::validFile(fileContent, false) ) {
-		*result = CPU_TYPE_POWERPC;
-		const macho_header<Pointer32<BigEndian> >* header = (const macho_header<Pointer32<BigEndian> >*)fileContent;
-		*subResult = header->cpusubtype();
-		return true;
-	}
-	if ( Parser<ppc64>::validFile(fileContent, false) ) {
-		*result = CPU_TYPE_POWERPC64;
-		*subResult = CPU_SUBTYPE_POWERPC_ALL;
-		return true;
-	}
-#endif
 	return false;
 }
 

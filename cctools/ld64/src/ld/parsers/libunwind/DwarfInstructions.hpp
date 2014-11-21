@@ -51,6 +51,7 @@
 
 #define CFI_INVALID_ADDRESS ((pint_t)(-1))
 
+
 namespace libunwind {
 
 ///
@@ -1959,6 +1960,7 @@ compact_unwind_encoding_t DwarfInstructions<A,R>::createCompactEncodingFromProlo
 
   return encoding;
 }
+
 
 } // namespace libunwind
 

@@ -330,6 +330,20 @@ void Resolver::doLinkerOption(const std::vector<const char*>& linkerOption, cons
 	}
 }
 
+static void userReadableSwiftVersion(uint8_t value, char versionString[64])
+{
+	switch (value) {
+		case 1:
+			strcpy(versionString, "1.0");
+			break;
+		case 2:
+			strcpy(versionString, "1.1");
+			break;
+		default:
+			sprintf(versionString, "unknown ABI version 0x%02X", value);
+	}
+}
+
 void Resolver::doFile(const ld::File& file)
 {
 	const ld::relocatable::File* objFile = dynamic_cast<const ld::relocatable::File*>(&file);
@@ -383,6 +397,27 @@ void Resolver::doFile(const ld::File& file)
 				break;
 		}
 	
+		// verify all files use same version of Swift language
+		if ( file.swiftVersion() != 0 ) {
+			if ( _internal.swiftVersion == 0 ) {
+				_internal.swiftVersion = file.swiftVersion();
+			}
+			else if ( file.swiftVersion() != _internal.swiftVersion ) {
+				char fileVersion[64];
+				char otherVersion[64];
+				userReadableSwiftVersion(file.swiftVersion(), fileVersion);
+				userReadableSwiftVersion(_internal.swiftVersion, otherVersion);
+				if ( file.swiftVersion() > _internal.swiftVersion ) {
+					throwf("%s compiled with newer version of Swift language (%s) than previous files (%s)", 
+						   file.path(), fileVersion, otherVersion);
+				}
+				else {
+					throwf("%s compiled with older version of Swift language (%s) than previous files (%s)", 
+					       file.path(), fileVersion, otherVersion);
+				}
+			}
+		}
+		
 		// in -r mode, if any .o files have dwarf then add UUID to output .o file
 		if ( objFile->debugInfo() == ld::relocatable::File::kDebugInfoDwarf )
 			_internal.someObjectFileHasDwarf = true;
@@ -468,6 +503,27 @@ void Resolver::doFile(const ld::File& file)
 					_internal.objcDylibConstraint = ld::File::objcConstraintRetainReleaseForSimulator;
 				}
 				break;
+		}
+		if ( _options.checkDylibsAreAppExtensionSafe() && !dylibFile->appExtensionSafe() ) {
+			warning("linking against dylib not safe for use in application extensions: %s", file.path());
+		}
+		const char* depInstallName = dylibFile->installPath();
+		// <rdar://problem/17229513> embedded frameworks are only supported on iOS 8 and later
+		if ( (depInstallName != NULL) && (depInstallName[0] != '/') ) {
+			if ( (_options.iOSVersionMin() != iOSVersionUnset) && (_options.iOSVersionMin() < iOS_8_0) ) {
+				// <rdar://problem/17598404> only warn about linking against embedded dylib if it is built for iOS 8 or later
+				if ( dylibFile->iOSMinVersion() >= iOS_8_0 )
+					throwf("embedded dylibs/frameworks are only supported on iOS 8.0 and later (%s)", depInstallName);
+			}
+		}
+		if ( _options.sharedRegionEligible() ) {
+			assert(depInstallName != NULL);
+			if ( depInstallName[0] == '@' )
+				warning("invalid -install_name (%s) in dependent dylib (%s). Dylibs/frameworks which might go in dyld shared cache "
+						"cannot link with dylib that uses @rpath, @loaderpath, etc.", depInstallName, dylibFile->path());
+			if ( (strncmp(depInstallName, "/usr/lib/", 9) != 0) && (strncmp(depInstallName, "/System/Library/", 16) != 0) )
+				warning("invalid -install_name (%s) in dependent dylib (%s). Dylibs/frameworks which might go in dyld shared cache "
+						"cannot link with dylibs that won't be in the shared cache", depInstallName, dylibFile->path());
 		}
 	}
 
@@ -569,7 +625,11 @@ void Resolver::doAtom(const ld::Atom& atom)
 	// remember if any atoms are proxies that require LTO
 	if ( atom.contentType() == ld::Atom::typeLTOtemporary )
 		_haveLLVMObjs = true;
-		
+	
+	// remember if any atoms are aliases
+	if ( atom.section().type() == ld::Section::typeTempAlias )
+		_haveAliases = true;
+	
 	if ( _options.deadCodeStrip() ) {
 		// add to set of dead-strip-roots, all symbols that the compiler marks as don't strip
 		if ( atom.dontDeadStrip() )
@@ -726,7 +786,7 @@ void Resolver::resolveUndefines()
 		}
 	}
 	
-	// Use linker options to resolve an remaining undefined symbols
+	// Use linker options to resolve any remaining undefined symbols
 	if ( !_internal.linkerOptionLibraries.empty() || !_internal.linkerOptionFrameworks.empty() ) {
 		std::vector<const char*> undefineNames;
 		_symbolTable.undefines(undefineNames);
@@ -1417,7 +1477,38 @@ void Resolver::fillInEntryPoint()
 	_internal.entryPoint = this->entryPoint(true);
 }
 
-
+void Resolver::syncAliases()
+{
+	if ( !_haveAliases || (_options.outputKind() == Options::kObjectFile) )
+		return;
+	
+	// Set attributes of alias to match its found target
+	for (std::vector<const ld::Atom*>::iterator it = _atoms.begin(); it != _atoms.end(); ++it) {
+		const ld::Atom* atom = *it;
+		if ( atom->section().type() == ld::Section::typeTempAlias ) {
+			assert(atom->fixupsBegin() != atom->fixupsEnd());
+			for (ld::Fixup::iterator fit = atom->fixupsBegin(); fit != atom->fixupsEnd(); ++fit) {
+				const ld::Atom* target;
+				ld::Atom::Scope scope;
+				assert(fit->kind == ld::Fixup::kindNoneFollowOn);
+				switch ( fit->binding ) {
+					case ld::Fixup::bindingByNameUnbound:
+						break;
+					case ld::Fixup::bindingsIndirectlyBound:
+						target = _internal.indirectBindingTable[fit->u.bindingIndex];
+						assert(target != NULL);
+						scope = atom->scope();
+						(const_cast<Atom*>(atom))->setAttributesFromAtom(*target);
+						// alias has same attributes as target, except for scope
+						(const_cast<Atom*>(atom))->setScope(scope);
+						break;
+					default:
+						assert(0 && "internal error: unexpected alias binding");
+				}
+			}
+		}
+	}
+}
 
 void Resolver::removeCoalescedAwayAtoms()
 {
@@ -1459,9 +1550,11 @@ void Resolver::linkTimeOptimize()
 	optOpt.linkerDeadStripping			= _options.deadCodeStrip();
 	optOpt.needsUnwindInfoSection		= _options.needsUnwindInfoSection();
 	optOpt.keepDwarfUnwind				= _options.keepDwarfUnwind();
+	optOpt.verboseOptimizationHints     = _options.verboseOptimizationHints();
 	optOpt.arch							= _options.architecture();
 	optOpt.mcpu							= _options.mcpuLTO();
 	optOpt.llvmOptions					= &_options.llvmOptions();
+	optOpt.initialUndefines				= &_options.initialUndefines();
 	
 	std::vector<const ld::Atom*>		newAtoms;
 	std::vector<const char*>			additionalUndefines; 
@@ -1488,7 +1581,7 @@ void Resolver::linkTimeOptimize()
 	}
 	
 	// <rdar://problem/14609792> add any auto-link libraries requested by LTO output to dylibs to search
-	_inputFiles.addLinkerOptionLibraries(_internal);
+	_inputFiles.addLinkerOptionLibraries(_internal, *this);
 	_inputFiles.createIndirectDylibs();
 
 	// resolve new undefines (e.g calls to _malloc and _memcpy that llvm compiler conjures up)
@@ -1591,6 +1684,7 @@ void Resolver::resolve()
 	this->deadStripOptimize();
 	this->checkUndefines();
 	this->checkDylibSymbolCollisions();
+	this->syncAliases();
 	this->removeCoalescedAwayAtoms();
 	this->fillInEntryPoint();
 	this->linkTimeOptimize();

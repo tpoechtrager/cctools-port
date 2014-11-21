@@ -71,8 +71,8 @@ public:
 				_name(nm),
 				_fixup1(0, ld::Fixup::k1of1, ld::Fixup::kindStoreTargetAddressARMBranch24, target),
 				_fixup2(0, ld::Fixup::k1of1, ld::Fixup::kindIslandTarget, finalTarget.atom) {
-					if (_s_log) fprintf(stderr, "%s: ARM jump instruction branch island to final target %s\n", 
-										target->name(), finalTarget.atom->name());
+					if (_s_log) fprintf(stderr, "%p: ARM-to-ARM branch island to final target %s\n", 
+										this, finalTarget.atom->name());
 				}
 
 	virtual const ld::File*					file() const					{ return NULL; }
@@ -101,8 +101,10 @@ public:
 							ld::Atom::scopeLinkageUnit, ld::Atom::typeBranchIsland, 
 							ld::Atom::symbolTableIn, false, false, false, ld::Atom::Alignment(2)), 
 				_name(nm),
-				_target(target),
-				_finalTarget(finalTarget) { }
+				_finalTarget(finalTarget) {
+					if (_s_log) fprintf(stderr, "%p: ARM-to-thumb1 branch island to final target %s\n", 
+										this, finalTarget.atom->name());
+				}
 
 	virtual const ld::File*					file() const					{ return NULL; }
 	virtual const char*						name() const					{ return _name; }
@@ -115,8 +117,6 @@ public:
 		int64_t displacement = _finalTarget.atom->finalAddress() + _finalTarget.offset - (this->finalAddress() + 12);
 		if ( _finalTarget.atom->isThumb() )
 			displacement |= 1;
-		if (_s_log) fprintf(stderr, "%s: 4 ARM instruction jump to final target at 0x%08llX\n", 
-										_target->name(), _finalTarget.atom->finalAddress());
 		OSWriteLittleInt32(&buffer[ 0], 0, 0xe59fc004);	// 	ldr  ip, pc + 4
 		OSWriteLittleInt32(&buffer[ 4], 0, 0xe08fc00c);	// 	add	 ip, pc, ip
 		OSWriteLittleInt32(&buffer[ 8], 0, 0xe12fff1c);	// 	bx	 ip
@@ -126,7 +126,6 @@ public:
 
 private:
 	const char*								_name;
-	const ld::Atom*							_target;
 	TargetAndOffset							_finalTarget;
 };
 
@@ -141,8 +140,8 @@ public:
 				_name(nm),
 				_fixup1(0, ld::Fixup::k1of1, ld::Fixup::kindStoreTargetAddressThumbBranch22, target),
 				_fixup2(0, ld::Fixup::k1of1, ld::Fixup::kindIslandTarget, finalTarget.atom)		{ 
-					if (_s_log) fprintf(stderr, "%s: Thumb jump instruction branch island to final target %s\n", 
-										target->name(), finalTarget.atom->name());
+					if (_s_log) fprintf(stderr, "%p: Thumb-to-thumb branch island to final target %s\n", 
+										this, finalTarget.atom->name());
 					}
 
 	virtual const ld::File*					file() const					{ return NULL; }
@@ -175,7 +174,10 @@ public:
 				_fixup2(0, ld::Fixup::k2of2, ld::Fixup::kindStoreThumbLow16),
 				_fixup3(4, ld::Fixup::k1of2, ld::Fixup::kindSetTargetAddress, finalTarget.atom),
 				_fixup4(4, ld::Fixup::k2of2, ld::Fixup::kindStoreThumbHigh16),
-				_fixup5(0, ld::Fixup::k1of1, ld::Fixup::kindIslandTarget, finalTarget.atom) { } 
+				_fixup5(0, ld::Fixup::k1of1, ld::Fixup::kindIslandTarget, finalTarget.atom) {
+					if (_s_log) fprintf(stderr, "%p: Thumb-to-thumb absolute branch island to final target %s\n", 
+										this, finalTarget.atom->name());
+					}
 
 	virtual const ld::File*					file() const					{ return NULL; }
 	virtual const char*						name() const					{ return _name; }
@@ -208,8 +210,10 @@ public:
 							ld::Atom::scopeLinkageUnit, ld::Atom::typeBranchIsland, 
 							ld::Atom::symbolTableIn, false, false, false, ld::Atom::Alignment(2)), 
 				_name(nm),
-				_target(target),
-				_finalTarget(finalTarget) { }
+				_finalTarget(finalTarget) {
+					if (_s_log) fprintf(stderr, "%p: NoPIC ARM-to-Thumb branch island to final target %s\n", 
+										this, finalTarget.atom->name());
+					}
 
 	virtual const ld::File*					file() const					{ return NULL; }
 	virtual const char*						name() const					{ return _name; }
@@ -222,8 +226,6 @@ public:
 		uint32_t targetAddr = _finalTarget.atom->finalAddress();
 		if ( _finalTarget.atom->isThumb() )
 			targetAddr |= 1;
-		if (_s_log) fprintf(stderr, "%s: 2 ARM instruction jump to final target at 0x%08llX\n",
-									_target->name(), _finalTarget.atom->finalAddress());
 		OSWriteLittleInt32(&buffer[0], 0, 0xe51ff004);	// 	ldr	pc, [pc, #-4]
 		OSWriteLittleInt32(&buffer[4], 0, targetAddr);	// 	.long target-this		
 	}
@@ -231,7 +233,6 @@ public:
 
 private:
 	const char*								_name;
-	const ld::Atom*							_target;
 	TargetAndOffset							_finalTarget;
 };
 
