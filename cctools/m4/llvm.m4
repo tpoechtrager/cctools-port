@@ -24,13 +24,15 @@ AC_DEFUN([CHECK_LLVM],
             AC_CHECK_LIB([LTO],[lto_get_version],
              [ LTO_LIB="-L${LLVM_LIB_DIR} -lLTO"
                if test "x$rpathlink" = "xyes"; then
-                   LTO_LIB="-Wl,-rpath,$LLVM_LIB_DIR,--enable-new-dtags $LTO_LIB"
+                   LTO_RPATH="-Wl,-rpath,$LLVM_LIB_DIR,--enable-new-dtags"
+                   LTO_LIB="$LTO_RPATH $LTO_LIB"
                fi
                LTO_DEF=-DLTO_SUPPORT
                # DO NOT include the LLVM include dir directly,
                # it may cause the build to fail.
                `ln -sf $LLVM_INCLUDE_DIR/llvm-c/lto.h include/llvm-c/lto.h 2>/dev/null 1>&2`
                AC_SUBST([LTO_DEF])
+               AC_SUBST([LTO_RPATH])
                AC_SUBST([LTO_LIB]) ])
 
             LDFLAGS=$ORIGLDFLAGS
