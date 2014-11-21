@@ -1,6 +1,6 @@
 # Apple cctools port for Linux, FreeBSD and NetBSD #
 
-Current Version: 855 + ld64-134.9.  
+Current Version: 862 + ld64-134.9.  
 Originally ported by [cjacker](http://ios-toolchain-based-on-clang-for-linux.googlecode.com).
 
 ## SUPPORTED HOSTS ##
