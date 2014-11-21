@@ -357,6 +357,13 @@ struct object *object)
 		    order_error(arch, member, "dyld_info "
 			"out of place");
 	    }
+	    else if(object->dyld_info->export_off != 0){
+		if(object->dyld_info->export_off != offset &&
+		   object->dyld_info->weak_bind_size != 0 &&
+		   object->dyld_info->lazy_bind_size != 0)
+		    order_error(arch, member, "dyld_info "
+			"out of place");
+	    }
 	    /* update offset to end of dyld_info contents */
 	    if (object->dyld_info->export_size != 0)
 		offset = object->dyld_info->export_off + 
@@ -382,17 +389,20 @@ struct object *object)
 		      sizeof(struct relocation_info);
 	}
 	if(object->split_info_cmd != NULL){
-	    if(object->split_info_cmd->dataoff != offset)
+	    if(object->split_info_cmd->dataoff != 0 &&
+	       object->split_info_cmd->dataoff != offset)
 		order_error(arch, member, "split info data out of place");
 	    offset += object->split_info_cmd->datasize;
 	}
 	if(object->func_starts_info_cmd != NULL){
-	    if(object->func_starts_info_cmd->dataoff != offset)
+	    if(object->func_starts_info_cmd->dataoff != 0 &&
+	       object->func_starts_info_cmd->dataoff != offset)
 		order_error(arch, member, "function starts data out of place");
 	    offset += object->func_starts_info_cmd->datasize;
 	}
 	if(object->data_in_code_cmd != NULL){
-	    if(object->data_in_code_cmd->dataoff != offset)
+	    if(object->data_in_code_cmd->dataoff != 0 &&
+	       object->data_in_code_cmd->dataoff != offset)
 		order_error(arch, member, "data in code info out of place");
 	    offset += object->data_in_code_cmd->datasize;
 	}
@@ -608,9 +618,10 @@ struct object *object)
 		 * at the end of the object file change the object_size to be
 		 * the end of the string table here.  This could be done at the
 		 * end of this routine but since all the later checks are fatal
-		 * we'll just do this here.
+		 * we'll just do this here.  If there is a code signature after
+		 * string table don't do this.
 		 */
-		if(rounded_strend != strend)
+		if(rounded_strend != strend && object->code_sig_cmd == NULL)
 		    object->object_size = strend;
 		end = object->st->stroff;
 	    }

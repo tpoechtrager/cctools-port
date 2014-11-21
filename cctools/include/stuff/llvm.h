@@ -26,4 +26,7 @@ __private_extern__ int llvm_disasm_set_options(
     LLVMDisasmContextRef DC,
     uint64_t Options);
 
+__private_extern__ const char *llvm_disasm_version_string(
+    void);
+
 #endif /* _STUFF_LLVM_H_ */

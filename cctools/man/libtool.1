@@ -1,4 +1,4 @@
-.TH LIBTOOL 1 "September 24, 2008" "Apple Inc."
+.TH LIBTOOL 1 "January 27, 2014" "Apple Inc."
 .SH NAME
 libtool \- create libraries
 .br
@@ -16,6 +16,9 @@ ranlib \- add or update the table of contents of archive libraries
 [
 .BI -arch_only " arch_type"
 ]
+[
+.B \-no_warning_for_no_symbols
+] 
 .IR file ...
 [-filelist listfile[,dirname]]
 .br
@@ -422,6 +425,9 @@ and
 .B \-
 Treat all remaining arguments as names of files (or archives) and not as
 options.
+.TP
+.B \-no_warning_for_no_symbols
+Don't warn about file that have no symbols.
 .SH "SEE ALSO"
 ld(1), ar(1), otool(1), make(1), redo_prebinding(1), ar(5)
 .SH BUGS

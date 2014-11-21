@@ -2497,14 +2497,15 @@ struct arch *arch)
 		if (debug_uuid != NULL) {
 		    string_to_uuid (debug_uuid, uuid->uuid);
 		}
-		mdi->uuid[0] = uuid->uuid[0];
-		mdi->uuid[1] = uuid->uuid[1];
-		mdi->uuid[2] = uuid->uuid[2];
-		mdi->uuid[3] = uuid->uuid[3];
-		mdi->uuid[4] = uuid->uuid[4];
-		mdi->uuid[5] = uuid->uuid[5];
-		mdi->uuid[6] = uuid->uuid[6];
-		mdi->uuid[7] = uuid->uuid[7];
+		/* Swizzle UUID to match EFI GUID definition */
+		mdi->uuid[0] = uuid->uuid[3];
+		mdi->uuid[1] = uuid->uuid[2];
+		mdi->uuid[2] = uuid->uuid[1];
+		mdi->uuid[3] = uuid->uuid[0];
+		mdi->uuid[4] = uuid->uuid[5];
+		mdi->uuid[5] = uuid->uuid[4];
+		mdi->uuid[6] = uuid->uuid[7];
+		mdi->uuid[7] = uuid->uuid[6];
 		mdi->uuid[8] = uuid->uuid[8];
 		mdi->uuid[9] = uuid->uuid[9];
 		mdi->uuid[10] = uuid->uuid[10];
@@ -2578,13 +2579,9 @@ uint8_t *uuid)
 {
     uint8_t count;
 
-	/*
-	* scanned bytewise to ensure correct endianness of fields
-	*/
 	count = sscanf (string, UUID_FORMAT_STRING,
-	&uuid[3], &uuid[2], &uuid[1], &uuid[0],
-	&uuid[5], &uuid[4],
-	&uuid[7], &uuid[6],
+	&uuid[0], &uuid[1], &uuid[2], &uuid[3],
+	&uuid[4], &uuid[5], &uuid[6], &uuid[7],
 	&uuid[8], &uuid[9], &uuid[10], &uuid[11],
 	&uuid[12], &uuid[13], &uuid[14], &uuid[15]);
 

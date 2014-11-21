@@ -808,8 +808,14 @@ struct info *info)
 	    printf("0x%llx", c.data);
 	}
 	printf(" (struct class_ro_t *)");
+	/*
+	 * This is a Swift class if some of the low bits of the pointer
+	 * are set.
+	 */
+	if((c.data + n_value) & 0x7)
+	    printf(" Swift class");
 	printf("\n");
-	print_class_ro_t(c.data + n_value, info, &is_meta_class);
+	print_class_ro_t((c.data + n_value) & ~0x7, info, &is_meta_class);
 
 	if(is_meta_class == FALSE){
 	    printf("Meta Class\n");
@@ -1776,6 +1782,8 @@ enum bool verbose)
 			object_addr, object_size, &info.sections,
 			&info.nsections, &info.database);
 	o = get_section_64(info.sections, info.nsections, SEG_OBJC, sectname);
+	if(o == NULL)
+	    return;
 	get_cstring_section_64(load_commands, ncmds, sizeofcmds,object_byte_sex,
 			       object_addr, object_size, &cstring_section);
 

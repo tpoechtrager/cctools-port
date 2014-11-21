@@ -622,8 +622,15 @@ struct info *info)
 	    printf(" %s\n", name);
 	else
 	    printf("\n");
-	printf("          data 0x%x (struct class_ro_t *)\n", c.data);
-	print_class_ro_t(c.data, info, &is_meta_class);
+	printf("          data 0x%x (struct class_ro_t *)", c.data);
+	/*
+	 * This is a Swift class if some of the low bits of the pointer
+	 * are set.
+	 */
+	if(c.data & 0x3)
+	    printf(" Swift class");
+	printf("\n");
+	print_class_ro_t(c.data & ~0x3, info, &is_meta_class);
 
 	if(! is_meta_class)
 	    {

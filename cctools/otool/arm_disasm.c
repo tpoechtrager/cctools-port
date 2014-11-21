@@ -838,6 +838,8 @@ const char **ReferenceName)
 		    *ReferenceType =
 			LLVMDisassembler_ReferenceType_DeMangled_Name;
 		}
+		else
+		    *ReferenceType = LLVMDisassembler_ReferenceType_InOut_None;
 	    }
 	    else
 		*ReferenceType = LLVMDisassembler_ReferenceType_InOut_None;
