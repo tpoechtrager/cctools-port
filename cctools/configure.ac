@@ -33,7 +33,7 @@ if test "x$build" = "x$host"; then
   CXX="clang++"
   CFLAGS="$CFLAGS -isystem /usr/local/include -isystem /usr/pkg/include"
   CXXFLAGS="$CXXFLAGS -isystem /usr/local/include -isystem /usr/pkg/include"
-  LDFLAGS="$LDFLAGS -L/usr/local/lib"
+  LDFLAGS="$LDFLAGS -L/usr/local/lib -L/usr/pkg/lib"
 else
   CC="`which ${host_alias}-clang 2>/dev/null || echo clang`"
   CXX="`which ${host_alias}-clang++ 2>/dev/null || echo clang++`"
