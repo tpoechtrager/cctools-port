@@ -23,6 +23,10 @@
 
 #ifndef __APPLE__
 
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE 1 /* otherwise string.h may hide strnlen() */
+#endif
+
 #include <string.h>
 
 size_t
