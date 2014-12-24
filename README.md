@@ -18,7 +18,7 @@ armv7m, armv7em, armv8, arm64, arm64v8, i386, x86_64 and x86_64h.
 
 ## DEPENDENCIES ##
 
-`Clang 3.2+`, `automake`, `autogen` and `libtool`.
+`Clang 3.2+ [3.5+ for arm64/x86_64h]`, `automake`, `autogen` and `libtool`.
 
 On Linux / FreeBSD / NetBSD you also need to install:
 
