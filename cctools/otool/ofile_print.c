@@ -201,6 +201,10 @@
 #define __dr6 dr6
 #define __dr7 dr7
 
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE 1 /* otherwise string.h may hide strnlen() */
+#endif
+
 #include <stdlib.h>
 #include <stddef.h>
 #include <string.h>
