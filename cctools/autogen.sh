@@ -8,17 +8,20 @@ if [ $? -eq 0 ]; then
     ../tools/fix-unistd-issue.sh
 fi
 
-mkdir -p m4
-aclocal
-autoconf
-
+# LIBTOOLIZE=libtoolize
 which glibtoolize &>/dev/null
-
 if [ $? -eq 0 ]; then
-    glibtoolize -c -i
+    LIBTOOLIZE=glibtoolize
 else
-    libtoolize -c -i
+    LIBTOOLIZE=libtoolize
 fi
+
+export LIBTOOLIZE
+mkdir -p m4
+
+$LIBTOOLIZE -c -i
+aclocal -I m4
+autoconf
 
 automake -a -c
 
