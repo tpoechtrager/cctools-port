@@ -33,6 +33,15 @@
  * flotaing point and other arithmetic types, as needed, later.
  */
 
+/*
+ * Silence old glibc -Wtypedef-redefinition warnings.
+ * https://github.com/tpoechtrager/cctools-port/pull/8
+ */
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wtypedef-redefinition"
+#endif
+
 #ifdef __GNUC__
 typedef __signed char		__int8_t;
 #else	/* !__GNUC__ */
@@ -120,5 +129,9 @@ typedef unsigned long		__darwin_clock_t;	/* clock() */
 typedef __uint32_t		__darwin_socklen_t;	/* socklen_t (duh) */
 typedef long			__darwin_ssize_t;	/* byte count or error */
 typedef long			__darwin_time_t;	/* time() */
+
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
 
 #endif	/* _BSD_I386__TYPES_H_ */
