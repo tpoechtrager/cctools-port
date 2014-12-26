@@ -201,6 +201,14 @@
 #define __dr6 dr6
 #define __dr7 dr7
 
+/*
+ * Otherwise string.h may hide strnlen().
+ * https://github.com/tpoechtrager/cctools-port/pull/8
+ */
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 #include <stdlib.h>
 #include <stddef.h>
 #include <string.h>
