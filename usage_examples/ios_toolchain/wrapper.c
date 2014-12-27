@@ -48,7 +48,7 @@ char *get_executable_path(char *buf, size_t len)
 
 char *get_filename(char *str)
 {
-    char *p = strchr(str, '/');
+    char *p = strrchr(str, '/');
     return p ? &p[1] : str;
 }
 
