@@ -16,7 +16,7 @@ function verbose_cmd
 
 function extract()
 {
-    echo "extracting `basename $1` ..."
+    echo "extracting $(basename $1) ..."
     local tarflags="xf"
 
     case $1 in
@@ -32,7 +32,7 @@ function extract()
         *)
             echo "unhandled archive type"
             exit 1
-        ;;
+            ;;
     esac
 }
 
