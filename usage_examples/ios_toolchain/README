@@ -1,0 +1,15 @@
+PRE-REQUISITES:
+
+See cctools/ld64 README + git + bash + a jailbroken iOS device
+
+USAGE:
+
+./build.sh /path/to/sdk.tar.* <target cpu>
+
+Target CPU should be one of arm6, armv7, armv7s and arm64.
+
+This will build an iOS toolchain prefixed with
+arm-apple-darwin11-*
+
+You can then use arm-apple-darwin11-clang / arm apple-darwin11-clang++
+to build your applications.
