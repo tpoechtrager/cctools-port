@@ -121,7 +121,7 @@ int main(int argc, char *argv[])
     }
 
     args[i++] = "-miphoneos-version-min=" OS_VER_MIN;
-    args[i++] = "-mlinker-version=134.9";
+    args[i++] = "-mlinker-version=241.9";
 
     for (j = 1; j < argc; ++i, ++j)
         args[i] = argv[j];
