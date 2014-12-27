@@ -28,8 +28,7 @@ char *get_executable_path(char *buf, size_t len)
     char *p;
 #ifdef __APPLE__
     unsigned int l = len;
-    if (_NSGetExecutablePath(buf, &l) != 0)
-    return NULL;
+    if (_NSGetExecutablePath(buf, &l) != 0) return NULL;
 #elif defined(__FreeBSD__)
     int mib[4] = { CTL_KERN, KERN_PROC, KERN_PROC_PATHNAME, -1 };
     size_t l = len;
