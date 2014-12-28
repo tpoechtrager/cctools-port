@@ -13,3 +13,13 @@ arm-apple-darwin11-*
 
 You can then use arm-apple-darwin11-clang / arm apple-darwin11-clang++
 to build your applications.
+
+---
+
+IPHONEOS_DEPLOYMENT_TARGET can be used to target older iOS versions.
+
+For example:
+
+export IPHONEOS_DEPLOYMENT_TARGET=5.0
+
+will target iOS 5.0.

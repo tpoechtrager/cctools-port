@@ -76,12 +76,14 @@ int main(int argc, char *argv[])
     char execpath[PATH_MAX+1];
     char sdkpath[PATH_MAX+1];
     char codesign_allocate[64];
+    char osvermin[64];
 
     char *compiler;
     char *target;
 
     char *sdk;
     char *cpu;
+    char *osmin;
 
     target_info(argv, &target, &compiler);
     if (!get_executable_path(execpath, sizeof(execpath))) abort();
@@ -95,6 +97,11 @@ int main(int argc, char *argv[])
 
     env(&sdk, "IOS_SDK_SYSROOT", sdkpath);
     env(&cpu, "IOS_TARGET_CPU", TARGET_CPU);
+
+    env(&osmin, "IPHONEOS_DEPLOYMENT_TARGET", OS_VER_MIN);
+    unsetenv("IPHONEOS_DEPLOYMENT_TARGET");
+
+    snprintf(osvermin, sizeof(osvermin), "-miphoneos-version-min=%s", osmin);
 
     for (i = 1; i < argc; ++i)
     {
@@ -119,7 +126,7 @@ int main(int argc, char *argv[])
         args[i++] = cpu;
     }
 
-    args[i++] = "-miphoneos-version-min=" OS_VER_MIN;
+    args[i++] = osvermin;
     args[i++] = "-mlinker-version=134.9";
 
     for (j = 1; j < argc; ++i, ++j)
