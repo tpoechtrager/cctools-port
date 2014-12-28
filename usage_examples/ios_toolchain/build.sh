@@ -112,7 +112,7 @@ echo "*** building cctools / ld64 ***"
 echo ""
 
 pushd ../../cctools &>/dev/null
-git clean -fdx . &>/dev/null
+git clean -fdx . &>/dev/null || true
 ./autogen.sh
 ./configure --target=$TRIPLE --prefix=$TARGETDIR
 make -j4 && make install
