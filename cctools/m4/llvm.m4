@@ -27,7 +27,7 @@ AC_DEFUN([CHECK_LLVM],
              [ LTO_LIB="-L${LLVM_LIB_DIR} -lLTO"
                if test "x$rpathlink" = "xyes"; then
                    LTO_RPATH="-Wl,-rpath,$LLVM_LIB_DIR,--enable-new-dtags"
-                   LTO_LIB="$LTO_RPATH $LTO_LIB"
+                   LTO_LIB="$LTO_LIB"
                fi
                LTO_DEF=-DLTO_SUPPORT
                # DO NOT include the LLVM include dir directly,
