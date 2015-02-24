@@ -14,7 +14,11 @@
  * plan to include it (along with the current libLTO APIs) in a generic
  * libLLVM.dylib.
  */
+#ifdef __APPLE__
+#define LIB_LLVM "libLTO.dylib"
+#else
 #define LIB_LLVM "libLTO.so"
+#endif /* __APPLE__ */
 
 static int tried_to_load_llvm = 0;
 static void *llvm_handle = NULL;
@@ -62,12 +66,20 @@ static void load_llvm(void)
 		p[1] = '\0';
 	    llvm_path = makestr(prefix, "../lib/" LIB_LLVM, NULL);
 
+#ifdef __APPLE__
 	    llvm_handle = dlopen(llvm_path, RTLD_NOW);
 	    if(llvm_handle == NULL){
 		free(llvm_path);
 		llvm_path = NULL;
-		llvm_handle = dlopen("/usr/lib/llvm/" LIB_LLVM, RTLD_NOW);
+		llvm_handle = dlopen("/Applications/Xcode.app/Contents/"
+				     "Developer/Toolchains/XcodeDefault."
+				     "xctoolchain/usr/lib/" LIB_LLVM,
+				     RTLD_NOW);
 	    }
+#else
+	    llvm_handle = dlopen(LIB_LLVM, RTLD_NOW);
+#endif /* __APPLE__ */
+
 	    if(llvm_handle == NULL)
 		return;
 
@@ -79,6 +91,13 @@ static void load_llvm(void)
 	    options = dlsym(llvm_handle, "LLVMSetDisasmOptions");
 	    createCPU = dlsym(llvm_handle, "LLVMCreateDisasmCPU");
 	    version = dlsym(llvm_handle, "lto_get_version");
+
+#ifndef __APPLE__
+	    if(create == NULL){
+		fprintf(stderr, "Your " LIB_LLVM " lacks required symbols.\n");
+		fprintf(stderr, "Please run: tools/fix_liblto.sh (or http://git.io/AyZP) to fix libLTO.\n");
+	    }
+#endif /* __APPLE__ */
 
 	    if(create == NULL ||
 	       dispose == NULL ||
