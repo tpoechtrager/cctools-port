@@ -67,8 +67,8 @@ popd &>/dev/null
 set -x
 
 clang++ -shared \
- -L$LIBDIR -I$INCDIR -Wl,--whole-archive $LIBS -Wl,--no-whole-archive $SYSLIBS \
- $CXXFLAGS $TMP/lto.cpp $TMP/LTODisassembler.cpp -Wl,-Map,$TMP/lto.exports \
+ -L$LIBDIR -I$INCDIR -Wl,--whole-archive $LIBS -Wl,--no-whole-archive $SYSLIBS   \
+ $CXXFLAGS $TMP/lto.cpp $TMP/LTODisassembler.cpp -Wl,-version-script,$TMP/lto.ls \
  -Wl,-no-undefined -fno-rtti -fPIC -o libLTO.so
 
 rm -r $TMP
