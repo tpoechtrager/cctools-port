@@ -9,7 +9,7 @@ Linux
 FreeBSD  
 NetBSD  
 OpenBSD  
-DragonFlyBSD
+DragonFlyBSD  
 Windows (Cygwin)  
 Mac OS X  
 iOS
