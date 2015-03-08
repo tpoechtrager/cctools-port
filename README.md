@@ -20,7 +20,7 @@ armv4t, armv5, armv6, armv7, armv7f, armv7k, armv7s, i386 and x86_64.
 
 ## DEPENDENCIES ##
 
-`Clang 3.2+ or gcc 4.5+`, `automake`, `autogen` and `libtool`.
+`Clang 3.2+ or gcc/g++/gcc-objc 4.5+`, `automake`, `autogen` and `libtool`.
 
 On non-Mac OS X systems you also need to install:
 
