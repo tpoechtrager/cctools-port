@@ -26,7 +26,7 @@
  * @APPLE_OSREFERENCE_LICENSE_HEADER_END@
  */
 
-#if defined(__FreeBSD__) || defined(__APPLE__)
+#if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__APPLE__) || defined(__CYGWIN__)
 #include_next <sys/_types.h>
 #else
 #ifndef _SYS__TYPES_H_
@@ -143,4 +143,4 @@ typedef	unsigned char	__darwin_uuid_t[16];
 #endif /* offsetof */
 #endif /* KERNEL */
 #endif	/* _SYS__TYPES_H_ */
-#endif /* __FreeBSD__ || __APPLE__ */
+#endif /* __FreeBSD__ || OpenBSD || __APPLE__ || __CYGWIN__ */

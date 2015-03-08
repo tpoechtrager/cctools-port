@@ -42,25 +42,39 @@
 #pragma clang diagnostic ignored "-Wtypedef-redefinition"
 #endif
 
+#ifndef __CYGWIN__
 #ifdef __GNUC__
-typedef __signed char		__int8_t;
+typedef __signed char           __int8_t;
 #else	/* !__GNUC__ */
-typedef char			__int8_t;
+typedef char                    __int8_t;
 #endif	/* !__GNUC__ */
-typedef unsigned char		__uint8_t;
-typedef	short			__int16_t;
-typedef	unsigned short		__uint16_t;
-typedef int			__int32_t;
-typedef unsigned int		__uint32_t;
-#if __SIZEOF_POINTER__ < 8
-typedef long long int		__int64_t;
-typedef unsigned long long  int	__uint64_t;
+#endif  /* __CYGWIN__ */
+
+typedef unsigned char           __uint8_t;
+typedef short                   __int16_t;
+typedef unsigned short          __uint16_t;
+typedef int                     __int32_t;
+typedef unsigned int            __uint32_t;
+
+#ifdef __INT64_TYPE_
+typedef __INT64_TYPE_           __int64_t;
+typedef unsigned __INT64_TYPE__ __uint64_t;
 #else
-typedef long int       __int64_t;
-typedef unsigned long  int __uint64_t;
+#if __SIZEOF_POINTER__ == 8 && !defined(__CYGWIN__)
+typedef long int                __int64_t;
+typedef unsigned long int       __uint64_t;
+#else
+typedef long long int           __int64_t;
+typedef unsigned long long int  __uint64_t;
 #endif
-typedef long			__darwin_intptr_t;
-typedef unsigned int		__darwin_natural_t;
+#endif
+
+typedef long                    __darwin_intptr_t;
+#ifdef __CYGWIN__
+typedef unsigned long           __darwin_natural_t;
+#else
+typedef unsigned int            __darwin_natural_t;
+#endif
 
 /*
  * The rune type below is declared to be an ``int'' instead of the more natural

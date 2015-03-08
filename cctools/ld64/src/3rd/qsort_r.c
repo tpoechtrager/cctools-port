@@ -160,11 +160,13 @@ fls(int mask)
  * only advantage over quicksort is that it requires little additional memory.
  */
 __private_extern__ int
-__heapsort_r(vbase, nmemb, size, thunk, compar)
-    void *vbase;
-    size_t nmemb, size;
-    void *thunk;
-    int (*compar)(void *, const void *, const void *);
+__heapsort_r(
+    void *vbase,
+    size_t nmemb,
+    size_t size,
+    void *thunk,
+    int (*compar)(void *, const void *, const void *)
+)
 {
     size_t cnt, i, j, l;
     char tmp, *tmp1, *tmp2;

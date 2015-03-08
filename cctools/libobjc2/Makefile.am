@@ -4,7 +4,7 @@ libobjc_la_CPPFLAGS= -DTYPE_DEPENDENT_DISPATCH -DGNUSTEP -D__OBJC_RUNTIME_INTERN
 
 libobjc_la_CFLAGS = -std=gnu99 -fPIC -fexceptions $(WARNINGS)
 
-libobjc_la_OBJCFLAGS = $(OBJCWARNINGS)
+libobjc_la_OBJCFLAGS = -std=gnu99 $(OBJCWARNINGS)
 
 libobjc_la_SOURCES =  \
     NSBlocks.m\

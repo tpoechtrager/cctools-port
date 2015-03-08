@@ -43,8 +43,19 @@ __attribute__((weak)) void (*dispatch_end_thread_4GC)(void);
 __attribute__((weak)) void *(*_dispatch_begin_NSAutoReleasePool)(void);
 __attribute__((weak)) void (*_dispatch_end_NSAutoReleasePool)(void *);
 
+__attribute__((weak)) extern int otool_cygwin;
+
 void __objc_exec_class(struct objc_module_abi_8 *module)
 {
+#if defined(__CYGWIN__) && defined(__clang__)
+	if (&otool_cygwin)
+	{
+		// Just return until I can figure out why this keeps
+		// crashing in clang built otool on Cygwin.
+		return;
+	}
+#endif
+
 	static BOOL first_run = YES;
 
 	// Check that this module uses an ABI version that we recognise.  

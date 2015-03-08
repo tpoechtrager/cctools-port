@@ -70,6 +70,9 @@
 #if defined(__NetBSD__) || defined(__OpenBSD__)
 #include_next <machine/types.h> /* __cpu_simple_lock_t */
 #endif /* __NetBSD__ || __OpenBSD__ */
+#ifdef __DragonFly__
+#include <cpu/types.h>
+#endif /* __DragonFly__ */
 #include <i386/_types.h>
 #include <sys/cdefs.h>
 /*
@@ -93,17 +96,17 @@ typedef	int			int32_t;
 typedef	unsigned int		u_int32_t;
 #ifndef _INT64_T
 #define _INT64_T
-#if !defined(__NetBSD__) && !defined(__OpenBSD__)
+#if !defined(__NetBSD__) && !defined(__OpenBSD__) && !defined(__DragonFly__)
 typedef	long long		int64_t;
 #else
 typedef long            int64_t;
-#endif /* ! __NetBSD__ && !__OpenBSD__  */
+#endif /* ! __NetBSD__ && !__OpenBSD__ && !__DragonFly__  */
 #endif
-#if !defined(__NetBSD__) && !defined(__OpenBSD__)
+#if !defined(__NetBSD__) && !defined(__OpenBSD__) && !defined(__DragonFly__)
 typedef	unsigned long long	u_int64_t;
 #else
 typedef unsigned long       u_int64_t;
-#endif /* ! __NetBSD__ && !__OpenBSD__  */
+#endif /* ! __NetBSD__ && !__OpenBSD__ && !__DragonFly__ */
 
 #if __LP64__
 typedef int64_t			register_t;

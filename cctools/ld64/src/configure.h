@@ -12,9 +12,7 @@
 
 #include "strlcat.h"
 #include "strlcpy.h"
-extern "C" {
 #include "helper.h"
-}
 
 #ifdef __GLIBCXX__
 #include <algorithm>

@@ -270,6 +270,8 @@ ld::File* InputFiles::makeFile(const Options::FileInfo& info, bool indirectDylib
 				}
 			}
 			// if requested architecture is page aligned within fat file, then remap just that portion of file
+			// ld64-port: remapping the file on Cygwin fails for an unknown reason, so always go the alternative way there
+#ifndef __CYGWIN__
 			if ( (fileOffset & 0x00000FFF) == 0 ) {
 				// unmap whole file
 				munmap((caddr_t)p, info.fileLen);
@@ -279,8 +281,11 @@ ld::File* InputFiles::makeFile(const Options::FileInfo& info, bool indirectDylib
 					throwf("can't re-map file, errno=%d", errno);
 			}
 			else {
+#endif /* __CYGWIN__ */
 				p = &p[fileOffset];
+#ifndef __CYGWIN__
 			}
+#endif /* __CYGWIN__ */
 		}
 	}
 	::close(fd);

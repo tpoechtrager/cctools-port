@@ -25,7 +25,7 @@
  * 
  * @APPLE_OSREFERENCE_LICENSE_HEADER_END@
  */
-#if defined(__FreeBSD__)
+#if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__CYGWIN__)
 #include_next <machine/_types.h>
 #else
 #ifndef _BSD_MACHINE__TYPES_H_
@@ -41,4 +41,4 @@
 #error architecture not supported
 #endif
 #endif /* _BSD_MACHINE__TYPES_H_ */
-#endif /* __FreeBSD__ */
+#endif /* __FreeBSD__ || __OpenBSD__ || __CYGWIN__ */

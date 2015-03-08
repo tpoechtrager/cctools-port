@@ -1,4 +1,4 @@
-# Apple cctools port for Linux, FreeBSD and NetBSD #
+# Apple cctools port for Linux, *BSD and Windows (Cygwin) #
 
 Current Version: 862 + ld64-241.9.  
 Originally ported by [cjacker](http://ios-toolchain-based-on-clang-for-linux.googlecode.com).
@@ -8,8 +8,11 @@ Originally ported by [cjacker](http://ios-toolchain-based-on-clang-for-linux.goo
 Linux  
 FreeBSD  
 NetBSD  
+OpenBSD  
+DragonFlyBSD
+Windows (Cygwin)  
 Mac OS X  
-iOS (partially)
+iOS
 
 ## SUPPORTED TARGETS ##
 
@@ -18,9 +21,9 @@ armv7m, armv7em, armv8, arm64, arm64v8, i386, x86_64 and x86_64h.
 
 ## DEPENDENCIES ##
 
-`Clang 3.2+ [3.5+ for arm64/x86_64h]`, `automake`, `autogen` and `libtool`.
+`Clang 3.2+ or gcc 4.5+`, `automake`, `autogen` and `libtool`.
 
-On Linux / FreeBSD / NetBSD you also need to install:
+On non-Mac OS X systems you also need to install:
 
 `uuid-devel` and `openssl-devel`.
 
@@ -32,7 +35,7 @@ Optional, but recommended deps:
 
 * `cd cctools`
 * `./autogen.sh`
-* `./configure --prefix=<installdir> --target=<target>`
+* `./configure --prefix=<installdir> --target=<target> [--with-llvm-config=...]`
 * `make`
 * `make install`
 

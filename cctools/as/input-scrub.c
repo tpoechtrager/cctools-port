@@ -410,7 +410,8 @@ char *
 find_an_include_file(
 char *no_path_name)
 {
-  char					  name_buffer [MAXPATHLEN];
+  /* cctools-port: added static keyword */
+  static char				name_buffer [MAXPATHLEN];
   register struct directory_stack	* the_path_pointer;
   register char				* whole_file_name;
 

@@ -309,6 +309,9 @@ static void print_argstrings(
 /* apple_version is created by the libstuff/Makefile */
 extern char apple_version[];
 char *version = apple_version;
+#if defined(__CYGWIN__) && defined(__clang__)
+int otool_cygwin;
+#endif
 
 int
 main(

@@ -40,9 +40,9 @@ typedef int sig_atomic_t;
 
 #if !defined(_POSIX_C_SOURCE) || defined(_DARWIN_C_SOURCE)
 
-#if !defined(__FreeBSD__) && !defined(__NetBSD__) && !defined(__OpenBSD__)
+#if !defined(__FreeBSD__) && !defined(__NetBSD__) && !defined(__OpenBSD__) && !defined(__DragonFly__)
 #include <sys/appleapiopts.h>
-#endif /* !__FreeBSD__ && !__NetBSD__ && !__OpenBSD__ */
+#endif /* !__FreeBSD__ && !__NetBSD__ && !__OpenBSD__ && !__DragonFly__ */
 
 #ifdef __APPLE_API_OBSOLETE
 

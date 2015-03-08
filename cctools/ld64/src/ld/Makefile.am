@@ -11,10 +11,9 @@ ld_LDADD =  \
 	$(UUID_LIB) \
 	$(LTO_LIB)
 
-ld_LDFLAGS = $(PTHREAD_FLAGS) $(SSL_LIB)
+ld_LDFLAGS = $(PTHREAD_FLAGS) $(SSL_LIB) $(EXECINFO_LIB)
 
 ld_CXXFLAGS =  \
-	-fblocks \
 	-D__DARWIN_UNIX03 \
 	$(WARNINGS) \
 	$(LTO_DEF) \
@@ -31,7 +30,6 @@ ld_CXXFLAGS =  \
 	-DPROGRAM_PREFIX="\"$(PROGRAM_PREFIX)\""
 
 ld_CFLAGS =  \
-    -fblocks \
     -D__DARWIN_UNIX03 \
     $(WARNINGS) \
     $(LTO_DEF) \
