@@ -12,11 +12,10 @@ noinst_HEADERS =  \
 	tlvp.h
 
 libPasses_la_CXXFLAGS = \
-	-fblocks \
 	-D__DARWIN_UNIX03 \
 	$(WARNINGS) \
 	$(LTO_DEF) \
-	$(ENDIAN_FLAGS) \
+	$(ENDIAN_FLAG) \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/include/foreign \
 	-I$(top_srcdir)/ld64/src/abstraction \

@@ -26,9 +26,9 @@ const char ldVersionString[] = "134.9\n";
 
 void __assert_rtn(const char *func, const char *file, int line, const char *msg)
 {
-#ifdef __FreeBSD__
+#if defined(__FreeBSD__) || defined(__DragonFly__)
     __assert(msg, file, line, func);
-#elif defined(__NetBSD__) || defined(__OpenBSD__)
+#elif defined(__NetBSD__) || defined(__OpenBSD__) || defined(__CYGWIN__)
     __assert(msg, line, file);
 #else
     __assert(msg, file, line);

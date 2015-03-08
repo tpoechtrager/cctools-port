@@ -167,7 +167,7 @@ uint32_t *throttle)
             uint32_t bytes_written, bytes_per_second, write_size;
             double time_used, time_should_have_took, usecs_to_kill;
             static struct host_sched_info info = { 0 };
-            unsigned int count;
+            natural_t count; /* cctools-port: unsigned int -> natural_t */
             kern_return_t r;
 
             p = file;

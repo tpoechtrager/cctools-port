@@ -13,7 +13,9 @@
 #define PREFIX_SUFFIX(x, y) REALLY_PREFIX_SUFFIX(x, y)
 #define NAME(x) PREFIX_SUFFIX(POOL_NAME, x)
 
+#ifndef PAGE_SIZE // cctools-port
 #define PAGE_SIZE 4096
+#endif
 
 // Malloc one page at a time.
 #define POOL_SIZE ((PAGE_SIZE) / sizeof(POOL_TYPE))

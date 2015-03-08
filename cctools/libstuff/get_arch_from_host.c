@@ -44,7 +44,7 @@ struct arch_flag *family_arch_flag,
 struct arch_flag *specific_arch_flag)
 {
     struct host_basic_info host_basic_info;
-    unsigned int count;
+    natural_t count; /* cctools-port: unsigned int -> natural_t */
     kern_return_t r;
     mach_port_t my_mach_host_self;
 

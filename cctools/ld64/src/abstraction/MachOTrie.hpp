@@ -383,7 +383,7 @@ inline void parseTrie(const uint8_t* start, const uint8_t* end, std::vector<Entr
 	output.reserve(entries.size());
 	for (std::vector<EntryWithOffset>::iterator it=entries.begin(); it != entries.end(); ++it)
 		output.push_back(it->entry);
-	delete cummulativeString;
+	delete[] cummulativeString; // ld64-port: delete -> delete[]
 }
 
 

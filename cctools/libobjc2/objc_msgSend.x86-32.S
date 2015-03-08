@@ -80,7 +80,14 @@
 7:
 	popl  %ebx;
 8:
+#ifndef __CYGWIN__
+	/*
+	 * This causes an assertion failure in the GNU BFD Assembler on Cygwin
+	 * BFD (GNU Binutils) 2.25 assertion fail ./coff-i386.c:569
+	 * objc_msgSend.x86-32.S:103: Error: cannot represent relocation type BFD_RELOC_386_GOTPC
+	 */
 	addl  $_GLOBAL_OFFSET_TABLE_+(8b-7b), %ebx
+#endif
 	leal  SmallObjectClasses@GOTOFF(%ebx), %eax
 	mov   (%eax), %eax
 	popl  %ebx

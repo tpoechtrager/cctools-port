@@ -12,9 +12,7 @@
 
 #include "strlcat.h"
 #include "strlcpy.h"
-extern "C" {
 #include "helper.h"
-}
 
 #define CPU_SUBTYPE_X86_ALL     ((cpu_subtype_t)3)
 
