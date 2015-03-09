@@ -56,8 +56,8 @@ typedef unsigned short          __uint16_t;
 typedef int                     __int32_t;
 typedef unsigned int            __uint32_t;
 
-#ifdef __INT64_TYPE_
-typedef __INT64_TYPE_           __int64_t;
+#ifdef __INT64_TYPE__
+typedef __INT64_TYPE__          __int64_t;
 typedef unsigned __INT64_TYPE__ __uint64_t;
 #else
 #if __SIZEOF_POINTER__ == 8 && !defined(__CYGWIN__)

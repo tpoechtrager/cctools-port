@@ -56,7 +56,9 @@ struct objc_slot* (*_objc_selector_type_mismatch)(Class cls, SEL
 static 
 // Uncomment for debugging
 //__attribute__((noinline))
+#ifdef __clang__ // cctools-port
 __attribute__((always_inline))
+#endif
 Slot_t objc_msg_lookup_internal(id *receiver,
                                 SEL selector, 
                                 id sender)
