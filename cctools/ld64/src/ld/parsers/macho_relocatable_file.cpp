@@ -4832,9 +4832,8 @@ unsigned long CFStringSection<A>::contentHash(const class Atom<A>* atom, const l
 	// base hash of CFString on hash of cstring it wraps
 	ContentType cType;
 	unsigned long hash;
-	unsigned int charCount;
+	unsigned int charCount = 0u; // ld64-port: added 0u
 	const uint8_t* content = this->targetContent(atom, ind, &cType, &charCount);
-	charCount = 0u; // ld64-port
 	switch ( cType ) {
 		case contentUTF8:
 			hash = 9408;
