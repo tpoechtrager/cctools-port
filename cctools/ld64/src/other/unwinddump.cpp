@@ -417,7 +417,7 @@ void UnwindPrinter<x86_64>::decode(uint32_t encoding, const uint8_t* funcStart, 
 				// renumber registers back to standard numbers
 				int registers[6];
 				bool used[7] = { false, false, false, false, false, false, false };
-				for (int i=0; i < regCount; ++i) {
+				for (uint32_t i=0; i < regCount; ++i) { // ld64-port: int -> uint32_t
 					int renum = 0; 
 					for (int u=1; u < 7; ++u) {
 						if ( !used[u] ) {
@@ -431,7 +431,7 @@ void UnwindPrinter<x86_64>::decode(uint32_t encoding, const uint8_t* funcStart, 
 					}
 				}
 				bool needComma = false;
-				for (int i=0; i < regCount; ++i) {
+				for (uint32_t i=0; i < regCount; ++i) { // ld64-port: int -> uint32_t
 					if ( needComma ) 
 						strcat(str, ",");
 					else
@@ -598,7 +598,7 @@ void UnwindPrinter<x86>::decode(uint32_t encoding, const uint8_t* funcStart, cha
 				// renumber registers back to standard numbers
 				int registers[6];
 				bool used[7] = { false, false, false, false, false, false, false };
-				for (int i=0; i < regCount; ++i) {
+				for (uint32_t i=0; i < regCount; ++i) { // ld64-port: int -> uint32_t
 					int renum = 0; 
 					for (int u=1; u < 7; ++u) {
 						if ( !used[u] ) {
@@ -612,7 +612,7 @@ void UnwindPrinter<x86>::decode(uint32_t encoding, const uint8_t* funcStart, cha
 					}
 				}
 				bool needComma = false;
-				for (int i=0; i < regCount; ++i) {
+				for (uint32_t i=0; i < regCount; ++i) { // ld64-port: int -> uint32_t
 					if ( needComma ) 
 						strcat(str, ",");
 					else

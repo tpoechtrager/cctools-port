@@ -1177,6 +1177,8 @@ enum bool verbose)
     char buf[20];
     uint64_t big_size;
 
+    str_size = 0; /* cctools-port */
+
 	host_byte_sex = get_host_byte_sex();
 	toc_offset = 0;
 	strings = NULL;
@@ -7865,6 +7867,8 @@ enum bool print_addresses)
     struct relocation_info *reloc;
     uint32_t n_strx;
     uint64_t big_load_end, big_size;
+
+    d = 0.0; /* cctools-port */
 
 	host_byte_sex = get_host_byte_sex();
 	swapped = host_byte_sex != object_byte_sex;

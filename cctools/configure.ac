@@ -41,6 +41,8 @@ fi
 CWARNINGS=""
 OBJCWARNINGS=""
 CXXWARNINGS=""
+EXTRAFLAGS=""
+EXTRACXXFLAGS=""
 WARNINGS=""
 
 case $host_os in
@@ -54,10 +56,7 @@ case $host_os in
   ;;
   cygwin* )
     iscygwin=yes
-    CYGFLAGS="-D__LARGE64_FILES -fno-PIC"
-    CFLAGS="$CFLAGS $CYGFLAGS"
-    OBJCFLAGS="$OBJCFLAGS $CYGFLAGS"
-    CXXFLAGS="$CXXFLAGS $CYGFLAGS"
+    EXTRAFLAGS="-D__LARGE64_FILES -fno-PIC"
     WARNINGS="-Wno-attributes"
     if test "x$CC" = "x"; then CC="gcc"; fi
     if test "x$CXX" = "x"; then CXX="g++"; fi
@@ -94,7 +93,6 @@ case "`$CC --version`" in
     WARNINGS="$WARNINGS -Wno-unused-but-set-variable -Wno-deprecated -Wno-deprecated-declarations"
     WARNINGS="$WARNINGS -Wno-char-subscripts -Wno-strict-aliasing"
     OBJCWARNINGS="-Wall"
-    # TODO: GCC5 needs -Wno-int-conversion
     CFLAGS="$CFLAGS -std=gnu99 $CFLAGS -D__private_extern__= "
     CXXFLAGS="$CXXFLAGS -D__private_extern__="
   ;;
@@ -107,10 +105,22 @@ case "`$CXX --version`" in
     fi
     # can't use -fblocks on cyggwin due to a clang driver bug
     if test "x$iscygwin" = "xno"; then
-      CXXFLAGS="$CXXFLAGS -fblocks"
+      EXTRACXXFLAGS="$EXTRACXXFLAGS -fblocks"
+    else
+      EXTRAFLAGS="$EXTRAFLAGS -integrated-as"
     fi
   ;;
 esac
+
+if test "x$EXTRAFLAGS" != "x"; then
+  CFLAGS="$CFLAGS $EXTRAFLAGS"
+  OBJCFLAGS="$OBJCFLAGS $EXTRAFLAGS"
+  CXXFLAGS="$CXXFLAGS $EXTRAFLAGS"
+fi
+
+if test "xEXTRACXXFLAGS" != "x"; then
+  CXXFLAGS="$CXXFLAGS $EXTRACXXFLAGS"
+fi
 
 AC_SUBST([WARNINGS], [$WARNINGS])
 AC_SUBST([OBJCWARNINGS], [$OBJCWARNINGS])

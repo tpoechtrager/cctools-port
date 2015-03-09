@@ -227,6 +227,7 @@ ld::File* InputFiles::makeFile(const Options::FileInfo& info, bool indirectDylib
 	bool isFatFile = false;
 	uint32_t sliceToUse, sliceCount;
 	const fat_header* fh = (fat_header*)p;
+        sliceCount = 0; // ld64-port
 	if ( fh->magic == OSSwapBigToHostInt32(FAT_MAGIC) ) {
 		isFatFile = true;
 		const struct fat_arch* archs = (struct fat_arch*)(p + sizeof(struct fat_header));

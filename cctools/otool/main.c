@@ -2837,6 +2837,8 @@ uint64_t *ndbi)
     uint8_t *start, *end;
     const char **dylibs;
 
+    a = NULL; /* cctools-port */
+
 	/* If already setup just return. */
 	if(*dbi != NULL)
 	    return;

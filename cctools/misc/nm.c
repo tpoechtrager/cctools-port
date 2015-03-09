@@ -499,6 +499,8 @@ void *cookie)
     char *short_name, *has_suffix;
     enum bool is_framework;
 
+    memset(&process_flags, '\0', sizeof(process_flags)); /* cctools-port */
+
 	cmd_flags = (struct cmd_flags *)cookie;
 
 	process_flags.nsect = -1;

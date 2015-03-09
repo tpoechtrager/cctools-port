@@ -16,9 +16,10 @@
 pthread_key_t ARCThreadKey;
 #endif
 
-extern void _NSConcreteMallocBlock;
-extern void _NSConcreteStackBlock;
-extern void _NSConcreteGlobalBlock;
+// cctools-port void -> char []
+extern char _NSConcreteMallocBlock[];
+extern char _NSConcreteStackBlock[];
+extern char _NSConcreteGlobalBlock[];
 
 @interface NSAutoreleasePool
 + (Class)class;
@@ -191,13 +192,13 @@ static inline void release(id obj)
 {
 	if (isSmallObject(obj)) { return; }
 	Class cls = obj->isa;
-	if (cls == &_NSConcreteMallocBlock)
+	if (cls == (Class)&_NSConcreteMallocBlock)     // cctools-port: added (Class)
 	{
 		_Block_release(obj);
 		return;
 	}
-	if ((cls == &_NSConcreteStackBlock) ||
-	    (cls == &_NSConcreteGlobalBlock))
+	if ((cls == (Class)&_NSConcreteStackBlock) ||  // cctools-port: added (Class)
+	    (cls == (Class)&_NSConcreteGlobalBlock))   // cctools-port: added (Class)
 	{
 		return;
 	}
@@ -554,7 +555,7 @@ id objc_storeWeak(id *addr, id obj)
 		return nil;
 	}
 	Class cls = classForObject(obj);
-	if (&_NSConcreteGlobalBlock == cls)
+	if ((Class)&_NSConcreteGlobalBlock == cls) // cctools-port: added (Class)
 	{
 		// If this is a global block, it's never deallocated, so secretly make
 		// this a strong reference
@@ -563,7 +564,7 @@ id objc_storeWeak(id *addr, id obj)
 		*addr = obj;
 		return obj;
 	}
-	if (&_NSConcreteMallocBlock == cls)
+	if ((Class)&_NSConcreteMallocBlock == cls) // cctools-port: added (Class)
 	{
 		obj = block_load_weak(obj);
 	}
@@ -651,7 +652,7 @@ id objc_loadWeakRetained(id* addr)
 	id obj = *addr;
 	if (nil == obj) { return nil; }
 	Class cls = classForObject(obj);
-	if (&_NSConcreteMallocBlock == cls)
+	if ((Class)&_NSConcreteMallocBlock == cls) // cctools-port: added (Class)
 	{
 		obj = block_load_weak(obj);
 	}

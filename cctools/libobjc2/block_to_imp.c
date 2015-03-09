@@ -108,10 +108,11 @@ static struct wx_buffer alloc_buffer(size_t size)
 	return b;
 }
 
-extern void __objc_block_trampoline;
-extern void __objc_block_trampoline_end;
-extern void __objc_block_trampoline_sret;
-extern void __objc_block_trampoline_end_sret;
+// cctools-port void -> char []
+extern char __objc_block_trampoline[];
+extern char __objc_block_trampoline_end[];
+extern char __objc_block_trampoline_sret[];
+extern char __objc_block_trampoline_end_sret[];
 
 IMP imp_implementationWithBlock(void *block)
 {

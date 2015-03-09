@@ -398,6 +398,16 @@ private:
 	}
 };
 
+//
+// ld64-port:
+// silence a false positive uninitialized variable warning:
+// warning: '*((void*)& picker +24)' may be used uninitialized in this function
+//
+#ifndef __clang__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
+
 bool SymbolTable::addByName(const ld::Atom& newAtom, bool ignoreDuplicates)
 {
 	bool useNew = true;
@@ -407,6 +417,7 @@ bool SymbolTable::addByName(const ld::Atom& newAtom, bool ignoreDuplicates)
 	const ld::Atom* existingAtom = _indirectBindingTable[slot];
 	//fprintf(stderr, "addByName(%p) name=%s, slot=%u, existing=%p\n", &newAtom, newAtom.name(), slot, existingAtom);
 	if ( existingAtom != NULL ) {
+
 		assert(&newAtom != existingAtom);
 		NameCollisionResolution picker(newAtom, *existingAtom, ignoreDuplicates, _options);
 		if (picker.reportDuplicate()) {
@@ -433,6 +444,9 @@ bool SymbolTable::addByName(const ld::Atom& newAtom, bool ignoreDuplicates)
 	return useNew && (existingAtom != NULL);
 }
 
+#ifndef __clang__
+#pragma GCC diagnostic pop
+#endif
 
 bool SymbolTable::addByContent(const ld::Atom& newAtom)
 {
