@@ -687,6 +687,7 @@ void UnwindPrinter<A>::printObjectUnwindSection(bool showFunctionNames)
 		const char* functionNameStr;
 		pint_t funcAddress;
 		uint32_t offsetInFunction;
+		funcAddress = 0; // ld64-port
 		if ( hasExernReloc(((char*)entry-(char*)entriesStart)+macho_compact_unwind_entry<P>::codeStartFieldOffset(), &functionNameStr, &funcAddress) ) {
 			offsetInFunction = entry->codeStart();
 		}

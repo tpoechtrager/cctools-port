@@ -624,6 +624,7 @@ void DyldInfoPrinter<A>::printRebaseInfo()
 		const char* segName = "??";
 		const char* typeName = "??";
 		bool done = false;
+		segIndex = 0; // ld64-port
 		while ( !done && (p < end) ) {
 			uint8_t immediate = *p & REBASE_IMMEDIATE_MASK;
 			uint8_t opcode = *p & REBASE_OPCODE_MASK;

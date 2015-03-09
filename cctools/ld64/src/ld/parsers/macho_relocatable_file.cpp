@@ -4834,6 +4834,7 @@ unsigned long CFStringSection<A>::contentHash(const class Atom<A>* atom, const l
 	unsigned long hash;
 	unsigned int charCount;
 	const uint8_t* content = this->targetContent(atom, ind, &cType, &charCount);
+	charCount = 0u; // ld64-port
 	switch ( cType ) {
 		case contentUTF8:
 			hash = 9408;
@@ -4873,6 +4874,7 @@ bool CFStringSection<A>::canCoalesceWith(const class Atom<A>* atom, const ld::At
 	const Atom<A>* rhsAtom = dynamic_cast<const Atom<A>*>(&rhs);
 	assert(rhsAtom !=  NULL);
 	unsigned int rhsCharCount;
+	rhsCharCount = charCount = 0u; // ld64-port
 	const uint8_t* rhsStringContent = this->targetContent(rhsAtom, indirectBindingTable, &rhsType, &rhsCharCount);
 
 	if ( thisType != rhsType )
