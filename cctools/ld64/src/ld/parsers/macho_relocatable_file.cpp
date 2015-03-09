@@ -4868,13 +4868,13 @@ bool CFStringSection<A>::canCoalesceWith(const class Atom<A>* atom, const ld::At
 	assert(strcmp(this->sectionName(), "__cfstring") == 0);
 	
 	ContentType thisType;
-	unsigned int charCount;
+	unsigned int charCount = 0u; // ld64-port: added 0u
 	const uint8_t* cstringContent = this->targetContent(atom, indirectBindingTable, &thisType, &charCount);
 	ContentType rhsType;
 	const Atom<A>* rhsAtom = dynamic_cast<const Atom<A>*>(&rhs);
 	assert(rhsAtom !=  NULL);
 	unsigned int rhsCharCount;
-	rhsCharCount = charCount = 0u; // ld64-port
+	rhsCharCount = 0u; // ld64-port: added 0u
 	const uint8_t* rhsStringContent = this->targetContent(rhsAtom, indirectBindingTable, &rhsType, &rhsCharCount);
 
 	if ( thisType != rhsType )
