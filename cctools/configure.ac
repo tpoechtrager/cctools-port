@@ -254,7 +254,7 @@ AC_SUBST(CXXABI_LIB)
 
 ORIGLDFLAGS=$LDFLAGS
 LDFLAGS="$LDFLAGS -Wl,-rpath,/usr/local/lib,--enable-new-dtags"
-AC_MSG_CHECKING([if -Wl,-rptah,<path>,--enable-new-dtags is supported])
+AC_MSG_CHECKING([if -Wl,-rpath,<path>,--enable-new-dtags is supported])
 AC_LINK_IFELSE(
   [AC_LANG_SOURCE([[int main(){}]])],
   [rpathlink=yes
