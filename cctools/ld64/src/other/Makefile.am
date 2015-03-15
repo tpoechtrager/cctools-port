@@ -2,7 +2,7 @@ bin_PROGRAMS =  \
 	dyldinfo \
 	ObjectDump \
 	unwinddump \
-	machochecker 
+	machocheck
 
 AM_CXXFLAGS = \
 	-D__DARWIN_UNIX03 \
@@ -34,7 +34,7 @@ AM_CFLAGS = \
     -I$(top_srcdir)/ld64/src/ld/passes 
 
 unwinddump_SOURCES = unwinddump.cpp
-machochecker_SOURCES = machochecker.cpp
+machocheck_SOURCES = machochecker.cpp
 ObjectDump_SOURCES = \
 	ObjectDump.cpp \
 	$(top_srcdir)/ld64/src/ld/debugline.c 

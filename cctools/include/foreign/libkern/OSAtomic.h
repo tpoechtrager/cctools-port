@@ -82,7 +82,8 @@ __inline static
 int32_t	OSAtomicDecrement32Barrier( volatile int32_t *__theValue )
             { return OSAtomicAdd32Barrier( -1, __theValue); }
 
-#if defined(__ppc64__) || defined(__i386__) || defined(__x86_64__) || defined(__arm__) || defined(__arm64__)
+/* cctools-port: added defined(__ppc__) || */
+#if defined(__ppc__) || defined(__ppc64__) || defined(__i386__) || defined(__x86_64__) || defined(__arm__) || defined(__arm64__)
 
 int64_t	OSAtomicAdd64( int64_t __theAmount, volatile int64_t *__theValue );
 int64_t	OSAtomicAdd64Barrier( int64_t __theAmount, volatile int64_t *__theValue );
@@ -101,7 +102,7 @@ __inline static
 int64_t	OSAtomicDecrement64Barrier( volatile int64_t *__theValue )
             { return OSAtomicAdd64Barrier( -1, __theValue); }
 
-#endif  /* defined(__ppc64__) || defined(__i386__) || defined(__x86_64__) || defined(__arm__) || defined(__arm64__) */
+#endif  /* defined(__ppc__) || defined(__ppc64__) || defined(__i386__) || defined(__x86_64__) || defined(__arm__) || defined(__arm64__) */
 
 
 /* Boolean functions (and, or, xor.)  These come in four versions for each operation:

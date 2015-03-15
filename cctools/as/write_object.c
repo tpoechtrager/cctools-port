@@ -75,11 +75,17 @@
 #define RELOC_PAIR		SPARC_RELOC_PAIR
 #endif
 #if defined(M68K) || defined(I386)
+#undef  RELOC_SECTDIFF /* cctools-port: need to undef these to avoid warnings */
+#undef  RELOC_LOCAL_SECTDIFF
+#undef  RELOC_PAIR
 #define RELOC_SECTDIFF		GENERIC_RELOC_SECTDIFF
 #define RELOC_LOCAL_SECTDIFF	GENERIC_RELOC_LOCAL_SECTDIFF
 #define RELOC_PAIR		GENERIC_RELOC_PAIR
 #endif
 #ifdef ARM
+#undef  RELOC_SECTDIFF /* cctools-port: need to undef these to avoid warnings */
+#undef  RELOC_LOCAL_SECTDIFF
+#undef  RELOC_PAIR
 #define RELOC_SECTDIFF		ARM_RELOC_SECTDIFF
 #define RELOC_LOCAL_SECTDIFF	ARM_RELOC_SECTDIFF
 #define RELOC_PAIR		ARM_RELOC_PAIR

@@ -112,13 +112,21 @@
 
 #if	defined(KERNEL) || (!defined(_POSIX_C_SOURCE) || defined(_DARWIN_C_SOURCE))
 
+// cctools-port
+#undef LITTLE_ENDIAN
+#undef BIG_ENDIAN
+#undef PDP_ENDIAN
+#undef BYTE_ORDER
+
 #define	LITTLE_ENDIAN	__DARWIN_LITTLE_ENDIAN
 #define	BIG_ENDIAN	__DARWIN_BIG_ENDIAN
 #define	PDP_ENDIAN	__DARWIN_PDP_ENDIAN
 
 #define	BYTE_ORDER	__DARWIN_BYTE_ORDER
 
+#if defined(__has_include) && __has_include(<sys/_endian.h>) /* cctools-port */
 #include <sys/_endian.h>
+#endif
 
 #endif /* defined(KERNEL) || (!defined(_POSIX_C_SOURCE) || defined(_DARWIN_C_SOURCE)) */
 #endif /* !_PPC_ENDIAN_H_ */
