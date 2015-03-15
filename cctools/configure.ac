@@ -93,7 +93,7 @@ case "`$CC --version`" in
     WARNINGS="$WARNINGS -Wno-unused-but-set-variable -Wno-deprecated -Wno-deprecated-declarations"
     WARNINGS="$WARNINGS -Wno-char-subscripts -Wno-strict-aliasing"
     OBJCWARNINGS="-Wall"
-    CFLAGS="$CFLAGS -std=gnu99 $CFLAGS -D__private_extern__= "
+    CFLAGS="$CFLAGS -std=gnu99 -D__private_extern__="
     CXXFLAGS="$CXXFLAGS -D__private_extern__="
   ;;
 esac
@@ -109,6 +109,21 @@ case "`$CXX --version`" in
     else
       EXTRAFLAGS="$EXTRAFLAGS -integrated-as"
     fi
+  ;;
+esac
+
+case $target_cpu in
+  powerpc)
+    EXTRAFLAGS="$EXTRAFLAGS -D__ppc__"
+  ;;
+  powerpc64*)
+    EXTRAFLAGS="$EXTRAFLAGS -D__ppc__ -D__ppc64__"
+  ;;
+  arm64*|aarch64)
+    EXTRAFLAGS="$EXTRAFLAGS -D__arm64__"
+  ;;
+  arm*)
+    EXTRAFLAGS="$EXTRAFLAGS -D__arm__"
   ;;
 esac
 
@@ -162,13 +177,14 @@ fi
 
 AC_CHECK_HEADERS([uuid/uuid.h], [], [AC_MSG_ERROR([*** uuid.h not found, please install uuid dev packages according to your system])])
 
+
 #for libstuff emulated.c
 case $target_cpu in
      powerpc)
         AC_DEFINE(EMULATED_HOST_CPU_TYPE, 18, [Emulated CPU type])
         AC_DEFINE(EMULATED_HOST_CPU_SUBTYPE, 100, [Emulated CPU subtype])
     ;;
-     powerpc64)
+     powerpc64*)
         AC_DEFINE(EMULATED_HOST_CPU_TYPE, 16777234, [Emulated CPU type])
         AC_DEFINE(EMULATED_HOST_CPU_SUBTYPE, 0, [Emulated CPU subtype])
        ;;
@@ -180,7 +196,7 @@ case $target_cpu in
         AC_DEFINE(EMULATED_HOST_CPU_TYPE, 16777223, [Emulated CPU type])
         AC_DEFINE(EMULATED_HOST_CPU_SUBTYPE, 3, [Emulated CPU subtype])
     ;;
-     arm64*)
+     arm64*|aarch64)
         AC_DEFINE(EMULATED_HOST_CPU_TYPE, 16777228, [Emulated CPU type])
         AC_DEFINE(EMULATED_HOST_CPU_SUBTYPE, 0, [Emulated CPU subtype])
     ;;
@@ -203,7 +219,7 @@ AC_SUBST([ASLIBEXECDIR], ['${libexecdir}/as'])
 
 # set PROGRAM PREFIX
 if test "$target_alias"; then
-AC_SUBST([PROGRAM_PREFIX], ['${target_alias}-'])
+  AC_SUBST([PROGRAM_PREFIX], ['${target_alias}-'])
 fi
 
 AC_CHECK_LIB([dl],[dlopen],[DL_LIB=-ldl])
@@ -213,8 +229,8 @@ AC_CHECK_LIB([pthread],[pthread_create],[PTHREAD_FLAGS=-pthread])
 AC_SUBST(PTHREAD_FLAGS)
 
 if test "x$isdarwin" = "xno"; then
-AC_CHECK_LIB([uuid],[uuid_generate_random],[UUID_LIB=-luuid],[exit 1])
-AC_SUBST(UUID_LIB)
+  AC_CHECK_LIB([uuid],[uuid_generate_random],[UUID_LIB=-luuid],[exit 1])
+  AC_SUBST(UUID_LIB)
 fi
 
 AC_CHECK_LIB([execinfo],[backtrace],[DL_LIB=-lexecinfo])
@@ -238,7 +254,7 @@ AC_SUBST(CXXABI_LIB)
 
 ORIGLDFLAGS=$LDFLAGS
 LDFLAGS="$LDFLAGS -Wl,-rpath,/usr/local/lib,--enable-new-dtags"
-AC_MSG_CHECKING([if -Wl,-rpath,<path>,--enable-new-dtags is supported])
+AC_MSG_CHECKING([if -Wl,-rptah,<path>,--enable-new-dtags is supported])
 AC_LINK_IFELSE(
   [AC_LANG_SOURCE([[int main(){}]])],
   [rpathlink=yes

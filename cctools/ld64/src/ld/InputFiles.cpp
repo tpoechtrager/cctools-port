@@ -813,9 +813,13 @@ void InputFiles::inferArchitecture(Options& opts, const char** archName)
 	opts.setArchitecture(CPU_TYPE_I386, CPU_SUBTYPE_X86_ALL);
 #elif __x86_64__
 	opts.setArchitecture(CPU_TYPE_X86_64, CPU_SUBTYPE_X86_64_ALL);
+#elif __ppc__ // ld64-port
+    opts.setArchitecture(CPU_TYPE_POWERPC, CPU_SUBTYPE_POWERPC_ALL);
+#elif __ppc64__ // ld64-port
+    opts.setArchitecture(CPU_TYPE_POWERPC64, CPU_SUBTYPE_POWERPC_ALL);
 #elif __arm__
 	opts.setArchitecture(CPU_TYPE_ARM, CPU_SUBTYPE_ARM_V6);
-#elif __arm64__
+#elif __arm64__ // ld64-port
 	opts.setArchitecture(CPU_TYPE_ARM, CPU_SUBTYPE_ARM64_ALL);
 #else
 	#error unknown default architecture

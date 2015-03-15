@@ -6,7 +6,7 @@ USAGE:
 
 ./build.sh /path/to/sdk.tar.* <target cpu>
 
-Target CPU should be one of arm6, armv7, armv7s and arm64.
+Target CPU should be one of armv6, armv7, armv7s and arm64.
 
 This will build an iOS toolchain prefixed with
 arm-apple-darwin11-*
