@@ -5,12 +5,12 @@ Originally ported by [cjacker](http://ios-toolchain-based-on-clang-for-linux.goo
 
 ## SUPPORTED HOSTS ##
 
-** SUPPORTED OPERATING SYSTEMS: **
+**SUPPORTED OPERATING SYSTEMS:**
 
 Linux, FreeBSD, NetBSD, OpenBSD, DragonFlyBSD,  
 Windows (Cygwin), Mac OS X and iOS
 
-** SUPPORTED HOST ARCHITECTURES: **
+**SUPPORTED HOST ARCHITECTURES:**
 
 x86, x86_64
 
