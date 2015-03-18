@@ -110,7 +110,7 @@ case "`$CXX --version`" in
   ;;
 esac
 
-case $target_cpu in
+case $host_cpu in
   powerpc)
     EXTRAFLAGS="$EXTRAFLAGS -D__ppc__"
   ;;
