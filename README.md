@@ -12,11 +12,11 @@ Windows (Cygwin), Mac OS X and iOS
 
 **SUPPORTED HOST ARCHITECTURES:**
 
-x86, x86_64
+x86, x86_64, arm
 
 Untested, but compiles:
 
-arm, aarch64, ppc, ppc64
+aarch64, ppc, ppc64
 
 ## SUPPORTED TARGETS ##
 
