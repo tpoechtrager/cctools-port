@@ -133,6 +133,8 @@ int main(int argc, char *argv[])
         args[i] = argv[j];
 
     args[i] = NULL;
+
+    setenv("COMPILER_PATH", execpath, 1);
     execvp(compiler, args);
 
     fprintf(stderr, "cannot invoke compiler!\n");
