@@ -27,13 +27,6 @@ if test "x$build" = "x$host"; then
   CFLAGS="$CFLAGS -isystem /usr/local/include -isystem /usr/pkg/include"
   CXXFLAGS="$CXXFLAGS -isystem /usr/local/include -isystem /usr/pkg/include"
   LDFLAGS="$LDFLAGS -L/usr/local/lib -L/usr/pkg/lib"
-else
-  if test "x$CC" = "x"; then
-    CC="`which ${host_alias}-clang 2>/dev/null || echo ${host_alias}-gcc`"
-  fi
-  if test "x$CXX" = "x"; then
-    CXX="`which ${host_alias}-clang++ 2>/dev/null || echo ${host_alias}-g++`"
-  fi
 fi
 
 CWARNINGS=""
@@ -49,37 +42,74 @@ case $host_os in
     AM_CONDITIONAL([ISDARWIN], [true])
   ;;
   openbsd* )
-    if test "x$CC" = "x"; then CC="egcc"; fi
-    if test "x$CXX" = "x"; then CXX="eg++"; fi
+    XCC="egcc"
+    XCXX="eg++"
   ;;
   cygwin* )
     iscygwin=yes
     EXTRAFLAGS="-D__LARGE64_FILES -fno-PIC"
     WARNINGS="-Wno-attributes"
-    if test "x$CC" = "x"; then CC="gcc"; fi
-    if test "x$CXX" = "x"; then CXX="g++"; fi
+    XCC="gcc"
+    XCXX="g++"
   ;;
 esac
 
+if test "x$isdarwin" = "xno"; then
+  case $host_cpu in
+    arm* )
+      # clang miscompiles ld64 on arm
+      if test "x$isdarwin" = "xno"; then
+        XCC="gcc"
+        XCXX="g++"
+      fi
+    ;;
+  esac
+fi
+
+if test "x$XCC" = "x"; then
+  XCC="clang"
+fi
+
+if test "x$XCXX" = "x"; then
+  XCXX="clang++"
+fi
+
 if test "x$CC" = "x"; then
-  which clang 2>/dev/null 1>&2
-  if test $? -eq 0; then
-    CC="clang"
-  else
-    CC="gcc"
+  if test "x$build" != "x$host"; then
+    CC="${host_alias}-${XCC}"
+    which $CC 2>/dev/null 1>&2
+    if test $? -ne 0; then
+      CC="${host_alias}-gcc"
+    fi
+   else
+    CC=$XCC
+    which $CC 2>/dev/null 1>&2
+    if test $? -ne 0; then
+      CC="gcc"
+    fi
   fi
 fi
 
 if test "x$CXX" = "x"; then
-  which clang++ 2>/dev/null 1>&2
-  if test $? -eq 0; then
-    CXX="clang++"
+  if test "x$build" != "x$host"; then
+    CXX="${host_alias}-${XCXX}"
+    which $CXX 2>/dev/null 1>&2
+    if test $? -ne 0; then
+      CXX="${host_alias}-g++"
+    fi
   else
-    CXX="g++"
+    CXX=$XCXX
+    which $CXX 2>/dev/null 1>&2
+    if test $? -ne 0; then
+      CXX="g++"
+    fi
   fi
 fi
 
-case "`$CC --version`" in
+CCVERSION="`$CC --version`"
+CXXVERSION="`$CXX --version`"
+
+case "$CCVERSION" in
   *clang* )
     WARNINGS="$WARNINGS -Wall -Wno-long-long -Wno-import -Wno-format -Wno-deprecated -Wno-unused-variable"
     WARNINGS="$WARNINGS -Wno-unused-private-field -Wno-unused-function -Wno-invalid-offsetof"
@@ -96,7 +126,7 @@ case "`$CC --version`" in
   ;;
 esac
 
-case "`$CXX --version`" in
+case "$CXXVERSION" in
   *clang* )
     if test "x$isdarwin" = "xyes"; then
       CXXFLAGS="$CXXFLAGS -stdlib=libc++"
@@ -121,6 +151,21 @@ case $host_cpu in
     EXTRAFLAGS="$EXTRAFLAGS -D__arm64__"
   ;;
   arm*)
+    case "$CXXVERSION" in
+      *clang* )
+        echo "" >&2
+        echo "clang is known to miscompile ld64 on arm platforms:" >&2
+        echo "https://github.com/tpoechtrager/cctools-port/issues/1#issuecomment-59118615" >&2
+        if test "x$isdarwin" = "xno"; then
+          echo "" >&2
+          echo "please use gcc instead;  CC=gcc CXX=g++ ./configure" >&2
+          echo "" >&2
+          exit 1
+        fi
+        echo "" >&2
+        sleep 2
+      ;;
+    esac
     EXTRAFLAGS="$EXTRAFLAGS -D__arm__"
   ;;
 esac

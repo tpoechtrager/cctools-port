@@ -3,8 +3,9 @@
 export LC_ALL=C
 pushd "${0%/*}" &>/dev/null
 
-export CC=clang
-export CXX=clang++
+PLATFORM=$(uname -s)
+
+CC=cc
 
 set -e
 
