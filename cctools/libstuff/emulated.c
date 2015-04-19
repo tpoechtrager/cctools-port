@@ -38,10 +38,10 @@ int _NSGetExecutablePath(char *path, unsigned int *size)
    mib[0] = CTL_KERN;
    mib[1] = KERN_PROC_ARGS;
    mib[2] = getpid();
-   mib[3] = KERN_PROC_ENV;
+   mib[3] = KERN_PROC_ARGV;
    if (sysctl(mib, 4, tmp, &l, NULL, 0) != 0)
     return -1;
-   *size = strlcpy(path, strchr(tmp[0], '=') + 1, *size);
+   *size = strlcpy(path, tmp[0], *size);
    return 0;
 #else
    int bufsize = *size;
