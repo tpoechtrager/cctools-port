@@ -35,11 +35,12 @@ void __assert_rtn(const char *func, const char *file, int line, const char *msg)
 #endif /* __FreeBSD__ */
 }
 
+
 int _NSGetExecutablePath(char *path, unsigned int *size)
 {
 #ifdef __FreeBSD__
     int mib[4];
-    mib[0] = CTL_KERN;
+    mib[0] = CTL_KERN; 
     mib[1] = KERN_PROC;
     mib[2] = KERN_PROC_PATHNAME;
     mib[3] = -1;
@@ -47,8 +48,20 @@ int _NSGetExecutablePath(char *path, unsigned int *size)
     if (sysctl(mib, 4, path, &cb, NULL, 0) != 0)
         return -1;
     *size = cb;
+    return 0;  
+#elif defined(__OpenBSD__)
+    int mib[4];
+    const char *tmp[100];
+    size_t l = sizeof(tmp);
+    mib[0] = CTL_KERN;
+    mib[1] = KERN_PROC_ARGS;
+    mib[2] = getpid();
+    mib[3] = KERN_PROC_ENV;
+    if (sysctl(mib, 4, tmp, &l, NULL, 0) != 0)
+        return -1;
+    *size = strlcpy(path, strchr(tmp[0], '=') + 1, *size);
     return 0;
-    #else
+#else
     int bufsize = *size;
     int ret_size;
     ret_size = readlink("/proc/self/exe", path, bufsize-1);
