@@ -1643,7 +1643,7 @@ void DyldInfoPrinter<A>::printDRInfo()
 		const uint8_t* start = ((uint8_t*)fHeader + fDRInfo->dataoff());
 		//const uint8_t* end   = ((uint8_t*)fHeader + fDRInfo->dataoff() + fDRInfo->datasize());
 		typedef Security::SuperBlob<Security::kSecCodeMagicDRList> DRListSuperBlob;
-		typedef Security::SuperBlob<Security::kSecCodeMagicRequirementSet> InternalRequirementsSetBlob;
+		//typedef Security::SuperBlob<Security::kSecCodeMagicRequirementSet> InternalRequirementsSetBlob; // ld64-port: commented
 		const DRListSuperBlob* topBlob = (DRListSuperBlob*)start;
 		if ( topBlob->validateBlob(fDRInfo->datasize()) ) {
 			if ( topBlob->count() == fDylibLoadCommands.size() ) {

@@ -3851,6 +3851,14 @@ output_disp (insn_start_frag, insn_start_off)
 		  int imm_size = 4;
 		  unsigned int n1;
 
+/* cctools-port start */
+#if !defined(__clang__) && (__GNUC__ > 4 || \
+    (__GNUC__ == 4 && __GNUC_MINOR__ >= 6))
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Warray-bounds"
+#endif
+/* cctools-port end */
+
 		  for (n1 = 0; n1 < i.operands; n1++)
 		    if (i.types[n1] & Imm)
 		      {
@@ -3869,6 +3877,13 @@ output_disp (insn_start_frag, insn_start_off)
 		    abort ();
 		  i.op[n].disps->X_add_number -= imm_size;
 		}
+
+/* cctools-start */
+#if !defined(__clang__) && (__GNUC__ > 4 || \
+    (__GNUC__ == 4 && __GNUC_MINOR__ >= 6))
+#pragma GCC diagnostic pop
+#endif
+/* cctools-port end */
 
 	      if (i.types[n] & Disp32S)
 		sign = 1;
