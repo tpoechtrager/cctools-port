@@ -5,8 +5,6 @@ pushd "${0%/*}" &>/dev/null
 
 PLATFORM=$(uname -s)
 
-CC=cc
-
 set -e
 
 function verbose_cmd
@@ -82,9 +80,9 @@ echo ""
 echo "*** building wrapper ***"
 echo ""
 
-echo "int main(){return 0;}" | $CC -xc -O2 -o $TARGETDIR/bin/dsymutil -
+echo "int main(){return 0;}" | cc -xc -O2 -o $TARGETDIR/bin/dsymutil -
 
-verbose_cmd $CC -O2 -Wall -Wextra -pedantic wrapper.c \
+verbose_cmd cc -O2 -Wall -Wextra -pedantic wrapper.c \
     -DTARGET_CPU=\"\\\"$2\\\"\" \
     -DOS_VER_MIN=\"\\\"$SDK_VERSION\\\"\" \
     -o $TARGETDIR/bin/$TRIPLE-clang
