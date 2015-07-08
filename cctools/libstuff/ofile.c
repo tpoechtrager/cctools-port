@@ -3577,6 +3577,7 @@ struct ofile *ofile)
 		    swap_section(s, sg->nsects, host_byte_sex);
 		for(j = 0 ; j < sg->nsects ; j++){
 		    if(mh->filetype != MH_DYLIB_STUB &&
+		       mh->filetype != MH_DSYM &&
 		       s->flags != S_ZEROFILL &&
 		       s->flags != S_THREAD_LOCAL_ZEROFILL && s->offset > size){
 			Mach_O_error(ofile, "truncated or malformed object "
@@ -3586,6 +3587,7 @@ struct ofile *ofile)
 			goto return_bad;
 		    }
 		    if(mh->filetype != MH_DYLIB_STUB &&
+		       mh->filetype != MH_DSYM &&
 		       s->flags != S_ZEROFILL &&
 		       s->flags != S_THREAD_LOCAL_ZEROFILL &&
 		       sg->fileoff == 0 && s->offset < sizeofhdrs &&
@@ -3598,6 +3600,7 @@ struct ofile *ofile)
 		    big_size = s->offset;
 		    big_size += s->size;
 		    if(mh->filetype != MH_DYLIB_STUB &&
+		       mh->filetype != MH_DSYM &&
 		       s->flags != S_ZEROFILL &&
 		       s->flags != S_THREAD_LOCAL_ZEROFILL && big_size > size){
 			Mach_O_error(ofile, "truncated or malformed object "
@@ -3607,6 +3610,7 @@ struct ofile *ofile)
 			goto return_bad;
 		    }
 		    if(mh->filetype != MH_DYLIB_STUB &&
+		       mh->filetype != MH_DSYM &&
 		       s->flags != S_ZEROFILL &&
 		       s->flags != S_THREAD_LOCAL_ZEROFILL &&
 		       s->size > sg->filesize){
@@ -3616,6 +3620,7 @@ struct ofile *ofile)
 			goto return_bad;
 		    }
 		    if(mh->filetype != MH_DYLIB_STUB &&
+		       mh->filetype != MH_DSYM &&
 		       s->size != 0 && s->addr < sg->vmaddr){
 			Mach_O_error(ofile, "malformed object (addr field of "
 				"section %u in LC_SEGMENT command %u less than "
@@ -3705,6 +3710,7 @@ struct ofile *ofile)
 		    swap_section_64(s64, sg64->nsects, host_byte_sex);
 		for(j = 0 ; j < sg64->nsects ; j++){
 		    if(mh64->filetype != MH_DYLIB_STUB &&
+		       mh64->filetype != MH_DSYM &&
 		       s64->flags != S_ZEROFILL &&
 		       s64->flags != S_THREAD_LOCAL_ZEROFILL &&
 		       s64->offset > size){
@@ -3714,9 +3720,21 @@ struct ofile *ofile)
 				j, i);
 			goto return_bad;
 		    }
+		    if(mh64->filetype != MH_DYLIB_STUB &&
+		       mh64->filetype != MH_DSYM &&
+		       s64->flags != S_ZEROFILL &&
+		       s64->flags != S_THREAD_LOCAL_ZEROFILL &&
+		       sg64->fileoff == 0 && s64->offset < sizeofhdrs &&
+		       s64->size != 0){
+			Mach_O_error(ofile, "malformed object (offset field of "
+				"section %u in LC_SEGMENT command %u not "
+				"past the headers of the file)", j, i);
+			goto return_bad;
+		    }
 		    big_size = s64->offset;
 		    big_size += s64->size;
 		    if(mh64->filetype != MH_DYLIB_STUB &&
+		       mh64->filetype != MH_DSYM &&
 		       s64->flags != S_ZEROFILL &&
 		       s64->flags != S_THREAD_LOCAL_ZEROFILL &&
 		       big_size > size){
@@ -4185,6 +4203,7 @@ check_linkedit_data_command:
 		    goto return_bad;
 		}
 		break;
+
 
 	    case LC_ENCRYPTION_INFO:
 		if(l.cmdsize < sizeof(struct encryption_info_command)){

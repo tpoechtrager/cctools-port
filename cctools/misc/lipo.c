@@ -612,7 +612,7 @@ unknown_flag:
 		if(extract_arch_flags[i].cputype ==
 		       extract_arch_flags[j].cputype &&
 		   (extract_arch_flags[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
-		       (thin_files[j].fat_arch.cpusubtype & ~CPU_SUBTYPE_MASK))
+		       (extract_arch_flags[j].cpusubtype & ~CPU_SUBTYPE_MASK))
 		    fatal("-extract %s specified multiple times", 
 			  extract_arch_flags[i].name);
 		}
@@ -1220,7 +1220,10 @@ struct input_file *input)
 	    thin->fat_arch.cpusubtype = cpusubtype;
 	    thin->fat_arch.offset = 0;
 	    thin->fat_arch.size = size;
-	    thin->fat_arch.align = 2; /* 2^2, sizeof(uint32_t) */
+	    if(thin->fat_arch.cputype & CPU_ARCH_ABI64)
+		thin->fat_arch.align = 3; /* 2^3, alignof(uint64_t) */
+	    else
+		thin->fat_arch.align = 2; /* 2^2, alignof(uint32_t) */
 
 	    /* if the arch type is specified make sure it matches the object */
 	    if(input->arch_flag.name != NULL){

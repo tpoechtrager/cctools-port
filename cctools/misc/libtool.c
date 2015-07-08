@@ -1372,9 +1372,11 @@ void)
 			    }
 			}
 		    }
+		    else if(ofiles[i].arch_type == OFILE_Mach_O
 #ifdef LTO_SUPPORT
-		    else if(ofiles[i].arch_type == OFILE_Mach_O ||
-		            ofiles[i].arch_type == OFILE_LLVM_BITCODE){
+			    || ofiles[i].arch_type == OFILE_LLVM_BITCODE
+#endif
+			   ){
 			if(cmd_flags.ranlib == TRUE){
 			    error("for architecture: %s file: %s is not an "
 				  "archive (no processing done on this file)",
@@ -1384,7 +1386,6 @@ void)
 			else
 			    add_member(ofiles + i);
 		    }
-#endif /* LTO_SUPPORT */
 		    else if(ofiles[i].arch_type == OFILE_UNKNOWN){
 			if(cmd_flags.ranlib == TRUE){
 			    error("for architecture: %s file: %s is not an "
@@ -2321,6 +2322,8 @@ struct ofile *ofile)
 	    library_size = 0;
 	some_tocs = FALSE;
 	for(i = 0; i < narchs; i++){
+	    if(narchs > 1 && (archs[i].arch_flag.cputype & CPU_ARCH_ABI64))
+		library_size = rnd(library_size, 1 << 3);
 	    make_table_of_contents(archs + i, output);
 	    if(errors != 0)
 		return;
@@ -2532,6 +2535,11 @@ fail_to_update_toc_in_place:
 			  "offset field in struct fat_arch is only 32-bits and "
 			  "offset (%llu) to architecture %s exceeds that",
 			  offset, archs[i].arch_flag.name);
+		if(fat_arch[i].cputype & CPU_ARCH_ABI64)
+		    fat_arch[i].align = 3;
+		else
+		    fat_arch[i].align = 2;
+		offset = rnd(offset, 1 << fat_arch[i].align);
 		fat_arch[i].offset = offset;
 		if(archs[i].size > UINT32_MAX)
 		    error("file too large to create as a fat file because "
@@ -2539,7 +2547,6 @@ fail_to_update_toc_in_place:
 			  "size (%llu) of architecture %s exceeds that",
 			  archs[i].size, archs[i].arch_flag.name);
 		fat_arch[i].size = archs[i].size;
-		fat_arch[i].align = 2;
 		offset += archs[i].size;
 	    }
 	    if(errors != 0){
@@ -2569,9 +2576,14 @@ fail_to_update_toc_in_place:
 	 * Now put each arch in the buffer.
 	 */
 	for(i = 0; i < narchs; i++){
+	    arch = archs + i;
+	    if(narchs > 1 && (arch->arch_flag.cputype & CPU_ARCH_ABI64)){
+		pad = rnd(offset, 1 << 3) - offset;
+		output_flush(library, library_size, fd, offset, pad);
+		offset = rnd(offset, 1 << 3);
+	    }
 	    p = library + offset;
 	    flush_start = p;
-	    arch = archs + i;
 
 	    /*
 	     * If the input files only contains non-object files then the

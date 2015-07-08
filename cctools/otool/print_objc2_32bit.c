@@ -1153,7 +1153,7 @@ print_image_info(
 struct section_info_32 *s,
 struct info *info)
 {
-    uint32_t left, offset;
+    uint32_t left, offset, swift_version;
     uint32_t p;
     struct objc_image_info o;
     void *r;
@@ -1182,6 +1182,15 @@ struct info *info)
 	    printf(" OBJC_IMAGE_IS_REPLACEMENT");
 	if(o.flags & OBJC_IMAGE_SUPPORTS_GC)
 	    printf(" OBJC_IMAGE_SUPPORTS_GC");
+	swift_version = (o.flags >> 8) & 0xff;
+	if(swift_version != 0){
+	    if(swift_version == 1)
+		printf(" Swift 1.0");
+	    else if(swift_version == 2)
+		printf(" Swift 1.1");
+	    else
+		printf(" unknown future Swift version (%d)", swift_version);
+	}
 	printf("\n");
 }
 

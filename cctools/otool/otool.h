@@ -68,6 +68,8 @@ extern char *mcpu; 	/* the arg of the -mcpu=arg flag */
 /* Print function offsets when disassembling when TRUE. */
 extern enum bool function_offsets;
 
+extern enum bool no_show_raw_insn;
+
 uint32_t m68k_usrstack(void);
 uint32_t m88k_usrstack(void);
 uint32_t i386_usrstack(void);

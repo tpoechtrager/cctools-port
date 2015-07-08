@@ -1738,9 +1738,9 @@ uint32_t ninsts)
 	/* Use the llvm disassembler with the -q flag. */
 	if(qflag || gflag){
 	    LLVMDisasmContextRef dc;
-	    char dst[4096];
+	    char dst[8192];
 
-	    dst[4095] = '\0';
+	    dst[8191] = '\0';
 	    dis_info.verbose = verbose;
 	    dis_info.sorted_relocs = sorted_relocs;
 	    dis_info.nsorted_relocs = nsorted_relocs;
@@ -1779,7 +1779,7 @@ uint32_t ninsts)
 	    else
 		dc = x86_64_dc;
 	    length = llvm_disasm_instruction(dc, (uint8_t *)sect, left,
-					     addr, dst, 4095);
+					     addr, dst, 8191);
 	    if(length != 0){
 		if(inst == NULL || inst->print){
 		    /* print the opcode bytes */
@@ -5087,10 +5087,11 @@ struct disassemble_info *info)
 	if(classref == TRUE){
 	    *reference_type =
 		LLVMDisassembler_ReferenceType_Out_Objc_Class_Ref;
-	    name = get_objc2_64bit_class_name(pointer_value,
+	    name = get_objc2_64bit_class_name(pointer_value, value,
 			info->load_commands, info->ncmds, info->sizeofcmds,
 			info->object_byte_sex, info->object_addr,
-			info->object_size);
+			info->object_size, info->symbols64, info->nsymbols,
+			info->strings, info->strings_size, info->cputype);
 	    if(name != NULL)
 		info->class_name = name;
 	    else
@@ -5104,10 +5105,19 @@ struct disassemble_info *info)
 	    name = get_objc2_64bit_cfstring_name(value,
 			info->load_commands, info->ncmds, info->sizeofcmds,
 			info->object_byte_sex, info->object_addr,
-			info->object_size);
+			info->object_size, info->symbols64, info->nsymbols,
+			info->strings, info->strings_size, info->cputype);
 	    if(name == NULL)
 	        name = "bad cfstring ref";
 	    return(name);
+	}
+
+	if(selref == TRUE && pointer_value == 0){
+	    pointer_value = get_objc2_64bit_selref(value,
+			info->load_commands, info->ncmds, info->sizeofcmds,
+			info->object_byte_sex, info->object_addr,
+			info->object_size, info->symbols64, info->nsymbols,
+			info->strings, info->strings_size, info->cputype);
 	}
 
 	if(pointer_value != 0)

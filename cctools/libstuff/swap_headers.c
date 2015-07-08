@@ -1171,6 +1171,7 @@ check_dylinker_command:
 		}
 		break;
 
+
 	    case LC_RPATH:
 		rpath = (struct rpath_command *)lc;
 		if(rpath->cmdsize < sizeof(struct rpath_command)){

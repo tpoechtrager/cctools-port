@@ -647,29 +647,57 @@ uint32_t ncmds,
 uint32_t sizeofcmds,
 enum byte_sex object_byte_sex,
 char *object_addr,
-uint32_t object_size)
+uint32_t object_size,
+struct nlist_64 *symbols64,
+uint32_t nsymbols,
+char *strings,
+uint32_t strings_size,
+cpu_type_t cputype)
 {
-    struct section_info_64 *sections;
-    uint32_t nsections, left;
-    uint64_t database;
+    struct section_info_64 *sections, *s;
+    uint32_t nsections, left, offset;
+    uint64_t database, n_value, cfs_characters;
     struct cfstring_t cfs;
     char *name;
+    const char *symbol_name;
     void *r;
+    struct info info;
+
+	memset(&info, '\0', sizeof(struct info));
+	info.symbols64 = symbols64;
+	info.nsymbols = nsymbols;
+	info.strings = strings;
+	info.strings_size = strings_size;
+	info.cputype = cputype;
+	info.verbose = TRUE;
 
 	get_sections_64(load_commands, ncmds, sizeofcmds, object_byte_sex,
 			object_addr, object_size, &sections, &nsections,
 			&database);
 
-	r = get_pointer_64(p, NULL, &left, NULL, sections, nsections);
+	r = get_pointer_64(p, &offset, &left, &s, sections, nsections);
 	if(r == NULL || left < sizeof(struct cfstring_t))
 	    return(NULL);
 	memcpy(&cfs, r, sizeof(struct cfstring_t));
 	if(get_host_byte_sex() != object_byte_sex)
 	    swap_cfstring_t(&cfs, get_host_byte_sex());
-	if(cfs.characters == 0)
-	    return(NULL);
+	if(cfs.characters == 0){
+	    symbol_name = get_symbol_64(offset +
+					offsetof(struct cfstring_t, characters),
+					s->addr - database, p,
+			                s->relocs, s->nrelocs, &info, &n_value);
+	    if(symbol_name == NULL){
+		if(sections != NULL)
+		    free(sections);
+		return(NULL);
+	    }
+	    cfs_characters = n_value;
+	}
+	else{
+	    cfs_characters = cfs.characters;
+	}
 
-	name = get_pointer_64(cfs.characters, NULL, &left, NULL,
+	name = get_pointer_64(cfs_characters, NULL, &left, NULL,
 			      sections, nsections);
 
 	if(sections != NULL)
@@ -680,48 +708,108 @@ uint32_t object_size)
 
 /*
  * get_objc2_64bit_class_name() is used for disassembly and is passed a pointer
- * to an Objective-C class and returns the class name.
+ * to an Objective-C class and returns the class name.  It is also passed the
+ * address of the pointer, so when the pointer is zero as it can be in an .o
+ * file, that is use to look for an external relocation entry with a symbol
+ * name.
  */
 char *
 get_objc2_64bit_class_name(
 uint64_t p,
+uint64_t address_of_p,
 struct load_command *load_commands,
 uint32_t ncmds,
 uint32_t sizeofcmds,
 enum byte_sex object_byte_sex,
 char *object_addr,
-uint32_t object_size)
+uint32_t object_size,
+struct nlist_64 *symbols64,
+uint32_t nsymbols,
+char *strings,
+uint32_t strings_size,
+cpu_type_t cputype)
 {
-    struct section_info_64 *sections;
-    uint32_t nsections, left;
-    uint64_t database;
+    struct section_info_64 *sections, *s;
+    uint32_t nsections, left, offset;
+    uint64_t database, n_value;
     struct class_t c;
     struct class_ro_t cro;
-    char *name;
+    char *name, *class_name;
+    const char *symbol_name;
     void *r;
+    struct info info;
+
+	memset(&info, '\0', sizeof(struct info));
+	info.symbols64 = symbols64;
+	info.nsymbols = nsymbols;
+	info.strings = strings;
+	info.strings_size = strings_size;
+	info.cputype = cputype;
+	info.verbose = TRUE;
 
 	get_sections_64(load_commands, ncmds, sizeofcmds, object_byte_sex,
 			object_addr, object_size, &sections, &nsections,
 			&database);
+	if(p == 0){
+	    r = get_pointer_64(address_of_p, &offset, &left, &s, sections,
+			       nsections);
+	    if(r == NULL || left < sizeof(uint64_t)){
+		if(sections != NULL)
+		    free(sections);
+		return(NULL);
+	    }
+	    symbol_name = get_symbol_64(offset, s->addr - database,
+				        address_of_p, s->relocs, s->nrelocs,
+					&info, &n_value);
+	    if(symbol_name == NULL){
+		if(sections != NULL)
+		    free(sections);
+		return(NULL);
+	    }
+	    class_name = rindex(symbol_name, '$');
+	    if(class_name != NULL &&
+	       class_name[1] == '_' && class_name[2] != '\0'){
+		if(sections != NULL)
+		    free(sections);
+		return(class_name + 2);
+	    }
+	    else{
+		if(sections != NULL)
+		    free(sections);
+		return(NULL);
+	    }
+	}
 
 	r = get_pointer_64(p, NULL, &left, NULL, sections, nsections);
-	if(r == NULL || left < sizeof(struct class_t))
+	if(r == NULL || left < sizeof(struct class_t)){
+	    if(sections != NULL)
+		free(sections);
 	    return(NULL);
+	}
 	memcpy(&c, r, sizeof(struct class_t));
 	if(get_host_byte_sex() != object_byte_sex)
 	    swap_class_t(&c, get_host_byte_sex());
-	if(c.data == 0)
+	if(c.data == 0){
+	    if(sections != NULL)
+		free(sections);
 	    return(NULL);
+        }
 
 	r = get_pointer_64(c.data, NULL, &left, NULL, sections, nsections);
-	if(r == NULL || left < sizeof(struct class_ro_t))
+	if(r == NULL || left < sizeof(struct class_ro_t)){
+	    if(sections != NULL)
+		free(sections);
 	    return(NULL);
+	}
 	memcpy(&cro, r, sizeof(struct class_ro_t));
 	if(get_host_byte_sex() != object_byte_sex)
 	    swap_class_ro_t(&cro, get_host_byte_sex());
 	
-	if(cro.name == 0)
+	if(cro.name == 0){
+	    if(sections != NULL)
+		free(sections);
 	    return(NULL);
+	}
 
 	name = get_pointer_64(cro.name, NULL, &left, NULL, sections, nsections);
 
@@ -729,6 +817,65 @@ uint32_t object_size)
 	    free(sections);
 
 	return(name);
+}
+
+/*
+ * get_objc2_64bit_selref() is used for disassembly and is passed a the address
+ * of a pointer to an Objective-C selector reference when the pointer value is
+ * zero as in a .o file and is likely to have a external relocation entry with
+ * who's symbol's n_value is the real pointer to the selector name.  If that is
+ * the case the real pointer to the selector name is returned else 0 is
+ * returned
+ */
+uint64_t
+get_objc2_64bit_selref(
+uint64_t address_of_p,
+struct load_command *load_commands,
+uint32_t ncmds,
+uint32_t sizeofcmds,
+enum byte_sex object_byte_sex,
+char *object_addr,
+uint32_t object_size,
+struct nlist_64 *symbols64,
+uint32_t nsymbols,
+char *strings,
+uint32_t strings_size,
+cpu_type_t cputype)
+{
+    struct section_info_64 *sections, *s;
+    uint32_t nsections, left, offset;
+    uint64_t database, n_value;
+    void *r;
+    const char *symbol_name;
+    struct info info;
+
+	memset(&info, '\0', sizeof(struct info));
+	info.symbols64 = symbols64;
+	info.nsymbols = nsymbols;
+	info.strings = strings;
+	info.strings_size = strings_size;
+	info.cputype = cputype;
+	info.verbose = TRUE;
+
+	get_sections_64(load_commands, ncmds, sizeofcmds, object_byte_sex,
+			object_addr, object_size, &sections, &nsections,
+			&database);
+	r = get_pointer_64(address_of_p, &offset, &left, &s, sections,
+			   nsections);
+	if(r == NULL || left < sizeof(uint64_t)){
+	    if(sections != NULL)
+		free(sections);
+	    return(0);
+	}
+	symbol_name = get_symbol_64(offset, s->addr - database,
+				    address_of_p, s->relocs, s->nrelocs,
+				    &info, &n_value);
+	if(symbol_name == NULL){
+	    if(sections != NULL)
+		free(sections);
+	    return(0);
+	}
+	return(n_value);
 }
 
 static
@@ -1709,7 +1856,7 @@ print_image_info(
 struct section_info_64 *s,
 struct info *info)
 {
-    uint32_t left, offset;
+    uint32_t left, offset, swift_version;
     uint64_t p;
     struct objc_image_info o;
     void *r;
@@ -1738,6 +1885,15 @@ struct info *info)
 	    printf(" OBJC_IMAGE_IS_REPLACEMENT");
 	if(o.flags & OBJC_IMAGE_SUPPORTS_GC)
 	    printf(" OBJC_IMAGE_SUPPORTS_GC");
+	swift_version = (o.flags >> 8) & 0xff;
+	if(swift_version != 0){
+	    if(swift_version == 1)
+		printf(" Swift 1.0");
+	    else if(swift_version == 2)
+		printf(" Swift 1.1");
+	    else
+		printf(" unknown future Swift version (%d)", swift_version);
+	}
 	printf("\n");
 }
 
@@ -2214,8 +2370,8 @@ uint32_t nsections)
 }
 
 /*
- * get_symbol() returns the name of a symbol (or NULL). Based on the relocation
- * information at the specified section offset or the value.
+ * get_symbol_64() returns the name of a symbol (or NULL). Based on the
+ * relocation information at the specified section offset or the value.
  */
 static
 const char *
