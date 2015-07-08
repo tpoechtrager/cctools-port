@@ -58,7 +58,9 @@ static void setup_code_signature(
 
 static struct linkedit_data_command *add_code_sig_load_command(
     struct arch *arch,
-    char *arch_name);
+    char *arch_name,
+    struct member *member,
+    struct object *object);
 
 /* apple_version is created by the libstuff/Makefile */
 extern char apple_version[];
@@ -613,7 +615,8 @@ struct object *object)
 	 */
 	else{
 	    object->code_sig_cmd = add_code_sig_load_command(arch,
-						arch_signs[i].arch_flag.name);
+						arch_signs[i].arch_flag.name,
+						member, object);
 	    object->code_sig_cmd->datasize = arch_signs[i].datasize;
 	    if(object->seg_linkedit != NULL)
 		linkedit_end = object->seg_linkedit->fileoff +
@@ -675,7 +678,9 @@ static
 struct linkedit_data_command *
 add_code_sig_load_command(
 struct arch *arch,
-char *arch_name)
+char *arch_name,
+struct member *member,
+struct object *object)
 {
     uint32_t i, j, low_fileoff;
     uint32_t ncmds, sizeofcmds, sizeof_mach_header;
@@ -686,14 +691,14 @@ char *arch_name)
     struct section_64 *s64;
     struct linkedit_data_command *code_sig;
 
-        if(arch->object->mh != NULL){
-            ncmds = arch->object->mh->ncmds;
-	    sizeofcmds = arch->object->mh->sizeofcmds;
+        if(object->mh != NULL){
+            ncmds = object->mh->ncmds;
+	    sizeofcmds = object->mh->sizeofcmds;
 	    sizeof_mach_header = sizeof(struct mach_header);
 	}
 	else{
-            ncmds = arch->object->mh64->ncmds;
-	    sizeofcmds = arch->object->mh64->sizeofcmds;
+            ncmds = object->mh64->ncmds;
+	    sizeofcmds = object->mh64->sizeofcmds;
 	    sizeof_mach_header = sizeof(struct mach_header_64);
 	}
 
@@ -704,7 +709,7 @@ char *arch_name)
 	 * (or segment in the case of a LINKEDIT segment only file).
 	 */
 	low_fileoff = UINT_MAX;
-	lc = arch->object->load_commands;
+	lc = object->load_commands;
 	for(i = 0; i < ncmds; i++){
 	    if(lc->cmd == LC_SEGMENT){
 		sg = (struct segment_command *)lc;
@@ -718,7 +723,7 @@ char *arch_name)
 				    S_THREAD_LOCAL_ZEROFILL &&
 			s->offset < low_fileoff)
 			    low_fileoff = s->offset;
-			s++;
+		s++;
 		    }
 		}
 		else{
@@ -749,32 +754,40 @@ char *arch_name)
 	    lc = (struct load_command *)((char *)lc + lc->cmdsize);
 	}
 	if(sizeofcmds + sizeof(struct linkedit_data_command) +
-	   sizeof_mach_header > low_fileoff)
-	    fatal("can't allocate code signature data for: %s (for architecture"
-		  " %s) because larger updated load commands do not fit (the "
-		  "program must be relinked using a larger -headerpad value)", 
-		  arch->file_name, arch_name);
+	   sizeof_mach_header > low_fileoff){
+	    if(member)
+		fatal("can't allocate code signature data for: %s(%s) (for "
+		      "architecture %s) because larger updated load commands "
+		      "do not fit (the program must be relinked using a larger "
+		      "-headerpad value)", arch->file_name, member->member_name,
+		      arch_name);
+	    else
+		fatal("can't allocate code signature data for: %s (for "
+		      "architecture %s) because larger updated load commands "
+		      "do not fit (the program must be relinked using a larger "
+		      "-headerpad value)", arch->file_name, arch_name);
+	}
 	/*
 	 * There is space for the new load commands. So just use that space for
 	 * the new code signature load command and set the fields.
 	 */
 	code_sig = (struct linkedit_data_command *)
-		   ((char *)arch->object->load_commands + sizeofcmds);
+		   ((char *)object->load_commands + sizeofcmds);
 	code_sig->cmd = LC_CODE_SIGNATURE;
 	code_sig->cmdsize = sizeof(struct linkedit_data_command);
 	/* these two feilds will be set by the caller */
 	code_sig->dataoff = 0;
 	code_sig->datasize = 0;
 	
-        if(arch->object->mh != NULL){
-            arch->object->mh->sizeofcmds = sizeofcmds +
+        if(object->mh != NULL){
+            object->mh->sizeofcmds = sizeofcmds +
 	       sizeof(struct linkedit_data_command);
-            arch->object->mh->ncmds = ncmds + 1;
+            object->mh->ncmds = ncmds + 1;
         }
 	else{
-            arch->object->mh64->sizeofcmds = sizeofcmds +
+            object->mh64->sizeofcmds = sizeofcmds +
 	       sizeof(struct linkedit_data_command);
-            arch->object->mh64->ncmds = ncmds + 1;
+            object->mh64->ncmds = ncmds + 1;
         }
 	return(code_sig);
 }

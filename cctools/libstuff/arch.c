@@ -321,12 +321,15 @@ uint32_t
 get_segalign_from_flag(
 const struct arch_flag *flag)
 {
+        if(flag->cputype == CPU_TYPE_ARM ||
+           flag->cputype == CPU_TYPE_ARM64)
+	    return(0x4000); /* 16K */
+
 	if(flag->cputype == CPU_TYPE_POWERPC ||
 	   flag->cputype == CPU_TYPE_POWERPC64 ||
 	   flag->cputype == CPU_TYPE_VEO ||
 	   flag->cputype == CPU_TYPE_I386 ||
-	   flag->cputype == CPU_TYPE_X86_64 ||
-	   flag->cputype == CPU_TYPE_ARM)
+	   flag->cputype == CPU_TYPE_X86_64)
 	    return(0x1000); /* 4K */
 	else
 	    return(0x2000); /* 8K */

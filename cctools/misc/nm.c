@@ -1183,11 +1183,11 @@ char *arch_name)
 			printf(" (null)");
 		}
 		else if((uint32_t)symbols[i].nl.n_un.n_strx > strsize){
-		    printf(i_xfmt, symbols[i].nl.n_un.n_strx);
+		    printf("%08x", symbols[i].nl.n_un.n_strx);
 		    printf(" (bad string index)");
 		}
 		else{
-		    printf(i_xfmt, symbols[i].nl.n_un.n_strx);
+		    printf("%08x", symbols[i].nl.n_un.n_strx);
 		    printf(" %s", symbols[i].nl.n_un.n_strx + strings);
 		}
 		if((symbols[i].nl.n_type & N_STAB) == 0 &&
@@ -1453,11 +1453,11 @@ struct value_diff *value_diffs)
 			printf(" (null)");
 		}
 		else if((uint32_t)symbols[i].nl.n_un.n_strx > strsize){
-		    printf(i_xfmt, symbols[i].nl.n_un.n_strx);
+		    printf("%08x", symbols[i].nl.n_un.n_strx);
 		    printf(" (bad string index)");
 		}
 		else{
-		    printf(i_xfmt, symbols[i].nl.n_un.n_strx);
+		    printf("%08x", symbols[i].nl.n_un.n_strx);
 		    printf(" %s", symbols[i].nl.n_un.n_strx + strings);
 		}
 		if((symbols[i].nl.n_type & N_STAB) == 0 &&
@@ -1674,6 +1674,7 @@ static const struct stabnames stabnames[] = {
     { N_STSYM, "STSYM" },
     { N_LCSYM, "LCSYM" },
     { N_BNSYM, "BNSYM" },
+    { N_AST,   "AST" },
     { N_OPT,   "OPT" },
     { N_RSYM,  "RSYM" },
     { N_SLINE, "SLINE" },
