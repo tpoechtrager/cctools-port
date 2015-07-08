@@ -40,6 +40,7 @@ struct ParserOptions {
 	bool			forceDwarfConversion;
 	bool			neverConvertDwarf;
 	bool			verboseOptimizationHints;
+	bool			armUsesZeroCostExceptions;
 	uint32_t		subType;
 };
 

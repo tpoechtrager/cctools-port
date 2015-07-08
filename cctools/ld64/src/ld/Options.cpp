@@ -608,6 +608,11 @@ void Options::setArchitecture(cpu_type_t type, cpu_subtype_t subtype)
 	fArchitectureName = "unknown architecture";
 }
 
+bool Options::armUsesZeroCostExceptions() const
+{
+	return ( (fArchitecture == CPU_TYPE_ARM) && (fSubArchitecture == CPU_SUBTYPE_ARM_V7K) );
+}
+
 void Options::parseArch(const char* arch)
 {
 	if ( arch == NULL )
@@ -3902,8 +3907,26 @@ void Options::reconfigureDefaults()
 			}
 			break;
 		case CPU_TYPE_ARM:
-			fAddCompactUnwindEncoding = false;
-			fRemoveDwarfUnwindIfCompactExists = false;
+			if ( armUsesZeroCostExceptions() )  {
+				switch ( fOutputKind ) {
+					case Options::kObjectFile:
+					case Options::kStaticExecutable:
+					case Options::kPreload:
+					case Options::kKextBundle:
+						fAddCompactUnwindEncoding = false;
+						break;
+					case Options::kDyld:
+					case Options::kDynamicLibrary:
+					case Options::kDynamicBundle:
+					case Options::kDynamicExecutable:
+						fAddCompactUnwindEncoding = true;
+						break;
+				}
+			}
+			else {
+				fAddCompactUnwindEncoding = false;
+				fRemoveDwarfUnwindIfCompactExists = false;
+			}
 			break;
 		case 0:
 			// if -arch is missing, assume we don't want compact unwind info
@@ -4289,24 +4312,31 @@ void Options::reconfigureDefaults()
 	// <rdar://problem/12258065> ARM64 needs 16KB page size for user land code
 	// <rdar://problem/15974532> make armv7[s] use 16KB pages in user land code for iOS 8 or later
 	if ( fSegmentAlignment == 4096 ) {
-		if ( (fArchitecture == CPU_TYPE_ARM64) 
-		|| ((fArchitecture == CPU_TYPE_ARM) && (fIOSVersionMin >= ld::iOS_8_0) && 
-			((fSubArchitecture == CPU_SUBTYPE_ARM_V7S) || (fSubArchitecture == CPU_SUBTYPE_ARM_V7))) ) {
-			switch ( fOutputKind ) {
-				case Options::kDynamicExecutable:
-				case Options::kDynamicLibrary:
-				case Options::kDynamicBundle:
-				case Options::kDyld:
+		switch ( fOutputKind ) {
+			case Options::kDynamicExecutable:
+			case Options::kDynamicLibrary:
+			case Options::kDynamicBundle:
+			case Options::kDyld:
+				if ( (fArchitecture == CPU_TYPE_ARM64) 
+				|| ((fArchitecture == CPU_TYPE_ARM) && (fIOSVersionMin >= ld::iOS_8_0) && 
+					((fSubArchitecture == CPU_SUBTYPE_ARM_V7S) || (fSubArchitecture == CPU_SUBTYPE_ARM_V7))) ) {
 					fSegmentAlignment = 4096*4;
-					break;
-				case Options::kStaticExecutable:
-				case Options::kKextBundle:
-				case Options::kObjectFile:
-				case Options::kPreload:
-					break;
-			}
+				}
+				break;
+			case Options::kStaticExecutable:
+			case Options::kKextBundle:
+				// <rdar://problem/14676611> 16KB segments for arm64 kexts
+				if ( (fArchitecture == CPU_TYPE_ARM64) && (fIOSVersionMin >= ld::iOS_9_0) ) {
+					fSegmentAlignment = 4096*4;
+				}
+				break;
+			case Options::kObjectFile:
+			case Options::kPreload:
+				break;
 		}
 	}
+
+
 
 	// <rdar://problem/13624134> linker should not convert dwarf unwind if .o file has compact unwind section
 	switch ( fOutputKind ) {
@@ -4335,6 +4365,13 @@ void Options::reconfigureDefaults()
 			break;
 	}
 	
+	// Make sure -image_base matches alignment
+	uint64_t alignedBaseAddress = (fBaseAddress+fSegmentAlignment-1) & (-fSegmentAlignment);
+	if ( alignedBaseAddress != fBaseAddress ) {
+		warning("base address 0x%llX is not properly aligned. Changing it to 0x%llX", fBaseAddress, alignedBaseAddress);
+		fBaseAddress = alignedBaseAddress;
+	}
+
 }
 
 void Options::checkIllegalOptionCombinations()

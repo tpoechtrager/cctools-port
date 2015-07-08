@@ -1,4 +1,4 @@
-const char ldVersionString[] = "241.9\n";
+const char ldVersionString[] = "242\n";
 
 #ifndef __APPLE__
 

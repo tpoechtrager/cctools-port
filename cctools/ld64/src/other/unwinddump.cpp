@@ -163,6 +163,25 @@ bool UnwindPrinter<arm64>::validFile(const uint8_t* fileContent)
 }
 #endif
 
+template <>
+bool UnwindPrinter<arm>::validFile(const uint8_t* fileContent)
+{	
+	const macho_header<P>* header = (const macho_header<P>*)fileContent;
+	if ( header->magic() != MH_MAGIC )
+		return false;
+	if ( header->cputype() != CPU_TYPE_ARM )
+		return false;
+	switch (header->filetype()) {
+		case MH_EXECUTE:
+		case MH_DYLIB:
+		case MH_BUNDLE:
+		case MH_DYLINKER:
+		case MH_OBJECT:
+			return true;
+	}
+	return false;
+}
+
 template <typename A>
 UnwindPrinter<A>::UnwindPrinter(const uint8_t* fileContent, uint32_t fileLength, const char* path, bool showFunctionNames)
  : fHeader(NULL), fLength(fileLength), fUnwindSection(NULL),
@@ -737,6 +756,91 @@ void UnwindPrinter<arm64>::decode(uint32_t encoding, const uint8_t* funcStart, c
 }
 #endif
 
+template <>
+void UnwindPrinter<arm>::decode(uint32_t encoding, const uint8_t* funcStart, char* str)
+{
+	*str = '\0';
+	switch ( encoding & UNWIND_ARM_MODE_MASK ) {
+		case UNWIND_ARM_MODE_DWARF:
+			sprintf(str, "dwarf offset 0x%08X, ", encoding & UNWIND_ARM_DWARF_SECTION_OFFSET);
+			break;
+		case UNWIND_ARM_MODE_FRAME:
+		case UNWIND_ARM_MODE_FRAME_D:
+			switch ( encoding & UNWIND_ARM_FRAME_STACK_ADJUST_MASK ) {
+				case 0x00000000:
+					strcpy(str, "std frame: ");
+					break;
+				case 0x00400000:
+					strcat(str, "std frame(sp adj 4): ");
+					break;
+				case 0x00800000:
+					strcat(str, "std frame(sp adj 8): ");
+					break;
+				case 0x00C00000:
+					strcat(str, "std frame(sp adj 12): ");
+					break;
+			}
+			if ( encoding & UNWIND_ARM_FRAME_FIRST_PUSH_R4 )
+				strcat(str, "r4 ");
+			if ( encoding & UNWIND_ARM_FRAME_FIRST_PUSH_R5 )
+				strcat(str, "r5 ");
+			if ( encoding & UNWIND_ARM_FRAME_FIRST_PUSH_R6 )
+				strcat(str, "r6 ");
+				
+			if ( encoding & 0x000000F8) 
+				strcat(str, " / ");
+			if ( encoding & UNWIND_ARM_FRAME_SECOND_PUSH_R8 )
+				strcat(str, "r8 ");
+			if ( encoding & UNWIND_ARM_FRAME_SECOND_PUSH_R9 )
+				strcat(str, "r9 ");
+			if ( encoding & UNWIND_ARM_FRAME_SECOND_PUSH_R10 )
+				strcat(str, "r10 ");
+			if ( encoding & UNWIND_ARM_FRAME_SECOND_PUSH_R11 )
+				strcat(str, "r11 ");
+			if ( encoding & UNWIND_ARM_FRAME_SECOND_PUSH_R12 )
+				strcat(str, "r12 ");
+			
+			if ( (encoding & UNWIND_ARM_MODE_MASK) == UNWIND_ARM_MODE_FRAME_D ) {
+				switch ( encoding & UNWIND_ARM_FRAME_D_REG_COUNT_MASK ) {
+					case 0x00000000:
+						strcat(str, " / d8 ");
+						break;
+					case 0x00000100:
+						strcat(str, " / d8,d10 ");
+						break;
+					case 0x00000200:
+						strcat(str, " / d8,d10,d12 ");
+						break;
+					case 0x00000300:
+						strcat(str, " / d8,d10,d12,d14 ");
+						break;
+					case 0x00000400:
+						strcat(str, " / d12,d14 / d8,d9,d10 ");
+						break;
+					case 0x00000500:
+						strcat(str, " / d14 / d8,d9,d10,d11,d12");
+						break;
+					case 0x00000600:
+						strcat(str, " / d8,d9,d10,d11,d12,d13,d14 ");
+						break;
+					case 0x00000700:
+						strcat(str, " / d8,d9,d10,d11,d12,d13,d14 ");
+						break;
+					default:
+						strcat(str, " / unknown D register usage ");
+						break;
+				}
+			}
+			
+			break;
+		default:
+			if ( encoding == 0 )
+				strcpy(str, "no unwind information");
+			else
+				strcpy(str, "unsupported compact unwind");
+			break;
+	}
+}
 
 
 template <>
@@ -768,6 +872,14 @@ const char* UnwindPrinter<arm64>::personalityName(const macho_relocation_info<ar
 }
 #endif
 
+template <>
+const char* UnwindPrinter<arm>::personalityName(const macho_relocation_info<arm::P>* reloc)
+{
+	//assert(reloc->r_extern() && "reloc not extern on personality column in __compact_unwind section");
+	//assert((reloc->r_type() == GENERIC_RELOC_VANILLA) && "wrong reloc type on personality column in __compact_unwind section");
+	const macho_nlist<P>& sym = fSymbols[reloc->r_symbolnum()];
+	return &fStrings[sym.n_strx()];
+}
 
 template <typename A>
 bool UnwindPrinter<A>::hasExernReloc(uint64_t sectionOffset, const char** personalityStr, pint_t* addr)
@@ -1004,6 +1116,12 @@ static void dump(const char* path, const std::set<cpu_type_t>& onlyArchs, bool s
 							throw "in universal file, arm64 slice does not contain arm64 mach-o";
 						break;
 #endif
+					case CPU_TYPE_ARM:
+						if ( UnwindPrinter<arm>::validFile(p + offset) )
+							UnwindPrinter<arm>::make(p + offset, size, path, showFunctionNames);
+						else
+							throw "in universal file, arm slice does not contain arm mach-o";
+						break;
 					default:
 							throwf("in universal file, unknown architecture slice 0x%x\n", cputype);
 					}
@@ -1021,6 +1139,9 @@ static void dump(const char* path, const std::set<cpu_type_t>& onlyArchs, bool s
 			UnwindPrinter<arm64>::make(p, length, path, showFunctionNames);
 		}
 #endif		
+		else if ( UnwindPrinter<arm>::validFile(p) && onlyArchs.count(CPU_TYPE_ARM) ) {
+			UnwindPrinter<arm>::make(p, length, path, showFunctionNames);
+		}
 		else {
 			throw "not a known file type";
 		}
@@ -1051,6 +1172,8 @@ int main(int argc, const char* argv[])
 					else if ( strcmp(arch, "arm64") == 0 )
 						onlyArchs.insert(CPU_TYPE_ARM64);
 #endif
+					else if ( strcmp(arch, "armv7k") == 0 )
+						onlyArchs.insert(CPU_TYPE_ARM);
 					else 
 						throwf("unknown architecture %s", arch);
 				}

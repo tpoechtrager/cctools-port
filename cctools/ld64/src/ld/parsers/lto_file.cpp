@@ -307,6 +307,7 @@ ld::relocatable::File* Parser::parseMachOFile(const uint8_t* p, size_t len, cons
 	objOpts.forceDwarfConversion = false;
 	objOpts.neverConvertDwarf   = false;
 	objOpts.verboseOptimizationHints = options.verboseOptimizationHints;
+	objOpts.armUsesZeroCostExceptions = options.armUsesZeroCostExceptions;
 
 	objOpts.subType				= 0;
 	
@@ -495,8 +496,6 @@ void Parser::ltoDiagnosticHandler(lto_codegen_diagnostic_severity_t severity, co
 			// this is a bug (fixed in 3.6/trunk), so for LLVM 3.5, just break
 			static bool printremarks = ( getenv("LD64_PRINT_LTO_REMARKS") || !strstr(::lto_get_version(), "3.5") );
 			if ( !printremarks ) break;
-			fprintf(stderr, "ld: LTO remark: %s\n", message);
-			break;
 		}
 #endif
 		case LTO_DS_NOTE:

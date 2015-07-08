@@ -11,7 +11,7 @@ else
 fi
 
 if [ -z "${RC_SUPPORTED_ARCHS}" ]; then
-	RC_SUPPORTED_ARCHS="i386 x86_64 x86_64h armv6 armv7 armv7s armv7m arm64"
+	RC_SUPPORTED_ARCHS="i386 x86_64 x86_64h armv6 armv7 armv7s armv7m armv7k arm64"
 fi
 
 for ANARCH in ${RC_SUPPORTED_ARCHS}

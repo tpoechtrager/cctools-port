@@ -330,17 +330,14 @@ void Resolver::doLinkerOption(const std::vector<const char*>& linkerOption, cons
 	}
 }
 
-static void userReadableSwiftVersion(uint8_t value, char versionString[64])
+static void userReadableSwiftVersion(uint8_t value, char versionString[32])
 {
 	switch (value) {
 		case 1:
 			strcpy(versionString, "1.0");
 			break;
-		case 2:
-			strcpy(versionString, "1.1");
-			break;
 		default:
-			sprintf(versionString, "unknown ABI version 0x%02X", value);
+			sprintf(versionString, "0x%02X", value);
 	}
 }
 
@@ -403,8 +400,8 @@ void Resolver::doFile(const ld::File& file)
 				_internal.swiftVersion = file.swiftVersion();
 			}
 			else if ( file.swiftVersion() != _internal.swiftVersion ) {
-				char fileVersion[64];
-				char otherVersion[64];
+				char fileVersion[32];
+				char otherVersion[32];
 				userReadableSwiftVersion(file.swiftVersion(), fileVersion);
 				userReadableSwiftVersion(_internal.swiftVersion, otherVersion);
 				if ( file.swiftVersion() > _internal.swiftVersion ) {
@@ -513,7 +510,7 @@ void Resolver::doFile(const ld::File& file)
 			if ( (_options.iOSVersionMin() != iOSVersionUnset) && (_options.iOSVersionMin() < iOS_8_0) ) {
 				// <rdar://problem/17598404> only warn about linking against embedded dylib if it is built for iOS 8 or later
 				if ( dylibFile->iOSMinVersion() >= iOS_8_0 )
-					throwf("embedded dylibs/frameworks are only supported on iOS 8.0 and later (%s)", depInstallName);
+					warning("embedded dylibs/frameworks are only supported on iOS 8.0 and later (%s)", depInstallName);
 			}
 		}
 		if ( _options.sharedRegionEligible() ) {
@@ -1551,6 +1548,7 @@ void Resolver::linkTimeOptimize()
 	optOpt.needsUnwindInfoSection		= _options.needsUnwindInfoSection();
 	optOpt.keepDwarfUnwind				= _options.keepDwarfUnwind();
 	optOpt.verboseOptimizationHints     = _options.verboseOptimizationHints();
+	optOpt.armUsesZeroCostExceptions    = _options.armUsesZeroCostExceptions();
 	optOpt.arch							= _options.architecture();
 	optOpt.mcpu							= _options.mcpuLTO();
 	optOpt.llvmOptions					= &_options.llvmOptions();

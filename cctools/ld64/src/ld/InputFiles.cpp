@@ -301,6 +301,7 @@ ld::File* InputFiles::makeFile(const Options::FileInfo& info, bool indirectDylib
 	objOpts.forceDwarfConversion= (_options.outputKind() == Options::kDyld);
 	objOpts.neverConvertDwarf   = !_options.needsUnwindInfoSection();
 	objOpts.verboseOptimizationHints = _options.verboseOptimizationHints();
+	objOpts.armUsesZeroCostExceptions = _options.armUsesZeroCostExceptions();
 	objOpts.subType				= _options.subArchitecture();
 	ld::relocatable::File* objResult = mach_o::relocatable::parse(p, len, info.path, info.modTime, info.ordinal, objOpts);
 	if ( objResult != NULL ) {
@@ -598,7 +599,6 @@ void InputFiles::addLinkerOptionLibraries(ld::Internal& state, ld::File::AtomHan
 				ld::dylib::File* dylibReader = dynamic_cast<ld::dylib::File*>(reader);
 				if ( dylibReader != NULL ) {
 					if ( ! dylibReader->installPathVersionSpecific() ) {
-						dylibReader->forEachAtom(handler);
 						dylibReader->setImplicitlyLinked();
 						this->addDylib(dylibReader, info);
 					}
@@ -625,7 +625,6 @@ void InputFiles::addLinkerOptionLibraries(ld::Internal& state, ld::File::AtomHan
 				ld::dylib::File* dylibReader = dynamic_cast<ld::dylib::File*>(reader);
 				ld::archive::File* archiveReader = dynamic_cast<ld::archive::File*>(reader);
 				if ( dylibReader != NULL ) {
-					dylibReader->forEachAtom(handler);
 					dylibReader->setImplicitlyLinked();
 					this->addDylib(dylibReader, info);
 				}
