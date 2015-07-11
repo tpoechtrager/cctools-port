@@ -21,18 +21,18 @@
  * @APPLE_LICENSE_HEADER_END@
  */
 #ifndef RLD
-#include <libc.h>
-#include <ctype.h>
-#include <sys/types.h>
+#import <libc.h>
+#import <ctype.h>
+#import <sys/types.h>
 #ifdef __OPENSTEP__
 #define _POSIX_SOURCE
 #endif
-#include <dirent.h>
-#include <pwd.h>
-#include "stuff/bool.h"
-#include "stuff/errors.h"
-#include "stuff/allocate.h"
-#include "stuff/SymLoc.h"
+#import <dirent.h>
+#import <pwd.h>
+#import "stuff/bool.h"
+#import "stuff/errors.h"
+#import "stuff/allocate.h"
+#import "stuff/SymLoc.h"
 
 const char *
 symLocForDylib(const char *installName, const char *releaseName,

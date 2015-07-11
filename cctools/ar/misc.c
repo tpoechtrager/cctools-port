@@ -164,7 +164,11 @@ void
 badfmt()
 {
 
+#ifdef __APPLE__ /* cctools-port */
+	errno = EFTYPE;
+#else
 	errno = EINVAL;
+#endif /* __APPLE__ */
 	err(1, "%s", archive);
 }
 

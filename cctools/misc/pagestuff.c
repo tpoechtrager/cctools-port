@@ -21,12 +21,12 @@
  * @APPLE_LICENSE_HEADER_END@
  */
 #include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include "stuff/ofile.h"
-#include "stuff/errors.h"
-#include "stuff/allocate.h"
+#import <stdio.h>
+#import <stdlib.h>
+#import <string.h>
+#import "stuff/ofile.h"
+#import "stuff/errors.h"
+#import "stuff/allocate.h"
 
 enum file_part_type {
     FP_FAT_HEADERS,

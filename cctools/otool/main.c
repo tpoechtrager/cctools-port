@@ -350,7 +350,7 @@ static void print_argstrings(
 /* apple_version is created by the libstuff/Makefile */
 extern char apple_version[];
 char *version = apple_version;
-#if defined(__CYGWIN__) && defined(__clang__)
+#if defined(__CYGWIN__) && defined(__clang__) /* cctools-port */
 int otool_cygwin;
 #endif
 
@@ -371,7 +371,7 @@ char **envp)
 	progname = argv[0];
 	arch_flags = NULL;
 	narch_flags = 0;
-	all_archs = TRUE;
+	all_archs = TRUE; /* cctools-port: FALSE -> TRUE */
 	use_member_syntax = TRUE;
 	llvm_mc = FALSE;
 	version = FALSE;

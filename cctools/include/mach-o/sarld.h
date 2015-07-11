@@ -86,8 +86,8 @@ extern sa_rld_with_symtab_t sa_rld_with_symtab;
  * API.  These are set in sa_rld() and used in layout_segments() as the place
  * to put the output in memory.
  */
-extern char         *sa_rld_output_addr;
-extern unsigned long sa_rld_output_size;
+__private_extern__ char         *sa_rld_output_addr;
+__private_extern__ unsigned long sa_rld_output_size;
 #endif /* SA_RLD */
 
 

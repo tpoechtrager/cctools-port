@@ -41,7 +41,7 @@
 #ifndef _ARCH_M88K_REG_HELP_H_
 #define _ARCH_M88K_REG_HELP_H_
 
-#include <architecture/nrw/reg_help.h>
+#import <architecture/nrw/reg_help.h>
 
 /* Stack pointer must always be a multiple of 16 */
 #define	STACK_INCR	16

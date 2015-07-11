@@ -20,8 +20,8 @@
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
-#include <architecture/byte_order.h>
-#include <mach/m88k/thread_status.h>
+#import <architecture/byte_order.h>
+#import <mach/m88k/thread_status.h>
 
 extern void swap_m88k_thread_state_grf_t(
     m88k_thread_state_grf_t *cpu,

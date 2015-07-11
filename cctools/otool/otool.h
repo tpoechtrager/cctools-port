@@ -61,7 +61,7 @@ extern enum bool Qflag; /* use the HACKED llvm-mc disassembler */
 extern enum bool qflag; /* use 'C' Public llvm-mc disassembler */
 extern enum bool gflag; /* group the disassembly */
 extern enum bool jflag; /* print opcode bytes */
-extern char *pflag;     /* procedure name to start disassembling from */
+extern char *pflag; 	/* procedure name to start disassembling from */
 extern char *segname,
      *sectname;	    /* name of the section to print the contents of */
 extern char *mcpu; 	/* the arg of the -mcpu=arg flag */

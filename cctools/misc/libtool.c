@@ -59,7 +59,8 @@
 #include <servers/bootstrap.h>
 #endif
 
-int asprintf(char **strp, const char *fmt, ...); /* port */
+/* cctools-port */
+int asprintf(char **strp, const char *fmt, ...); 
 
 /*
  * This is used internally to build the table of contents.
@@ -373,9 +374,20 @@ char **envp)
 	(void)umask(oumask);
 
 	/* see if this is being run as ranlib */
+	/* cctools-port start*/
+#if 0 /* old code */
+	p = strrchr(argv[0], '/');
+	if(p != NULL)
+	    p++;
+	else
+	    p = argv[0];
+	if(strncmp(p, "ranlib", sizeof("ranlib") - 1) == 0)
+	    cmd_flags.ranlib = TRUE;
+#endif
 #ifdef RANLIB
     cmd_flags.ranlib = TRUE;
 #endif
+	/* cctools-port end */
 
 	/* The default is to used long names */
 	cmd_flags.use_long_names = TRUE;

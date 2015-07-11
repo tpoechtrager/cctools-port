@@ -31,7 +31,7 @@
  * #include <reloc.h>
  * #include "section.h"
  */
-extern void arm_reloc(
+__private_extern__ void arm_reloc(
     char *contents,
     struct relocation_info *relocs,
     struct section_map *section_map,

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CodeLite_Workspace Name="cctools-ld64" Database="cctools-ld64.tags">
+  <Project Name="cctools" Path="cctools.project" Active="Yes"/>
+  <Project Name="ld64" Path="ld64.project" Active="No"/>
+  <BuildMatrix>
+    <WorkspaceConfiguration Name="Debug" Selected="yes">
+      <Project Name="ld64" ConfigName="Debug"/>
+      <Project Name="cctools" ConfigName="Debug"/>
+    </WorkspaceConfiguration>
+  </BuildMatrix>
+</CodeLite_Workspace>

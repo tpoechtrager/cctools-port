@@ -28,8 +28,8 @@ struct macosx_deployment_target {
     char *name;			/* name for printing */
 };
 
-extern void get_macosx_deployment_target(
+__private_extern__ void get_macosx_deployment_target(
     struct macosx_deployment_target *value);
 
-extern void put_macosx_deployment_target(
+__private_extern__ void put_macosx_deployment_target(
     char *target);

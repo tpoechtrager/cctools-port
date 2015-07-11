@@ -31,7 +31,7 @@
  * #include <reloc.h>
  * #include "section.h"
  */
-extern void m88k_reloc(
+__private_extern__ void m88k_reloc(
     char *contents,
     struct relocation_info *relocs,
     struct section_map *map);

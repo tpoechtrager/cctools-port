@@ -120,7 +120,7 @@ typedef struct fp_control {
 					:3;
 } fp_control_t;
 
-#include <architecture/i386/sel.h>
+#import <architecture/i386/sel.h>
 
 /*
  * Floating point 'environment'

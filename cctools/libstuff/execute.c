@@ -161,6 +161,15 @@ char *str)
 	    p = allocate(bufsize);
 	    _NSGetExecutablePath(p, &bufsize);
 	}
+	/* cctools-port start */
+#if 0 /* old code */
+	prefix = realpath(p, resolved_name);
+	p = rindex(prefix, '/');
+	if(p != NULL)
+	    p[1] = '\0';
+
+	return(makestr(prefix, str, NULL));
+#endif
 	if (*p){
 		prefix = realpath(p, resolved_name);
 		if (prefix){
@@ -174,8 +183,9 @@ char *str)
 		invalid:;
 		prefix = "";
 	}
-    //NOTE, here we add a target alias to command str;
+	/* here we add the target alias to the command string */
 	return(makestr(prefix, PROGRAM_PREFIX, str, NULL));
+	/* cctools-port end */
 }
 
 /*

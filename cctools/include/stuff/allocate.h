@@ -26,15 +26,15 @@
 
 /* defined in allocate.c */
 
-extern void *allocate(
+__private_extern__ void *allocate(
     size_t size);
 
-extern void *reallocate(
+__private_extern__ void *reallocate(
     void *,
     size_t size);
 
-extern char *savestr(
+__private_extern__ char *savestr(
     const char *s);
 
-extern char *makestr(
+__private_extern__ char *makestr(
     const char *args, ...);

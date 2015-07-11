@@ -24,5 +24,5 @@
 /*
  * uuid() is called to set the uuid[] bytes for the uuid load command.
  */
-extern void uuid(
+__private_extern__ void uuid(
     uint8_t *uuid);

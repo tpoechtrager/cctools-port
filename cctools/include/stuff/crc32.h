@@ -20,6 +20,6 @@
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
-extern uint32_t crc32(
+__private_extern__ uint32_t crc32(
     const void *buf,
     uint32_t len);

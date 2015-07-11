@@ -78,45 +78,45 @@ struct literal8_order_line {
     unsigned long output_offset;
 };
 
-extern void literal8_merge(
+__private_extern__ void literal8_merge(
     struct literal8_data *data,
     struct merged_section *ms,
     struct section *s,
     struct section_map *section_map,
     enum bool redo_live);
 
-extern void literal8_order(
+__private_extern__ void literal8_order(
     struct literal8_data *data,
     struct merged_section *ms);
 
-extern void literal8_reset_live(
+__private_extern__ void literal8_reset_live(
     struct literal8_data *data,
     struct merged_section *ms);
 
-extern enum bool get_hex_from_sectorder(
+__private_extern__ enum bool get_hex_from_sectorder(
     struct merged_section *ms,
     unsigned long *index,
     unsigned long *value,
     unsigned long line_number);
 
-extern unsigned long lookup_literal8(
+__private_extern__ unsigned long lookup_literal8(
     struct literal8 literal8,
     struct literal8_data *data,
     struct merged_section *ms);
 
-extern void literal8_output(
+__private_extern__ void literal8_output(
     struct literal8_data *data,
     struct merged_section *ms);
 
-extern void literal8_free(
+__private_extern__ void literal8_free(
     struct literal8_data *data);
 
 #ifdef DEBUG
-extern void print_literal8_data(
+__private_extern__ void print_literal8_data(
     struct literal8_data *data,
     char *indent);
 
-extern void literal8_data_stats(
+__private_extern__ void literal8_data_stats(
     struct literal8_data *data,
     struct merged_section *ms);
 #endif /* DEBUG */

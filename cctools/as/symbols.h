@@ -17,8 +17,8 @@ You should have received a copy of the GNU General Public License
 along with GAS; see the file COPYING.  If not, write to
 the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
 
-#include "struc-symbol.h"
-#include "hash.h"
+#import "struc-symbol.h"
+#import "hash.h"
 
 extern struct hash_control *sy_hash;
 extern struct obstack notes;

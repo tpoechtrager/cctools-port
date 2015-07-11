@@ -3,7 +3,7 @@
 
 #include "llvm-c/Disassembler.h"
 
-extern LLVMDisasmContextRef llvm_create_disasm(
+__private_extern__ LLVMDisasmContextRef llvm_create_disasm(
     const char *TripleName,
     const char *CPU,
     void *DisInfo,
@@ -11,10 +11,10 @@ extern LLVMDisasmContextRef llvm_create_disasm(
     LLVMOpInfoCallback GetOpInfo,
     LLVMSymbolLookupCallback SymbolLookUp);
 
-extern void llvm_disasm_dispose(
+__private_extern__ void llvm_disasm_dispose(
     LLVMDisasmContextRef DC);
 
-extern size_t llvm_disasm_instruction(
+__private_extern__ size_t llvm_disasm_instruction(
     LLVMDisasmContextRef DC,
     uint8_t *Bytes,
     uint64_t BytesSize,

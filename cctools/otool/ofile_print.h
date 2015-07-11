@@ -28,13 +28,13 @@
  *
  * @APPLE_LICENSE_HEADER_END@
  */
-#include <ar.h>
-#include <mach-o/fat.h>
-#include <mach-o/loader.h>
-#include <mach-o/nlist.h>
-#include <mach-o/reloc.h>
-#include <stuff/bytesex.h>
-#include <stuff/bool.h>
+#import <ar.h>
+#import <mach-o/fat.h>
+#import <mach-o/loader.h>
+#import <mach-o/nlist.h>
+#import <mach-o/reloc.h>
+#import <stuff/bytesex.h>
+#import <stuff/bool.h>
 #include "stuff/symbol.h"
 
 extern void print_fat_headers(

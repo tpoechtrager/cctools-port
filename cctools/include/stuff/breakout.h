@@ -24,7 +24,7 @@
 #define __private_extern__ __declspec(private_extern)
 #endif
 
-#include "stuff/ofile.h"
+#import "stuff/ofile.h"
 
 /*
  * This is used to build the table of contents of an archive.  Each toc_entry
@@ -246,13 +246,13 @@ struct object {
     struct ofile *ld_r_ofile;
 };
 
-extern struct ofile * breakout(
+__private_extern__ struct ofile * breakout(
     char *filename,
     struct arch **archs,
     uint32_t *narchs,
     enum bool calculate_input_prebind_cksum);
 
-extern struct ofile * breakout_mem(
+__private_extern__ struct ofile * breakout_mem(
     void *membuf,
     uint32_t length,
     char *filename,
@@ -260,11 +260,11 @@ extern struct ofile * breakout_mem(
     uint32_t *narchs,
     enum bool calculate_input_prebind_cksum);
 
-extern void free_archs(
+__private_extern__ void free_archs(
     struct arch *archs,
     uint32_t narchs);
 
-extern void writeout(
+__private_extern__ void writeout(
     struct arch *archs,
     uint32_t narchs,
     char *output,
@@ -274,7 +274,7 @@ extern void writeout(
     enum bool library_warnings,
     uint32_t *throttle);
 
-extern void writeout_to_mem(
+__private_extern__ void writeout_to_mem(
     struct arch *archs,
     uint32_t narchs,
     char *filename,
@@ -285,7 +285,7 @@ extern void writeout_to_mem(
     enum bool library_warning,
     enum bool *seen_archive);
 
-extern void checkout(
+__private_extern__ void checkout(
     struct arch *archs,
     uint32_t narchs);
 

@@ -316,7 +316,7 @@ extern void _dyld_lookup_and_bind_fully(
     unsigned long *address,
     void **module);
 
-extern int _dyld_func_lookup(
+__private_extern__ int _dyld_func_lookup(
     const char *dyld_func_name,
     unsigned long *address);
 
