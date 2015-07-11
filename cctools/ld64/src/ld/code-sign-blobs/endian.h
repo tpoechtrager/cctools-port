@@ -32,7 +32,7 @@
 #include <libkern/OSByteOrder.h>
 //#include <security_utilities/utilities.h>
 #include "memutils.h"
-#include <arpa/inet.h>
+#include <arpa/inet.h> // ld64-port
 
 namespace Security {
 

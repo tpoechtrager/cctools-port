@@ -35,7 +35,7 @@
 #include <vector>
 #include <unordered_set>
 
-#include "configure.h"
+#include "configure.h" // ld64-port
 
 namespace ld {
 

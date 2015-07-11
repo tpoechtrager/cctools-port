@@ -33,7 +33,7 @@
 #include <sys/fcntl.h>
 #include <sys/stat.h>
 #include <errno.h>
-#include <pthread.h>
+#include <pthread.h> // ld64-port
 #include <mach-o/dyld.h>
 #include <vector>
 #include <unordered_set>
@@ -46,8 +46,8 @@
 #include "lto_file.h"
 
 // #defines are a work around for <rdar://problem/8760268>
-#undef __STDC_LIMIT_MACROS
-#undef __STDC_CONSTANT_MACROS
+#undef __STDC_LIMIT_MACROS      // ld64-port
+#undef __STDC_CONSTANT_MACROS   // ld64-port
 #define __STDC_LIMIT_MACROS 1
 #define __STDC_CONSTANT_MACROS 1
 #include "llvm-c/lto.h"
@@ -492,7 +492,7 @@ void Parser::ltoDiagnosticHandler(lto_codegen_diagnostic_severity_t severity, co
 #if LTO_API_VERSION >= 10
 		case LTO_DS_REMARK:
 		{
-			// PORT HACK: LLVM 3.5 prints thousands of lines about inlining, loop vectorization etc. by default
+			// ld64-port: LLVM 3.5 prints thousands of lines about inlining, loop vectorization etc. by default
 			// this is a bug (fixed in 3.6/trunk), so for LLVM 3.5, just break
 			static bool printremarks = ( getenv("LD64_PRINT_LTO_REMARKS") || !strstr(::lto_get_version(), "3.5") );
 			if ( !printremarks ) break;

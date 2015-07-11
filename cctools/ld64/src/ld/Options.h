@@ -411,8 +411,8 @@ private:
 		bool					containsNonWildcard(const char*) const;
 		bool					empty() const			{ return fRegular.empty() && fWildCard.empty(); }
 		bool					hasWildCards() const	{ return !fWildCard.empty(); }
-		NameSet::const_iterator		regularBegin() const	{ return fRegular.begin(); }
-		NameSet::const_iterator		regularEnd() const		{ return fRegular.end(); }
+		NameSet::const_iterator		regularBegin() const	{ return fRegular.begin(); }    // ld64-port: NameSet::iterator -> NameSet::const_iterator
+		NameSet::const_iterator		regularEnd() const		{ return fRegular.end(); }      // ld64-port: NameSet::iterator -> NameSet::const_iterator
 		void					remove(const NameSet&); 
 	private:
 		static bool				hasWildCards(const char*);

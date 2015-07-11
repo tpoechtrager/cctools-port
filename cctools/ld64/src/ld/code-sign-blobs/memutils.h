@@ -33,7 +33,7 @@
 #include <stdlib.h>
 #include <algorithm>
 
-#ifdef __GLIBCXX__
+#ifdef __GLIBCXX__ // ld64-port
 using namespace __gnu_cxx;
 #endif
 
@@ -49,7 +49,7 @@ namespace LowLevelMemoryUtilities {
 //
 static const size_t systemAlignment = 4;
 
-#ifndef __GXX_EXPERIMENTAL_CXX0X__
+#ifndef __GXX_EXPERIMENTAL_CXX0X__ // ld64-port
 //
 // Get the local alignment for a type, as used by the acting compiler.
 //

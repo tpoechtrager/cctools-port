@@ -23,7 +23,7 @@
  */
  
 // start temp HACK for cross builds
-//extern "C" double log2 ( double );
+//extern "C" double log2 ( double ); // ld64-port: commented
 //#define __MATH__
 // end temp HACK for cross builds
 
@@ -1151,7 +1151,7 @@ int main(int argc, const char* argv[])
 			fprintf(stderr, "processed %3u dylib files\n", inputFiles._totalDylibsLoaded);
 			fprintf(stderr, "wrote output file            totaling %15s bytes\n", commatize(out.fileSize(), temp));
 		}
-		if ( getenv("IOS_SIGN_CODE_WHEN_BUILD") || getenv("IOS_FAKE_CODE_SIGN") ) {
+		if ( getenv("IOS_SIGN_CODE_WHEN_BUILD") || getenv("IOS_FAKE_CODE_SIGN") ) { // ld64-port   (keep IOS_SIGN_CODE_WHEN_BUILD for compatibility with the 'iOS toolchain based on clang for linux' project)
 			std::string ldid = std::string("ldid -S ") + std::string(options.outputFilePath());
 			system(ldid.c_str());
 		}
@@ -1179,7 +1179,7 @@ int main(int argc, const char* argv[])
 // implement assert() function to print out a backtrace before aborting
 void __assert_rtn(const char* func, const char* file, int line, const char* failedexpr)
 {
-#if __has_include(<execinfo.h>)
+#if __has_include(<execinfo.h>) // ld64-port
     Snapshot *snapshot = Snapshot::globalSnapshot;
     
     snapshot->setSnapshotMode(Snapshot::SNAPSHOT_DEBUG);

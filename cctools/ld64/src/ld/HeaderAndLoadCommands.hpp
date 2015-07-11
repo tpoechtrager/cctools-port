@@ -32,6 +32,7 @@
 
 #include <vector>
 
+// ld64-port start
 #if defined(__arm__) || defined(__arm64__)
 #undef THREAD_STATE_NONE
 #undef VALID_THREAD_STATE_FLAVOR
@@ -40,6 +41,7 @@
 #endif
 
 #include <mach/i386/thread_status.h>
+// ld64-port end
 
 #include "MachOFileAbstraction.hpp"
 #include "Options.h"

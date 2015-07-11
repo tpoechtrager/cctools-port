@@ -417,7 +417,6 @@ bool SymbolTable::addByName(const ld::Atom& newAtom, bool ignoreDuplicates)
 	const ld::Atom* existingAtom = _indirectBindingTable[slot];
 	//fprintf(stderr, "addByName(%p) name=%s, slot=%u, existing=%p\n", &newAtom, newAtom.name(), slot, existingAtom);
 	if ( existingAtom != NULL ) {
-
 		assert(&newAtom != existingAtom);
 		NameCollisionResolution picker(newAtom, *existingAtom, ignoreDuplicates, _options);
 		if (picker.reportDuplicate()) {

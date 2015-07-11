@@ -365,7 +365,12 @@ ld::File* InputFiles::makeFile(const Options::FileInfo& info, bool indirectDylib
 			throwf("lto file was built for %s which is not the architecture being linked (%s): %s", fileArch(p, len), _options.architectureName(), info.path);
 		}
 		else {
-			const char* libLTO = "libLTO.so";
+#ifdef __APPLE__ // ld64-port
+      const char* libLTO = "libLTO.dylib";
+#else
+      const char* libLTO = "libLTO.so";
+#endif /* __APPLE__ */
+
 			char ldPath[PATH_MAX];
 			char tmpPath[PATH_MAX];
 			char libLTOPath[PATH_MAX];

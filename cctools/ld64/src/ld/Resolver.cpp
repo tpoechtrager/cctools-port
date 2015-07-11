@@ -1626,7 +1626,7 @@ void Resolver::linkTimeOptimize()
 		this->checkDylibSymbolCollisions();
 	}
 #else
-    throw "";
+    throwf("no builtin LTO support"); // ld64-port
 #endif /* LTO_SUPPORT */
 }
 

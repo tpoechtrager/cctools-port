@@ -49,7 +49,7 @@
 #include "Architectures.hpp"
 #include "ld.hpp"
 #include "macho_relocatable_file.h"
-#include "qsort_r.h"
+#include "qsort_r.h" // ld64-port
 
 
 extern void throwf(const char* format, ...) __attribute__ ((noreturn,format(printf, 1, 2)));
@@ -2135,7 +2135,7 @@ void Parser<A>::makeSortedSectionsArray(uint32_t array[])
 	// sort by symbol table address
 	for (uint32_t i=0; i < _machOSectionsCount; ++i)
 		array[i] = i;
-	::qsort_r_local(array, _machOSectionsCount, sizeof(uint32_t), this, &sectionIndexSorter);
+	::qsort_r(array, _machOSectionsCount, sizeof(uint32_t), this, &sectionIndexSorter);
 
 	if ( log ) {
 		fprintf(stderr, "sorted sections:\n");
@@ -2228,7 +2228,7 @@ void Parser<A>::makeSortedSymbolsArray(uint32_t array[], const uint32_t sectionA
 	
 	// sort by symbol table address
 	ParserAndSectionsArray extra = { this, sectionArray };
-	::qsort_r_local(array, _symbolsInSections, sizeof(uint32_t), &extra, &symbolIndexSorter);
+	::qsort_r(array, _symbolsInSections, sizeof(uint32_t), &extra, &symbolIndexSorter);
 	
 
 	// look for two symbols at same address
@@ -4130,7 +4130,7 @@ bool CFISection<A>::needsRelocating()
 
 template <>
 void CFISection<x86_64>::cfiParse(class Parser<x86_64>& parser, uint8_t* buffer,
-									libunwind::CFI_Atom_Info<CFISection<x86_64>::OAS> cfiArray[],
+									libunwind::CFI_Atom_Info<CFISection<x86_64>::OAS> cfiArray[],  // ld64-port: removed superfluous ::CFI_Atom_Info
 									uint32_t& count, const pint_t cuStarts[], uint32_t cuCount)
 {
 	// copy __eh_frame data to buffer
@@ -4192,7 +4192,7 @@ void CFISection<x86_64>::cfiParse(class Parser<x86_64>& parser, uint8_t* buffer,
 
 template <>
 void CFISection<x86>::cfiParse(class Parser<x86>& parser, uint8_t* buffer, 
-									libunwind::CFI_Atom_Info<CFISection<x86>::OAS> cfiArray[],
+									libunwind::CFI_Atom_Info<CFISection<x86>::OAS> cfiArray[], // ld64-port: removed superfluous ::CFI_Atom_Info
 									uint32_t& count, const pint_t cuStarts[], uint32_t cuCount)
 {
 	// create ObjectAddressSpace object for use by libunwind
@@ -4213,7 +4213,7 @@ void CFISection<x86>::cfiParse(class Parser<x86>& parser, uint8_t* buffer,
 
 template <>
 void CFISection<arm>::cfiParse(class Parser<arm>& parser, uint8_t* buffer, 
-									libunwind::CFI_Atom_Info<CFISection<arm>::OAS> cfiArray[],
+									libunwind::CFI_Atom_Info<CFISection<arm>::OAS> cfiArray[], // ld64-port: removed superfluous ::CFI_Atom_Info
 									uint32_t& count, const pint_t cuStarts[], uint32_t cuCount)
 {
 	if ( !parser.armUsesZeroCostExceptions() ) {
@@ -4239,7 +4239,7 @@ void CFISection<arm>::cfiParse(class Parser<arm>& parser, uint8_t* buffer,
 
 template <>
 void CFISection<arm64>::cfiParse(class Parser<arm64>& parser, uint8_t* buffer, 
-									libunwind::CFI_Atom_Info<CFISection<arm64>::OAS> cfiArray[],
+									libunwind::CFI_Atom_Info<CFISection<arm64>::OAS> cfiArray[], // ld64-port: removed superfluous ::CFI_Atom_Info
 									uint32_t& count, const pint_t cuStarts[], uint32_t cuCount)
 {
 	// copy __eh_frame data to buffer

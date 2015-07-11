@@ -42,7 +42,7 @@
 #include "MachOFileAbstraction.hpp"
 #include "Snapshot.h"
 
-#include <ctype.h>
+#include <ctype.h> // ld64-port
 
 // upward dependency on lto::version()
 namespace lto {
@@ -52,7 +52,7 @@ namespace lto {
 // magic to place command line in crash reports
 const int crashreporterBufferSize = 2000;
 static char crashreporterBuffer[crashreporterBufferSize];
-#if defined(__has_include) && __has_include(<CrashReporterClient.h>)
+#if defined(__has_include) && __has_include(<CrashReporterClient.h>) // ld64-port
 #define HAVE_CRASHREPORTER_HEADER 1
 #else
 #define HAVE_CRASHREPORTER_HEADER 0
@@ -1773,7 +1773,7 @@ void Options::addSection(const char* segment, const char* section, const char* p
 	::close(fd);
 
 	// record section to create
-	ExtraSection info = { segment, section, path, (uint8_t*)p, static_cast<uint64_t>(stat_buf.st_size) };
+	ExtraSection info = { segment, section, path, (uint8_t*)p, static_cast<uint64_t>(stat_buf.st_size) }; // ld64-port:  stat_buf.st_size -> static_cast<uint64_t>(stat_buf.st_size)
 	fExtraSections.push_back(info);
 }
 
@@ -2478,9 +2478,9 @@ void Options::parse(int argc, const char* argv[])
 			else if ( (strcmp(arg, "-ios_version_min") == 0) || (strcmp(arg, "-iphoneos_version_min") == 0) ) {
 				setIOSVersionMin(argv[++i]); 
 			}
-			else if ( (strcmp(arg, "-aspen_version_min") == 0) ) {
-                //for backward compitable with llvm-gcc.
-                ++i;
+			else if ( (strcmp(arg, "-aspen_version_min") == 0) ) { // ld64-port
+        // for backward compatibility with llvm-gcc.
+        ++i;
 			}
 			else if ( strcmp(arg, "-ios_simulator_version_min") == 0 ) {
 				setIOSVersionMin(argv[++i]);
@@ -4274,7 +4274,7 @@ void Options::reconfigureDefaults()
 			fSDKVersion = fMacVersionMin;
 		}
 		else {
-#ifdef __APPLE__
+#ifdef __APPLE__ // ld64-port
 			int mib[2] = { CTL_KERN, KERN_OSRELEASE };
 			char kernVersStr[100];
 			size_t strlen = sizeof(kernVersStr);
@@ -4285,7 +4285,7 @@ void Options::reconfigureDefaults()
 				uint32_t kernVers = parseVersionNumber32(kernVersStr);
 				int minor = (kernVers >> 16) - 4;  // kernel major version is 4 ahead of x in 10.x
 				fSDKVersion = 0x000A0000 + (minor << 8);
-#ifdef __APPLE__
+#ifdef __APPLE__ // ld64-port
 			}
 #endif
 		}
@@ -4604,7 +4604,7 @@ void Options::checkIllegalOptionCombinations()
 
 	// make sure all required exported symbols exist
 	std::vector<const char*> impliedExports;
-	for (NameSet::const_iterator it=fExportSymbols.regularBegin(); it != fExportSymbols.regularEnd(); ++it) {
+	for (NameSet::const_iterator it=fExportSymbols.regularBegin(); it != fExportSymbols.regularEnd(); ++it) {    // ld64-port: NameSet::iterator it -> NameSet::const_iterator it
 		const char* name = *it;
 		const int len = strlen(name);
 		if ( (strcmp(&name[len-3], ".eh") == 0) || (strncmp(name, ".objc_category_name_", 20) == 0) ) {
@@ -4636,7 +4636,7 @@ void Options::checkIllegalOptionCombinations()
 	}
 
 	// make sure all required re-exported symbols exist
-	for (NameSet::const_iterator it=fReExportSymbols.regularBegin(); it != fReExportSymbols.regularEnd(); ++it) {
+	for (NameSet::const_iterator it=fReExportSymbols.regularBegin(); it != fReExportSymbols.regularEnd(); ++it) {    // ld64-port: NameSet::iterator it -> NameSet::const_iterator it
 		fInitialUndefines.push_back(*it);
 	}
 	
@@ -4836,7 +4836,7 @@ void Options::checkForClassic(int argc, const char* argv[])
 	bool newLinker = false;
 	
 	// build command line buffer in case ld crashes
-#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 1070 && HAVE_CRASHREPORTER_HEADER
+#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 1070 && HAVE_CRASHREPORTER_HEADER // ld64-port: added && HAVE_CRASHREPORTER_HEADER
 	CRSetCrashLogMessage(crashreporterBuffer);
 #endif
 	const char* srcRoot = getenv("SRCROOT");
@@ -4895,7 +4895,7 @@ void Options::checkForClassic(int argc, const char* argv[])
 
 void Options::gotoClassicLinker(int argc, const char* argv[])
 {
-	argv[0] = PROGRAM_PREFIX "ld_classic";
+	argv[0] = PROGRAM_PREFIX "ld_classic"; // ld64-port: added PROGRAM_PREFIX
 	// ld_classic does not support -iphoneos_version_min, so change
 	for(int j=0; j < argc; ++j) {
 		if ( (strcmp(argv[j], "-iphoneos_version_min") == 0) || (strcmp(argv[j], "-ios_version_min") == 0) ) {

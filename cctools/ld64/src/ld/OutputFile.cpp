@@ -2683,7 +2683,7 @@ void OutputFile::writeOutputFile(ld::Internal& state)
 		if (stat_buf.st_mode & S_IFREG) {
 			outputIsRegularFile = true;
 			// <rdar://problem/12264302> Don't use mmap on non-hfs volumes
-#if 0
+#ifdef __APPLE__ // ld64-port
 			struct statfs fsInfo;
 			if ( statfs(_options.outputFilePath(), &fsInfo) != -1 ) {
 				if ( strcmp(fsInfo.f_fstypename, "hfs") == 0) {
@@ -2692,11 +2692,11 @@ void OutputFile::writeOutputFile(ld::Internal& state)
 				}
 			}
 			else {
-#endif
+#endif /* __APPLE__ */
 				outputIsMappableFile = false;
-#if 0
+#ifdef __APPLE__ // ld64-port
 			}
-#endif
+#endif /* __APPLE__ */
 		} 
 		else {
 			outputIsRegularFile = false;

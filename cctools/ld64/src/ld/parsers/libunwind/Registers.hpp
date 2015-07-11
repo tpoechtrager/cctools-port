@@ -36,7 +36,7 @@
 #include <mach-o/loader.h>
 #include <mach-o/getsect.h>
 
-#if defined(__arm__) || defined(__arm64__)
+#if defined(__arm__) || defined(__arm64__) // ld64-port
 #undef THREAD_STATE_NONE
 #undef VALID_THREAD_STATE_FLAVOR
 #undef MACHINE_THREAD_STATE
