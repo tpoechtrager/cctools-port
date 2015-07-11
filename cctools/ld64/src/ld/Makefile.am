@@ -7,11 +7,10 @@ ld_LDADD =  \
 	$(top_srcdir)/ld64/src/ld/parsers/libParsers.la \
 	$(top_srcdir)/ld64/src/ld/passes/libPasses.la \
 	$(DL_LIB) \
-	$(CRYPTO_LIB) \
 	$(UUID_LIB) \
 	$(LTO_LIB)
 
-ld_LDFLAGS = $(PTHREAD_FLAGS) $(SSL_LIB) $(EXECINFO_LIB)
+ld_LDFLAGS = $(PTHREAD_FLAGS) $(EXECINFO_LIB)
 
 ld_CXXFLAGS =  \
 	-D__DARWIN_UNIX03 \
@@ -24,6 +23,7 @@ ld_CXXFLAGS =  \
 	-I$(top_srcdir)/ld64/src/abstraction \
 	-I$(top_srcdir)/ld64/src/3rd \
 	-I$(top_srcdir)/ld64/src/3rd/BlocksRuntime \
+	-I$(top_srcdir)/ld64/src/3rd/include \
 	-I$(top_srcdir)/ld64/src/ld \
 	-I$(top_srcdir)/ld64/src/ld/parsers \
 	-I$(top_srcdir)/ld64/src/ld/passes \
@@ -39,7 +39,7 @@ ld_CFLAGS =  \
     -I$(top_srcdir)/ld64/src \
     -I$(top_srcdir)/ld64/src/abstraction \
     -I$(top_srcdir)/ld64/src/3rd \
-	  -I$(top_srcdir)/ld64/src/3rd/BlocksRuntime \
+    -I$(top_srcdir)/ld64/src/3rd/BlocksRuntime \
     -I$(top_srcdir)/ld64/src/ld \
     -I$(top_srcdir)/ld64/src/ld/parsers \
     -I$(top_srcdir)/ld64/src/ld/passes \

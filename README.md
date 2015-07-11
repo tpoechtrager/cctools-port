@@ -27,13 +27,10 @@ armv7m, armv7em, armv8, arm64, arm64v8, i386, x86_64 and x86_64h.
 
 `Clang 3.2+ or gcc/g++/gcc-objc 4.5+`, `automake`, `autogen` and `libtool`.
 
-On non-Mac OS X systems you also need to install:
+Optional, but recommended:
 
-`uuid-devel` and `openssl-devel`.
-
-Optional, but recommended deps:
-
-`llvm-devel` (Enables Link Time Optimization)
+`llvm-devel` (For Link Time Optimization Support)  
+`uuid-devel` (For ld64 `-random_uuid` Support)
 
 ## INSTALLATION ##
 
