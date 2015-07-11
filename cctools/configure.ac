@@ -210,17 +210,6 @@ AM_PROG_AS([clang])
 AC_CHECK_TOOL([HOST_RANLIB], [ranlib], :)
 AC_CHECK_TOOL([HOST_AR], [ar], :)
 
-if test "x$isdarwin" != "xyes"; then
-  AC_CHECK_HEADERS([openssl/md5.h], [], [AC_MSG_ERROR([*** md5.h not found, please install ssl dev packages according to your system])])
-  CRYPTO_LIB=-lcrypto
-  SSL_LIB=-lssl
-  AC_SUBST([CRYPTO_LIB])
-  AC_SUBST([SSL_LIB])
-fi
-
-AC_CHECK_HEADERS([uuid/uuid.h], [], [AC_MSG_ERROR([*** uuid.h not found, please install uuid dev packages according to your system])])
-
-
 #for libstuff emulated.c
 case $target_cpu in
      powerpc)
@@ -271,13 +260,12 @@ AC_SUBST(DL_LIB)
 AC_CHECK_LIB([pthread],[pthread_create],[PTHREAD_FLAGS=-pthread])
 AC_SUBST(PTHREAD_FLAGS)
 
-if test "x$isdarwin" = "xno"; then
-  AC_CHECK_LIB([uuid],[uuid_generate_random],[UUID_LIB=-luuid],[exit 1])
-  AC_SUBST(UUID_LIB)
-fi
-
 AC_CHECK_LIB([execinfo],[backtrace],[DL_LIB=-lexecinfo])
 AC_SUBST(EXECINFO_LIB)
+
+AC_CHECK_HEADERS([uuid/uuid.h], [
+  AC_CHECK_LIB([uuid],[uuid_generate_random],[UUID_LIB=-luuid])], [])
+AC_SUBST(UUID_LIB)
 
 AC_CHECK_FUNCS([strmode])
 
