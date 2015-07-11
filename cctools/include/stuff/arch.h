@@ -49,7 +49,7 @@ struct arch_flag {
  * If the pointer to the arch_flag is not NULL it is filled in with the
  * arch_flag struct that matches the name.
  */
-extern int get_arch_from_flag(
+__private_extern__ int get_arch_from_flag(
     char *name,
     struct arch_flag *arch_flag);
 
@@ -61,7 +61,7 @@ extern int get_arch_from_flag(
  * architecture and specific architecure for the host.  If the architecture
  * is unknown and the parameters are not NULL then all fields are set to zero.
  */
-extern int get_arch_from_host(
+__private_extern__ int get_arch_from_host(
     struct arch_flag *family_arch_flag,
     struct arch_flag *specific_arch_flag);
 
@@ -69,14 +69,14 @@ extern int get_arch_from_host(
  * get_arch_flags() returns a pointer to an array of all currently know
  * architecture flags (terminated with an entry with all zeros).
  */
-extern const struct arch_flag *get_arch_flags(
+__private_extern__ const struct arch_flag *get_arch_flags(
     void);
 
 /*
  * arch_usage() is called when an unknown architecture flag is encountered.
  * It prints the currently know architecture flags on stderr.
  */
-extern void arch_usage(
+__private_extern__ void arch_usage(
     void);
 
 /*
@@ -85,7 +85,7 @@ extern void arch_usage(
  * the routines in "allocate.h" and errors are handled by the routines in
  * "error.h".
  */
-extern void set_arch_flag_name(
+__private_extern__ void set_arch_flag_name(
     struct arch_flag *p);
 
 /*
@@ -93,7 +93,7 @@ extern void set_arch_flag_name(
  * specified cputype and cpusubtype if known.  If unknown it returns a pointer
  * to the string "unknown".
  */
-extern const char *get_arch_name_from_types(
+__private_extern__ const char *get_arch_name_from_types(
     cpu_type_t cputype,
     cpu_subtype_t cpusubtype);
 
@@ -101,7 +101,7 @@ extern const char *get_arch_name_from_types(
  * get_arch_family_from_cputype() returns the family architecture for the
  * specified cputype if known.  If unknown it returns NULL.
  */
-extern const struct arch_flag *get_arch_family_from_cputype(
+__private_extern__ const struct arch_flag *get_arch_family_from_cputype(
     cpu_type_t cputype);
 
 /*
@@ -111,7 +111,7 @@ extern const struct arch_flag *get_arch_family_from_cputype(
  * of reading a magic number from a file that should be done and this routine
  * should not be used as it could be out of date.
  */
-extern enum byte_sex get_byte_sex_from_flag(
+__private_extern__ enum byte_sex get_byte_sex_from_flag(
     const struct arch_flag *flag);
 
 /*
@@ -119,39 +119,39 @@ extern enum byte_sex get_byte_sex_from_flag(
  * either positive (+1) or negative (-1) of the architecture for the
  * specified cputype and cpusubtype if known.  If unknown it returns 0.
  */
-extern int get_stack_direction_from_flag(
+__private_extern__ int get_stack_direction_from_flag(
     const struct arch_flag *flag);
 
 /*
  * get_stack_addr_from_flag() returns the default starting address of the user
  * stack.
  */
-extern uint64_t get_stack_addr_from_flag(
+__private_extern__ uint64_t get_stack_addr_from_flag(
     const struct arch_flag *flag);
 
 /*
  * get_stack_size_from_flag() returns the default size of the userstack.
  */
-extern uint32_t get_stack_size_from_flag(
+__private_extern__ uint32_t get_stack_size_from_flag(
     const struct arch_flag *flag);
 
 /*
  * get_segalign_from_flag() returns the default segment alignment (page size).
  */
-extern uint32_t get_segalign_from_flag(
+__private_extern__ uint32_t get_segalign_from_flag(
     const struct arch_flag *flag);
 
 /*
  * get_segprot_from_flag() returns the default segment protection.
  */
-extern vm_prot_t get_segprot_from_flag(
+__private_extern__ vm_prot_t get_segprot_from_flag(
     const struct arch_flag *flag);
 
 /*
  * get_shared_region_size_from_flag() returns the size of the read only shared
  * region.
  */
-extern uint32_t get_shared_region_size_from_flag(
+__private_extern__ uint32_t get_shared_region_size_from_flag(
     const struct arch_flag *flag);
 
 /*
@@ -159,6 +159,6 @@ extern uint32_t get_shared_region_size_from_flag(
  * that cputype the cpusubtype should always be forced to the ALL cpusubtype,
  * otherwise it returns FALSE.
  */
-extern enum bool force_cpusubtype_ALL_for_cputype(
+__private_extern__ enum bool force_cpusubtype_ALL_for_cputype(
     cpu_type_t cputype);
 #endif /* _STUFF_ARCH_H_ */

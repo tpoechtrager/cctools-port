@@ -33,44 +33,44 @@
 
 #ifndef RLD
 /* TRUE if -search_paths_first was specified */
-extern enum bool search_paths_first;
+__private_extern__ enum bool search_paths_first;
 
 /* the user specified directories to search for -lx filenames, and the number
    of them */
-extern char **search_dirs;
-extern unsigned long nsearch_dirs;
+__private_extern__ char **search_dirs;
+__private_extern__ unsigned long nsearch_dirs;
 
 /*
  * The user specified directories to search via the environment variable
  * LD_LIBRARY_PATH.
  */
-extern char **ld_library_paths;
-extern unsigned long nld_library_paths;
+__private_extern__ char **ld_library_paths;
+__private_extern__ unsigned long nld_library_paths;
 
 /* the standard directories to search for -lx filenames */
-extern char *standard_dirs[];
+__private_extern__ char *standard_dirs[];
 
 /*
  * The user specified directories to search for "-framework Foo" names, and the
  * number of them.  These are specified with -F options.
  */
-extern char **framework_dirs;
-extern unsigned long nframework_dirs;
+__private_extern__ char **framework_dirs;
+__private_extern__ unsigned long nframework_dirs;
 
 /* the standard framework directories to search for "-framework Foo" names */
-extern char *standard_framework_dirs[];
+__private_extern__ char *standard_framework_dirs[];
 
 /* the pointer to the head of the base object file's segments */
-extern struct merged_segment *base_obj_segments;
+__private_extern__ struct merged_segment *base_obj_segments;
 
 /*
  * These are pointers to strings and symbols used to search of the table of
  * contents of a library.  These have to be can not be local so that routines
  * can set them and that ranlib_bsearch() and dylib_bsearch() can use them.
  */
-extern char *bsearch_strings;
+__private_extern__ char *bsearch_strings;
 #ifndef RLD
-extern struct nlist *bsearch_symbols;
+__private_extern__ struct nlist *bsearch_symbols;
 #endif /* !defined(RLD) */
 
 /*
@@ -127,24 +127,24 @@ struct dynamic_library {
  * can contain archive libraries when archive libraries appear after dynamic
  * libraries on the link line.
  */
-extern struct dynamic_library *dynamic_libs;
+__private_extern__ struct dynamic_library *dynamic_libs;
 
-extern unsigned int indirect_library_ratio;
+__private_extern__ unsigned int indirect_library_ratio;
 
 #endif /* !defined(RLD) */
 
-extern void pass1(
+__private_extern__ void pass1(
     char *filename,
     enum bool lname,
     enum bool base_name,
     enum bool framework_name,
     enum bool bundle_loader,
     enum bool force_weak);
-extern void merge(
+__private_extern__ void merge(
     enum bool dylib_only,
     enum bool bundle_loader,
     enum bool force_weak);
-extern void check_fat(
+__private_extern__ void check_fat(
     char *file_name,
     unsigned long file_size,
     struct fat_header *fat_header,
@@ -153,23 +153,23 @@ extern void check_fat(
     unsigned long ar_name_size);
 
 #ifndef RLD
-extern void search_dynamic_libs(
+__private_extern__ void search_dynamic_libs(
     void);
-extern void prebinding_check_for_dylib_override_symbols(
+__private_extern__ void prebinding_check_for_dylib_override_symbols(
     void);
-extern void twolevel_namespace_check_for_unused_dylib_symbols(
+__private_extern__ void twolevel_namespace_check_for_unused_dylib_symbols(
     void);
-extern struct dynamic_library *add_dynamic_lib(
+__private_extern__ struct dynamic_library *add_dynamic_lib(
     enum library_type type,
     struct dylib_command *dl,
     struct object_file *definition_obj);
-extern int dylib_bsearch(
+__private_extern__ int dylib_bsearch(
     const char *symbol_name,
     const struct dylib_table_of_contents *toc);
 #endif /* !defined(RLD) */
 
 #ifdef RLD
-extern void merge_base_program(
+__private_extern__ void merge_base_program(
     char *basefile_name,
     struct mach_header *basefile_addr,
     struct segment_command *seg_linkedit,

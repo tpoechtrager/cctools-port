@@ -20,8 +20,8 @@
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
-#include <architecture/byte_order.h>
-#include <mach/sparc/thread_status.h>
+#import <architecture/byte_order.h>
+#import <mach/sparc/thread_status.h>
 
 void swap_sparc_thread_state_regs(
     struct sparc_thread_state_regs *cpu,

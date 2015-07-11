@@ -1,0 +1,939 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CodeLite_Project Name="cctools" InternalType="">
+  <VirtualDirectory Name="libobjc2">
+    <VirtualDirectory Name="opts">
+      <File Name="libobjc2/opts/TypeInfoProvider.h"/>
+      <File Name="libobjc2/opts/IMPCacher.cpp"/>
+      <File Name="libobjc2/opts/ClassLookupCache.cpp"/>
+      <File Name="libobjc2/opts/ClassIMPCache.cpp"/>
+      <File Name="libobjc2/opts/TypeFeedbackDrivenInliner.cpp"/>
+      <File Name="libobjc2/opts/LoopIMPCachePass.cpp"/>
+      <File Name="libobjc2/opts/TypeFeedback.cpp"/>
+      <File Name="libobjc2/opts/ObjectiveCOpts.cpp"/>
+      <File Name="libobjc2/opts/ObjectiveCOpts.h"/>
+      <File Name="libobjc2/opts/LLVMCompat.h"/>
+      <File Name="libobjc2/opts/IMPCacher.h"/>
+      <File Name="libobjc2/opts/IvarPass.cpp"/>
+      <File Name="libobjc2/opts/ClassMethodInliner.cpp"/>
+    </VirtualDirectory>
+    <VirtualDirectory Name="objc">
+      <File Name="libobjc2/objc/capabilities.h"/>
+      <File Name="libobjc2/objc/blocks_private.h"/>
+      <File Name="libobjc2/objc/Availability.h"/>
+      <File Name="libobjc2/objc/objc-arc.h"/>
+      <File Name="libobjc2/objc/developer.h"/>
+      <File Name="libobjc2/objc/slot.h"/>
+      <File Name="libobjc2/objc/runtime.h"/>
+      <File Name="libobjc2/objc/objc-auto.h"/>
+      <File Name="libobjc2/objc/hooks.h"/>
+      <File Name="libobjc2/objc/runtime-deprecated.h"/>
+      <File Name="libobjc2/objc/Object.h"/>
+      <File Name="libobjc2/objc/objc-api.h"/>
+      <File Name="libobjc2/objc/Protocol.h"/>
+      <File Name="libobjc2/objc/blocks_runtime.h"/>
+      <File Name="libobjc2/objc/encoding.h"/>
+      <File Name="libobjc2/objc/objc.h"/>
+      <File Name="libobjc2/objc/toydispatch.h"/>
+      <File Name="libobjc2/objc/message.h"/>
+    </VirtualDirectory>
+    <File Name="libobjc2/module.h"/>
+    <File Name="libobjc2/string_hash.h"/>
+    <File Name="libobjc2/runtime.c"/>
+    <File Name="libobjc2/properties.h"/>
+    <File Name="libobjc2/unwind.h"/>
+    <File Name="libobjc2/unistd.h"/>
+    <File Name="libobjc2/sarray2.h"/>
+    <File Name="libobjc2/slot_pool.h"/>
+    <File Name="libobjc2/hash_table.h"/>
+    <File Name="libobjc2/protocol.h"/>
+    <File Name="libobjc2/protocol.c"/>
+    <File Name="libobjc2/lock.h"/>
+    <File Name="libobjc2/ivar.h"/>
+    <File Name="libobjc2/buffer.h"/>
+    <File Name="libobjc2/dtable.c"/>
+    <File Name="libobjc2/toydispatch.c"/>
+    <File Name="libobjc2/visibility.h"/>
+    <File Name="libobjc2/objcxx_eh.h"/>
+    <File Name="libobjc2/constant_string.h"/>
+    <File Name="libobjc2/spinlock.h"/>
+    <File Name="libobjc2/alias.h"/>
+    <File Name="libobjc2/selector_table.c"/>
+    <File Name="libobjc2/gc_none.c"/>
+    <File Name="libobjc2/encoding2.c"/>
+    <File Name="libobjc2/hooks.c"/>
+    <File Name="libobjc2/class.h"/>
+    <File Name="libobjc2/sarray2.c"/>
+    <File Name="libobjc2/hash_table.c"/>
+    <File Name="libobjc2/loader.h"/>
+    <File Name="libobjc2/category_loader.c"/>
+    <File Name="libobjc2/caps.c"/>
+    <File Name="libobjc2/nsobject.h"/>
+    <File Name="libobjc2/gc_ops.h"/>
+    <File Name="libobjc2/objcxx_eh.cc"/>
+    <File Name="libobjc2/category.h"/>
+    <File Name="libobjc2/unwind-arm.h"/>
+    <File Name="libobjc2/class_table.c"/>
+    <File Name="libobjc2/unwind-itanium.h"/>
+    <File Name="libobjc2/abi_version.c"/>
+    <File Name="libobjc2/statics_loader.c"/>
+    <File Name="libobjc2/eh_personality.c"/>
+    <File Name="libobjc2/blocks_runtime.h"/>
+    <File Name="libobjc2/type_encoding_cases.h"/>
+    <File Name="libobjc2/block_to_imp.c"/>
+    <File Name="libobjc2/pool.h"/>
+    <File Name="libobjc2/alias_table.c"/>
+    <File Name="libobjc2/dwarf_eh.h"/>
+    <File Name="libobjc2/ivar.c"/>
+    <File Name="libobjc2/selector.h"/>
+    <File Name="libobjc2/sendmsg2.c"/>
+    <File Name="libobjc2/gc_boehm.c"/>
+    <File Name="libobjc2/loader.c"/>
+    <File Name="libobjc2/dtable.h"/>
+    <File Name="libobjc2/legacy_malloc.c"/>
+    <File Name="libobjc2/method_list.h"/>
+  </VirtualDirectory>
+  <Description/>
+  <Dependencies/>
+  <Settings Type="Dynamic Library">
+    <GlobalSettings>
+      <Compiler Options="" C_Options="" Assembler="">
+        <IncludePath Value="."/>
+      </Compiler>
+      <Linker Options="">
+        <LibraryPath Value="."/>
+      </Linker>
+      <ResourceCompiler Options=""/>
+    </GlobalSettings>
+    <Configuration Name="Debug" CompilerType="clang++" DebuggerType="GNU gdb debugger" Type="Dynamic Library" BuildCmpWithGlobalSettings="append" BuildLnkWithGlobalSettings="append" BuildResWithGlobalSettings="append">
+      <Compiler Options="-g" C_Options="-g" Assembler="" Required="yes" PreCompiledHeader="" PCHInCommandLine="no" PCHFlags="" PCHFlagsPolicy="0">
+        <IncludePath Value="."/>
+      </Compiler>
+      <Linker Options="" Required="yes"/>
+      <ResourceCompiler Options="" Required="no"/>
+      <General OutputFile="" IntermediateDirectory="./Debug" Command="" CommandArguments="" UseSeparateDebugArgs="no" DebugArguments="" WorkingDirectory="$(IntermediateDirectory)" PauseExecWhenProcTerminates="yes" IsGUIProgram="no" IsEnabled="yes"/>
+      <Environment EnvVarSetName="&lt;Use Defaults&gt;" DbgSetName="&lt;Use Defaults&gt;">
+        <![CDATA[]]>
+      </Environment>
+      <Debugger IsRemote="no" RemoteHostName="" RemoteHostPort="" DebuggerPath="" IsExtended="no">
+        <DebuggerSearchPaths/>
+        <PostConnectCommands/>
+        <StartupCommands/>
+      </Debugger>
+      <PreBuild/>
+      <PostBuild/>
+      <CustomBuild Enabled="yes">
+        <RebuildCommand/>
+        <CleanCommand>make clean</CleanCommand>
+        <BuildCommand>make</BuildCommand>
+        <PreprocessFileCommand/>
+        <SingleFileCommand/>
+        <MakefileGenerationCommand/>
+        <ThirdPartyToolName>None</ThirdPartyToolName>
+        <WorkingDirectory>$(WorkspacePath)</WorkingDirectory>
+      </CustomBuild>
+      <AdditionalRules>
+        <CustomPostBuild/>
+        <CustomPreBuild/>
+      </AdditionalRules>
+      <Completion EnableCpp11="no" EnableCpp14="no">
+        <ClangCmpFlagsC/>
+        <ClangCmpFlags/>
+        <ClangPP/>
+        <SearchPaths/>
+      </Completion>
+    </Configuration>
+    <Configuration Name="Release" CompilerType="clang++" DebuggerType="GNU gdb debugger" Type="Dynamic Library" BuildCmpWithGlobalSettings="append" BuildLnkWithGlobalSettings="append" BuildResWithGlobalSettings="append">
+      <Compiler Options="" C_Options="" Assembler="" Required="yes" PreCompiledHeader="" PCHInCommandLine="no" PCHFlags="" PCHFlagsPolicy="0">
+        <IncludePath Value="."/>
+      </Compiler>
+      <Linker Options="-O2" Required="yes"/>
+      <ResourceCompiler Options="" Required="no"/>
+      <General OutputFile="" IntermediateDirectory="./Release" Command="" CommandArguments="" UseSeparateDebugArgs="no" DebugArguments="" WorkingDirectory="$(IntermediateDirectory)" PauseExecWhenProcTerminates="yes" IsGUIProgram="no" IsEnabled="yes"/>
+      <Environment EnvVarSetName="&lt;Use Defaults&gt;" DbgSetName="&lt;Use Defaults&gt;">
+        <![CDATA[]]>
+      </Environment>
+      <Debugger IsRemote="no" RemoteHostName="" RemoteHostPort="" DebuggerPath="" IsExtended="no">
+        <DebuggerSearchPaths/>
+        <PostConnectCommands/>
+        <StartupCommands/>
+      </Debugger>
+      <PreBuild/>
+      <PostBuild/>
+      <CustomBuild Enabled="yes">
+        <RebuildCommand/>
+        <CleanCommand>make clean</CleanCommand>
+        <BuildCommand>make</BuildCommand>
+        <PreprocessFileCommand/>
+        <SingleFileCommand/>
+        <MakefileGenerationCommand/>
+        <ThirdPartyToolName>None</ThirdPartyToolName>
+        <WorkingDirectory>$(WorkspacePath)</WorkingDirectory>
+      </CustomBuild>
+      <AdditionalRules>
+        <CustomPostBuild/>
+        <CustomPreBuild/>
+      </AdditionalRules>
+      <Completion EnableCpp11="no" EnableCpp14="no">
+        <ClangCmpFlagsC/>
+        <ClangCmpFlags/>
+        <ClangPP/>
+        <SearchPaths/>
+      </Completion>
+    </Configuration>
+  </Settings>
+  <VirtualDirectory Name="ar">
+    <File Name="ar/append.c"/>
+    <File Name="ar/ar.c"/>
+    <File Name="ar/archive.c"/>
+    <File Name="ar/archive.h"/>
+    <File Name="ar/contents.c"/>
+    <File Name="ar/delete.c"/>
+    <File Name="ar/extern.h"/>
+    <File Name="ar/extract.c"/>
+    <File Name="ar/misc.c"/>
+    <File Name="ar/move.c"/>
+    <File Name="ar/pathnames.h"/>
+    <File Name="ar/print.c"/>
+    <File Name="ar/replace.c"/>
+  </VirtualDirectory>
+  <VirtualDirectory Name="as">
+    <File Name="as/COPYING"/>
+    <File Name="as/app.c"/>
+    <File Name="as/app.h"/>
+    <File Name="as/arch64_32.h"/>
+    <File Name="as/arm.c"/>
+    <File Name="as/arm-check.c"/>
+    <File Name="as/arm_reloc.h"/>
+    <File Name="as/as.c"/>
+    <File Name="as/as.h"/>
+    <File Name="as/atof-generic.c"/>
+    <File Name="as/atof-ieee.c"/>
+    <File Name="as/atof-ieee.h"/>
+    <File Name="as/bignum.h"/>
+    <File Name="as/driver.c"/>
+    <File Name="as/dwarf2dbg.c"/>
+    <File Name="as/dwarf2dbg.h"/>
+    <File Name="as/expr.c"/>
+    <File Name="as/expr.h"/>
+    <File Name="as/filenames.h"/>
+    <File Name="as/fixes.c"/>
+    <File Name="as/fixes.h"/>
+    <File Name="as/flonum.h"/>
+    <File Name="as/flonum-const.c"/>
+    <File Name="as/flonum-copy.c"/>
+    <File Name="as/flonum-mult.c"/>
+    <File Name="as/frags.c"/>
+    <File Name="as/frags.h"/>
+    <File Name="as/hash.c"/>
+    <File Name="as/hash.h"/>
+    <File Name="as/hex-value.c"/>
+    <File Name="as/hex_value.h"/>
+    <File Name="as/hppa.c"/>
+    <File Name="as/hppa-aux.c"/>
+    <File Name="as/hppa-aux.h"/>
+    <File Name="as/hppa-check.c"/>
+    <File Name="as/hppa-opcode.h"/>
+    <File Name="as/i386.c"/>
+    <File Name="as/i386.h"/>
+    <File Name="as/i386-check.c"/>
+    <File Name="as/i386-opcode.h"/>
+    <File Name="as/i860.c"/>
+    <File Name="as/i860-check.c"/>
+    <File Name="as/i860-opcode.h"/>
+    <File Name="as/input-file.c"/>
+    <File Name="as/input-file.h"/>
+    <File Name="as/input-scrub.c"/>
+    <File Name="as/input-scrub.h"/>
+    <File Name="as/layout.c"/>
+    <File Name="as/layout.h"/>
+    <File Name="as/m68k.c"/>
+    <File Name="as/m68k-check.c"/>
+    <File Name="as/m68k-opcode.h"/>
+    <File Name="as/m88k.c"/>
+    <File Name="as/m88k-check.c"/>
+    <File Name="as/m88k-opcode.h"/>
+    <File Name="as/md.h"/>
+    <File Name="as/messages.c"/>
+    <File Name="as/messages.h"/>
+    <File Name="as/obstack.c"/>
+    <File Name="as/obstack.h"/>
+    <File Name="as/ppc.c"/>
+    <File Name="as/ppc-check.c"/>
+    <File Name="as/ppc-opcode.h"/>
+    <File Name="as/read.c"/>
+    <File Name="as/read.h"/>
+    <File Name="as/relax.h"/>
+    <File Name="as/sections.c"/>
+    <File Name="as/sections.h"/>
+    <File Name="as/sparc.c"/>
+    <File Name="as/sparc-check.c"/>
+    <File Name="as/sparc-opcode.h"/>
+    <File Name="as/struc-symbol.h"/>
+    <File Name="as/symbols.c"/>
+    <File Name="as/symbols.h"/>
+    <File Name="as/write_object.c"/>
+    <File Name="as/write_object.h"/>
+    <File Name="as/xmalloc.c"/>
+    <File Name="as/xmalloc.h"/>
+  </VirtualDirectory>
+  <VirtualDirectory Name="otool">
+    <File Name="otool/arm64_disasm.c"/>
+    <File Name="otool/arm64_disasm.h"/>
+    <File Name="otool/arm_disasm.c"/>
+    <File Name="otool/arm_disasm.h"/>
+    <File Name="otool/coff_print.c"/>
+    <File Name="otool/cxa_demangle.h"/>
+    <File Name="otool/dyld_bind_info.c"/>
+    <File Name="otool/dyld_bind_info.h"/>
+    <File Name="otool/hppa_disasm.c"/>
+    <File Name="otool/hppa_disasm.h"/>
+    <File Name="otool/i386_disasm.c"/>
+    <File Name="otool/i386_disasm.h"/>
+    <File Name="otool/i860_disasm.c"/>
+    <File Name="otool/i860_disasm.h"/>
+    <File Name="otool/m68k_disasm.c"/>
+    <File Name="otool/m68k_disasm.h"/>
+    <File Name="otool/m88k_disasm.c"/>
+    <File Name="otool/m88k_disasm.h"/>
+    <File Name="otool/main.c"/>
+    <File Name="otool/notify.c"/>
+    <File Name="otool/notify.h"/>
+    <File Name="otool/ofile_print.c"/>
+    <File Name="otool/ofile_print.h"/>
+    <File Name="otool/otool.h"/>
+    <File Name="otool/ppc_disasm.c"/>
+    <File Name="otool/ppc_disasm.h"/>
+    <File Name="otool/print_objc.c"/>
+    <File Name="otool/print_objc2_32bit.c"/>
+    <File Name="otool/print_objc2_64bit.c"/>
+    <File Name="otool/sparc_disasm.c"/>
+    <File Name="otool/sparc_disasm.h"/>
+  </VirtualDirectory>
+  <VirtualDirectory Name="libstuff">
+    <File Name="libstuff/SymLoc.c"/>
+    <File Name="libstuff/allocate.c"/>
+    <File Name="libstuff/apple_version.c"/>
+    <File Name="libstuff/arch.c"/>
+    <File Name="libstuff/arch_usage.c"/>
+    <File Name="libstuff/best_arch.c"/>
+    <File Name="libstuff/breakout.c"/>
+    <File Name="libstuff/bytesex.c"/>
+    <File Name="libstuff/checkout.c"/>
+    <File Name="libstuff/coff_bytesex.c"/>
+    <File Name="libstuff/crc32.c"/>
+    <File Name="libstuff/dylib_roots.c"/>
+    <File Name="libstuff/dylib_table.c"/>
+    <File Name="libstuff/emulated.c"/>
+    <File Name="libstuff/errors.c"/>
+    <File Name="libstuff/execute.c"/>
+    <File Name="libstuff/fatal_arch.c"/>
+    <File Name="libstuff/fatals.c"/>
+    <File Name="libstuff/get_arch_from_host.c"/>
+    <File Name="libstuff/get_toc_byte_sex.c"/>
+    <File Name="libstuff/guess_short_name.c"/>
+    <File Name="libstuff/hash_string.c"/>
+    <File Name="libstuff/hppa.c"/>
+    <File Name="libstuff/llvm.c"/>
+    <File Name="libstuff/lto.c"/>
+    <File Name="libstuff/macosx_deployment_target.c"/>
+    <File Name="libstuff/ofile.c"/>
+    <File Name="libstuff/ofile_error.c"/>
+    <File Name="libstuff/ofile_get_word.c"/>
+    <File Name="libstuff/print.c"/>
+    <File Name="libstuff/reloc.c"/>
+    <File Name="libstuff/rnd.c"/>
+    <File Name="libstuff/seg_addr_table.c"/>
+    <File Name="libstuff/set_arch_flag_name.c"/>
+    <File Name="libstuff/swap_headers.c"/>
+    <File Name="libstuff/symbol_list.c"/>
+    <File Name="libstuff/unix_standard_mode.c"/>
+    <File Name="libstuff/version_number.c"/>
+    <File Name="libstuff/vm_flush_cache.c"/>
+    <File Name="libstuff/writeout.c"/>
+  </VirtualDirectory>
+  <VirtualDirectory Name="ld">
+    <File Name="ld/4byte_literals.c"/>
+    <File Name="ld/4byte_literals.h"/>
+    <File Name="ld/8byte_literals.c"/>
+    <File Name="ld/8byte_literals.h"/>
+    <File Name="ld/arm_reloc.c"/>
+    <File Name="ld/arm_reloc.h"/>
+    <File Name="ld/coalesced_sections.c"/>
+    <File Name="ld/coalesced_sections.h"/>
+    <File Name="ld/cstring_literals.c"/>
+    <File Name="ld/cstring_literals.h"/>
+    <File Name="ld/debugcompunit.c"/>
+    <File Name="ld/debugcompunit.h"/>
+    <File Name="ld/debugline.c"/>
+    <File Name="ld/debugline.h"/>
+    <File Name="ld/dwarf2.h"/>
+    <File Name="ld/dylibs.c"/>
+    <File Name="ld/dylibs.h"/>
+    <File Name="ld/fvmlibs.c"/>
+    <File Name="ld/fvmlibs.h"/>
+    <File Name="ld/generic_reloc.c"/>
+    <File Name="ld/generic_reloc.h"/>
+    <File Name="ld/hash_string.h"/>
+    <File Name="ld/hppa_reloc.c"/>
+    <File Name="ld/hppa_reloc.h"/>
+    <File Name="ld/i860_reloc.c"/>
+    <File Name="ld/i860_reloc.h"/>
+    <File Name="ld/indirect_sections.c"/>
+    <File Name="ld/indirect_sections.h"/>
+    <File Name="ld/layout.c"/>
+    <File Name="ld/layout.h"/>
+    <File Name="ld/ld.c"/>
+    <File Name="ld/ld.h"/>
+    <File Name="ld/literal_pointers.c"/>
+    <File Name="ld/literal_pointers.h"/>
+    <File Name="ld/live_refs.h"/>
+    <File Name="ld/m88k_reloc.c"/>
+    <File Name="ld/m88k_reloc.h"/>
+    <File Name="ld/mod_sections.c"/>
+    <File Name="ld/mod_sections.h"/>
+    <File Name="ld/objects.c"/>
+    <File Name="ld/objects.h"/>
+    <File Name="ld/pass1.c"/>
+    <File Name="ld/pass1.h"/>
+    <File Name="ld/pass2.c"/>
+    <File Name="ld/pass2.h"/>
+    <File Name="ld/ppc_reloc.c"/>
+    <File Name="ld/ppc_reloc.h"/>
+    <File Name="ld/rld.c"/>
+    <File Name="ld/sections.c"/>
+    <File Name="ld/sections.h"/>
+    <File Name="ld/sets.c"/>
+    <File Name="ld/sets.h"/>
+    <File Name="ld/sparc_reloc.c"/>
+    <File Name="ld/sparc_reloc.h"/>
+    <File Name="ld/specs.c"/>
+    <File Name="ld/specs.h"/>
+    <File Name="ld/symbols.c"/>
+    <File Name="ld/symbols.h"/>
+    <File Name="ld/uuid.c"/>
+    <File Name="ld/uuid.h"/>
+  </VirtualDirectory>
+  <VirtualDirectory Name="gprof">
+    <File Name="gprof/arcs.c"/>
+    <File Name="gprof/calls.c"/>
+    <File Name="gprof/dfn.c"/>
+    <File Name="gprof/getnfile.c"/>
+    <File Name="gprof/gprof.c"/>
+    <File Name="gprof/gprof.h"/>
+    <File Name="gprof/hertz.c"/>
+    <File Name="gprof/lookup.c"/>
+    <File Name="gprof/m68k.h"/>
+    <File Name="gprof/printgprof.c"/>
+    <File Name="gprof/printlist.c"/>
+    <File Name="gprof/scatter.c"/>
+    <File Name="gprof/vax.h"/>
+  </VirtualDirectory>
+  <VirtualDirectory Name="cbtlibs">
+    <File Name="cbtlibs/libsyminfo.c"/>
+  </VirtualDirectory>
+  <VirtualDirectory Name="efitools">
+    <File Name="efitools/makerelocs.c"/>
+    <File Name="efitools/mtoc.c"/>
+  </VirtualDirectory>
+  <VirtualDirectory Name="include">
+    <VirtualDirectory Name="mach-o">
+      <VirtualDirectory Name="arm">
+        <File Name="include/mach-o/arm/reloc.h"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="m88k">
+        <File Name="include/mach-o/m88k/reloc.h"/>
+        <File Name="include/mach-o/m88k/swap.h"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="i860">
+        <File Name="include/mach-o/i860/reloc.h"/>
+        <File Name="include/mach-o/i860/swap.h"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="hppa">
+        <File Name="include/mach-o/hppa/reloc.h"/>
+        <File Name="include/mach-o/hppa/swap.h"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="ppc">
+        <File Name="include/mach-o/ppc/reloc.h"/>
+        <File Name="include/mach-o/ppc/swap.h"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="m68k">
+        <File Name="include/mach-o/m68k/swap.h"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="i386">
+        <File Name="include/mach-o/i386/swap.h"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="sparc">
+        <File Name="include/mach-o/sparc/reloc.h"/>
+        <File Name="include/mach-o/sparc/swap.h"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="arm64">
+        <File Name="include/mach-o/arm64/reloc.h"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="x86_64">
+        <File Name="include/mach-o/x86_64/reloc.h"/>
+      </VirtualDirectory>
+      <File Name="include/mach-o/dyld.h"/>
+      <File Name="include/mach-o/ldsyms.h"/>
+      <File Name="include/mach-o/dyld_priv.h"/>
+      <File Name="include/mach-o/redo_prebinding.h"/>
+      <File Name="include/mach-o/rld_state.h"/>
+      <File Name="include/mach-o/dyld_gdb.h"/>
+      <File Name="include/mach-o/rld.h"/>
+      <File Name="include/mach-o/loader.h"/>
+      <File Name="include/mach-o/arch.h"/>
+      <File Name="include/mach-o/gmon.h"/>
+      <File Name="include/mach-o/sarld.h"/>
+      <File Name="include/mach-o/nlist.h"/>
+      <File Name="include/mach-o/reloc.h"/>
+      <File Name="include/mach-o/fat.h"/>
+      <File Name="include/mach-o/swap.h"/>
+      <File Name="include/mach-o/getsect.h"/>
+      <File Name="include/mach-o/ranlib.h"/>
+      <File Name="include/mach-o/dyld_debug.h"/>
+      <File Name="include/mach-o/kld.h"/>
+      <File Name="include/mach-o/stab.h"/>
+    </VirtualDirectory>
+    <VirtualDirectory Name="mach">
+      <VirtualDirectory Name="arm">
+        <File Name="include/mach/arm/thread_status.h"/>
+        <File Name="include/mach/arm/_structs.h"/>
+        <File Name="include/mach/arm/thread_state.h"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="m88k">
+        <File Name="include/mach/m88k/thread_status.h"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="i860">
+        <File Name="include/mach/i860/thread_status.h"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="hppa">
+        <File Name="include/mach/hppa/thread_status.h"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="ppc">
+        <File Name="include/mach/ppc/thread_status.h"/>
+        <File Name="include/mach/ppc/_structs.h"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="m68k">
+        <File Name="include/mach/m68k/thread_status.h"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="i386">
+        <File Name="include/mach/i386/fp_reg.h"/>
+        <File Name="include/mach/i386/thread_status.h"/>
+        <File Name="include/mach/i386/_structs.h"/>
+        <File Name="include/mach/i386/thread_state.h"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="sparc">
+        <File Name="include/mach/sparc/thread_status.h"/>
+      </VirtualDirectory>
+      <File Name="include/mach/machine.h"/>
+    </VirtualDirectory>
+    <VirtualDirectory Name="architecture">
+      <VirtualDirectory Name="m88k">
+        <File Name="include/architecture/m88k/fp_regs.h"/>
+        <File Name="include/architecture/m88k/reg_help.h"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="nrw">
+        <File Name="include/architecture/nrw/reg_help.h"/>
+        <File Name="include/architecture/nrw/macro_help.h"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="i386">
+        <File Name="include/architecture/i386/fpu.h"/>
+        <File Name="include/architecture/i386/frame.h"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="sparc">
+        <File Name="include/architecture/sparc/reg.h"/>
+      </VirtualDirectory>
+    </VirtualDirectory>
+    <VirtualDirectory Name="foreign">
+      <VirtualDirectory Name="mach">
+        <VirtualDirectory Name="machine">
+          <File Name="include/foreign/mach/machine/vm_types.h"/>
+          <File Name="include/foreign/mach/machine/asm.h"/>
+          <File Name="include/foreign/mach/machine/sdt.h"/>
+          <File Name="include/foreign/mach/machine/boolean.h"/>
+          <File Name="include/foreign/mach/machine/thread_status.h"/>
+          <File Name="include/foreign/mach/machine/processor_info.h"/>
+          <File Name="include/foreign/mach/machine/exception.h"/>
+          <File Name="include/foreign/mach/machine/kern_return.h"/>
+          <File Name="include/foreign/mach/machine/sdt_isa.h"/>
+          <File Name="include/foreign/mach/machine/ndr_def.h"/>
+          <File Name="include/foreign/mach/machine/rpc.h"/>
+          <File Name="include/foreign/mach/machine/thread_state.h"/>
+          <File Name="include/foreign/mach/machine/vm_param.h"/>
+        </VirtualDirectory>
+        <VirtualDirectory Name="arm">
+          <File Name="include/foreign/mach/arm/vm_types.h"/>
+          <File Name="include/foreign/mach/arm/fp_reg.h"/>
+          <File Name="include/foreign/mach/arm/asm.h"/>
+          <File Name="include/foreign/mach/arm/boolean.h"/>
+          <File Name="include/foreign/mach/arm/thread_act.h"/>
+          <File Name="include/foreign/mach/arm/thread_status.h"/>
+          <File Name="include/foreign/mach/arm/processor_info.h"/>
+          <File Name="include/foreign/mach/arm/task.h"/>
+          <File Name="include/foreign/mach/arm/exception.h"/>
+          <File Name="include/foreign/mach/arm/kern_return.h"/>
+          <File Name="include/foreign/mach/arm/sdt_isa.h"/>
+          <File Name="include/foreign/mach/arm/ndr_def.h"/>
+          <File Name="include/foreign/mach/arm/_structs.h"/>
+          <File Name="include/foreign/mach/arm/rpc.h"/>
+          <File Name="include/foreign/mach/arm/thread_state.h"/>
+          <File Name="include/foreign/mach/arm/vm_param.h"/>
+        </VirtualDirectory>
+        <VirtualDirectory Name="ppc">
+          <File Name="include/foreign/mach/ppc/vm_types.h"/>
+          <File Name="include/foreign/mach/ppc/asm.h"/>
+          <File Name="include/foreign/mach/ppc/boolean.h"/>
+          <File Name="include/foreign/mach/ppc/thread_act.h"/>
+          <File Name="include/foreign/mach/ppc/thread_status.h"/>
+          <File Name="include/foreign/mach/ppc/processor_info.h"/>
+          <File Name="include/foreign/mach/ppc/task.h"/>
+          <File Name="include/foreign/mach/ppc/exception.h"/>
+          <File Name="include/foreign/mach/ppc/kern_return.h"/>
+          <File Name="include/foreign/mach/ppc/sdt_isa.h"/>
+          <File Name="include/foreign/mach/ppc/ndr_def.h"/>
+          <File Name="include/foreign/mach/ppc/_structs.h"/>
+          <File Name="include/foreign/mach/ppc/rpc.h"/>
+          <File Name="include/foreign/mach/ppc/thread_state.h"/>
+          <File Name="include/foreign/mach/ppc/vm_param.h"/>
+        </VirtualDirectory>
+        <VirtualDirectory Name="i386">
+          <File Name="include/foreign/mach/i386/vm_types.h"/>
+          <File Name="include/foreign/mach/i386/fp_reg.h"/>
+          <File Name="include/foreign/mach/i386/asm.h"/>
+          <File Name="include/foreign/mach/i386/boolean.h"/>
+          <File Name="include/foreign/mach/i386/thread_act.h"/>
+          <File Name="include/foreign/mach/i386/thread_status.h"/>
+          <File Name="include/foreign/mach/i386/processor_info.h"/>
+          <File Name="include/foreign/mach/i386/task.h"/>
+          <File Name="include/foreign/mach/i386/exception.h"/>
+          <File Name="include/foreign/mach/i386/kern_return.h"/>
+          <File Name="include/foreign/mach/i386/sdt_isa.h"/>
+          <File Name="include/foreign/mach/i386/ndr_def.h"/>
+          <File Name="include/foreign/mach/i386/_structs.h"/>
+          <File Name="include/foreign/mach/i386/rpc.h"/>
+          <File Name="include/foreign/mach/i386/thread_state.h"/>
+          <File Name="include/foreign/mach/i386/vm_param.h"/>
+        </VirtualDirectory>
+        <VirtualDirectory Name="x86_64">
+          <File Name="include/foreign/mach/x86_64/thread_act.h"/>
+          <File Name="include/foreign/mach/x86_64/task.h"/>
+        </VirtualDirectory>
+        <File Name="include/foreign/mach/vm_sync.h"/>
+        <File Name="include/foreign/mach/ndr.h"/>
+        <File Name="include/foreign/mach/vm_types.h"/>
+        <File Name="include/foreign/mach/mach_error.h"/>
+        <File Name="include/foreign/mach/exc.h"/>
+        <File Name="include/foreign/mach/semaphore.h"/>
+        <File Name="include/foreign/mach/machine.h"/>
+        <File Name="include/foreign/mach/mig_errors.h"/>
+        <File Name="include/foreign/mach/mach_syscalls.h"/>
+        <File Name="include/foreign/mach/sdt.h"/>
+        <File Name="include/foreign/mach/processor_set.h"/>
+        <File Name="include/foreign/mach/policy.h"/>
+        <File Name="include/foreign/mach/boolean.h"/>
+        <File Name="include/foreign/mach/thread_act.h"/>
+        <File Name="include/foreign/mach/host_reboot.h"/>
+        <File Name="include/foreign/mach/clock_types.h"/>
+        <File Name="include/foreign/mach/vm_region.h"/>
+        <File Name="include/foreign/mach/mach_port.h"/>
+        <File Name="include/foreign/mach/exception_types.h"/>
+        <File Name="include/foreign/mach/thread_status.h"/>
+        <File Name="include/foreign/mach/processor_info.h"/>
+        <File Name="include/foreign/mach/ledger.h"/>
+        <File Name="include/foreign/mach/error.h"/>
+        <File Name="include/foreign/mach/kmod.h"/>
+        <File Name="include/foreign/mach/vm_map.h"/>
+        <File Name="include/foreign/mach/clock_priv.h"/>
+        <File Name="include/foreign/mach/shared_memory_server.h"/>
+        <File Name="include/foreign/mach/mach_host.h"/>
+        <File Name="include/foreign/mach/shared_region.h"/>
+        <File Name="include/foreign/mach/task.h"/>
+        <File Name="include/foreign/mach/thread_switch.h"/>
+        <File Name="include/foreign/mach/sync.h"/>
+        <File Name="include/foreign/mach/mach_interface.h"/>
+        <File Name="include/foreign/mach/exception.h"/>
+        <File Name="include/foreign/mach/vm_behavior.h"/>
+        <File Name="include/foreign/mach/kern_return.h"/>
+        <File Name="include/foreign/mach/task_ledger.h"/>
+        <File Name="include/foreign/mach/memory_object_types.h"/>
+        <File Name="include/foreign/mach/mach_time.h"/>
+        <File Name="include/foreign/mach/thread_special_ports.h"/>
+        <File Name="include/foreign/mach/mach_param.h"/>
+        <File Name="include/foreign/mach/clock_reply.h"/>
+        <File Name="include/foreign/mach/thread_policy.h"/>
+        <File Name="include/foreign/mach/mach.h"/>
+        <File Name="include/foreign/mach/vm_attributes.h"/>
+        <File Name="include/foreign/mach/clock.h"/>
+        <File Name="include/foreign/mach/vm_task.h"/>
+        <File Name="include/foreign/mach/vm_prot.h"/>
+        <File Name="include/foreign/mach/host_priv.h"/>
+        <File Name="include/foreign/mach/std_types.h"/>
+        <File Name="include/foreign/mach/vm_purgable.h"/>
+        <File Name="include/foreign/mach/vm_statistics.h"/>
+        <File Name="include/foreign/mach/mach_types.h"/>
+        <File Name="include/foreign/mach/mach_vm.h"/>
+        <File Name="include/foreign/mach/sync_policy.h"/>
+        <File Name="include/foreign/mach/port_obj.h"/>
+        <File Name="include/foreign/mach/rpc.h"/>
+        <File Name="include/foreign/mach/task_policy.h"/>
+        <File Name="include/foreign/mach/host_info.h"/>
+        <File Name="include/foreign/mach/processor.h"/>
+        <File Name="include/foreign/mach/mach_traps.h"/>
+        <File Name="include/foreign/mach/lock_set.h"/>
+        <File Name="include/foreign/mach/bootstrap.h"/>
+        <File Name="include/foreign/mach/port.h"/>
+        <File Name="include/foreign/mach/time_value.h"/>
+        <File Name="include/foreign/mach/host_notify.h"/>
+        <File Name="include/foreign/mach/host_security.h"/>
+        <File Name="include/foreign/mach/host_special_ports.h"/>
+        <File Name="include/foreign/mach/thread_info.h"/>
+        <File Name="include/foreign/mach/task_info.h"/>
+        <File Name="include/foreign/mach/task_special_ports.h"/>
+        <File Name="include/foreign/mach/vm_inherit.h"/>
+        <File Name="include/foreign/mach/mach_init.h"/>
+        <File Name="include/foreign/mach/notify.h"/>
+        <File Name="include/foreign/mach/mig.h"/>
+        <File Name="include/foreign/mach/vm_param.h"/>
+        <File Name="include/foreign/mach/message.h"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="architecture">
+        <VirtualDirectory Name="i386">
+          <File Name="include/foreign/architecture/i386/tss.h"/>
+          <File Name="include/foreign/architecture/i386/desc.h"/>
+          <File Name="include/foreign/architecture/i386/pio.h"/>
+          <File Name="include/foreign/architecture/i386/sel.h"/>
+          <File Name="include/foreign/architecture/i386/fpu.h"/>
+          <File Name="include/foreign/architecture/i386/frame.h"/>
+          <File Name="include/foreign/architecture/i386/reg_help.h"/>
+          <File Name="include/foreign/architecture/i386/byte_order.h"/>
+          <File Name="include/foreign/architecture/i386/cpu.h"/>
+          <File Name="include/foreign/architecture/i386/alignment.h"/>
+          <File Name="include/foreign/architecture/i386/asm_help.h"/>
+          <File Name="include/foreign/architecture/i386/io.h"/>
+          <File Name="include/foreign/architecture/i386/table.h"/>
+        </VirtualDirectory>
+        <File Name="include/foreign/architecture/byte_order.h"/>
+        <File Name="include/foreign/architecture/alignment.h"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="libkern">
+        <VirtualDirectory Name="machine">
+          <File Name="include/foreign/libkern/machine/OSByteOrder.h"/>
+        </VirtualDirectory>
+        <VirtualDirectory Name="arm">
+          <File Name="include/foreign/libkern/arm/_OSByteOrder.h"/>
+          <File Name="include/foreign/libkern/arm/OSByteOrder.h"/>
+        </VirtualDirectory>
+        <VirtualDirectory Name="ppc">
+          <File Name="include/foreign/libkern/ppc/OSByteOrder.h"/>
+        </VirtualDirectory>
+        <VirtualDirectory Name="i386">
+          <File Name="include/foreign/libkern/i386/_OSByteOrder.h"/>
+          <File Name="include/foreign/libkern/i386/OSByteOrder.h"/>
+        </VirtualDirectory>
+        <File Name="include/foreign/libkern/OSKextLib.h"/>
+        <File Name="include/foreign/libkern/OSReturn.h"/>
+        <File Name="include/foreign/libkern/OSCacheControl.h"/>
+        <File Name="include/foreign/libkern/_OSByteOrder.h"/>
+        <File Name="include/foreign/libkern/OSByteOrder.h"/>
+        <File Name="include/foreign/libkern/OSTypes.h"/>
+        <File Name="include/foreign/libkern/OSDebug.h"/>
+        <File Name="include/foreign/libkern/OSAtomic.h"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="machine">
+        <File Name="include/foreign/machine/signal.h"/>
+        <File Name="include/foreign/machine/_types.h"/>
+        <File Name="include/foreign/machine/types.h"/>
+        <File Name="include/foreign/machine/limits.h"/>
+        <File Name="include/foreign/machine/_limits.h"/>
+        <File Name="include/foreign/machine/profile.h"/>
+        <File Name="include/foreign/machine/fasttrap_isa.h"/>
+        <File Name="include/foreign/machine/_param.h"/>
+        <File Name="include/foreign/machine/byte_order.h"/>
+        <File Name="include/foreign/machine/setjmp.h"/>
+        <File Name="include/foreign/machine/_structs.h"/>
+        <File Name="include/foreign/machine/param.h"/>
+        <File Name="include/foreign/machine/endian.h"/>
+        <File Name="include/foreign/machine/vmparam.h"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="arm">
+        <File Name="include/foreign/arm/signal.h"/>
+        <File Name="include/foreign/arm/_types.h"/>
+        <File Name="include/foreign/arm/types.h"/>
+        <File Name="include/foreign/arm/limits.h"/>
+        <File Name="include/foreign/arm/user_ldt.h"/>
+        <File Name="include/foreign/arm/_limits.h"/>
+        <File Name="include/foreign/arm/profile.h"/>
+        <File Name="include/foreign/arm/fasttrap_isa.h"/>
+        <File Name="include/foreign/arm/_param.h"/>
+        <File Name="include/foreign/arm/setjmp.h"/>
+        <File Name="include/foreign/arm/_structs.h"/>
+        <File Name="include/foreign/arm/param.h"/>
+        <File Name="include/foreign/arm/endian.h"/>
+        <File Name="include/foreign/arm/vmparam.h"/>
+        <File Name="include/foreign/arm/eflags.h"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="malloc">
+        <File Name="include/foreign/malloc/malloc.h"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="CommonCrypto">
+        <File Name="include/foreign/CommonCrypto/CommonDigest.h"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="ppc">
+        <File Name="include/foreign/ppc/signal.h"/>
+        <File Name="include/foreign/ppc/_types.h"/>
+        <File Name="include/foreign/ppc/types.h"/>
+        <File Name="include/foreign/ppc/limits.h"/>
+        <File Name="include/foreign/ppc/_limits.h"/>
+        <File Name="include/foreign/ppc/profile.h"/>
+        <File Name="include/foreign/ppc/fasttrap_isa.h"/>
+        <File Name="include/foreign/ppc/_param.h"/>
+        <File Name="include/foreign/ppc/setjmp.h"/>
+        <File Name="include/foreign/ppc/_structs.h"/>
+        <File Name="include/foreign/ppc/param.h"/>
+        <File Name="include/foreign/ppc/endian.h"/>
+        <File Name="include/foreign/ppc/vmparam.h"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="sys">
+        <File Name="include/foreign/sys/_types.h"/>
+        <File Name="include/foreign/sys/dirent.h"/>
+        <File Name="include/foreign/sys/attr.h"/>
+        <File Name="include/foreign/sys/sysctl.h"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="i386">
+        <File Name="include/foreign/i386/signal.h"/>
+        <File Name="include/foreign/i386/_types.h"/>
+        <File Name="include/foreign/i386/types.h"/>
+        <File Name="include/foreign/i386/limits.h"/>
+        <File Name="include/foreign/i386/user_ldt.h"/>
+        <File Name="include/foreign/i386/_limits.h"/>
+        <File Name="include/foreign/i386/profile.h"/>
+        <File Name="include/foreign/i386/fasttrap_isa.h"/>
+        <File Name="include/foreign/i386/_param.h"/>
+        <File Name="include/foreign/i386/setjmp.h"/>
+        <File Name="include/foreign/i386/_structs.h"/>
+        <File Name="include/foreign/i386/param.h"/>
+        <File Name="include/foreign/i386/endian.h"/>
+        <File Name="include/foreign/i386/vmparam.h"/>
+        <File Name="include/foreign/i386/eflags.h"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="servers">
+        <File Name="include/foreign/servers/bootstrap.h"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="mach_debug">
+        <File Name="include/foreign/mach_debug/mach_debug.h"/>
+        <File Name="include/foreign/mach_debug/mach_debug_types.h"/>
+        <File Name="include/foreign/mach_debug/page_info.h"/>
+        <File Name="include/foreign/mach_debug/zone_info.h"/>
+        <File Name="include/foreign/mach_debug/lockgroup_info.h"/>
+        <File Name="include/foreign/mach_debug/vm_info.h"/>
+        <File Name="include/foreign/mach_debug/hash_info.h"/>
+        <File Name="include/foreign/mach_debug/ipc_info.h"/>
+      </VirtualDirectory>
+      <VirtualDirectory Name="mach-o">
+        <File Name="include/foreign/mach-o/compact_unwind_encoding.h"/>
+      </VirtualDirectory>
+      <File Name="include/foreign/Availability.h"/>
+      <File Name="include/foreign/AvailabilityMacros.h"/>
+      <File Name="include/foreign/unistd.h"/>
+      <File Name="include/foreign/stdio.h"/>
+      <File Name="include/foreign/libunwind.h"/>
+      <File Name="include/foreign/dlfcn.h"/>
+      <File Name="include/foreign/fcntl.h"/>
+      <File Name="include/foreign/tzfile.h"/>
+      <File Name="include/foreign/stdlib.h"/>
+      <File Name="include/foreign/extern.h"/>
+      <File Name="include/foreign/libc.h"/>
+      <File Name="include/foreign/ar.h"/>
+    </VirtualDirectory>
+    <VirtualDirectory Name="elf">
+      <File Name="include/elf/dwarf2.h"/>
+    </VirtualDirectory>
+    <VirtualDirectory Name="opcode">
+      <File Name="include/opcode/arm.h"/>
+    </VirtualDirectory>
+    <VirtualDirectory Name="stuff">
+      <File Name="include/stuff/hash_string.h"/>
+      <File Name="include/stuff/seg_addr_table.h"/>
+      <File Name="include/stuff/SymLoc.h"/>
+      <File Name="include/stuff/guess_short_name.h"/>
+      <File Name="include/stuff/vm_flush_cache.h"/>
+      <File Name="include/stuff/version_number.h"/>
+      <File Name="include/stuff/execute.h"/>
+      <File Name="include/stuff/llvm.h"/>
+      <File Name="include/stuff/bytesex.h"/>
+      <File Name="include/stuff/lto.h"/>
+      <File Name="include/stuff/symbol.h"/>
+      <File Name="include/stuff/dylib_table.h"/>
+      <File Name="include/stuff/dylib_roots.h"/>
+      <File Name="include/stuff/ofile.h"/>
+      <File Name="include/stuff/unix_standard_mode.h"/>
+      <File Name="include/stuff/arch.h"/>
+      <File Name="include/stuff/openstep_mach.h"/>
+      <File Name="include/stuff/symbol_list.h"/>
+      <File Name="include/stuff/reloc.h"/>
+      <File Name="include/stuff/errors.h"/>
+      <File Name="include/stuff/macosx_deployment_target.h"/>
+      <File Name="include/stuff/breakout.h"/>
+      <File Name="include/stuff/crc32.h"/>
+      <File Name="include/stuff/rnd.h"/>
+      <File Name="include/stuff/hppa.h"/>
+      <File Name="include/stuff/best_arch.h"/>
+      <File Name="include/stuff/print.h"/>
+      <File Name="include/stuff/allocate.h"/>
+      <File Name="include/stuff/bool.h"/>
+    </VirtualDirectory>
+    <VirtualDirectory Name="standalone">
+      <File Name="include/standalone/libsa.h"/>
+    </VirtualDirectory>
+    <VirtualDirectory Name="llvm-c">
+      <File Name="include/llvm-c/Disassembler.h"/>
+    </VirtualDirectory>
+    <VirtualDirectory Name="sys">
+      <File Name="include/sys/cdefs.h"/>
+      <File Name="include/sys/gmon.h"/>
+    </VirtualDirectory>
+    <VirtualDirectory Name="i386">
+      <File Name="include/i386/eflags.h"/>
+    </VirtualDirectory>
+    <VirtualDirectory Name="coff">
+      <File Name="include/coff/debug_directory.h"/>
+      <File Name="include/coff/scnhdr.h"/>
+      <File Name="include/coff/bytesex.h"/>
+      <File Name="include/coff/syment.h"/>
+      <File Name="include/coff/aouthdr.h"/>
+      <File Name="include/coff/base_relocs.h"/>
+      <File Name="include/coff/filehdr.h"/>
+      <File Name="include/coff/ms_dos_stub.h"/>
+    </VirtualDirectory>
+    <VirtualDirectory Name="gnu">
+      <File Name="include/gnu/symseg.h"/>
+      <File Name="include/gnu/a.out.h"/>
+      <File Name="include/gnu/exec.h"/>
+    </VirtualDirectory>
+  </VirtualDirectory>
+  <VirtualDirectory Name="cbt">
+    <File Name="include/cbt/libsyminfo.h"/>
+  </VirtualDirectory>
+  <VirtualDirectory Name="misc">
+    <File Name="misc/codesign_allocate.c"/>
+    <File Name="misc/redo_prebinding.c"/>
+    <File Name="misc/ctf_insert.c"/>
+    <File Name="misc/nm.c"/>
+    <File Name="misc/check_dylib.c"/>
+    <File Name="misc/segedit.c"/>
+    <File Name="misc/install_name_tool.c"/>
+    <File Name="misc/lipo.c"/>
+    <File Name="misc/inout.c"/>
+    <File Name="misc/strings.c"/>
+    <File Name="misc/libtool.c"/>
+    <File Name="misc/strip.c"/>
+    <File Name="misc/cmpdylib.c"/>
+    <File Name="misc/pagestuff.c"/>
+    <File Name="misc/seg_hack.c"/>
+    <File Name="misc/checksyms.c"/>
+    <File Name="misc/size.c"/>
+    <File Name="misc/indr.c"/>
+    <File Name="misc/seg_addr_table.c"/>
+  </VirtualDirectory>
+  <Dependencies Name="Debug"/>
+  <Dependencies Name="Release"/>
+</CodeLite_Project>

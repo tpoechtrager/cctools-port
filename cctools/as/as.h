@@ -58,9 +58,9 @@ extern char version_string[];
 
 /* These #imports are for type definitions etc. */
 #include <stdint.h>
-#include <stdio.h>
-#include <assert.h>
-#include <mach/machine.h>
+#import <stdio.h>
+#import <assert.h>
+#import <mach/machine.h>
 
 /* These defines are potentially useful */
 #undef FALSE

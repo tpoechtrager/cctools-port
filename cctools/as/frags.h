@@ -19,9 +19,9 @@ You should have received a copy of the GNU General Public License
 along with GAS; see the file COPYING.  If not, write to
 the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
 
-#include "as.h"
-#include "relax.h"
-#include "struc-symbol.h"
+#import "as.h"
+#import "relax.h"
+#import "struc-symbol.h"
 
 /*
  * A code fragment (frag) is some known number of chars, followed by some

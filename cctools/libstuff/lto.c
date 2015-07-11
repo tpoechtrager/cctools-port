@@ -106,10 +106,11 @@ void **pmod) /* maybe NULL */
 		_NSGetExecutablePath(p, &bufsize);
 	    }
 	    prefix = realpath(p, resolved_name);
+	    /* cctools-port: added  prefix ? */
 	    p = (prefix ? rindex(prefix, '/') : NULL);
 	    if(p != NULL)
 		p[1] = '\0';
-#ifdef __APPLE__
+#ifdef __APPLE__ /* cctools-port */
            lto_path = makestr(prefix, "../lib/libLTO.dylib", NULL);
 
 	    lto_handle = dlopen(lto_path, RTLD_NOW);

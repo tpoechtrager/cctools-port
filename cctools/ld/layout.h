@@ -33,7 +33,7 @@
  */
 
 /* The output file's mach header */
-extern struct mach_header output_mach_header;
+__private_extern__ struct mach_header output_mach_header;
 
 /*
  * The output file's symbol table load command and the offsets used in the
@@ -46,7 +46,7 @@ struct symtab_info {
       output_merged_strsize, /* the current merged string table size in pass2 */
       output_local_strsize;  /* the current local string table size in pass2 */
 };
-extern struct symtab_info output_symtab_info;
+__private_extern__ struct symtab_info output_symtab_info;
 
 /*
  * The output file's dynamic symbol table load command.
@@ -54,7 +54,7 @@ extern struct symtab_info output_symtab_info;
 struct dysymtab_info {
     struct dysymtab_command dysymtab_command;
 };
-extern struct dysymtab_info output_dysymtab_info;
+__private_extern__ struct dysymtab_info output_dysymtab_info;
 
 /*
  * The output file's two level hints load command.
@@ -62,7 +62,7 @@ extern struct dysymtab_info output_dysymtab_info;
 struct hints_info {
     struct twolevel_hints_command twolevel_hints_command;
 };
-extern struct hints_info output_hints_info;
+__private_extern__ struct hints_info output_hints_info;
 
 /*
  * The output file's prebind_cksum load command.
@@ -70,7 +70,7 @@ extern struct hints_info output_hints_info;
 struct cksum_info {
     struct prebind_cksum_command prebind_cksum_command;
 };
-extern struct cksum_info output_cksum_info;
+__private_extern__ struct cksum_info output_cksum_info;
 
 /*
  * The output file's uuid load command.
@@ -81,7 +81,7 @@ struct uuid_info {
 			   an LC_UUID load command */
     struct uuid_command uuid_command;
 };
-extern struct uuid_info output_uuid_info;
+__private_extern__ struct uuid_info output_uuid_info;
 
 /*
  * The output file's thread load command and the machine specific information
@@ -99,7 +99,7 @@ struct thread_info {
     unsigned long second_count;	/* the count (sizeof(long)) of second_state */
     void *second_state;		/* a pointer to the second thread state */
 };
-extern struct thread_info output_thread_info;
+__private_extern__ struct thread_info output_thread_info;
 
 /*
  * The output file's routines load command and the information for it.
@@ -108,12 +108,12 @@ struct routines_info {
     struct routines_command routines_command;
     enum bool routines_in_output;/* TRUE if the output file has a routines cmd*/
 };
-extern struct routines_info output_routines_info;
+__private_extern__ struct routines_info output_routines_info;
 
-extern void layout(
+__private_extern__ void layout(
     void);
 #if defined(RLD) && !defined(SA_RLD)
-extern void layout_rld_symfile(
+__private_extern__ void layout_rld_symfile(
     void);
 #endif /* defined(RLD) && !defined(SA_RLD) */
 
@@ -122,17 +122,17 @@ extern void layout_rld_symfile(
  * The user's address function to be called in layout to get the address of
  * where to link edit the result.
  */
-extern unsigned long (
+__private_extern__ unsigned long (
     *address_func)(
 	unsigned long size,
 	unsigned long header_address);
 #endif /* RLD */
 
 #ifdef DEBUG
-extern void print_mach_header(
+__private_extern__ void print_mach_header(
     void);
-extern void print_symtab_info(
+__private_extern__ void print_symtab_info(
     void);
-extern void print_thread_info(
+__private_extern__ void print_thread_info(
     void);
 #endif /* DEBUG */

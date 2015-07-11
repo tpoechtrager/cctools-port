@@ -22,13 +22,13 @@
  */
 /* Exported API for standalone library */
 #if !(defined(KLD) && defined(__STATIC__))
-#include <mach/mach.h>
+#import <mach/mach.h>
 #else /* defined(KLD) && defined(__STATIC__) */
 #include <mach/kern_return.h>
 #endif /* !(defined(KLD) && defined(__STATIC__)) */
-#include <mach-o/loader.h>
-#include <stdarg.h>
-#include <stddef.h>
+#import <mach-o/loader.h>
+#import <stdarg.h>
+#import <stddef.h>
 
 #ifndef bcopy
 #ifdef __OPENSTEP__

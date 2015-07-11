@@ -80,8 +80,8 @@
 #ifndef	_MACH_MACHINE_H_
 #define _MACH_MACHINE_H_
 
-#include <mach/machine/vm_types.h>
-#include <mach/boolean.h>
+#import <mach/machine/vm_types.h>
+#import <mach/boolean.h>
 
 /*
  *	For each host, there is a maximum possible number of

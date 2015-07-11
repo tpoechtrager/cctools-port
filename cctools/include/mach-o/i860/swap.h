@@ -20,8 +20,8 @@
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
-#include <architecture/byte_order.h>
-#include <mach/i860/thread_status.h>
+#import <architecture/byte_order.h>
+#import <mach/i860/thread_status.h>
 
 extern void swap_i860_thread_state_regs(
     struct i860_thread_state_regs *cpu,

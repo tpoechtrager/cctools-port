@@ -20,8 +20,8 @@
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
-#include <architecture/byte_order.h>
-#include <mach/hppa/thread_status.h>
+#import <architecture/byte_order.h>
+#import <mach/hppa/thread_status.h>
 
 extern void swap_hppa_integer_thread_state(
     struct hp_pa_integer_thread_state *regs,

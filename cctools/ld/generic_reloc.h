@@ -31,7 +31,7 @@
  * #include <reloc.h>
  * #include "section.h"
  */
-extern void generic_reloc(
+__private_extern__ void generic_reloc(
     char *contents,
     struct relocation_info *relocs,
     struct section_map *map,
@@ -39,7 +39,7 @@ extern void generic_reloc(
     struct live_refs *refs,
     unsigned long reloc_index);
 
-extern int undef_bsearch(
+__private_extern__ int undef_bsearch(
     const unsigned long *index,
     const struct undefined_map *undefined_map);
 

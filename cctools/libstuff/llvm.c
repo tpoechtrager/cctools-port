@@ -3,7 +3,7 @@
 #include <libc.h>
 #include <sys/file.h>
 #include <dlfcn.h>
-#include <stdint.h>
+#include <stdint.h> /* cctools-port */
 #include "llvm-c/Disassembler.h"
 #include "stuff/llvm.h"
 #include "stuff/allocate.h"
@@ -14,7 +14,7 @@
  * plan to include it (along with the current libLTO APIs) in a generic
  * libLLVM.dylib.
  */
-#ifdef __APPLE__
+#ifdef __APPLE__ /* cctools-port */
 #define LIB_LLVM "libLTO.dylib"
 #else
 #define LIB_LLVM "libLTO.so"
@@ -66,7 +66,7 @@ static void load_llvm(void)
 		p[1] = '\0';
 	    llvm_path = makestr(prefix, "../lib/" LIB_LLVM, NULL);
 
-#ifdef __APPLE__
+#ifdef __APPLE__ /* cctools-port */
 	    llvm_handle = dlopen(llvm_path, RTLD_NOW);
 	    if(llvm_handle == NULL){
 		free(llvm_path);
@@ -92,7 +92,7 @@ static void load_llvm(void)
 	    createCPU = dlsym(llvm_handle, "LLVMCreateDisasmCPU");
 	    version = dlsym(llvm_handle, "lto_get_version");
 
-#ifndef __APPLE__
+#ifndef __APPLE__ /* cctools-port */
 	    if(create == NULL){
 		fprintf(stderr, "Your " LIB_LLVM " lacks required symbols.\n");
 		fprintf(stderr, "Please run: tools/fix_liblto.sh (or http://git.io/AyZP) to fix libLTO.\n");
