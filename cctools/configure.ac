@@ -182,9 +182,6 @@ if test "xEXTRACXXFLAGS" != "x"; then
   CXXFLAGS="$CXXFLAGS $EXTRACXXFLAGS"
 fi
 
-AC_SUBST([WARNINGS], [$WARNINGS])
-AC_SUBST([OBJCWARNINGS], [$OBJCWARNINGS])
-
 CPP="$CC -E"
 OBJC="$CC"
 
@@ -283,11 +280,27 @@ AC_CHECK_LIB([c++abi],[__cxa_demangle],[CXXABI_LIB=-lc++abi],[
 
 AC_SUBST(CXXABI_LIB)
 
+### Check for supported warning options ###
+
+ORIGCFLAGS=$CFLAGS
+CFLAGS="$CFLAGS -Werror -Wno-shift-negative-value"
+AC_MSG_CHECKING([whether $CC supports -Wno-shift-negative-value])
+AC_COMPILE_IFELSE(
+  [AC_LANG_SOURCE([[int dummy;]])],
+  [WARNINGS="$WARNINGS -Wno-shift-negative-value"
+   AC_MSG_RESULT([yes])],
+  [AC_MSG_RESULT([no])]
+)
+CFLAGS=$ORIGCFLAGS
+
+AC_SUBST([WARNINGS], [$WARNINGS])
+AC_SUBST([OBJCWARNINGS], [$OBJCWARNINGS])
+
 ### Check for libLTO ###
 
 ORIGLDFLAGS=$LDFLAGS
 LDFLAGS="$LDFLAGS -Wl,-rpath,/usr/local/lib,--enable-new-dtags"
-AC_MSG_CHECKING([if -Wl,-rpath,<path>,--enable-new-dtags is supported])
+AC_MSG_CHECKING([whether ld supports -rpath,<path>,--enable-new-dtags])
 AC_LINK_IFELSE(
   [AC_LANG_SOURCE([[int main(){}]])],
   [rpathlink=yes
