@@ -60,7 +60,7 @@ char *get_executable_path(char *epath, size_t buflen)
     if (*comm == '/' || *comm == '.') {
         char *rpath;
         if ((rpath = realpath(comm, NULL))) {
-          snprintf(epath, buflen, "%s", rpath);
+          strlcpy(epath, rpath, buflen);
           free(rpath);
           ok = 1;
         }
