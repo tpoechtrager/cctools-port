@@ -14,46 +14,88 @@
 #include <mach/host_info.h>
 #include <sys/time.h>
 
-#if defined(__FreeBSD__) || defined(__OpenBSD__)
+#if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__DragonFly__)
 #include <sys/sysctl.h>
 #endif
 
-int _NSGetExecutablePath(char *path, unsigned int *size)
+#ifdef __OpenBSD__
+#include <sys/types.h>
+#include <sys/user.h>
+#include <sys/stat.h>
+#endif
+
+int _NSGetExecutablePath(char *epath, unsigned int *size)
 {
 #ifdef __FreeBSD__
-   int mib[4];
-   mib[0] = CTL_KERN;
-   mib[1] = KERN_PROC;
-   mib[2] = KERN_PROC_PATHNAME;
-   mib[3] = -1;
-   size_t cb = *size;
-   if (sysctl(mib, 4, path, &cb, NULL, 0) != 0)
+  int mib[4];
+  mib[0] = CTL_KERN;
+  mib[1] = KERN_PROC;
+  mib[2] = KERN_PROC_PATHNAME;
+  mib[3] = -1;
+  size_t cb = *size;
+  if (sysctl(mib, 4, epath, &cb, NULL, 0) != 0)
     return -1;
-   *size = cb;
-   return 0;
+  *size = cb;
+  return 0;
 #elif defined(__OpenBSD__)
-   int mib[4];
-   const char *tmp[100];  
-   size_t l = sizeof(tmp);
-   mib[0] = CTL_KERN;
-   mib[1] = KERN_PROC_ARGS;
-   mib[2] = getpid();
-   mib[3] = KERN_PROC_ARGV;
-   if (sysctl(mib, 4, tmp, &l, NULL, 0) != 0)
-    return -1;
-   *size = strlcpy(path, tmp[0], *size);
-   return 0;
-#else
-   int bufsize = *size;
-   int ret_size;
-   ret_size = readlink("/proc/self/exe", path, bufsize-1);
-   if (ret_size != -1)
-   {
-    *size = ret_size;
-    path[ret_size]=0;
+  int mib[4];
+  char **argv;
+  size_t len;
+  const char *comm;
+  int ok = 0;
+  mib[0] = CTL_KERN;
+  mib[1] = KERN_PROC_ARGS;
+  mib[2] = getpid();
+  mib[3] = KERN_PROC_ARGV;
+  if (sysctl(mib, 4, NULL, &len, NULL, 0) < 0)
+    abort();
+  if (!(argv = malloc(len)))
+    abort();
+  if (sysctl(mib, 4, argv, &len, NULL, 0) < 0)
+    abort();
+  comm = argv[0];
+  if (*comm == '/' || *comm == '.') {
+    char *rpath;
+    if ((rpath = realpath(comm, NULL))) {
+      snprintf(epath, *size, "%s", rpath);
+      free(rpath);
+      ok = 1;
+    }
+  } else {
+    char *sp;
+    char *xpath = strdup(getenv("PATH"));
+    char *path = strtok_r(xpath, ":", &sp);
+    struct stat st;
+    if (!xpath)
+      abort();
+    while (path) {
+      snprintf(epath, *size, "%s/%s", path, comm);
+      if (!stat(epath, &st) && (st.st_mode & S_IXUSR)) {
+        ok = 1;
+        break;
+      }
+      path = strtok_r(NULL, ":", &sp);
+    }
+    free(xpath);
+  }
+  free(argv);
+  if (ok) {
+    *strrchr(epath, '/') = '\0';
+    *size = strlen(epath);
     return 0;
-   }
-   else
+  }
+  return -1;
+#else
+  int bufsize = *size;
+  int ret_size;
+  ret_size = readlink("/proc/self/exe", epath, bufsize-1);
+  if (ret_size != -1)
+  {
+    *size = ret_size;
+    epath[ret_size]=0;
+    return 0;
+  }
+  else
     return -1;
 #endif
 }
