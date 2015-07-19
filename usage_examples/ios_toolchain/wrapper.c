@@ -19,30 +19,79 @@
 #include <mach-o/dyld.h>
 #endif
 
-#ifdef __FreeBSD__
+#if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__DragonFly__)
 #include <sys/sysctl.h>
 #endif
 
-char *get_executable_path(char *buf, size_t len)
+#ifdef __OpenBSD__
+#include <sys/types.h>
+#include <sys/user.h>
+#include <sys/stat.h>
+#endif
+
+char *get_executable_path(char *epath, size_t buflen)
 {
     char *p;
 #ifdef __APPLE__
-    unsigned int l = len;
-    if (_NSGetExecutablePath(buf, &l) != 0) return NULL;
+    unsigned int l = buflen;
+    if (_NSGetExecutablePath(epath, &l) != 0) return NULL;
 #elif defined(__FreeBSD__)
     int mib[4] = { CTL_KERN, KERN_PROC, KERN_PROC_PATHNAME, -1 };
-    size_t l = len;
-    if (sysctl(mib, 4, buf, &l, NULL, 0) != 0) return NULL;
-#elif defined(_WIN32)
-    size_t l = GetModuleFileName(NULL, buf, (DWORD)len);
+    size_t l = buflen;
+    if (sysctl(mib, 4, epath, &l, NULL, 0) != 0) return NULL;
+#elif defined(__OpenBSD__)
+    int mib[4];
+    char **argv;
+    size_t len;
+    size_t l;
+    const char *comm;
+    int ok = 0;
+    mib[0] = CTL_KERN;
+    mib[1] = KERN_PROC_ARGS;
+    mib[2] = getpid();
+    mib[3] = KERN_PROC_ARGV;
+    if (sysctl(mib, 4, NULL, &len, NULL, 0) < 0)
+        abort();
+    if (!(argv = malloc(len)))
+        abort();
+    if (sysctl(mib, 4, argv, &len, NULL, 0) < 0)
+        abort();
+    comm = argv[0];
+    if (*comm == '/' || *comm == '.') {
+        char *rpath;
+        if ((rpath = realpath(comm, NULL))) {
+          snprintf(epath, buflen, "%s", rpath);
+          free(rpath);
+          ok = 1;
+        }
+    } else {
+        char *sp;
+        char *xpath = strdup(getenv("PATH"));
+        char *path = strtok_r(xpath, ":", &sp);
+        struct stat st;
+        if (!xpath)
+            abort();
+        while (path) {
+            snprintf(epath, buflen, "%s/%s", path, comm);
+            if (!stat(epath, &st) && (st.st_mode & S_IXUSR)) {
+                ok = 1;
+                break;
+            }
+            path = strtok_r(NULL, ":", &sp);
+        }
+        free(xpath);
+    }
+    free(argv);
+    if (!ok) return NULL;
+    l = strlen(epath);
 #else
-    ssize_t l = readlink("/proc/self/exe", buf, len);
+    ssize_t l = readlink("/proc/self/exe", epath, buflen);
 #endif
     if (l <= 0) return NULL;
-    buf[len - 1] = '\0';
-    p = strrchr(buf, '/');
+    epath[buflen - 1] = '\0';
+    p = strrchr(epath, '/');
     if (p) *p = '\0';
-    return buf;
+    return epath;
 }
 
 char *get_filename(char *str)
@@ -88,7 +137,7 @@ int main(int argc, char *argv[])
     target_info(argv, &target, &compiler);
     if (!get_executable_path(execpath, sizeof(execpath))) abort();
     snprintf(sdkpath, sizeof(sdkpath), "%s/../SDK", execpath);
- 
+
     snprintf(codesign_allocate, sizeof(codesign_allocate),
              "%s-codesign_allocate", target);
 
