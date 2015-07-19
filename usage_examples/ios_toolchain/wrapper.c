@@ -35,7 +35,7 @@ char *get_executable_path(char *epath, size_t buflen)
 #ifdef __APPLE__
     unsigned int l = buflen;
     if (_NSGetExecutablePath(epath, &l) != 0) return NULL;
-#elif defined(__FreeBSD__)
+#elif defined(__FreeBSD__) || defined(__DragonFly__)
     int mib[4] = { CTL_KERN, KERN_PROC, KERN_PROC_PATHNAME, -1 };
     size_t l = buflen;
     if (sysctl(mib, 4, epath, &l, NULL, 0) != 0) return NULL;

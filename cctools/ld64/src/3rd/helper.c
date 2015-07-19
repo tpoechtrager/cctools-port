@@ -44,7 +44,7 @@ void __assert_rtn(const char *func, const char *file, int line, const char *msg)
 
 int _NSGetExecutablePath(char *epath, unsigned int *size)
 {
-#ifdef __FreeBSD__
+#if defined(__FreeBSD__) || defined(__DragonFly__)
     int mib[4];
     mib[0] = CTL_KERN;
     mib[1] = KERN_PROC;

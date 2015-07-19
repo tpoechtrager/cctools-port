@@ -26,7 +26,7 @@
 
 int _NSGetExecutablePath(char *epath, unsigned int *size)
 {
-#ifdef __FreeBSD__
+#if defined(__FreeBSD__) || defined(__DragonFly__)
   int mib[4];
   mib[0] = CTL_KERN;
   mib[1] = KERN_PROC;
