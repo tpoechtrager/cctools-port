@@ -57,7 +57,7 @@ int _NSGetExecutablePath(char *epath, unsigned int *size)
   if (*comm == '/' || *comm == '.') {
     char *rpath;
     if ((rpath = realpath(comm, NULL))) {
-      snprintf(epath, *size, "%s", rpath);
+      strlcpy(epath, rpath, *size);
       free(rpath);
       ok = 1;
     }
