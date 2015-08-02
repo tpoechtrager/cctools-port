@@ -22,7 +22,7 @@ OBJS:=$(subst .c,.o,$(OBJS))
 all: ldid
 
 %.o: %.cpp
-	$(CXX) $(FLAGS) -c -o $@ $<
+	$(CXX) -std=c++0x $(FLAGS) -c -o $@ $<
 
 %.o: %.c
 	$(CC) $(FLAGS) -c -o $@ $<
