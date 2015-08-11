@@ -1,6 +1,6 @@
 bin_PROGRAMS = ld_classic 
 ld_classic_LDADD =  \
-        $(top_srcdir)/libstuff/libstuff.la   $(UUID_LIB)
+        $(top_builddir)/libstuff/libstuff.la   $(UUID_LIB)
 
 ld_classic_CFLAGS = -D__DARWIN_UNIX03 -I$(top_srcdir)/include -I$(top_srcdir)/include/foreign -I$(top_srcdir)/libstuff $(WARNINGS) $(LTO_DEF) $(ENDIAN_FLAG) -DDEBUG
 

@@ -2,12 +2,12 @@ bin_PROGRAMS = otool
 
 if ISDARWIN
 otool_LDADD = \
-$(top_srcdir)/libstuff/libstuff.la \
+$(top_builddir)/libstuff/libstuff.la \
 $(PTHREAD_FLAGS) $(CXXABI_LIB) $(DL_LIB) -lobjc
 else
 otool_LDADD = \
-$(top_srcdir)/libstuff/libstuff.la \
-$(top_srcdir)/libobjc2/libobjc.la \
+$(top_builddir)/libstuff/libstuff.la \
+$(top_builddir)/libobjc2/libobjc.la \
 $(PTHREAD_FLAGS) $(CXXABI_LIB) $(DL_LIB)
 endif
 
