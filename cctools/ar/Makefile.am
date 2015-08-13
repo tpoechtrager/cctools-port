@@ -1,6 +1,6 @@
 bin_PROGRAMS = ar 
 ar_LDADD =  \
-        $(top_srcdir)/libstuff/libstuff.la
+        $(top_builddir)/libstuff/libstuff.la
 
 ar_CFLAGS = -D__DARWIN_UNIX03 -I$(top_srcdir)/include -I$(top_srcdir)/include/foreign -I$(top_srcdir)/libstuff $(WARNINGS) $(LTO_DEF) $(ENDIAN_FLAG)
 

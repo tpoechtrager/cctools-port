@@ -18,7 +18,7 @@ bin_PROGRAMS =  \
 	codesign_allocate
 
 LDADD =  \
-	$(top_srcdir)/libstuff/libstuff.la \
+	$(top_builddir)/libstuff/libstuff.la \
 	$(DL_LIB) \
 	$(LTO_RPATH)
 

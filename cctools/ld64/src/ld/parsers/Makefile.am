@@ -8,7 +8,7 @@ noinst_HEADERS =  \
 	opaque_section_file.h 
 
 libParsers_la_LIBADD =  \
-	$(top_srcdir)/ld64/src/3rd/libhelper.la
+	 $(top_builddir)/ld64/src/3rd/libhelper.la
 
 libParsers_la_CXXFLAGS =  \
 	-D__DARWIN_UNIX03 \

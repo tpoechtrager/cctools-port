@@ -2,10 +2,10 @@ SUBDIRS = parsers passes
 
 bin_PROGRAMS = ld
 ld_LDADD =  \
-    $(top_srcdir)/ld64/src/3rd/libhelper.la  \
-    $(top_srcdir)/ld64/src/3rd/BlocksRuntime/libBlocksRuntime.la  \
-	$(top_srcdir)/ld64/src/ld/parsers/libParsers.la \
-	$(top_srcdir)/ld64/src/ld/passes/libPasses.la \
+     $(top_builddir)/ld64/src/3rd/libhelper.la  \
+    $(top_builddir)/ld64/src/3rd/BlocksRuntime/libBlocksRuntime.la  \
+	$(top_builddir)/ld64/src/ld/parsers/libParsers.la \
+	$(top_builddir)/ld64/src/ld/passes/libPasses.la \
 	$(DL_LIB) \
 	$(UUID_LIB) \
 	$(LTO_LIB)
