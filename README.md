@@ -44,3 +44,7 @@ target = `i386-apple-darwin11`, `x86_64-apple-darwin11`, `arm-apple-darwin11`, .
 
 If you get compile errors because of `unistd.h`, then please run  
 `../tools/fix_unistd_issue.sh` and restart compiling.
+
+## TRAVIS CI ##
+
+[![Build Status](https://travis-ci.org/tpoechtrager/cctools-port.svg?branch=master)](https://travis-ci.org/tpoechtrager/cctools-port)
