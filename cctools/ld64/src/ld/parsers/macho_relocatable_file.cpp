@@ -1499,6 +1499,12 @@ ld::relocatable::File* Parser<A>::parse(const ParserOptions& opts)
 	uint32_t countOfCFIs = 0;
 	if ( _EHFrameSection != NULL )
 		countOfCFIs = _EHFrameSection->cfiCount();
+#ifdef __clang__
+	// Workaround to get rid of the following clang <= 3.4 error:
+	// macho_relocatable_file.cpp:1506:49: error: variable length array of non-POD element type 'typename CFISection<arm>::CFI_Atom_Info' (aka 'CFI_Atom_Info<mach_o::relocatable::CFISection<arm>::OAS>')
+	// Don't ask me why this fixes the error.
+	typename CFISection<A>::CFI_Atom_Info  __clang_workaround[2];
+#endif
 	typename CFISection<A>::CFI_Atom_Info  cfiArray[countOfCFIs];
 	// stack allocate (if not too large) a copy of __eh_frame to apply relocations to
 	uint8_t* ehBuffer = NULL;

@@ -34,6 +34,7 @@
 #include <algorithm>
 
 #ifdef __GLIBCXX__
+#include <stddef.h>
 using namespace __gnu_cxx;
 #endif
 
