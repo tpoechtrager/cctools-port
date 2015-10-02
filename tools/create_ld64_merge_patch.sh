@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-BASE_VERSION=241.9
-NEW_VERSION=242
+BASE_VERSION=242
+NEW_VERSION=242.2
 
 set -e
 
@@ -13,8 +13,8 @@ pushd $TMPDIR
 wget http://www.opensource.apple.com/tarballs/ld64/ld64-$BASE_VERSION.tar.gz
 wget http://www.opensource.apple.com/tarballs/ld64/ld64-$NEW_VERSION.tar.gz
 
-tar xzf ld64-$BASE_VERSION* &>/dev/null
-tar xzf ld64-$NEW_VERSION* &>/dev/null
+tar xzf ld64-$BASE_VERSION.tar.gz &>/dev/null
+tar xzf ld64-$NEW_VERSION.tar.gz &>/dev/null
 
 pushd ld64-$NEW_VERSION*
 

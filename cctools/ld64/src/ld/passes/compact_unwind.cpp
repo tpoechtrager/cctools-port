@@ -144,8 +144,7 @@ UnwindInfoAtom<A>::UnwindInfoAtom(const std::vector<UnwindEntry>& entries, uint6
 	std::map<const ld::Atom*, uint32_t>	personalityIndexMap;
 	makePersonalityIndexes(uniqueEntries, personalityIndexMap);
 	if ( personalityIndexMap.size() > 3 ) {
-		warning("too many personality routines for compact unwind to encode");
-		return;
+		throw "too many personality routines for compact unwind to encode";
 	}
 
 	// put the most common encodings into the common table, but at most 127 of them

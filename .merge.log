@@ -1,3 +1,21 @@
+## ld64-242 -> ld64-242.2 ##
+
+patching file ./src/ld/passes/branch_island.cpp
+patching file ./src/ld/passes/compact_unwind.cpp
+patching file ./src/ld/passes/got.cpp
+can't find file to patch at input line 214
+Perhaps you used the wrong -p or --strip option?
+The text leading up to this was:
+--------------------------
+|diff -Naur ../ld64-242/unit-tests/test-cases/branch-islands/space.s ./unit-tests/test-cases/branch-islands/space.s
+|--- ../ld64-242/unit-tests/test-cases/branch-islands/space.s   2013-10-19 03:10:28.000000000 +0200
+|+++ ./unit-tests/test-cases/branch-islands/space.s     2015-05-05 21:42:23.000000000 +0200
+--------------------------
+File to patch: 
+Skip this patch? [y] 
+Skipping patch.
+1 out of 1 hunk ignored
+
 ## cctools 862 -> 870 ##
 
 patching file ./as/arm.c
