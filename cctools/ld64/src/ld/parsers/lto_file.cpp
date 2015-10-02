@@ -711,11 +711,23 @@ bool Parser::optimize(  const std::vector<const ld::Atom*>&	allAtoms,
 	uint32_t bufSize = PATH_MAX;
 	if ( _NSGetExecutablePath(path, &bufSize) != -1 ) {
 		char* lastSlash = strrchr(path, '/');
+		struct stat statInfo; // ld64-port
 		if ( lastSlash != NULL ) {
+			// ld64-port start
+			char* lastHyphen = strrchr(path, '-');
+			if ( lastHyphen != NULL && lastHyphen <= path + bufSize - 3 ) {
+				strcpy(lastHyphen+1, "as");
+				if ( stat(path, &statInfo) == 0 ) {
+					::lto_codegen_set_assembler_path(generator, path);
+					goto assembler_found;
+				}
+			}
+			// ld64-port end
 			strcpy(lastSlash+1, "as");
-			struct stat statInfo;
+			//struct stat statInfo;
 			if ( stat(path, &statInfo) == 0 )
 				::lto_codegen_set_assembler_path(generator, path);
+			assembler_found:; // ld64-port
 		}
 	}
 #endif
