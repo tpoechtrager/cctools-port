@@ -93,7 +93,6 @@
     <File Name="ld64/src/ld/Resolver.cpp"/>
     <File Name="ld64/src/ld/ld.cpp"/>
     <File Name="ld64/src/ld/Snapshot.h"/>
-    <File Name="ld64/src/ld/lto_file.hpp"/>
     <File Name="ld64/src/ld/SymbolTable.h"/>
     <File Name="ld64/src/ld/Options.cpp"/>
     <File Name="ld64/src/ld/InputFiles.h"/>
