@@ -33,8 +33,9 @@ AC_DEFUN([CHECK_LLVM],
             AC_CHECK_LIB([LTO],[lto_get_version],
              [ LTO_LIB="-L${LLVM_LIB_DIR} -lLTO"
                if test "x$rpathlink" = "xyes"; then
-                   LTO_RPATH="-Wl,-rpath,$LLVM_LIB_DIR,--enable-new-dtags"
-                   LTO_LIB="$LTO_LIB"
+                  LTO_RPATH="-Wl,-rpath,$LLVM_LIB_DIR,--enable-new-dtags"
+               elif test "x$isdarwin" = "xyes"; then
+                  LTO_LIB="-Wl,-lazy-library,${LLVM_LIB_DIR}/libLTO.dylib"
                fi
                LTO_DEF=-DLTO_SUPPORT
                # DO NOT include the LLVM include dir directly,

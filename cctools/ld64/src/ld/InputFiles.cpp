@@ -366,9 +366,9 @@ ld::File* InputFiles::makeFile(const Options::FileInfo& info, bool indirectDylib
 		}
 		else {
 #ifdef __APPLE__ // ld64-port
-      const char* libLTO = "libLTO.dylib";
+			const char* libLTO = "libLTO.dylib";
 #else
-      const char* libLTO = "libLTO.so";
+			const char* libLTO = "libLTO.so";
 #endif /* __APPLE__ */
 
 			char ldPath[PATH_MAX];
@@ -382,7 +382,11 @@ ld::File* InputFiles::makeFile(const Options::FileInfo& info, bool indirectDylib
 				if ( realpath(ldPath, tmpPath) != NULL ) {
 					char* lastSlash = strrchr(tmpPath, '/');
 					if ( lastSlash != NULL )
-						strcpy(lastSlash, "/../lib/llvm/libLTO.so");
+#ifdef __APPLE__
+						strcpy(lastSlash, "/../lib/llvm/libLTO.dylib");
+#else
+						strcpy(lastSlash, "/../lib/llvm/libLTO.so"); // ld64-port
+#endif
 					libLTO = tmpPath;
 					if ( realpath(tmpPath, libLTOPath) != NULL ) 
 						libLTO = libLTOPath;

@@ -50,7 +50,7 @@
 #undef __STDC_CONSTANT_MACROS   // ld64-port
 #define __STDC_LIMIT_MACROS 1
 #define __STDC_CONSTANT_MACROS 1
-#include "llvm-c/lto.h"
+#include "3rd/ld64_llvm_lto.h" // ld64-port: "llvm-c/lto.h" -> "3rd/ld64_llvm_lto.h"
 
 namespace lto {
 	  
@@ -206,7 +206,7 @@ public:
 	static File*					parse(const uint8_t* fileContent, uint64_t fileLength, const char* path, 
 											time_t modTime, ld::File::Ordinal ordinal, cpu_type_t architecture, cpu_subtype_t subarch,
 											bool logAllFiles, bool verboseOptimizationHints);
-	static bool						libLTOisLoaded() { return (::lto_get_version() != NULL); }
+	static bool						libLTOisLoaded() { return (lto_get_version() != NULL); }
 	static bool						optimize(   const std::vector<const ld::Atom*>&	allAtoms,
 												ld::Internal&						state,
 												const OptimizeOptions&				options,
@@ -214,7 +214,7 @@ public:
 												std::vector<const ld::Atom*>&		newAtoms, 
 												std::vector<const char*>&			additionalUndefines);
 
-	static const char*			ltoVersion()	{ return ::lto_get_version(); }
+	static const char*			ltoVersion()	{ return lto_get_version(); }
 
 private:
 	static const char*				tripletPrefixForArch(cpu_type_t arch);
@@ -252,11 +252,11 @@ bool Parser::validFile(const uint8_t* fileContent, uint64_t fileLength, cpu_type
 {
 	for (const ArchInfo* t=archInfoArray; t->archName != NULL; ++t) {
 		if ( (architecture == t->cpuType) && (!(t->isSubType) || (subarch == t->cpuSubType)) ) {
-			bool result = ::lto_module_is_object_file_in_memory_for_target(fileContent, fileLength, t->llvmTriplePrefix);
+			bool result = lto_module_is_object_file_in_memory_for_target(fileContent, fileLength, t->llvmTriplePrefix);
 			if ( !result ) {
 				// <rdar://problem/8434487> LTO only supports thumbv7 not armv7
 				if ( t->llvmTriplePrefixAlt[0] != '\0' ) {
-					result = ::lto_module_is_object_file_in_memory_for_target(fileContent, fileLength, t->llvmTriplePrefixAlt);
+					result = lto_module_is_object_file_in_memory_for_target(fileContent, fileLength, t->llvmTriplePrefixAlt);
 				}
 			}
 			return result;
@@ -272,7 +272,7 @@ const char* Parser::fileKind(const uint8_t* p, uint64_t fileLength)
 		for (const ArchInfo* t=archInfoArray; t->archName != NULL; ++t) {
 			if ( arch == t->cpuType ) {
 				 if ( t->isSubType ) {
-					if ( ::lto_module_is_object_file_in_memory_for_target(p, fileLength, t->llvmTriplePrefix) )
+					if ( lto_module_is_object_file_in_memory_for_target(p, fileLength, t->llvmTriplePrefix) )
 						return t->archName;
 				}
 				else {
@@ -340,20 +340,20 @@ File::File(const char* pth, time_t mTime, ld::File::Ordinal ordinal, const uint8
 	
 	// create llvm module
 #if LTO_API_VERSION >= 9
-	_module = ::lto_module_create_from_memory_with_path(content, contentLength, pth);
+	_module = lto_module_create_from_memory_with_path(content, contentLength, pth);
 	if ( _module == NULL )
 #endif
-	_module = ::lto_module_create_from_memory(content, contentLength);
+	_module = lto_module_create_from_memory(content, contentLength);
     if ( _module == NULL )
-		throwf("could not parse object file %s: '%s', using libLTO version '%s'", pth, ::lto_get_error_message(), ::lto_get_version());
+		throwf("could not parse object file %s: '%s', using libLTO version '%s'", pth, lto_get_error_message(), lto_get_version());
 
 	if ( log ) fprintf(stderr, "bitcode file: %s\n", pth);
 	
 	// create atom for each global symbol in module
-	uint32_t count = ::lto_module_get_num_symbols(_module);
+	uint32_t count = lto_module_get_num_symbols(_module);
 	_atomArray = (Atom*)malloc(sizeof(Atom)*count);
 	for (uint32_t i=0; i < count; ++i) {
-		const char* name = ::lto_module_get_symbol_name(_module, i);
+		const char* name = lto_module_get_symbol_name(_module, i);
 		lto_symbol_attributes attr = lto_module_get_symbol_attribute(_module, i);
 
 		// <rdar://problem/6378110> LTO doesn't like dtrace symbols
@@ -432,7 +432,7 @@ File::~File()
 void File::release()
 {
 	if ( _module != NULL )
-		::lto_module_dispose(_module);
+		lto_module_dispose(_module);
 	_module = NULL;
 }
 
@@ -494,7 +494,7 @@ void Parser::ltoDiagnosticHandler(lto_codegen_diagnostic_severity_t severity, co
 		{
 			// ld64-port: LLVM 3.5 prints thousands of lines about inlining, loop vectorization etc. by default
 			// this is a bug (fixed in 3.6/trunk), so for LLVM 3.5, just break
-			static bool printremarks = ( getenv("LD64_PRINT_LTO_REMARKS") || !strstr(::lto_get_version(), "3.5") );
+			static bool printremarks = ( getenv("LD64_PRINT_LTO_REMARKS") || !strstr(lto_get_version(), "3.5") );
 			if ( !printremarks ) break;
 		}
 #endif
@@ -526,10 +526,10 @@ bool Parser::optimize(  const std::vector<const ld::Atom*>&	allAtoms,
 	
 	// print out LTO version string if -v was used
 	if ( options.verbose )
-		fprintf(stderr, "%s\n", ::lto_get_version());
+		fprintf(stderr, "%s\n", lto_get_version());
 	
 	// create optimizer and add each Reader
-	lto_code_gen_t generator = ::lto_codegen_create();
+	lto_code_gen_t generator = lto_codegen_create();
 #if LTO_API_VERSION >= 7
 	lto_codegen_set_diagnostic_handler(generator, ltoDiagnosticHandler, NULL);
 #endif
@@ -541,8 +541,8 @@ bool Parser::optimize(  const std::vector<const ld::Atom*>&	allAtoms,
 		File* f = *it;
 		assert(f->ordinal() > lastOrdinal);
 		if ( logBitcodeFiles ) fprintf(stderr, "lto_codegen_add_module(%s)\n", f->path());
-		if ( ::lto_codegen_add_module(generator, f->module()) )
-			throwf("lto: could not merge in %s because '%s', using libLTO version '%s'", f->path(), ::lto_get_error_message(), ::lto_get_version());
+		if ( lto_codegen_add_module(generator, f->module()) )
+			throwf("lto: could not merge in %s because '%s', using libLTO version '%s'", f->path(), lto_get_error_message(), lto_get_version());
 		// <rdar://problem/15471128> linker should release module as soon as possible
 		f->release();
 		lastOrdinal = f->ordinal();
@@ -551,12 +551,12 @@ bool Parser::optimize(  const std::vector<const ld::Atom*>&	allAtoms,
 	// add any -mllvm command line options
 	for (std::vector<const char*>::const_iterator it=options.llvmOptions->begin(); it != options.llvmOptions->end(); ++it) {
 		if ( logExtraOptions ) fprintf(stderr, "passing option to llvm: %s\n", *it);
-		::lto_codegen_debug_options(generator, *it);
+		lto_codegen_debug_options(generator, *it);
 	}
 
 	// <rdar://problem/13687397> Need a way for LTO to get cpu variants (until that info is in bitcode)
 	if ( options.mcpu != NULL )
-		::lto_codegen_set_cpu(generator, options.mcpu);
+		lto_codegen_set_cpu(generator, options.mcpu);
 
 	// The atom graph uses directed edges (references). Collect all references where 
 	// originating atom is not part of any LTO Reader. This allows optimizer to optimize an 
@@ -609,7 +609,7 @@ bool Parser::optimize(  const std::vector<const ld::Atom*>&	allAtoms,
 		if ( atom->coalescedAway() && (atom->contentType() == ld::Atom::typeLTOtemporary) ) {
 			const char* name = atom->name();
 			if ( logMustPreserve ) fprintf(stderr, "lto_codegen_add_must_preserve_symbol(%s) because linker coalesce away and replace with a mach-o atom\n", name);
-			::lto_codegen_add_must_preserve_symbol(generator, name);
+			lto_codegen_add_must_preserve_symbol(generator, name);
 			deadllvmAtoms[name] = (Atom*)atom;
 		}
 	}
@@ -622,7 +622,7 @@ bool Parser::optimize(  const std::vector<const ld::Atom*>&	allAtoms,
 				if ( deadllvmAtoms.find(name) == deadllvmAtoms.end() ) {
 					if ( logMustPreserve ) 
 						fprintf(stderr, "lto_codegen_add_must_preserve_symbol(%s) because linker coalesce away and replace with a mach-o atom\n", name);
-					::lto_codegen_add_must_preserve_symbol(generator, name);
+					lto_codegen_add_must_preserve_symbol(generator, name);
 					deadllvmAtoms[name] = (Atom*)llvmAtom;
 				}
 			}
@@ -643,28 +643,28 @@ bool Parser::optimize(  const std::vector<const ld::Atom*>&	allAtoms,
 		// If a symbol is not listed in exportList then LTO is free to optimize it away.
 		if ( (atom->scope() == ld::Atom::scopeGlobal) && options.preserveAllGlobals ) { 
 			if ( logMustPreserve ) fprintf(stderr, "lto_codegen_add_must_preserve_symbol(%s) because global symbol\n", name);
-			::lto_codegen_add_must_preserve_symbol(generator, name);
+			lto_codegen_add_must_preserve_symbol(generator, name);
 		}
 		else if ( nonLLVMRefs.find(name) != nonLLVMRefs.end() ) {
 			if ( logMustPreserve ) fprintf(stderr, "lto_codegen_add_must_preserve_symbol(%s) because referenced by a mach-o atom\n", name);
-			::lto_codegen_add_must_preserve_symbol(generator, name);
+			lto_codegen_add_must_preserve_symbol(generator, name);
 		}
 		else if ( options.relocatable && hasNonllvmAtoms ) {
 			// <rdar://problem/14334895> ld -r mode but merging in some mach-o files, so need to keep libLTO from optimizing away anything
 			if ( logMustPreserve ) fprintf(stderr, "lto_codegen_add_must_preserve_symbol(%s) because -r mode disable LTO dead stripping\n", name);
-			::lto_codegen_add_must_preserve_symbol(generator, name);
+			lto_codegen_add_must_preserve_symbol(generator, name);
 		}
 	}
 	
 	// <rdar://problem/16165191> tell code generator to preserve initial undefines
 	for( std::vector<const char*>::const_iterator it=options.initialUndefines->begin(); it != options.initialUndefines->end(); ++it) {
 		if ( logMustPreserve ) fprintf(stderr, "lto_codegen_add_must_preserve_symbol(%s) because it is an initial undefine\n", *it);
-		::lto_codegen_add_must_preserve_symbol(generator, *it);
+		lto_codegen_add_must_preserve_symbol(generator, *it);
 	}
 
     // special case running ld -r on all bitcode files to produce another bitcode file (instead of mach-o)
     if ( options.relocatable && !hasNonllvmAtoms ) {
-		if ( ! ::lto_codegen_write_merged_modules(generator, options.outputFilePath) ) {
+		if ( ! lto_codegen_write_merged_modules(generator, options.outputFilePath) ) {
 			// HACK, no good way to tell linker we are all done, so just quit
 			exit(0);
 		}
@@ -694,7 +694,7 @@ bool Parser::optimize(  const std::vector<const ld::Atom*>&	allAtoms,
 		else
 			model = LTO_CODEGEN_PIC_MODEL_DYNAMIC;
 	}
-	if ( ::lto_codegen_set_pic_model(generator, model) )
+	if ( lto_codegen_set_pic_model(generator, model) )
 		throwf("could not create set codegen model: %s", lto_get_error_message());
 
     // if requested, save off merged bitcode file
@@ -702,7 +702,7 @@ bool Parser::optimize(  const std::vector<const ld::Atom*>&	allAtoms,
         char tempBitcodePath[MAXPATHLEN];
         strcpy(tempBitcodePath, options.outputFilePath);
         strcat(tempBitcodePath, ".lto.bc");
-        ::lto_codegen_write_merged_modules(generator, tempBitcodePath);
+        lto_codegen_write_merged_modules(generator, tempBitcodePath);
     }
 
 #if LTO_API_VERSION >= 3
@@ -718,7 +718,7 @@ bool Parser::optimize(  const std::vector<const ld::Atom*>&	allAtoms,
 			if ( lastHyphen != NULL && lastHyphen <= path + PATH_MAX - 4 ) {
 				strcpy(lastHyphen+1, "as");
 				if ( stat(path, &statInfo) == 0 ) {
-					::lto_codegen_set_assembler_path(generator, path);
+					lto_codegen_set_assembler_path(generator, path);
 					goto assembler_found;
 				}
 			}
@@ -726,16 +726,16 @@ bool Parser::optimize(  const std::vector<const ld::Atom*>&	allAtoms,
 			strcpy(lastSlash+1, "as");
 			//struct stat statInfo;
 			if ( stat(path, &statInfo) == 0 )
-				::lto_codegen_set_assembler_path(generator, path);
+				lto_codegen_set_assembler_path(generator, path);
 			assembler_found:; // ld64-port
 		}
 	}
 #endif
 	// run code generator
 	size_t machOFileLen;
-	const uint8_t* machOFile = (uint8_t*)::lto_codegen_compile(generator, &machOFileLen);
+	const uint8_t* machOFile = (uint8_t*)lto_codegen_compile(generator, &machOFileLen);
 	if ( machOFile == NULL ) 
-		throwf("could not do LTO codegen: '%s', using libLTO version '%s'", ::lto_get_error_message(), ::lto_get_version());
+		throwf("could not do LTO codegen: '%s', using libLTO version '%s'", lto_get_error_message(), lto_get_version());
 	
     // if requested, save off temp mach-o file
     if ( options.saveTemps ) {
@@ -751,7 +751,7 @@ bool Parser::optimize(  const std::vector<const ld::Atom*>&	allAtoms,
 		char tempOptBitcodePath[MAXPATHLEN];
         strcpy(tempOptBitcodePath, options.outputFilePath);
         strcat(tempOptBitcodePath, ".lto.opt.bc");
-        ::lto_codegen_write_merged_modules(generator, tempOptBitcodePath);
+        lto_codegen_write_merged_modules(generator, tempOptBitcodePath);
 	}
 
 	// if needed, save temp mach-o file to specific location
@@ -943,7 +943,7 @@ ld::relocatable::File* parse(const uint8_t* fileContent, uint64_t fileLength,
 const char* version()
 {
 	Mutex lock;
-	return ::lto_get_version();
+	return lto_get_version();
 }
 
 
@@ -953,7 +953,7 @@ const char* version()
 bool libLTOisLoaded()
 {
 	Mutex lock;
-	return (::lto_get_version() != NULL);
+	return (lto_get_version() != NULL);
 }
 
 //

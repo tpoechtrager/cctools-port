@@ -17,6 +17,7 @@
     <File Name="ld64/src/3rd/strlcpy.h"/>
     <File Name="ld64/src/3rd/strlcat.h"/>
     <File Name="ld64/src/3rd/eprintf.c"/>
+    <File Name="ld64/src/3rd/ld64_llvm_lto.h"/>
   </VirtualDirectory>
   <VirtualDirectory Name="ld">
     <VirtualDirectory Name="passes">

@@ -35,8 +35,12 @@
 #include "parsers/macho_relocatable_file.h"
 #include "parsers/lto_file.h"
 
-#ifdef __GLIBCXX__
+#ifdef __GLIBCXX__ // ld64-port
 #include <algorithm>
+#endif
+
+#ifdef __CYGWIN__  // ld64-port
+const char*         sOverridePathlibLTO = NULL;
 #endif
 
 static bool			sDumpContent= true;

@@ -1046,9 +1046,13 @@ static void getVMInfo(vm_statistics_data_t& info)
 }
 
 
+#ifdef __APPLE__ // ld64-port
+static
+#endif
 
-static const char* sOverridePathlibLTO = NULL;
+const char* sOverridePathlibLTO = NULL; // ld64-port: removed static
 
+#ifdef __APPLE__ // ld64-port
 //
 // This is magic glue that overrides the default behaviour 
 // of lazydylib1.o which is used to lazily load libLTO.dylib.
@@ -1061,6 +1065,7 @@ const char* dyld_lazy_dylib_path_fix(const char* path)
 	else
 		return path;
 }
+#endif
 
 
 
