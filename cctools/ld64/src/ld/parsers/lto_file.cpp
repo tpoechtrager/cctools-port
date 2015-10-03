@@ -715,7 +715,7 @@ bool Parser::optimize(  const std::vector<const ld::Atom*>&	allAtoms,
 		if ( lastSlash != NULL ) {
 			// ld64-port start
 			char* lastHyphen = strrchr(path, '-');
-			if ( lastHyphen != NULL && lastHyphen <= path + bufSize - 3 ) {
+			if ( lastHyphen != NULL && lastHyphen <= path + PATH_MAX - 4 ) {
 				strcpy(lastHyphen+1, "as");
 				if ( stat(path, &statInfo) == 0 ) {
 					::lto_codegen_set_assembler_path(generator, path);
