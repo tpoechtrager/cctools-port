@@ -25,7 +25,7 @@ armv7m, armv7em, armv8, arm64, arm64v8, i386, x86_64 and x86_64h.
 
 ## DEPENDENCIES ##
 
-`Clang 3.2+ or gcc/g++/gcc-objc 4.5+`, `automake`, `autogen` and `libtool`.
+`Clang 3.2+ or gcc/g++/gcc-objc 4.6+`, `automake`, `autogen` and `libtool`.
 
 Optional, but recommended:
 
