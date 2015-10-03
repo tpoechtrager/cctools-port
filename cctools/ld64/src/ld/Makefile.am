@@ -2,7 +2,6 @@ SUBDIRS = parsers passes
 
 bin_PROGRAMS = ld
 
-if ISDARWIN
 ld_LDADD =  \
 	$(top_builddir)/ld64/src/3rd/libhelper.la  \
 	$(top_builddir)/ld64/src/3rd/BlocksRuntime/libBlocksRuntime.la  \
@@ -10,16 +9,7 @@ ld_LDADD =  \
 	$(top_builddir)/ld64/src/ld/passes/libPasses.la \
 	$(DL_LIB) \
 	$(UUID_LIB) \
-	$(LTO_LIB)
-else
-ld_LDADD =  \
-	$(top_builddir)/ld64/src/3rd/libhelper.la  \
-	$(top_builddir)/ld64/src/3rd/BlocksRuntime/libBlocksRuntime.la  \
-	$(top_builddir)/ld64/src/ld/parsers/libParsers.la \
-	$(top_builddir)/ld64/src/ld/passes/libPasses.la \
-	$(DL_LIB) \
-	$(UUID_LIB)
-endif
+	$(LD64_LTO_LIB)
 
 ld_LDFLAGS = $(PTHREAD_FLAGS) $(EXECINFO_LIB)
 

@@ -1,16 +1,19 @@
 AC_DEFUN([CHECK_LLVM],
 [
     AC_ARG_ENABLE([lto],
-    AS_HELP_STRING([--enable-lto],
-                   [enable link time optimization support]),
-    [], [enable_lto=yes])
+    AS_HELP_STRING([--disable-lto],
+                   [disable link time optimization support]))
+
+    AC_ARG_ENABLE([ld64_liblto_proxy],
+    AS_HELP_STRING([--disable-ld64-liblto-proxy],
+                   [disable support for ld64 `-lto_library' (non-Apple OSs only)]))
 
     AC_ARG_WITH([llvm-config],
     AS_HELP_STRING([--with-llvm-config],
                    [llvm config tool]),
     [LLVM_CONFIG=$with_llvm_config], [LLVM_CONFIG=no])
 
-    if test "x$enable_lto" = "xyes"; then
+    if test "x$enable_lto" != "xno"; then
         if test "x$LLVM_CONFIG" = "xno"; then
             AC_PATH_PROGS(LLVM_CONFIG,
                 [llvm-config                                    \
@@ -44,6 +47,14 @@ AC_DEFUN([CHECK_LLVM],
                AC_SUBST([LTO_DEF])
                AC_SUBST([LTO_RPATH])
                AC_SUBST([LTO_LIB]) ])
+
+            LD64_LTO_LIB=$LTO_LIB
+
+            if test "x$enable_ld64_liblto_proxy" = "xyes"; then
+                LD64_LTO_LIB=""
+            fi
+
+            AC_SUBST([LD64_LTO_LIB])
 
             LDFLAGS=$ORIGLDFLAGS
         else

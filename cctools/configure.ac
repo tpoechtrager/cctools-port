@@ -313,6 +313,10 @@ CHECK_LLVM
 
 LDFLAGS="$LDFLAGS $LTO_RPATH"
 
+if test "x$enable_ld64_liblto_proxy" = "xno"; then
+  CXXFLAGS="$CXXFLAGS -DDISABLE_LD64_LIBLTO_PROXY"
+fi
+
 ### Check endianness ###
 
 AC_C_BIGENDIAN([AC_SUBST([ENDIAN_FLAG],[-D__BIG_ENDIAN__=1])],

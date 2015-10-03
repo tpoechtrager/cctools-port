@@ -2002,6 +2002,17 @@ void Options::parse(int argc, const char* argv[])
 			}
 			else if ( strcmp(arg, "-lto_library") == 0 ) {
                 snapshotFileArgIndex = 1;
+				// ld64-port start
+#if !defined(LTO_SUPPORT)
+				if ( !fOverridePathlibLTO )
+					warning("lto support not compiled in");
+#else
+#if !defined(__APPLE__) && defined(DISABLE_LD64_LIBLTO_PROXY)
+				if ( !fOverridePathlibLTO )
+					warning("-lto_library support not compiled in");
+#endif
+#endif
+				// ld64-port end
 				fOverridePathlibLTO = argv[++i];
 				if ( fOverridePathlibLTO == NULL )
 					throw "missing argument to -lto_library";

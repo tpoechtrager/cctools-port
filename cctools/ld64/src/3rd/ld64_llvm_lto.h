@@ -22,7 +22,7 @@
 
 #include "llvm-c/lto.h"
 
-#ifndef __APPLE__
+#if !defined(__APPLE__) && !defined(DISABLE_LD64_LIBLTO_PROXY)
 
 //
 // This workaround is required for
@@ -295,4 +295,4 @@ static void initLibLTO() {
 #undef LTO_DECLARE
 #undef LTO_LOOKUP
 
-#endif // ! __APPLE__
+#endif // !__APPLE__ && !DISABLE_LD64_LIBLTO_PROXY

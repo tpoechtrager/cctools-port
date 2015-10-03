@@ -38,15 +38,11 @@ machocheck_SOURCES = machochecker.cpp
 ObjectDump_SOURCES = \
 	ObjectDump.cpp \
 	$(top_srcdir)/ld64/src/ld/debugline.c
-if ISDARWIN
+
 ObjectDump_LDADD =  \
 	$(top_builddir)/ld64/src/ld/parsers/libParsers.la \
-	$(LTO_LIB)
-else
-ObjectDump_LDADD =  \
-	$(top_builddir)/ld64/src/ld/parsers/libParsers.la \
-	$(DL_LIB)
-endif
+	$(DL_LIB) \
+	$(LD64_LTO_LIB)
 
 dyldinfo_SOURCES =  dyldinfo.cpp
 dyldinfo_LDADD =  \
