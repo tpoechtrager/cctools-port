@@ -25,7 +25,7 @@
 #ifndef __APPLE__
 
 //
-// This is workaround is required for
+// This workaround is required for
 // ld64 `-lto_library' support on non-Apple OSs.
 //
 
@@ -35,7 +35,14 @@
 #warning header file out of date
 #endif
 
+#ifdef __APPLE__
+// This workaround should theoretically work on Darwin too.
+#define LIBLTO "libLTO.dylib"
+#elif defined(__CYGWIN__)
+#define LIBLTO "cygLTO.dll"
+#else
 #define LIBLTO "libLTO.so"
+#endif
 
 #define LTO_STR1(x) #x
 #define LTO_STR(x) LTO_STR1(x)
@@ -126,8 +133,10 @@ extern const char* sOverridePathlibLTO;
 namespace ltoproxy {
 
 static const char *getLibLTOPath() {
-  return &sOverridePathlibLTO && sOverridePathlibLTO ?
-         sOverridePathlibLTO : LIBLTO;
+#ifndef __CYGWIN__
+  if ( !&sOverridePathlibLTO ) return LIBLTO;
+#endif
+  return sOverridePathlibLTO ? sOverridePathlibLTO : LIBLTO;
 }
 
 }
