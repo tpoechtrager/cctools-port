@@ -79,7 +79,7 @@ LTO_DECLARE(lto_module_get_symbol_name);
 LTO_DECLARE(lto_module_get_symbol_attribute);
 #if LTO_API_VERSION >= 16
 LTO_DECLARE(lto_module_get_linkeropts);
-#endif // LTO_API_VERSION >= 17
+#endif // LTO_API_VERSION >= 16
 #if LTO_API_VERSION >= 7
 LTO_DECLARE(lto_codegen_set_diagnostic_handler);
 #endif // LTO_API_VERSION >= 7
@@ -100,7 +100,7 @@ LTO_DECLARE(lto_codegen_set_cpu);
 LTO_DECLARE(lto_codegen_set_assembler_path);
 #if LTO_API_VERSION >= 4
 LTO_DECLARE(lto_codegen_set_assembler_args);
-#endif
+#endif // LTO_API_VERSION >= 4
 LTO_DECLARE(lto_codegen_add_must_preserve_symbol);
 #if LTO_API_VERSION >= 4
 LTO_DECLARE(lto_codegen_write_merged_modules);
@@ -123,7 +123,7 @@ LTO_DECLARE(lto_codegen_set_should_internalize);
 #endif // LTO_API_VERSION >= 14
 #if LTO_API_VERSION >= 15
 LTO_DECLARE(lto_codegen_set_should_embed_uselists);
-#endif // LTO_API_VERSION >= 14
+#endif // LTO_API_VERSION >= 15
 
 #ifndef __CYGWIN__
 __attribute__((weak))
@@ -193,7 +193,7 @@ static void initLibLTO() {
     LTO_LOOKUP(lto_module_get_symbol_attribute);
 #if LTO_API_VERSION >= 16
     LTO_LOOKUP(lto_module_get_linkeropts);
-#endif // LTO_API_VERSION >= 17
+#endif // LTO_API_VERSION >= 16
 #if LTO_API_VERSION >= 7
     LTO_LOOKUP(lto_codegen_set_diagnostic_handler);
 #endif // LTO_API_VERSION >= 7
@@ -214,7 +214,7 @@ static void initLibLTO() {
     LTO_LOOKUP(lto_codegen_set_assembler_path);
 #if LTO_API_VERSION >= 4
     LTO_LOOKUP(lto_codegen_set_assembler_args);
-#endif
+#endif // LTO_API_VERSION >= 4
     LTO_LOOKUP(lto_codegen_add_must_preserve_symbol);
 #if LTO_API_VERSION >= 4
     LTO_LOOKUP(lto_codegen_write_merged_modules);
@@ -237,7 +237,7 @@ static void initLibLTO() {
 #endif // LTO_API_VERSION >= 14
 #if LTO_API_VERSION >= 15
     LTO_LOOKUP(lto_codegen_set_should_embed_uselists);
-#endif // LTO_API_VERSION >= 14
+#endif // LTO_API_VERSION >= 15
 }
 
 }
@@ -292,6 +292,8 @@ static void initLibLTO() {
 #define lto_codegen_set_should_embed_uselists(...)          LTO_WRAPPER_FUN(lto_codegen_set_should_embed_uselists, __VA_ARGS__)
 
 #undef LIBLTO
+#undef LTO_STR1
+#undef LTO_STR
 #undef LTO_DECLARE
 #undef LTO_LOOKUP
 

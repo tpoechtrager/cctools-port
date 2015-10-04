@@ -50,7 +50,7 @@ AC_DEFUN([CHECK_LLVM],
 
             LD64_LTO_LIB=$LTO_LIB
 
-            if test "x$enable_ld64_liblto_proxy" = "xyes"; then
+            if test "x$enable_ld64_liblto_proxy" != "xno"; then
                 LD64_LTO_LIB=""
             fi
 
