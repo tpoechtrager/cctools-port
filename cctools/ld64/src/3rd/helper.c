@@ -98,7 +98,6 @@ int _NSGetExecutablePath(char *epath, unsigned int *size)
     }
     free(argv);
     if (ok) {
-        *strrchr(epath, '/') = '\0';
         *size = strlen(epath);
         return 0;
     }
