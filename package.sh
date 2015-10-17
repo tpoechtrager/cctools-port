@@ -9,7 +9,7 @@ REVHASH=`git rev-parse --short HEAD`
 CCTOOLSVER=`cat README.md | grep "Current Version: " | awk '{print $3}'`
 LD64VER=`cat README.md | grep "Current Version: " | awk '{print $5}'`
 
-PACKAGE=cctools-${CCTOOLSVER}-${LD64VER%?}_$REVHASH
+PACKAGE=cctools-${CCTOOLSVER}-${LD64VER%?}-ppc_$REVHASH
 
 mkdir $PACKAGETMP/$PACKAGE
 cp -r . $PACKAGETMP/$PACKAGE
