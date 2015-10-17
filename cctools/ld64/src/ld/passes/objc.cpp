@@ -468,7 +468,9 @@ private:
 };
 
 template <> unsigned int Class<x86_64>::class_ro_header_size() { return 16; }
+#if SUPPORT_ARCH_arm_any
 template <> unsigned int Class<arm>::class_ro_header_size() { return 12;}
+#endif
 template <> unsigned int Class<x86>::class_ro_header_size() { return 12; }
 
 
@@ -605,6 +607,7 @@ void ClassROOverlayAtom<x86_64>::addMethodListFixup()
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k1of1, ld::Fixup::kindStoreTargetAddressLittleEndian64, targetAtom));
 }
 
+#if SUPPORT_ARCH_arm_any
 template <>
 void ClassROOverlayAtom<arm>::addMethodListFixup()
 {
@@ -612,6 +615,7 @@ void ClassROOverlayAtom<arm>::addMethodListFixup()
 	uint32_t offset = Class<arm>::class_ro_header_size() + 2*4; // class_ro_t.baseMethods
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k1of1, ld::Fixup::kindStoreTargetAddressLittleEndian32, targetAtom));
 }
+#endif
 
 template <>
 void ClassROOverlayAtom<x86>::addMethodListFixup()
@@ -631,6 +635,7 @@ void ClassROOverlayAtom<x86_64>::addProtocolListFixup()
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k1of1, ld::Fixup::kindStoreTargetAddressLittleEndian64, targetAtom));
 }
 
+#if SUPPORT_ARCH_arm_any
 template <>
 void ClassROOverlayAtom<arm>::addProtocolListFixup()
 {
@@ -638,6 +643,7 @@ void ClassROOverlayAtom<arm>::addProtocolListFixup()
 	uint32_t offset = Class<arm>::class_ro_header_size() + 3*4; // class_ro_t.baseProtocols
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k1of1, ld::Fixup::kindStoreTargetAddressLittleEndian32, targetAtom));
 }
+#endif
 
 template <>
 void ClassROOverlayAtom<x86>::addProtocolListFixup()
@@ -656,6 +662,7 @@ void ClassROOverlayAtom<x86_64>::addPropertyListFixup()
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k1of1, ld::Fixup::kindStoreTargetAddressLittleEndian64, targetAtom));
 }
 
+#if SUPPORT_ARCH_arm_any
 template <>
 void ClassROOverlayAtom<arm>::addPropertyListFixup()
 {
@@ -663,6 +670,7 @@ void ClassROOverlayAtom<arm>::addPropertyListFixup()
 	uint32_t offset = Class<arm>::class_ro_header_size() + 6*4; // class_ro_t.baseProperties
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k1of1, ld::Fixup::kindStoreTargetAddressLittleEndian32, targetAtom));
 }
+#endif
 
 template <>
 void ClassROOverlayAtom<x86>::addPropertyListFixup()
@@ -1202,6 +1210,18 @@ void doPass(const Options& opts, ld::Internal& state)
 							  true, state.swiftVersion));
 				break;
 #endif
+#if SUPPORT_ARCH_ppc
+			case CPU_TYPE_POWERPC:
+				state.addAtom(*new ObjCImageInfoAtom<ppc>(state.objcObjectConstraint, compaction,
+							false, state.swiftVersion));
+				break;
+#endif
+#if SUPPORT_ARCH_ppc64
+			case CPU_TYPE_POWERPC64:
+				state.addAtom(*new ObjCImageInfoAtom<ppc64>(state.objcObjectConstraint, compaction,
+							true, state.swiftVersion));
+				break;
+#endif
 			default:
 				assert(0 && "unknown objc arch");
 		}	
@@ -1229,6 +1249,14 @@ void doPass(const Options& opts, ld::Internal& state)
 #if SUPPORT_ARCH_arm64
 			case CPU_TYPE_ARM64:
 				// disabled until tested
+				break;
+#endif
+#if SUPPORT_ARCH_ppc64
+			case CPU_TYPE_POWERPC64:
+				break;
+#endif
+#if SUPPORT_ARCH_ppc
+			case CPU_TYPE_POWERPC:
 				break;
 #endif
 			default:

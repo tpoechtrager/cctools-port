@@ -100,6 +100,7 @@ private:
 	bool					isDtraceProbe(ld::Fixup::Kind kind);
 	void					liveUndefines(std::vector<const char*>&);
 	void					remainingUndefines(std::vector<const char*>&);
+	static unsigned int			ppcSubTypeIndex(uint32_t subtype);
 	bool					printReferencedBy(const char* name, SymbolTable::IndirectBindingSlot slot);
 	void					tweakWeakness();
 	void					doLinkerOption(const std::vector<const char*>& linkerOption, const char* fileName);

@@ -141,15 +141,29 @@ void doPass(const Options& opts, ld::Internal& internal)
 			for (ld::Fixup::iterator fit = atom->fixupsBegin(), end=atom->fixupsEnd(); fit != end; ++fit) {
 				switch ( fit->kind ) {
 					case ld::Fixup::kindStoreX86DtraceCallSiteNop:
+#if SUPPORT_ARCH_ppc
+					case ld::Fixup::kindStorePPCDtraceCallSiteNop:
+#endif
+#if SUPPORT_ARCH_arm_any
 					case ld::Fixup::kindStoreARMDtraceCallSiteNop:
 					case ld::Fixup::kindStoreThumbDtraceCallSiteNop:
+#endif
+#if SUPPORT_ARCH_arm64
 					case ld::Fixup::kindStoreARM64DtraceCallSiteNop:
+#endif
 						probeSites.push_back(DTraceProbeInfo(atom, fit->offsetInAtom, fit->u.name));
 						break;
 					case ld::Fixup::kindStoreX86DtraceIsEnableSiteClear:
+#if SUPPORT_ARCH_ppc
+					case ld::Fixup::kindStorePPCDtraceIsEnableSiteClear:
+#endif
+#if SUPPORT_ARCH_arm_any
 					case ld::Fixup::kindStoreARMDtraceIsEnableSiteClear:
 					case ld::Fixup::kindStoreThumbDtraceIsEnableSiteClear:
+#endif
+#if SUPPORT_ARCH_arm64
 					case ld::Fixup::kindStoreARM64DtraceIsEnableSiteClear:
+#endif
 						isEnabledSites.push_back(DTraceProbeInfo(atom, fit->offsetInAtom, fit->u.name));
 						break;
 					case ld::Fixup::kindDtraceExtra:
@@ -168,12 +182,28 @@ void doPass(const Options& opts, ld::Internal& internal)
 	
 	ld::Fixup::Kind storeKind = ld::Fixup::kindNone;
 	switch ( opts.architecture() ) {
+#if SUPPORT_ARCH_ppc
+		case CPU_TYPE_POWERPC:
+			storeKind = ld::Fixup::kindStoreBigEndian32;
+			break;
+#endif
+#if SUPPORT_ARCH_ppc64
+		case CPU_TYPE_POWERPC64:
+			storeKind = ld::Fixup::kindStoreBigEndian32;
+			break;
+#endif
 		case CPU_TYPE_I386:
 		case CPU_TYPE_X86_64:
+#if SUPPORT_ARCH_arm_any
 		case CPU_TYPE_ARM:
+#endif
+#if SUPPORT_ARCH_arm64
 		case CPU_TYPE_ARM64:
+#endif
+#if SUPPORT_ARCH_arm_any || SUPPORT_ARCH_arm64
 			storeKind = ld::Fixup::kindStoreLittleEndian32;
 			break;
+#endif
 		default:
 			throw "unsupported arch for DOF";
 	}

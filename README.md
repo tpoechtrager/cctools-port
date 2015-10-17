@@ -1,7 +1,11 @@
 # Apple cctools port for Linux, *BSD and Windows (Cygwin) #
 
 Current Version: 870 + ld64-242.2.  
-Originally ported by [cjacker](http://ios-toolchain-based-on-clang-for-linux.googlecode.com).
+
+## CREDITS ##
+
+Initial cctools/ld64 port: [cjacker](http://ios-toolchain-based-on-clang-for-linux.googlecode.com).  
+PPC forward port: [Michael Weiser](https://github.com/michaelweiser/ld64/tree/ld64-242-ppc).
 
 ## SUPPORTED HOSTS ##
 
@@ -20,8 +24,9 @@ aarch64, ppc, ppc64
 
 ## SUPPORTED TARGETS ##
 
-armv4t, armv5, armv6, armv7, armv7f, armv7k, armv7s, armv6m  
-armv7m, armv7em, armv8, arm64, arm64v8, i386, x86_64 and x86_64h.
+armv4t, armv5, armv6, armv7, armv7f, armv7k, armv7s, armv6m,  
+armv7m, armv7em, armv8, arm64, arm64v8, i386, x86_64, x86_64h,  
+ppc, ppc750, ppc7400, ppc7450, ppc970 and ppc64
 
 ## DEPENDENCIES ##
 
@@ -47,4 +52,4 @@ If you get compile errors because of `unistd.h`, then please run
 
 ## TRAVIS CI ##
 
-[![Build Status](https://travis-ci.org/tpoechtrager/cctools-port.svg?branch=master)](https://travis-ci.org/tpoechtrager/cctools-port)
+[![Build Status](https://travis-ci.org/tpoechtrager/cctools-port.svg?branch=870-ld64-242.2-ppc)](https://travis-ci.org/tpoechtrager/cctools-port)

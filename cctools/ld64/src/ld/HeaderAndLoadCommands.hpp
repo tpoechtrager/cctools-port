@@ -611,17 +611,55 @@ uint32_t HeaderAndLoadCommandsAtom<A>::flags() const
 	return bits;
 }
 
+#if SUPPORT_ARCH_ppc
+template <> uint32_t HeaderAndLoadCommandsAtom<ppc>::magic() const		{ return MH_MAGIC; }
+#endif
+#if SUPPORT_ARCH_ppc64
+template <> uint32_t HeaderAndLoadCommandsAtom<ppc64>::magic() const		{ return MH_MAGIC_64; }
+#endif
 template <> uint32_t HeaderAndLoadCommandsAtom<x86>::magic() const		{ return MH_MAGIC; }
 template <> uint32_t HeaderAndLoadCommandsAtom<x86_64>::magic() const	{ return MH_MAGIC_64; }
+#if SUPPORT_ARCH_arm_any
 template <> uint32_t HeaderAndLoadCommandsAtom<arm>::magic() const		{ return MH_MAGIC; }
+#endif
+#if SUPPORT_ARCH_arm64
 template <> uint32_t HeaderAndLoadCommandsAtom<arm64>::magic() const		{ return MH_MAGIC_64; }
+#endif
 
+#if SUPPORT_ARCH_ppc
+template <> uint32_t HeaderAndLoadCommandsAtom<ppc>::cpuType() const	{ return CPU_TYPE_POWERPC; }
+#endif
+#if SUPPORT_ARCH_ppc64
+template <> uint32_t HeaderAndLoadCommandsAtom<ppc64>::cpuType() const	{ return CPU_TYPE_POWERPC64; }
+#endif
 template <> uint32_t HeaderAndLoadCommandsAtom<x86>::cpuType() const	{ return CPU_TYPE_I386; }
 template <> uint32_t HeaderAndLoadCommandsAtom<x86_64>::cpuType() const	{ return CPU_TYPE_X86_64; }
+#if SUPPORT_ARCH_arm_any
 template <> uint32_t HeaderAndLoadCommandsAtom<arm>::cpuType() const	{ return CPU_TYPE_ARM; }
+#endif
+#if SUPPORT_ARCH_arm64
 template <> uint32_t HeaderAndLoadCommandsAtom<arm64>::cpuType() const	{ return CPU_TYPE_ARM64; }
+#endif
 
 
+#if SUPPORT_ARCH_ppc
+template <>
+uint32_t HeaderAndLoadCommandsAtom<ppc>::cpuSubType() const
+{
+	return _state.cpuSubType;
+}
+#endif
+
+#if SUPPORT_ARCH_ppc64
+template <>
+uint32_t HeaderAndLoadCommandsAtom<ppc64>::cpuSubType() const
+{
+	if ( (_options.outputKind() == Options::kDynamicExecutable) && (_options.macosxVersionMin() >= ld::mac10_5) )
+		return (CPU_SUBTYPE_POWERPC_ALL | 0x80000000);
+	else
+		return CPU_SUBTYPE_POWERPC_ALL;
+}
+#endif
 
 template <>
 uint32_t HeaderAndLoadCommandsAtom<x86>::cpuSubType() const
@@ -638,17 +676,21 @@ uint32_t HeaderAndLoadCommandsAtom<x86_64>::cpuSubType() const
 		return _state.cpuSubType;
 }
 
+#if SUPPORT_ARCH_arm_any
 template <>
 uint32_t HeaderAndLoadCommandsAtom<arm>::cpuSubType() const
 {
 	return _state.cpuSubType;
 }
+#endif
 
+#if SUPPORT_ARCH_arm64
 template <>
 uint32_t HeaderAndLoadCommandsAtom<arm64>::cpuSubType() const
 {
 	return CPU_SUBTYPE_ARM64_ALL;
 }
+#endif
 
 
 
@@ -1081,8 +1123,10 @@ template <typename A>
 uint8_t* HeaderAndLoadCommandsAtom<A>::copyRoutinesLoadCommand(uint8_t* p) const
 {
 	pint_t initAddr = _state.entryPoint->finalAddress(); 
+#if SUPPORT_ARCH_arm_any
 	if ( _state.entryPoint->isThumb() )
 		initAddr |= 1ULL;
+#endif
 	macho_routines_command<P>* cmd = (macho_routines_command<P>*)p;
 	cmd->set_cmd(macho_routines_command<P>::CMD);
 	cmd->set_cmdsize(sizeof(macho_routines_command<P>));
@@ -1143,6 +1187,54 @@ uint8_t* HeaderAndLoadCommandsAtom<A>::copySourceVersionLoadCommand(uint8_t* p) 
 	return p + sizeof(macho_source_version_command<P>);
 }
 
+#if SUPPORT_ARCH_ppc
+template <>
+uint32_t HeaderAndLoadCommandsAtom<ppc>::threadLoadCommandSize() const
+{
+	return this->alignedSize(16 + 40*4);	// base size + PPC_THREAD_STATE_COUNT * 4
+}
+
+
+template <>
+uint8_t* HeaderAndLoadCommandsAtom<ppc>::copyThreadsLoadCommand(uint8_t* p) const
+{
+	assert(_state.entryPoint != NULL);
+	pint_t start = _state.entryPoint->finalAddress();
+	macho_thread_command<ppc::P>* cmd = (macho_thread_command<ppc::P>*)p;
+	cmd->set_cmd(LC_UNIXTHREAD);
+	cmd->set_cmdsize(threadLoadCommandSize());
+	cmd->set_flavor(1);				// PPC_THREAD_STATE
+	cmd->set_count(40);				// PPC_THREAD_STATE_COUNT;
+	cmd->set_thread_register(0, start);
+	if ( _options.hasCustomStack() )
+		cmd->set_thread_register(3, _options.customStackAddr());	// r1
+	return p + threadLoadCommandSize();
+}
+#endif
+
+#if SUPPORT_ARCH_ppc64
+template <>
+uint32_t HeaderAndLoadCommandsAtom<ppc64>::threadLoadCommandSize() const
+{
+	return this->alignedSize(16 + 76*4);	// base size + PPC_THREAD_STATE64_COUNT * 4
+}
+
+template <>
+uint8_t* HeaderAndLoadCommandsAtom<ppc64>::copyThreadsLoadCommand(uint8_t* p) const
+{
+	assert(_state.entryPoint != NULL);
+	pint_t start = _state.entryPoint->finalAddress();
+	macho_thread_command<ppc::P>* cmd = (macho_thread_command<ppc::P>*)p;
+	cmd->set_cmd(LC_UNIXTHREAD);
+	cmd->set_cmdsize(threadLoadCommandSize());
+	cmd->set_flavor(5);				// PPC_THREAD_STATE64
+	cmd->set_count(76);				// PPC_THREAD_STATE64_COUNT;
+	cmd->set_thread_register(0, start);
+	if ( _options.hasCustomStack() )
+		cmd->set_thread_register(3, _options.customStackAddr());	// r1
+	return p + threadLoadCommandSize();
+}
+#endif
 
 template <>
 uint32_t HeaderAndLoadCommandsAtom<x86>::threadLoadCommandSize() const
@@ -1188,6 +1280,7 @@ uint8_t* HeaderAndLoadCommandsAtom<x86_64>::copyThreadsLoadCommand(uint8_t* p) c
 	return p + threadLoadCommandSize();
 }
 
+#if SUPPORT_ARCH_arm_any
 template <>
 uint32_t HeaderAndLoadCommandsAtom<arm>::threadLoadCommandSize() const
 {
@@ -1211,8 +1304,10 @@ uint8_t* HeaderAndLoadCommandsAtom<arm>::copyThreadsLoadCommand(uint8_t* p) cons
 		cmd->set_thread_register(13, _options.customStackAddr());	// sp
 	return p + threadLoadCommandSize();
 }
+#endif
 
 
+#if SUPPORT_ARCH_arm64
 template <>
 uint32_t HeaderAndLoadCommandsAtom<arm64>::threadLoadCommandSize() const
 {
@@ -1234,6 +1329,7 @@ uint8_t* HeaderAndLoadCommandsAtom<arm64>::copyThreadsLoadCommand(uint8_t* p) co
 		cmd->set_thread_register(31, _options.customStackAddr());	// sp 
 	return p + threadLoadCommandSize();
 }
+#endif
 
 
 template <typename A>
@@ -1244,8 +1340,10 @@ uint8_t* HeaderAndLoadCommandsAtom<A>::copyEntryPointLoadCommand(uint8_t* p) con
 	cmd->set_cmdsize(sizeof(macho_entry_point_command<P>));
 	assert(_state.entryPoint != NULL);
 	pint_t start = _state.entryPoint->finalAddress(); 
+#if SUPPORT_ARCH_arm_any
 	if ( _state.entryPoint->isThumb() )
 		start |= 1ULL;
+#endif
 	cmd->set_entryoff(start - this->finalAddress());
 	cmd->set_stacksize(_options.hasCustomStack() ? _options.customStackSize() : 0 );
 	return p + sizeof(macho_entry_point_command<P>);

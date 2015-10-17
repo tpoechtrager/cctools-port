@@ -222,10 +222,20 @@ const class File<A>::Entry* File<A>::Entry::next() const
 }
 
 
+#if SUPPORT_ARCH_ppc
+template <> cpu_type_t File<ppc>::architecture()    { return CPU_TYPE_POWERPC; }
+#endif
+#if SUPPORT_ARCH_ppc64
+template <> cpu_type_t File<ppc64>::architecture()  { return CPU_TYPE_POWERPC64; }
+#endif
 template <> cpu_type_t File<x86>::architecture()    { return CPU_TYPE_I386; }
 template <> cpu_type_t File<x86_64>::architecture() { return CPU_TYPE_X86_64; }
+#if SUPPORT_ARCH_arm_any
 template <> cpu_type_t File<arm>::architecture()    { return CPU_TYPE_ARM; }
+#endif
+#if SUPPORT_ARCH_arm64
 template <> cpu_type_t File<arm64>::architecture()  { return CPU_TYPE_ARM64; }
+#endif
 
 
 template <typename A>
@@ -319,6 +329,14 @@ bool File<x86>::memberHasObjCCategories(const Entry* member) const
 	}
 }
 
+#if SUPPORT_ARCH_ppc
+template <>
+bool File<ppc>::memberHasObjCCategories(const Entry* member) const
+{
+	// ppc uses ObjC1 ABI which has .objc_category* global symbols
+	return false;
+}
+#endif
 
 
 template <typename A>
@@ -614,6 +632,18 @@ ld::archive::File* parse(const uint8_t* fileContent, uint64_t fileLength,
 		case CPU_TYPE_ARM64:
 			if ( archive::Parser<arm64>::validFile(fileContent, fileLength, opts.objOpts) )
 				return archive::Parser<arm64>::parse(fileContent, fileLength, path, modTime, ordinal, opts);
+			break;
+#endif
+#if SUPPORT_ARCH_ppc
+		case CPU_TYPE_POWERPC:
+			if ( archive::Parser<ppc>::validFile(fileContent, fileLength, opts.objOpts) )
+				return archive::Parser<ppc>::parse(fileContent, fileLength, path, modTime, ordinal, opts);
+			break;
+#endif
+#if SUPPORT_ARCH_ppc64
+		case CPU_TYPE_POWERPC64:
+			if ( archive::Parser<ppc64>::validFile(fileContent, fileLength, opts.objOpts) )
+				return archive::Parser<ppc64>::parse(fileContent, fileLength, path, modTime, ordinal, opts);
 			break;
 #endif
 	}

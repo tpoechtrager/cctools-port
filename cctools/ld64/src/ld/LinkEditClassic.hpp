@@ -333,8 +333,10 @@ bool SymbolTableAtom<A>::addLocal(const ld::Atom* atom, StringPoolAtom* pool)
         desc |= N_NO_DEAD_STRIP;
 	if ( (atom->definition() == ld::Atom::definitionRegular) && (atom->combine() == ld::Atom::combineByName) )
 		desc |= N_WEAK_DEF;
+#if SUPPORT_ARCH_arm_any
 	if ( atom->isThumb() )
 		desc |= N_ARM_THUMB_DEF;
+#endif
     if ( (this->_options.outputKind() == Options::kObjectFile) && this->_state.allObjectFilesScatterable && isAltEntry(atom) )
         desc |= N_ALT_ENTRY;
 	entry.set_n_desc(desc);
@@ -404,8 +406,10 @@ void SymbolTableAtom<A>::addGlobal(const ld::Atom* atom, StringPoolAtom* pool)
 
 	// set n_desc
 	uint16_t desc = 0;
+#if SUPPORT_ARCH_arm_any
     if ( atom->isThumb() )
         desc |= N_ARM_THUMB_DEF;
+#endif
     if ( atom->symbolTableInclusion() == ld::Atom::symbolTableInAndNeverStrip )
         desc |= REFERENCED_DYNAMICALLY;
     if ( (atom->contentType() == ld::Atom::typeResolver) && (this->_options.outputKind() == Options::kObjectFile) )
@@ -855,6 +859,54 @@ void LocalRelocationsAtom<A>::addPointerReloc(uint64_t addr, uint32_t symNum)
 template <typename A>
 void LocalRelocationsAtom<A>::addTextReloc(uint64_t addr, ld::Fixup::Kind kind, uint64_t targetAddr, uint32_t symNum)
 {
+	macho_relocation_info<P> reloc1;
+	macho_relocation_info<P> reloc2;
+	switch ( kind ) {
+#if SUPPORT_ARCH_ppc
+		case ld::Fixup::kindStorePPCAbsLow14:
+		case ld::Fixup::kindStorePPCAbsLow16:
+			// a reference to the absolute address of something in this same linkage unit can be
+			// encoded as a local text reloc in a dylib or bundle
+			if ( _options.outputSlidable() ) {
+				reloc1.set_r_address(addr);
+				reloc1.set_r_symbolnum(symNum);
+				reloc1.set_r_pcrel(false);
+				reloc1.set_r_length(2);
+				reloc1.set_r_extern(false);
+				reloc1.set_r_type(kind==ld::Fixup::kindStorePPCAbsLow16 ? PPC_RELOC_LO16 : PPC_RELOC_LO14);
+				reloc2.set_r_address(targetAddr >> 16);
+				reloc2.set_r_symbolnum(0);
+				reloc2.set_r_pcrel(false);
+				reloc2.set_r_length(2);
+				reloc2.set_r_extern(false);
+				reloc2.set_r_type(PPC_RELOC_PAIR);
+				_relocs.push_back(reloc1);
+				_relocs.push_back(reloc2);
+			}
+			break;
+		case ld::Fixup::kindStorePPCAbsHigh16AddLow:
+		case ld::Fixup::kindStorePPCAbsHigh16:
+			if ( _options.outputSlidable() ) {
+				reloc1.set_r_address(addr);
+				reloc1.set_r_symbolnum(symNum);
+				reloc1.set_r_pcrel(false);
+				reloc1.set_r_length(2);
+				reloc1.set_r_extern(false);
+				reloc1.set_r_type(kind==ld::Fixup::kindStorePPCAbsHigh16AddLow ? PPC_RELOC_HA16 : PPC_RELOC_HI16);
+				reloc2.set_r_address(targetAddr & 0xFFFF);
+				reloc2.set_r_symbolnum(0);
+				reloc2.set_r_pcrel(false);
+				reloc2.set_r_length(2);
+				reloc2.set_r_extern(false);
+				reloc2.set_r_type(PPC_RELOC_PAIR);
+				_relocs.push_back(reloc1);
+				_relocs.push_back(reloc2);
+			}
+			break;
+#endif
+		default:
+			break;
+	}
 }
 
 
@@ -983,7 +1035,13 @@ template <> uint32_t ExternalRelocationsAtom<arm64>::pointerReloc() { return ARM
 template <> uint32_t ExternalRelocationsAtom<arm>::pointerReloc() { return ARM_RELOC_VANILLA; }
 #endif
 template <> uint32_t ExternalRelocationsAtom<x86>::pointerReloc() { return GENERIC_RELOC_VANILLA; }
+#if SUPPORT_ARCH_ppc
+template <> uint32_t ExternalRelocationsAtom<ppc>::pointerReloc() { return PPC_RELOC_VANILLA; }
+#endif
 template <> uint32_t ExternalRelocationsAtom<x86_64>::pointerReloc() { return X86_64_RELOC_UNSIGNED; }
+#if SUPPORT_ARCH_ppc64
+template <> uint32_t ExternalRelocationsAtom<ppc64>::pointerReloc() { return PPC_RELOC_VANILLA; }
+#endif
 
 
 template <> uint32_t ExternalRelocationsAtom<x86_64>::callReloc() { return X86_64_RELOC_BRANCH; }
@@ -1903,6 +1961,586 @@ void SectionRelocationsAtom<arm64>::encodeSectionReloc(ld::Internal::FinalSectio
 }
 #endif // SUPPORT_ARCH_arm64
 
+#if SUPPORT_ARCH_ppc
+template <>
+void SectionRelocationsAtom<ppc>::encodeSectionReloc(ld::Internal::FinalSection* sect,
+													const Entry& entry, std::vector<macho_relocation_info<P> >& relocs)
+{
+	macho_relocation_info<P> reloc1;
+	macho_relocation_info<P> reloc2;
+	macho_scattered_relocation_info<P>* sreloc1 = (macho_scattered_relocation_info<P>*)&reloc1;
+	macho_scattered_relocation_info<P>* sreloc2 = (macho_scattered_relocation_info<P>*)&reloc2;
+	uint64_t address = entry.inAtom->finalAddress()+entry.offsetInAtom - sect->address;
+	bool external = entry.toTargetUsesExternalReloc;
+	uint32_t symbolNum = sectSymNum(external, entry.toTarget);
+	bool fromExternal = false;
+	uint32_t fromSymbolNum = 0;
+	if ( entry.fromTarget != NULL ) {
+		fromExternal = entry.fromTargetUsesExternalReloc;
+		fromSymbolNum= sectSymNum(fromExternal, entry.fromTarget);
+	}
+	uint32_t toAddr;
+	uint32_t fromAddr;
+
+	switch ( entry.kind ) {
+
+		case ld::Fixup::kindStorePPCBranch24:
+		case ld::Fixup::kindStoreTargetAddressPPCBranch24:
+		case ld::Fixup::kindStorePPCDtraceCallSiteNop:
+		case ld::Fixup::kindStorePPCDtraceIsEnableSiteClear:
+			if ( !external && (entry.toAddend != 0) ) {
+				// use scattered reloc if target offset is non-zero
+				sreloc1->set_r_scattered(true);
+				sreloc1->set_r_pcrel(true);
+				sreloc1->set_r_length(2);
+				sreloc1->set_r_type(PPC_RELOC_BR24);
+				sreloc1->set_r_address(address);
+				sreloc1->set_r_value(entry.toTarget->finalAddress());
+			}
+			else {
+				reloc1.set_r_address(address);
+				reloc1.set_r_symbolnum(symbolNum);
+				reloc1.set_r_pcrel(true);
+				reloc1.set_r_length(2);
+				reloc1.set_r_extern(external);
+				reloc1.set_r_type(PPC_RELOC_BR24);
+			}
+			relocs.push_back(reloc1);
+			break;
+
+		case ld::Fixup::kindStorePPCBranch14:
+			if ( !external && (entry.toAddend != 0) ) {
+				// use scattered reloc if target offset is non-zero
+				sreloc1->set_r_scattered(true);
+				sreloc1->set_r_pcrel(true);
+				sreloc1->set_r_length(2);
+				sreloc1->set_r_type(PPC_RELOC_BR14);
+				sreloc1->set_r_address(address);
+				sreloc1->set_r_value(entry.toTarget->finalAddress());
+			}
+			else {
+				reloc1.set_r_address(address);
+				reloc1.set_r_symbolnum(symbolNum);
+				reloc1.set_r_pcrel(true);
+				reloc1.set_r_length(2);
+				reloc1.set_r_extern(external);
+				reloc1.set_r_type(PPC_RELOC_BR14);
+			}
+			relocs.push_back(reloc1);
+			break;
+
+		case ld::Fixup::kindStoreBigEndian32:
+		case ld::Fixup::kindStoreTargetAddressBigEndian32:
+			if ( entry.fromTarget != NULL ) {
+				// this is a pointer-diff
+				sreloc1->set_r_scattered(true);
+				sreloc1->set_r_pcrel(false);
+				sreloc1->set_r_length(2);
+				if ( entry.toTarget->scope() == ld::Atom::scopeTranslationUnit )
+					sreloc1->set_r_type(PPC_RELOC_LOCAL_SECTDIFF);
+				else
+					sreloc1->set_r_type(PPC_RELOC_SECTDIFF);
+				sreloc1->set_r_address(address);
+				if ( entry.toTarget == entry.inAtom )
+					sreloc1->set_r_value(entry.toTarget->finalAddress()+entry.toAddend);
+				else
+					sreloc1->set_r_value(entry.toTarget->finalAddress());
+				sreloc2->set_r_scattered(true);
+				sreloc2->set_r_pcrel(false);
+				sreloc2->set_r_length(2);
+				sreloc2->set_r_type(PPC_RELOC_PAIR);
+				sreloc2->set_r_address(0);
+				if ( entry.fromTarget == entry.inAtom ) {
+					if ( entry.fromAddend > entry.fromTarget->size() )
+						sreloc2->set_r_value(entry.fromTarget->finalAddress()+entry.offsetInAtom);
+					else
+						sreloc2->set_r_value(entry.fromTarget->finalAddress()+entry.fromAddend);
+				}
+				else
+					sreloc2->set_r_value(entry.fromTarget->finalAddress());
+				relocs.push_back(reloc1);
+				relocs.push_back(reloc2);
+			}
+			else {
+				// regular pointer
+				if ( !external && (entry.toAddend != 0) ) {
+					// use scattered reloc is target offset is non-zero
+					sreloc1->set_r_scattered(true);
+					sreloc1->set_r_pcrel(false);
+					sreloc1->set_r_length(2);
+					sreloc1->set_r_type(GENERIC_RELOC_VANILLA);
+					sreloc1->set_r_address(address);
+					sreloc1->set_r_value(entry.toTarget->finalAddress());
+				}
+				else {
+					reloc1.set_r_address(address);
+					reloc1.set_r_symbolnum(symbolNum);
+					reloc1.set_r_pcrel(false);
+					reloc1.set_r_length(2);
+					reloc1.set_r_extern(external);
+					reloc1.set_r_type(GENERIC_RELOC_VANILLA);
+				}
+				relocs.push_back(reloc1);
+			}
+			break;
+
+		case ld::Fixup::kindStorePPCAbsLow14:
+		case ld::Fixup::kindStorePPCAbsLow16:
+			if ( !external && (entry.toAddend != 0) ) {
+				// use scattered reloc if target offset is non-zero
+				sreloc1->set_r_scattered(true);
+				sreloc1->set_r_pcrel(false);
+				sreloc1->set_r_length(2);
+				sreloc1->set_r_type(entry.kind==ld::Fixup::kindStorePPCAbsLow16 ? PPC_RELOC_LO16 : PPC_RELOC_LO14);
+				sreloc1->set_r_address(address);
+				sreloc1->set_r_value(entry.toTarget->finalAddress());
+			}
+			else {
+				reloc1.set_r_address(address);
+				reloc1.set_r_symbolnum(symbolNum);
+				reloc1.set_r_pcrel(false);
+				reloc1.set_r_length(2);
+				reloc1.set_r_extern(external);
+				reloc1.set_r_type(entry.kind==ld::Fixup::kindStorePPCAbsLow16 ? PPC_RELOC_LO16 : PPC_RELOC_LO14);
+			}
+			if ( external )
+				reloc2.set_r_address(entry.toAddend >> 16);
+			else
+				reloc2.set_r_address((entry.toTarget->finalAddress()+entry.toAddend) >> 16);
+			reloc2.set_r_symbolnum(0);
+			reloc2.set_r_pcrel(false);
+			reloc2.set_r_length(2);
+			reloc2.set_r_extern(false);
+			reloc2.set_r_type(PPC_RELOC_PAIR);
+			relocs.push_back(reloc1);
+			relocs.push_back(reloc2);
+			break;
+
+		case ld::Fixup::kindStorePPCAbsHigh16:
+			if ( !external && (entry.toAddend != 0) ) {
+				// use scattered reloc if target offset is non-zero
+				sreloc1->set_r_scattered(true);
+				sreloc1->set_r_pcrel(false);
+				sreloc1->set_r_length(2);
+				sreloc1->set_r_type(PPC_RELOC_HI16);
+				sreloc1->set_r_address(address);
+				sreloc1->set_r_value(entry.toTarget->finalAddress());
+			}
+			else {
+				reloc1.set_r_address(address);
+				reloc1.set_r_symbolnum(symbolNum);
+				reloc1.set_r_pcrel(false);
+				reloc1.set_r_length(2);
+				reloc1.set_r_extern(external);
+				reloc1.set_r_type(PPC_RELOC_HI16);
+			}
+			if ( external )
+				reloc2.set_r_address(entry.toAddend & 0x0000FFFF);
+			else
+				reloc2.set_r_address((entry.toTarget->finalAddress()+entry.toAddend) & 0x0000FFFF);
+			reloc2.set_r_symbolnum(0);
+			reloc2.set_r_pcrel(false);
+			reloc2.set_r_length(2);
+			reloc2.set_r_extern(false);
+			reloc2.set_r_type(PPC_RELOC_PAIR);
+			relocs.push_back(reloc1);
+			relocs.push_back(reloc2);
+			break;
+
+		case ld::Fixup::kindStorePPCAbsHigh16AddLow:
+			if ( !external && (entry.toAddend != 0) ) {
+				// use scattered reloc if target offset is non-zero
+				sreloc1->set_r_scattered(true);
+				sreloc1->set_r_pcrel(false);
+				sreloc1->set_r_length(2);
+				sreloc1->set_r_type(PPC_RELOC_HA16);
+				sreloc1->set_r_address(address);
+				sreloc1->set_r_value(entry.toTarget->finalAddress());
+			}
+			else {
+				reloc1.set_r_address(address);
+				reloc1.set_r_symbolnum(symbolNum);
+				reloc1.set_r_pcrel(false);
+				reloc1.set_r_length(2);
+				reloc1.set_r_extern(external);
+				reloc1.set_r_type(PPC_RELOC_HA16);
+			}
+			if ( external )
+				reloc2.set_r_address(entry.toAddend & 0x0000FFFF);
+			else
+				reloc2.set_r_address((entry.toTarget->finalAddress()+entry.toAddend) & 0x0000FFFF);
+			reloc2.set_r_symbolnum(0);
+			reloc2.set_r_pcrel(false);
+			reloc2.set_r_length(2);
+			reloc2.set_r_extern(false);
+			reloc2.set_r_type(PPC_RELOC_PAIR);
+			relocs.push_back(reloc1);
+			relocs.push_back(reloc2);
+			break;
+
+		case ld::Fixup::kindStorePPCPicLow14:
+		case ld::Fixup::kindStorePPCPicLow16:
+			fromAddr = entry.fromTarget->finalAddress() + entry.fromAddend;
+			toAddr = entry.toTarget->finalAddress() + entry.toAddend;
+			sreloc1->set_r_scattered(true);
+			sreloc1->set_r_pcrel(false);
+			sreloc1->set_r_length(2);
+			sreloc1->set_r_type(entry.kind == ld::Fixup::kindStorePPCPicLow16 ? PPC_RELOC_LO16_SECTDIFF : PPC_RELOC_LO14_SECTDIFF);
+			sreloc1->set_r_address(address);
+			sreloc1->set_r_value(entry.toTarget->finalAddress());
+			sreloc2->set_r_scattered(true);
+			sreloc2->set_r_pcrel(false);
+			sreloc2->set_r_length(2);
+			sreloc2->set_r_type(PPC_RELOC_PAIR);
+			sreloc2->set_r_address(((toAddr-fromAddr) >> 16) & 0xFFFF);
+			sreloc2->set_r_value(fromAddr);
+			relocs.push_back(reloc1);
+			relocs.push_back(reloc2);
+			break;
+
+		case ld::Fixup::kindStorePPCPicHigh16AddLow:
+			fromAddr = entry.fromTarget->finalAddress() + entry.fromAddend;
+			toAddr = entry.toTarget->finalAddress() + entry.toAddend;
+			sreloc1->set_r_scattered(true);
+			sreloc1->set_r_pcrel(false);
+			sreloc1->set_r_length(2);
+			sreloc1->set_r_type(PPC_RELOC_HA16_SECTDIFF);
+			sreloc1->set_r_address(address);
+			sreloc1->set_r_value(entry.toTarget->finalAddress());
+			sreloc2->set_r_scattered(true);
+			sreloc2->set_r_pcrel(false);
+			sreloc2->set_r_length(2);
+			sreloc2->set_r_type(PPC_RELOC_PAIR);
+			sreloc2->set_r_address((toAddr-fromAddr) & 0xFFFF);
+			sreloc2->set_r_value(fromAddr);
+			relocs.push_back(reloc1);
+			relocs.push_back(reloc2);
+			break;
+
+		default:
+			assert(0 && "need to handle -r reloc");
+
+	}
+}
+#endif
+
+#if SUPPORT_ARCH_ppc64
+template <>
+void SectionRelocationsAtom<ppc64>::encodeSectionReloc(ld::Internal::FinalSection* sect,
+													const Entry& entry, std::vector<macho_relocation_info<P> >& relocs)
+{
+	macho_relocation_info<P> reloc1;
+	macho_relocation_info<P> reloc2;
+	macho_scattered_relocation_info<P>* sreloc1 = (macho_scattered_relocation_info<P>*)&reloc1;
+	macho_scattered_relocation_info<P>* sreloc2 = (macho_scattered_relocation_info<P>*)&reloc2;
+	uint64_t address = entry.inAtom->finalAddress()+entry.offsetInAtom - sect->address;
+	bool external = entry.toTargetUsesExternalReloc;
+	uint32_t symbolNum = sectSymNum(external, entry.toTarget);
+	bool fromExternal = false;
+	uint32_t fromSymbolNum = 0;
+	if ( entry.fromTarget != NULL ) {
+		fromExternal = entry.fromTargetUsesExternalReloc;
+		fromSymbolNum= sectSymNum(fromExternal, entry.fromTarget);
+	}
+	uint32_t toAddr;
+	uint32_t fromAddr;
+
+	switch ( entry.kind ) {
+
+		case ld::Fixup::kindStorePPCBranch24:
+		case ld::Fixup::kindStoreTargetAddressPPCBranch24:
+		case ld::Fixup::kindStorePPCDtraceCallSiteNop:
+		case ld::Fixup::kindStorePPCDtraceIsEnableSiteClear:
+			if ( !external && (entry.toAddend != 0) ) {
+				// use scattered reloc if target offset is non-zero
+				sreloc1->set_r_scattered(true);
+				sreloc1->set_r_pcrel(true);
+				sreloc1->set_r_length(2);
+				sreloc1->set_r_type(PPC_RELOC_BR24);
+				sreloc1->set_r_address(address);
+				sreloc1->set_r_value(entry.toTarget->finalAddress());
+			}
+			else {
+				reloc1.set_r_address(address);
+				reloc1.set_r_symbolnum(symbolNum);
+				reloc1.set_r_pcrel(true);
+				reloc1.set_r_length(2);
+				reloc1.set_r_extern(external);
+				reloc1.set_r_type(PPC_RELOC_BR24);
+			}
+			relocs.push_back(reloc1);
+			break;
+
+		case ld::Fixup::kindStorePPCBranch14:
+			if ( !external && (entry.toAddend != 0) ) {
+				// use scattered reloc if target offset is non-zero
+				sreloc1->set_r_scattered(true);
+				sreloc1->set_r_pcrel(true);
+				sreloc1->set_r_length(2);
+				sreloc1->set_r_type(PPC_RELOC_BR14);
+				sreloc1->set_r_address(address);
+				sreloc1->set_r_value(entry.toTarget->finalAddress());
+			}
+			else {
+				reloc1.set_r_address(address);
+				reloc1.set_r_symbolnum(symbolNum);
+				reloc1.set_r_pcrel(true);
+				reloc1.set_r_length(2);
+				reloc1.set_r_extern(external);
+				reloc1.set_r_type(PPC_RELOC_BR14);
+			}
+			relocs.push_back(reloc1);
+			break;
+
+		case ld::Fixup::kindStoreBigEndian32:
+		case ld::Fixup::kindStoreTargetAddressBigEndian32:
+			if ( entry.fromTarget != NULL ) {
+				// this is a pointer-diff
+				sreloc1->set_r_scattered(true);
+				sreloc1->set_r_pcrel(false);
+				sreloc1->set_r_length(2);
+				if ( entry.toTarget->scope() == ld::Atom::scopeTranslationUnit )
+					sreloc1->set_r_type(PPC_RELOC_LOCAL_SECTDIFF);
+				else
+					sreloc1->set_r_type(PPC_RELOC_SECTDIFF);
+				sreloc1->set_r_address(address);
+				if ( entry.toTarget == entry.inAtom )
+					sreloc1->set_r_value(entry.toTarget->finalAddress()+entry.toAddend);
+				else
+					sreloc1->set_r_value(entry.toTarget->finalAddress());
+				sreloc2->set_r_scattered(true);
+				sreloc2->set_r_pcrel(false);
+				sreloc2->set_r_length(2);
+				sreloc2->set_r_type(PPC_RELOC_PAIR);
+				sreloc2->set_r_address(0);
+				if ( entry.fromTarget == entry.inAtom ) {
+					if ( entry.fromAddend > entry.fromTarget->size() )
+						sreloc2->set_r_value(entry.fromTarget->finalAddress()+entry.offsetInAtom);
+					else
+						sreloc2->set_r_value(entry.fromTarget->finalAddress()+entry.fromAddend);
+				}
+				else
+					sreloc2->set_r_value(entry.fromTarget->finalAddress());
+				relocs.push_back(reloc1);
+				relocs.push_back(reloc2);
+			}
+			else {
+				// regular pointer
+				if ( !external && (entry.toAddend != 0) ) {
+					// use scattered reloc is target offset is non-zero
+					sreloc1->set_r_scattered(true);
+					sreloc1->set_r_pcrel(false);
+					sreloc1->set_r_length(2);
+					sreloc1->set_r_type(GENERIC_RELOC_VANILLA);
+					sreloc1->set_r_address(address);
+					sreloc1->set_r_value(entry.toTarget->finalAddress());
+				}
+				else {
+					reloc1.set_r_address(address);
+					reloc1.set_r_symbolnum(symbolNum);
+					reloc1.set_r_pcrel(false);
+					reloc1.set_r_length(2);
+					reloc1.set_r_extern(external);
+					reloc1.set_r_type(GENERIC_RELOC_VANILLA);
+				}
+				relocs.push_back(reloc1);
+			}
+			break;
+
+		case ld::Fixup::kindStoreBigEndian64:
+		case ld::Fixup::kindStoreTargetAddressBigEndian64:
+			if ( entry.fromTarget != NULL ) {
+				// this is a pointer-diff
+				sreloc1->set_r_scattered(true);
+				sreloc1->set_r_pcrel(false);
+				sreloc1->set_r_length(3);
+				if ( entry.toTarget->scope() == ld::Atom::scopeTranslationUnit )
+					sreloc1->set_r_type(PPC_RELOC_LOCAL_SECTDIFF);
+				else
+					sreloc1->set_r_type(PPC_RELOC_SECTDIFF);
+				sreloc1->set_r_address(address);
+				if ( entry.toTarget == entry.inAtom )
+					sreloc1->set_r_value(entry.toTarget->finalAddress()+entry.toAddend);
+				else
+					sreloc1->set_r_value(entry.toTarget->finalAddress());
+				sreloc2->set_r_scattered(true);
+				sreloc2->set_r_pcrel(false);
+				sreloc2->set_r_length(3);
+				sreloc2->set_r_type(PPC_RELOC_PAIR);
+				sreloc2->set_r_address(0);
+				if ( entry.fromTarget == entry.inAtom ) {
+					if ( entry.fromAddend > entry.fromTarget->size() )
+						sreloc2->set_r_value(entry.fromTarget->finalAddress()+entry.offsetInAtom);
+					else
+						sreloc2->set_r_value(entry.fromTarget->finalAddress()+entry.fromAddend);
+				}
+				else
+					sreloc2->set_r_value(entry.fromTarget->finalAddress());
+				relocs.push_back(reloc1);
+				relocs.push_back(reloc2);
+			}
+			else {
+				// regular pointer
+				if ( !external && (entry.toAddend != 0) ) {
+					// use scattered reloc is target offset is non-zero
+					sreloc1->set_r_scattered(true);
+					sreloc1->set_r_pcrel(false);
+					sreloc1->set_r_length(3);
+					sreloc1->set_r_type(GENERIC_RELOC_VANILLA);
+					sreloc1->set_r_address(address);
+					sreloc1->set_r_value(entry.toTarget->finalAddress());
+				}
+				else {
+					reloc1.set_r_address(address);
+					reloc1.set_r_symbolnum(symbolNum);
+					reloc1.set_r_pcrel(false);
+					reloc1.set_r_length(3);
+					reloc1.set_r_extern(external);
+					reloc1.set_r_type(GENERIC_RELOC_VANILLA);
+				}
+				relocs.push_back(reloc1);
+			}
+			break;
+
+		case ld::Fixup::kindStorePPCAbsLow14:
+		case ld::Fixup::kindStorePPCAbsLow16:
+			if ( !external && (entry.toAddend != 0) ) {
+				// use scattered reloc if target offset is non-zero
+				sreloc1->set_r_scattered(true);
+				sreloc1->set_r_pcrel(false);
+				sreloc1->set_r_length(2);
+				sreloc1->set_r_type(entry.kind==ld::Fixup::kindStorePPCAbsLow16 ? PPC_RELOC_LO16 : PPC_RELOC_LO14);
+				sreloc1->set_r_address(address);
+				sreloc1->set_r_value(entry.toTarget->finalAddress());
+			}
+			else {
+				reloc1.set_r_address(address);
+				reloc1.set_r_symbolnum(symbolNum);
+				reloc1.set_r_pcrel(false);
+				reloc1.set_r_length(2);
+				reloc1.set_r_extern(external);
+				reloc1.set_r_type(entry.kind==ld::Fixup::kindStorePPCAbsLow16 ? PPC_RELOC_LO16 : PPC_RELOC_LO14);
+			}
+			if ( external )
+				reloc2.set_r_address(entry.toAddend >> 16);
+			else
+				reloc2.set_r_address((entry.toTarget->finalAddress()+entry.toAddend) >> 16);
+			reloc2.set_r_symbolnum(0);
+			reloc2.set_r_pcrel(false);
+			reloc2.set_r_length(2);
+			reloc2.set_r_extern(false);
+			reloc2.set_r_type(PPC_RELOC_PAIR);
+			relocs.push_back(reloc1);
+			relocs.push_back(reloc2);
+			break;
+
+		case ld::Fixup::kindStorePPCAbsHigh16:
+			if ( !external && (entry.toAddend != 0) ) {
+				// use scattered reloc if target offset is non-zero
+				sreloc1->set_r_scattered(true);
+				sreloc1->set_r_pcrel(false);
+				sreloc1->set_r_length(2);
+				sreloc1->set_r_type(PPC_RELOC_HI16);
+				sreloc1->set_r_address(address);
+				sreloc1->set_r_value(entry.toTarget->finalAddress());
+			}
+			else {
+				reloc1.set_r_address(address);
+				reloc1.set_r_symbolnum(symbolNum);
+				reloc1.set_r_pcrel(false);
+				reloc1.set_r_length(2);
+				reloc1.set_r_extern(external);
+				reloc1.set_r_type(PPC_RELOC_HI16);
+			}
+			if ( external )
+				reloc2.set_r_address(entry.toAddend & 0x0000FFFF);
+			else
+				reloc2.set_r_address((entry.toTarget->finalAddress()+entry.toAddend) & 0x0000FFFF);
+			reloc2.set_r_symbolnum(0);
+			reloc2.set_r_pcrel(false);
+			reloc2.set_r_length(2);
+			reloc2.set_r_extern(false);
+			reloc2.set_r_type(PPC_RELOC_PAIR);
+			relocs.push_back(reloc1);
+			relocs.push_back(reloc2);
+			break;
+
+		case ld::Fixup::kindStorePPCAbsHigh16AddLow:
+			if ( !external && (entry.toAddend != 0) ) {
+				// use scattered reloc if target offset is non-zero
+				sreloc1->set_r_scattered(true);
+				sreloc1->set_r_pcrel(false);
+				sreloc1->set_r_length(2);
+				sreloc1->set_r_type(PPC_RELOC_HA16);
+				sreloc1->set_r_address(address);
+				sreloc1->set_r_value(entry.toTarget->finalAddress());
+			}
+			else {
+				reloc1.set_r_address(address);
+				reloc1.set_r_symbolnum(symbolNum);
+				reloc1.set_r_pcrel(false);
+				reloc1.set_r_length(2);
+				reloc1.set_r_extern(external);
+				reloc1.set_r_type(PPC_RELOC_HA16);
+			}
+			if ( external )
+				reloc2.set_r_address(entry.toAddend & 0x0000FFFF);
+			else
+				reloc2.set_r_address((entry.toTarget->finalAddress()+entry.toAddend) & 0x0000FFFF);
+			reloc2.set_r_symbolnum(0);
+			reloc2.set_r_pcrel(false);
+			reloc2.set_r_length(2);
+			reloc2.set_r_extern(false);
+			reloc2.set_r_type(PPC_RELOC_PAIR);
+			relocs.push_back(reloc1);
+			relocs.push_back(reloc2);
+			break;
+
+		case ld::Fixup::kindStorePPCPicLow14:
+		case ld::Fixup::kindStorePPCPicLow16:
+			fromAddr = entry.fromTarget->finalAddress() + entry.fromAddend;
+			toAddr = entry.toTarget->finalAddress() + entry.toAddend;
+			sreloc1->set_r_scattered(true);
+			sreloc1->set_r_pcrel(false);
+			sreloc1->set_r_length(2);
+			sreloc1->set_r_type(entry.kind == ld::Fixup::kindStorePPCPicLow16 ? PPC_RELOC_LO16_SECTDIFF : PPC_RELOC_LO14_SECTDIFF);
+			sreloc1->set_r_address(address);
+			sreloc1->set_r_value(entry.toTarget->finalAddress());
+			sreloc2->set_r_scattered(true);
+			sreloc2->set_r_pcrel(false);
+			sreloc2->set_r_length(2);
+			sreloc2->set_r_type(PPC_RELOC_PAIR);
+			sreloc2->set_r_address(((toAddr-fromAddr) >> 16) & 0xFFFF);
+			sreloc2->set_r_value(fromAddr);
+			relocs.push_back(reloc1);
+			relocs.push_back(reloc2);
+			break;
+
+		case ld::Fixup::kindStorePPCPicHigh16AddLow:
+			fromAddr = entry.fromTarget->finalAddress() + entry.fromAddend;
+			toAddr = entry.toTarget->finalAddress() + entry.toAddend;
+			sreloc1->set_r_scattered(true);
+			sreloc1->set_r_pcrel(false);
+			sreloc1->set_r_length(2);
+			sreloc1->set_r_type(PPC_RELOC_HA16_SECTDIFF);
+			sreloc1->set_r_address(address);
+			sreloc1->set_r_value(entry.toTarget->finalAddress());
+			sreloc2->set_r_scattered(true);
+			sreloc2->set_r_pcrel(false);
+			sreloc2->set_r_length(2);
+			sreloc2->set_r_type(PPC_RELOC_PAIR);
+			sreloc2->set_r_address((toAddr-fromAddr) & 0xFFFF);
+			sreloc2->set_r_value(fromAddr);
+			relocs.push_back(reloc1);
+			relocs.push_back(reloc2);
+			break;
+
+		default:
+			assert(0 && "need to handle -r reloc");
+
+	}
+}
+#endif
 
 template <typename A>
 void SectionRelocationsAtom<A>::addSectionReloc(ld::Internal::FinalSection*	sect, ld::Fixup::Kind kind, 

@@ -297,18 +297,21 @@ bool UnwindInfoAtom<x86_64>::encodingMeansUseDwarf(compact_unwind_encoding_t enc
 	return ((enc & UNWIND_X86_64_MODE_MASK) == UNWIND_X86_64_MODE_DWARF);
 }
 
+#if SUPPORT_ARCH_arm64
 template <>
 bool UnwindInfoAtom<arm64>::encodingMeansUseDwarf(compact_unwind_encoding_t enc)
 {
 	return ((enc & UNWIND_ARM64_MODE_MASK) == UNWIND_ARM64_MODE_DWARF);
 }
+#endif
 
+#if SUPPORT_ARCH_arm_any
 template <>
 bool UnwindInfoAtom<arm>::encodingMeansUseDwarf(compact_unwind_encoding_t enc)
 {
 	return ((enc & UNWIND_ARM_MODE_MASK) == UNWIND_ARM_MODE_DWARF);
 }
-
+#endif
 
 template <typename A>
 void UnwindInfoAtom<A>::compressDuplicates(const std::vector<UnwindEntry>& entries, std::vector<UnwindEntry>& uniqueEntries)
@@ -416,6 +419,7 @@ void UnwindInfoAtom<x86_64>::addCompressedAddressOffsetFixup(uint32_t offset, co
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k3of3, ld::Fixup::kindStoreLittleEndianLow24of32));
 }
 
+#if SUPPORT_ARCH_arm64
 template <>
 void UnwindInfoAtom<arm64>::addCompressedAddressOffsetFixup(uint32_t offset, const ld::Atom* func, const ld::Atom* fromFunc)
 {
@@ -423,7 +427,9 @@ void UnwindInfoAtom<arm64>::addCompressedAddressOffsetFixup(uint32_t offset, con
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k2of3, ld::Fixup::kindSubtractTargetAddress, fromFunc));
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k3of3, ld::Fixup::kindStoreLittleEndianLow24of32));
 }
+#endif
 
+#if SUPPORT_ARCH_arm_any
 template <>
 void UnwindInfoAtom<arm>::addCompressedAddressOffsetFixup(uint32_t offset, const ld::Atom* func, const ld::Atom* fromFunc)
 {
@@ -439,6 +445,7 @@ void UnwindInfoAtom<arm>::addCompressedAddressOffsetFixup(uint32_t offset, const
 		_fixups.push_back(ld::Fixup(offset, ld::Fixup::k3of3, ld::Fixup::kindStoreLittleEndianLow24of32));
 	}
 }
+#endif
 
 template <>
 void UnwindInfoAtom<x86>::addCompressedEncodingFixup(uint32_t offset, const ld::Atom* fde)
@@ -454,19 +461,23 @@ void UnwindInfoAtom<x86_64>::addCompressedEncodingFixup(uint32_t offset, const l
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k2of2, ld::Fixup::kindStoreLittleEndianLow24of32));
 }
 
+#if SUPPORT_ARCH_arm64
 template <>
 void UnwindInfoAtom<arm64>::addCompressedEncodingFixup(uint32_t offset, const ld::Atom* fde)
 {
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k1of2, ld::Fixup::kindSetTargetSectionOffset, fde));
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k2of2, ld::Fixup::kindStoreLittleEndianLow24of32));
 }
+#endif
 
+#if SUPPORT_ARCH_arm_any
 template <>
 void UnwindInfoAtom<arm>::addCompressedEncodingFixup(uint32_t offset, const ld::Atom* fde)
 {
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k1of2, ld::Fixup::kindSetTargetSectionOffset, fde));
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k2of2, ld::Fixup::kindStoreLittleEndianLow24of32));
 }
+#endif
 
 template <>
 void UnwindInfoAtom<x86>::addRegularAddressFixup(uint32_t offset, const ld::Atom* func)
@@ -482,19 +493,23 @@ void UnwindInfoAtom<x86_64>::addRegularAddressFixup(uint32_t offset, const ld::A
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k2of2, ld::Fixup::kindStoreLittleEndian32));
 }
 
+#if SUPPORT_ARCH_arm64
 template <>
 void UnwindInfoAtom<arm64>::addRegularAddressFixup(uint32_t offset, const ld::Atom* func)
 {
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k1of2, ld::Fixup::kindSetTargetImageOffset, func));
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k2of2, ld::Fixup::kindStoreLittleEndian32));
 }
+#endif
 
+#if SUPPORT_ARCH_arm_any
 template <>
 void UnwindInfoAtom<arm>::addRegularAddressFixup(uint32_t offset, const ld::Atom* func)
 {
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k1of2, ld::Fixup::kindSetTargetImageOffset, func));
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k2of2, ld::Fixup::kindStoreLittleEndian32));
 }
+#endif
 
 template <>
 void UnwindInfoAtom<x86>::addRegularFDEOffsetFixup(uint32_t offset, const ld::Atom* fde)
@@ -510,19 +525,23 @@ void UnwindInfoAtom<x86_64>::addRegularFDEOffsetFixup(uint32_t offset, const ld:
 	_fixups.push_back(ld::Fixup(offset+4, ld::Fixup::k2of2, ld::Fixup::kindStoreLittleEndianLow24of32));
 }
 
+#if SUPPORT_ARCH_arm64
 template <>
 void UnwindInfoAtom<arm64>::addRegularFDEOffsetFixup(uint32_t offset, const ld::Atom* fde)
 {
 	_fixups.push_back(ld::Fixup(offset+4, ld::Fixup::k1of2, ld::Fixup::kindSetTargetSectionOffset, fde));
 	_fixups.push_back(ld::Fixup(offset+4, ld::Fixup::k2of2, ld::Fixup::kindStoreLittleEndianLow24of32));
 }
+#endif
 
+#if SUPPORT_ARCH_arm_any
 template <>
 void UnwindInfoAtom<arm>::addRegularFDEOffsetFixup(uint32_t offset, const ld::Atom* fde)
 {
 	_fixups.push_back(ld::Fixup(offset+4, ld::Fixup::k1of2, ld::Fixup::kindSetTargetSectionOffset, fde));
 	_fixups.push_back(ld::Fixup(offset+4, ld::Fixup::k2of2, ld::Fixup::kindStoreLittleEndianLow24of32));
 }
+#endif
 
 template <>
 void UnwindInfoAtom<x86>::addImageOffsetFixup(uint32_t offset, const ld::Atom* targ)
@@ -538,19 +557,23 @@ void UnwindInfoAtom<x86_64>::addImageOffsetFixup(uint32_t offset, const ld::Atom
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k2of2, ld::Fixup::kindStoreLittleEndian32));
 }
 
+#if SUPPORT_ARCH_arm64
 template <>
 void UnwindInfoAtom<arm64>::addImageOffsetFixup(uint32_t offset, const ld::Atom* targ)
 {
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k1of2, ld::Fixup::kindSetTargetImageOffset, targ));
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k2of2, ld::Fixup::kindStoreLittleEndian32));
 }
+#endif
 
+#if SUPPORT_ARCH_arm_any
 template <>
 void UnwindInfoAtom<arm>::addImageOffsetFixup(uint32_t offset, const ld::Atom* targ)
 {
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k1of2, ld::Fixup::kindSetTargetImageOffset, targ));
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k2of2, ld::Fixup::kindStoreLittleEndian32));
 }
+#endif
 
 template <>
 void UnwindInfoAtom<x86>::addImageOffsetFixupPlusAddend(uint32_t offset, const ld::Atom* targ, uint32_t addend)
@@ -568,6 +591,7 @@ void UnwindInfoAtom<x86_64>::addImageOffsetFixupPlusAddend(uint32_t offset, cons
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k3of3, ld::Fixup::kindStoreLittleEndian32));
 }
 
+#if SUPPORT_ARCH_arm64
 template <>
 void UnwindInfoAtom<arm64>::addImageOffsetFixupPlusAddend(uint32_t offset, const ld::Atom* targ, uint32_t addend)
 {
@@ -575,7 +599,9 @@ void UnwindInfoAtom<arm64>::addImageOffsetFixupPlusAddend(uint32_t offset, const
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k2of3, ld::Fixup::kindAddAddend, addend));
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k3of3, ld::Fixup::kindStoreLittleEndian32));
 }
+#endif
 
+#if SUPPORT_ARCH_arm_any
 template <>
 void UnwindInfoAtom<arm>::addImageOffsetFixupPlusAddend(uint32_t offset, const ld::Atom* targ, uint32_t addend)
 {
@@ -583,7 +609,7 @@ void UnwindInfoAtom<arm>::addImageOffsetFixupPlusAddend(uint32_t offset, const l
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k2of3, ld::Fixup::kindAddAddend, addend));
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k3of3, ld::Fixup::kindStoreLittleEndian32));
 }
-
+#endif
 
 
 
@@ -956,8 +982,10 @@ template <> ld::Fixup::Kind CompactUnwindAtom<x86_64>::_s_pointerStoreKind = ld:
 template <> ld::Fixup::Kind CompactUnwindAtom<arm64>::_s_pointerKind = ld::Fixup::kindStoreLittleEndian64;
 template <> ld::Fixup::Kind CompactUnwindAtom<arm64>::_s_pointerStoreKind = ld::Fixup::kindStoreTargetAddressLittleEndian64;
 #endif
+#if SUPPORT_ARCH_arm_any
 template <> ld::Fixup::Kind CompactUnwindAtom<arm>::_s_pointerKind = ld::Fixup::kindStoreLittleEndian32;
 template <> ld::Fixup::Kind CompactUnwindAtom<arm>::_s_pointerStoreKind = ld::Fixup::kindStoreTargetAddressLittleEndian32;
+#endif
 
 template <typename A>
 CompactUnwindAtom<A>::CompactUnwindAtom(ld::Internal& state,const ld::Atom* funcAtom, uint32_t startOffset,
@@ -1019,9 +1047,11 @@ static void makeCompactUnwindAtom(const Options& opts, ld::Internal& state, cons
 			state.addAtom(*new CompactUnwindAtom<arm64>(state, atom, startOffset, endOffset-startOffset, cui));
 			break;
 #endif
+#if SUPPORT_ARCH_arm_any
 		case CPU_TYPE_ARM:
 			state.addAtom(*new CompactUnwindAtom<arm>(state, atom, startOffset, endOffset-startOffset, cui));
 			break;
+#endif
 	}
 }
 

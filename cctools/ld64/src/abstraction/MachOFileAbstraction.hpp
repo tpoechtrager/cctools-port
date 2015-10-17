@@ -30,6 +30,7 @@
 #include <mach-o/fat.h>
 #include <mach-o/stab.h>
 #include <mach-o/reloc.h>
+#include <mach-o/ppc/reloc.h>
 #include <mach-o/x86_64/reloc.h>
 #include <mach-o/compact_unwind_encoding.h>
 #include <mach/machine.h>
@@ -541,6 +542,28 @@ static const ArchInfo archInfoArray[] = {
 #endif
 #if SUPPORT_ARCH_arm64v8
 	{ "arm64v8", CPU_TYPE_ARM64, CPU_SUBTYPE_ARM64_V8,   "arm64v8-",  "aarch64-",   true,  false },
+#endif
+#if SUPPORT_ARCH_ppc
+	{ "ppc", CPU_TYPE_POWERPC,	CPU_SUBTYPE_POWERPC_ALL,	"ppc-", "", false,  false },
+#endif
+#if SUPPORT_ARCH_ppc750
+	{ "ppc750", CPU_TYPE_POWERPC,	CPU_SUBTYPE_POWERPC_750,	"ppc750-", "", true,  false },
+	#define SUPPORT_ARCH_ppc 1
+#endif
+#if SUPPORT_ARCH_ppc7400
+	{ "ppc7400", CPU_TYPE_POWERPC,	CPU_SUBTYPE_POWERPC_7400,	"ppc7400-", "", true,  false },
+	#define SUPPORT_ARCH_ppc 1
+#endif
+#if SUPPORT_ARCH_ppc7450
+	{ "ppc7450", CPU_TYPE_POWERPC,	CPU_SUBTYPE_POWERPC_7450,	"ppc7450-", "", true,  false },
+	#define SUPPORT_ARCH_ppc 1
+#endif
+#if SUPPORT_ARCH_ppc970
+	{ "ppc970", CPU_TYPE_POWERPC,	CPU_SUBTYPE_POWERPC_970,	"ppc970-", "", true,  false },
+	#define SUPPORT_ARCH_ppc 1
+#endif
+#if SUPPORT_ARCH_ppc64
+	{ "ppc64", CPU_TYPE_POWERPC64,	CPU_SUBTYPE_POWERPC_ALL,	"ppc64-", "", false,  false },
 #endif
 	{ NULL, 0, 0, NULL, NULL, false, false }
 };
