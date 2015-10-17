@@ -4324,7 +4324,7 @@ void CFISection<x86>::cfiParse(class Parser<x86>& parser, uint8_t* buffer,
 // need to change libunwind parseCFIs() to work for ppc
 template <>
 void CFISection<ppc>::cfiParse(class Parser<ppc>& parser, uint8_t* buffer,
-	libunwind::CFI_Atom_Info<CFISection<ppc>::OAS>::CFI_Atom_Info cfiArray[],
+	libunwind::CFI_Atom_Info<CFISection<ppc>::OAS> cfiArray[], // ld64-port: removed superfluous ::CFI_Atom_Info
 	uint32_t& count, const pint_t cuStarts[], uint32_t cuCount)
 {
 	// create ObjectAddressSpace object for use by libunwind
@@ -4344,7 +4344,7 @@ void CFISection<ppc>::cfiParse(class Parser<ppc>& parser, uint8_t* buffer,
 #if SUPPORT_ARCH_ppc64
 template <>
 void CFISection<ppc64>::cfiParse(class Parser<ppc64>& parser, uint8_t* buffer,
-	libunwind::CFI_Atom_Info<CFISection<ppc64>::OAS>::CFI_Atom_Info cfiArray[],
+	libunwind::CFI_Atom_Info<CFISection<ppc64>::OAS> cfiArray[], // ld64-port: removed superfluous ::CFI_Atom_Info
 	uint32_t& count, const pint_t cuStarts[], uint32_t cuCount)
 {
 	// libunwind does not support ppc64
