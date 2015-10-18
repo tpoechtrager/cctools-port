@@ -30,6 +30,7 @@
         <File Name="ld64/src/ld/passes/stubs/stub_x86_64_classic.hpp"/>
         <File Name="ld64/src/ld/passes/stubs/stub_arm64.hpp"/>
         <File Name="ld64/src/ld/passes/stubs/stub_x86_classic.hpp"/>
+        <File Name="ld64/src/ld/passes/stubs/stub_ppc_classic.hpp"/>
       </VirtualDirectory>
       <File Name="ld64/src/ld/passes/tlvp.h"/>
       <File Name="ld64/src/ld/passes/order.h"/>
