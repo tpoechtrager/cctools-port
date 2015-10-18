@@ -639,6 +639,20 @@ bool Options::armUsesZeroCostExceptions() const
 
 void Options::parseArch(const char* arch)
 {
+	// ld64-port start
+	if ( strcmp(arch, "powerpc") == 0 )
+		arch = "ppc";
+	else if ( strcmp(arch, "powerpc750") == 0 )
+		arch = "ppc750";
+	else if ( strcmp(arch, "powerpc7400") == 0 )
+		arch = "ppc7400";
+	else if ( strcmp(arch, "powerpc7450") == 0 )
+		arch = "ppc7450";
+	else if ( strcmp(arch, "powerpc970") == 0 )
+		arch = "ppc970";
+	else if ( strcmp(arch, "powerpc64") == 0 )
+		arch = "ppc64";
+	// ld64-port end
 	if ( arch == NULL )
 		throw "-arch must be followed by an architecture string";
 	for (const ArchInfo* t=archInfoArray; t->archName != NULL; ++t) {

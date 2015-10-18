@@ -154,6 +154,20 @@ char **envp)
 			    if(arch_name != NULL)
 				fatal("more than one %s option (not allowed, "
 				      "use cc(1) instead)", argv[i]);
+			    // cctools-port start
+			    if (strcmp(argv[i+1],"powerpc") == 0)
+				argv[i+1] = "ppc";
+			    else if (strcmp(argv[i+1], "powerpc750") == 0)
+				argv[i+1] = "ppc750";
+			    else if (strcmp(argv[i+1], "powerpc7400") == 0)
+				argv[i+1] = "ppc7400";
+			    else if (strcmp(argv[i+1], "powerpc7450") == 0)
+				argv[i+1] = "ppc7450";
+			    else if (strcmp(argv[i+1], "powerpc970") == 0)
+				argv[i+1] = "ppc970";
+			    else if (strcmp(argv[i+1], "powerpc64") == 0)
+				argv[i+1] = "ppc64";
+			    // cctools-port end
 			    arch_name = argv[i+1];
 			    p = " "; /* Finished with this arg. */
 			    i++;
