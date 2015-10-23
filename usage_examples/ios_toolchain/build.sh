@@ -98,10 +98,8 @@ echo ""
 rm -rf tmp
 mkdir -p tmp
 pushd tmp &>/dev/null
-git clone git://git.saurik.com/ldid.git
+git clone https://github.com/tpoechtrager/ldid.git
 pushd ldid &>/dev/null
-git clone git://git.saurik.com/minimal.git
-cp ../../LDID.Makefile Makefile
 make INSTALLPREFIX=$TARGETDIR -j4 install
 popd &>/dev/null
 popd &>/dev/null
