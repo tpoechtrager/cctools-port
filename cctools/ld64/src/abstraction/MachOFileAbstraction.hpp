@@ -426,10 +426,17 @@
 	#define LOH_ARM64_ADRP_LDR_GOT			8
 #endif
 
+#ifndef LC_VERSION_MIN_TVOS
+	#define LC_VERSION_MIN_TVOS			0x2F
+#endif
+
+#ifndef LC_VERSION_MIN_WATCHOS
+	#define LC_VERSION_MIN_WATCHOS		0x30
+#endif
+
 #ifndef EXPORT_SYMBOL_FLAGS_KIND_ABSOLUTE
 	#define EXPORT_SYMBOL_FLAGS_KIND_ABSOLUTE			0x02
 #endif
-
 
 #ifndef CPU_SUBTYPE_ARM_V8
 	#define CPU_SUBTYPE_ARM_V8		((cpu_subtype_t) 13) 
@@ -471,6 +478,40 @@
 #define UNWIND_ARM_FRAME_D_REG_COUNT_MASK             0x00000F00
  
 #define UNWIND_ARM_DWARF_SECTION_OFFSET               0x00FFFFFF
+
+
+// ( <opcode> (delta-uleb128)+ <zero> )+ <zero>
+#define DYLD_CACHE_ADJ_V1_POINTER_32		0x01
+#define DYLD_CACHE_ADJ_V1_POINTER_64		0x02
+#define DYLD_CACHE_ADJ_V1_ADRP				0x03
+#define DYLD_CACHE_ADJ_V1_ARM_THUMB_MOVT	0x10 // thru 0x1F
+#define DYLD_CACHE_ADJ_V1_ARM_MOVT			0x20 // thru 0x2F
+
+
+// Whole		 :== <new-marker> <count> FromToSection+
+// FromToSection :== <from-sect-index> <to-sect-index> <count> ToOffset+
+// ToOffset		 :== <to-sect-offset-delta> <count> FromOffset+
+// FromOffset	 :== <kind> <count> <from-sect-offset-delta>
+#define DYLD_CACHE_ADJ_V2_FORMAT				0x7F
+
+#define DYLD_CACHE_ADJ_V2_POINTER_32			0x01
+#define DYLD_CACHE_ADJ_V2_POINTER_64			0x02
+#define DYLD_CACHE_ADJ_V2_DELTA_32			    0x03
+#define DYLD_CACHE_ADJ_V2_DELTA_64			    0x04
+#define DYLD_CACHE_ADJ_V2_ARM64_ADRP			0x05
+#define DYLD_CACHE_ADJ_V2_ARM64_OFF12			0x06
+#define DYLD_CACHE_ADJ_V2_ARM64_BR26			0x07
+#define DYLD_CACHE_ADJ_V2_ARM_MOVW_MOVT			0x08
+#define DYLD_CACHE_ADJ_V2_ARM_BR24				0x09
+#define DYLD_CACHE_ADJ_V2_THUMB_MOVW_MOVT		0x0A
+#define DYLD_CACHE_ADJ_V2_THUMB_BR22			0x0B
+#define DYLD_CACHE_ADJ_V2_IMAGE_OFF_32			0x0C
+
+
+
+// kind target-address fixup-addr [adj] 
+
+
 
 struct ArchInfo {
 	const char*			archName;

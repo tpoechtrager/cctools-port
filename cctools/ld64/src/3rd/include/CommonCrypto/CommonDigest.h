@@ -15,10 +15,10 @@ static int CC_MD5_Init(CC_MD5_CTX *c) {
     return 1;
 }
 
-static int CC_MD5_Update(CC_MD5_CTX *c, const unsigned char *data,
+static int CC_MD5_Update(CC_MD5_CTX *c, const void *data,
                          unsigned long nbytes) {
     assert(nbytes <= 0x7fffffff && "would overflow");
-    md5_append(c, data, nbytes);
+    md5_append(c, (const unsigned char*)data, nbytes);
     return 1;
 }
 
@@ -28,8 +28,8 @@ static int CC_MD5_Final(unsigned char digest[CC_MD5_DIGEST_LENGTH],
     return 1;
 }
 
-static unsigned char *CC_MD5(const unsigned char *data,
-                             unsigned long nbytes, unsigned char *md) {
+static unsigned char *CC_MD5(const void *data, unsigned long nbytes,
+                             unsigned char *md) {
     static unsigned char smd[CC_MD5_DIGEST_LENGTH];
 
     if (!md)

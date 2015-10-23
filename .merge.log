@@ -1,4 +1,80 @@
-## ld64-242 -> ld64-242.2 ##
+## ld64 242.2 -> ld64 253.3 ##
+
+patching file ./doc/man/man1/ld.1
+can't find file to patch at input line 78
+Perhaps you used the wrong -p or --strip option?
+The text leading up to this was:
+--------------------------
+|diff -Naur '--exclude=unit-tests' ../ld64-242.2/ld64.xcodeproj/project.pbxproj ./ld64.xcodeproj/project.pbxproj
+|--- ../ld64-242.2/ld64.xcodeproj/project.pbxproj       2014-08-20 00:19:03.000000000 +0200
+|+++ ./ld64.xcodeproj/project.pbxproj   2015-05-20 08:11:58.000000000 +0200
+--------------------------
+File to patch: 
+Skip this patch? [y] 
+Skipping patch.
+22 out of 22 hunks ignored
+patching file ./src/abstraction/MachOFileAbstraction.hpp
+patching file ./src/create_configure
+patching file ./src/ld/Bitcode.hpp
+patching file ./src/ld/HeaderAndLoadCommands.hpp
+patching file ./src/ld/InputFiles.cpp
+Hunk #3 merged at 334.
+Hunk #10 merged at 858, NOT MERGED at 861-870.
+patching file ./src/ld/LinkEdit.hpp
+patching file ./src/ld/LinkEditClassic.hpp
+patching file ./src/ld/Options.cpp
+Hunk #1 merged at 39-40, NOT MERGED at 47-54.
+Hunk #18 NOT MERGED at 1958-1962.
+patching file ./src/ld/Options.h
+Hunk #13 merged at 481.
+patching file ./src/ld/OutputFile.cpp
+patching file ./src/ld/OutputFile.h
+patching file ./src/ld/Resolver.cpp
+patching file ./src/ld/Resolver.h
+patching file ./src/ld/SymbolTable.cpp
+patching file ./src/ld/SymbolTable.h
+patching file ./src/ld/code-sign-blobs/memutils.h
+Hunk #1 NOT MERGED at 56-66.
+patching file ./src/ld/ld.cpp
+patching file ./src/ld/ld.hpp
+Hunk #1 merged at 35-36,38,45-47.
+The next patch would delete the file ./src/ld/lto_file.hpp,
+which does not exist!  Assume -R? [n] 
+Apply anyway? [n] 
+Skipping patch.
+1 out of 1 hunk ignored
+patching file ./src/ld/parsers/lto_file.cpp
+Hunk #1 merged at 39.
+Hunk #9 NOT MERGED at 551-558.
+patching file ./src/ld/parsers/lto_file.h
+patching file ./src/ld/parsers/macho_dylib_file.cpp
+patching file ./src/ld/parsers/macho_relocatable_file.cpp
+Hunk #1 merged at 45,51.
+patching file ./src/ld/parsers/macho_relocatable_file.h
+patching file ./src/ld/parsers/opaque_section_file.cpp
+patching file ./src/ld/parsers/textstub_dylib_file.cpp
+patching file ./src/ld/parsers/textstub_dylib_file.hpp
+patching file ./src/ld/passes/bitcode_bundle.cpp
+patching file ./src/ld/passes/bitcode_bundle.h
+patching file ./src/ld/passes/branch_island.cpp
+Hunk #1 NOT MERGED at 555-559.
+patching file ./src/ld/passes/branch_shim.cpp
+patching file ./src/ld/passes/dylibs.cpp
+patching file ./src/ld/passes/got.cpp
+patching file ./src/ld/passes/huge.cpp
+patching file ./src/ld/passes/objc.cpp
+patching file ./src/ld/passes/order.cpp
+patching file ./src/ld/passes/stubs/stub_arm.hpp
+patching file ./src/ld/passes/stubs/stub_arm64.hpp
+patching file ./src/ld/passes/stubs/stubs.cpp
+patching file ./src/ld/passes/tlvp.cpp
+patching file ./src/other/ObjectDump.cpp
+patching file ./src/other/dyldinfo.cpp
+Hunk #10 NOT MERGED at 1892-1895.
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+## ld64 242 -> ld64 242.2 ##
 
 patching file ./src/ld/passes/branch_island.cpp
 patching file ./src/ld/passes/compact_unwind.cpp
@@ -15,6 +91,8 @@ File to patch:
 Skip this patch? [y] 
 Skipping patch.
 1 out of 1 hunk ignored
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 ## cctools 862 -> 870 ##
 
@@ -83,7 +161,7 @@ patching file ./otool/otool.h
 patching file ./otool/print_objc2_32bit.c
 patching file ./otool/print_objc2_64bit.c
 
-## ld64-241.9 -> ld64-242 ##
+## ld64 241.9 -> ld64 242 ##
 
 can't find file to patch at input line 4
 Perhaps you used the wrong -p or --strip option?

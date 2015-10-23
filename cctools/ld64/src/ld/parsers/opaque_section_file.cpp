@@ -24,6 +24,7 @@
 
 
 #include <vector>
+#include <map>
 
 #include "ld.hpp"
 #include "opaque_section_file.h"
@@ -63,7 +64,7 @@ public:
 									const char* symbolName="sect_create")
 									: ld::File(pth, 0, ld::File::Ordinal::NullOrdinal(), Other),
 									  _atom(*this, symbolName, fileContent, fileLength), 
-									  _section(segmentName, sectionName, ld::Section::typeUnclassified) { }
+									  _section(segmentName, sectionName, ld::Section::typeSectCreate) { }
 	virtual						~File() { }
 	
 	virtual bool				forEachAtom(ld::File::AtomHandler& h) const { h.doAtom(_atom); return true; }

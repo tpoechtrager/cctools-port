@@ -48,6 +48,7 @@ struct OptimizeOptions {
 	bool								preserveAllGlobals;
 	bool								verbose; 
 	bool								saveTemps; 
+	bool								ltoCodegenOnly;
 	bool								pie; 
 	bool								mainExecutable; 
 	bool								staticExecutable; 
@@ -58,8 +59,12 @@ struct OptimizeOptions {
 	bool								keepDwarfUnwind; 
 	bool								verboseOptimizationHints;
 	bool								armUsesZeroCostExceptions;
+	bool								simulator;
+	bool								ignoreMismatchPlatform;
+	bool								bitcodeBundle;
 	cpu_type_t							arch;
 	const char*							mcpu;
+	Options::Platform					platform;
 	const std::vector<const char*>*		llvmOptions;
 	const std::vector<const char*>*		initialUndefines;
 };

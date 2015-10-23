@@ -1614,9 +1614,17 @@ void SectionRelocationsAtom<arm>::encodeSectionReloc(ld::Internal::FinalSection*
 			{
 				int len = 0;
 				uint32_t otherHalf = 0;
-				uint32_t value = entry.toTarget->finalAddress()+entry.toAddend;
-				if ( entry.fromTarget != NULL ) 
-					value -= (entry.fromTarget->finalAddress()+entry.fromAddend);
+				uint32_t value;
+				if ( entry.fromTarget != NULL )  {
+				  // this is a sect-diff
+				  value = (entry.toTarget->finalAddress()+entry.toAddend) - (entry.fromTarget->finalAddress()+entry.fromAddend);
+				}
+				else {
+					// this is an absolute address
+					value = entry.toAddend;
+					if ( !external )
+						value += entry.toTarget->finalAddress();
+				}
 				switch ( entry.kind ) {
 					case ld::Fixup::kindStoreARMLow16:
 						len = 0;

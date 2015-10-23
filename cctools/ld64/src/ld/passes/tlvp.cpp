@@ -48,7 +48,7 @@ public:
 							symbolTableNotIn, false, false, false, ld::Atom::Alignment(3)), 
 				_fixup(0, ld::Fixup::k1of1, ld::Fixup::kindStoreTargetAddressLittleEndian64, target),
 				_target(target)
-					{ _fixup.weakImport = weakImport; internal.addAtom(*this); }
+					{	_fixup.weakImport = weakImport; internal.addAtom(*this); }
 
 	virtual const ld::File*					file() const					{ return NULL; }
 	virtual const char*						name() const					{ return _target->name(); }
@@ -236,7 +236,7 @@ void doPass(const Options& opts, ld::Internal& internal)
 					break;
 #if SUPPORT_ARCH_arm64
 				case ld::Fixup::kindStoreTargetAddressARM64TLVPLoadPage21:
-					it->fixupWithTLVStore->kind = ld::Fixup::kindStoreARM64TLVPLoadNowLeaPage21;
+					it->fixupWithTLVStore->kind = ld::Fixup::kindStoreTargetAddressARM64TLVPLoadNowLeaPage21;
 					break;
 				case ld::Fixup::kindStoreTargetAddressARM64TLVPLoadPageOff12:
 					it->fixupWithTLVStore->kind = ld::Fixup::kindStoreTargetAddressARM64TLVPLoadNowLeaPageOff12;
@@ -265,6 +265,9 @@ void doPass(const Options& opts, ld::Internal& internal)
 			continue;
 		for (std::vector<const ld::Atom*>::iterator ait=sect->atoms.begin();  ait != sect->atoms.end(); ++ait) {
 			const ld::Atom* atom = *ait;
+			if ( ! opts.canUseThreadLocalVariables() ) {
+				throwf("targeted OS version does not support use of thread local variables in %s", atom->name());
+			}
 			for (ld::Fixup::iterator fit = atom->fixupsBegin(), end=atom->fixupsEnd(); fit != end; ++fit) {
 				if ( fit->offsetInAtom != 0 ) {
 					assert(fit->binding == ld::Fixup::bindingDirectlyBound && "thread variable def contains pointer to global");

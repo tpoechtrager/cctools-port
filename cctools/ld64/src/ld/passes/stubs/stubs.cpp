@@ -164,16 +164,17 @@ const ld::Atom* Pass::stubableFixup(const ld::Fixup* fixup, ld::Internal& state)
 
 ld::Atom* Pass::makeStub(const ld::Atom& target, bool weakImport)
 {
-	//fprintf(stderr, "makeStub(target=%p %s in sect %s)\n", &target, target.name(), target.section().sectionName());
-	bool stubToGlobalWeakDef = ( (target.scope() == ld::Atom::scopeGlobal)
-								&& (target.definition() == ld::Atom::definitionRegular) 
-								&& (target.combine() == ld::Atom::combineByName) );
+	//fprintf(stderr, "makeStub(target=%p %s in sect %s, def=%d)\n", &target, target.name(), target.section().sectionName(), target.definition());
+	bool stubToGlobalWeakDef = ( (target.combine() == ld::Atom::combineByName) &&
+								 (((target.definition() == ld::Atom::definitionRegular) && (target.scope() == ld::Atom::scopeGlobal))
+								  || (target.definition() == ld::Atom::definitionProxy)) );
 
 	bool forLazyDylib = false;
 	const ld::dylib::File* dylib = dynamic_cast<const ld::dylib::File*>(target.file());
 	if ( (dylib != NULL) && dylib->willBeLazyLoadedDylib() ) 
 		forLazyDylib = true;
 	bool stubToResolver = (target.contentType() == ld::Atom::typeResolver);
+	bool usingDataConst =  _options.useDataConstSegment();
 	
 	if ( usingCompressedLINKEDIT() && !forLazyDylib ) {
 		if ( _internal->compressedFastBinderProxy == NULL )
@@ -209,7 +210,7 @@ ld::Atom* Pass::makeStub(const ld::Atom& target, bool weakImport)
 				if ( (_stubCount < 900) && !_mightBeInSharedRegion && !_largeText )
 					return new ld::passes::stubs::arm::StubCloseAtom(*this, target, stubToGlobalWeakDef, stubToResolver, weakImport);
 				else if ( _pic )
-					return new ld::passes::stubs::arm::StubPICAtom(*this, target, stubToGlobalWeakDef, stubToResolver, weakImport);
+					return new ld::passes::stubs::arm::StubPICAtom(*this, target, stubToGlobalWeakDef, stubToResolver, weakImport, usingDataConst);
 				else
 					return new ld::passes::stubs::arm::StubNoPICAtom(*this, target, stubToGlobalWeakDef, stubToResolver, weakImport);
 			} 
@@ -226,7 +227,7 @@ ld::Atom* Pass::makeStub(const ld::Atom& target, bool weakImport)
 			if ( (_options.outputKind() == Options::kKextBundle) && _options.kextsUseStubs() ) 
 				return new ld::passes::stubs::arm64::KextStubAtom(*this, target);
 			else
-				return new ld::passes::stubs::arm64::StubAtom(*this, target, stubToGlobalWeakDef, stubToResolver, weakImport);
+				return new ld::passes::stubs::arm64::StubAtom(*this, target, stubToGlobalWeakDef, stubToResolver, weakImport, usingDataConst);
 			break;
 #endif
 	}

@@ -41,7 +41,12 @@ struct ParserOptions {
 	bool			neverConvertDwarf;
 	bool			verboseOptimizationHints;
 	bool			armUsesZeroCostExceptions;
+	bool			simulator;
+	bool			ignoreMismatchPlatform;
 	uint32_t		subType;
+	Options::Platform platform;
+	uint32_t		minOSVersion;
+	ld::relocatable::File::SourceKind	srcKind;
 };
 
 extern ld::relocatable::File* parse(const uint8_t* fileContent, uint64_t fileLength, 
@@ -50,13 +55,15 @@ extern ld::relocatable::File* parse(const uint8_t* fileContent, uint64_t fileLen
 									
 extern bool isObjectFile(const uint8_t* fileContent, uint64_t fileLength, const ParserOptions& opts);
 
-extern bool isObjectFile(const uint8_t* fileContent, cpu_type_t* result, cpu_subtype_t* subResult);					
+extern bool isObjectFile(const uint8_t* fileContent, cpu_type_t* result, cpu_subtype_t* subResult, Options::Platform* platform);
 
 extern bool hasObjC2Categories(const uint8_t* fileContent);					
 
 extern bool hasObjC1Categories(const uint8_t* fileContent);
 
-extern const char* archName(const uint8_t* fileContent);					
+extern const char* archName(const uint8_t* fileContent);
+
+bool getNonLocalSymbols(const uint8_t* fileContent, std::vector<const char*> &syms);
 
 } // namespace relocatable
 } // namespace mach_o

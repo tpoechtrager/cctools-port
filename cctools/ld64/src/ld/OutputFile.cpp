@@ -53,6 +53,7 @@
 #include <list>
 #include <algorithm>
 #include <unordered_set>
+#include <utility>
 
 #include <CommonCrypto/CommonDigest.h>
 #include <AvailabilityMacros.h>
@@ -66,7 +67,6 @@
 #include "HeaderAndLoadCommands.hpp"
 #include "LinkEdit.hpp"
 #include "LinkEditClassic.hpp"
-
 
 namespace ld {
 namespace tool {
@@ -84,7 +84,7 @@ OutputFile::OutputFile(const Options& opts)
 		rebaseSection(NULL), bindingSection(NULL), weakBindingSection(NULL), 
 		lazyBindingSection(NULL), exportSection(NULL), 
 		splitSegInfoSection(NULL), functionStartsSection(NULL), 
-		dataInCodeSection(NULL), optimizationHintsSection(NULL), dependentDRsSection(NULL), 
+		dataInCodeSection(NULL), optimizationHintsSection(NULL),
 		symbolTableSection(NULL), stringPoolSection(NULL), 
 		localRelocationsSection(NULL), externalRelocationsSection(NULL), 
 		sectionRelocationsSection(NULL), 
@@ -96,7 +96,6 @@ OutputFile::OutputFile(const Options& opts)
 		_hasSplitSegInfo(opts.sharedRegionEligible()),
 		_hasFunctionStartsInfo(opts.addFunctionStarts()),
 		_hasDataInCodeInfo(opts.addDataInCodeInfo()),
-		_hasDependentDRInfo(opts.needsDependentDRInfo()),
 		_hasDynamicSymbolTable(true),
 		_hasLocalRelocations(!opts.makeCompressedDyldInfo()),
 		_hasExternalRelocations(!opts.makeCompressedDyldInfo()),
@@ -122,7 +121,6 @@ OutputFile::OutputFile(const Options& opts)
 		_splitSegInfoAtom(NULL),
 		_functionStartsAtom(NULL),
 		_dataInCodeAtom(NULL),
-		_dependentDRInfoAtom(NULL),
 		_optimizationHintsAtom(NULL)
 {
 }
@@ -158,7 +156,10 @@ void OutputFile::write(ld::Internal& state)
 	this->synthesizeDebugNotes(state);
 	this->buildSymbolTable(state);
 	this->generateLinkEditInfo(state);
-	this->makeSplitSegInfo(state);
+	if ( _options.sharedRegionEncodingV2() )
+		this->makeSplitSegInfoV2(state);
+	else
+		this->makeSplitSegInfo(state);
 	this->updateLINKEDITAddresses(state);
 	//this->dumpAtomsBySection(state, false);
 	this->writeOutputFile(state);
@@ -269,13 +270,7 @@ void OutputFile::updateLINKEDITAddresses(ld::Internal& state)
 		_optimizationHintsAtom->encode();
 	}
 	
-	if ( _options.needsDependentDRInfo() ) {
-		// build dependent dylib DR info  
-		assert(_dependentDRInfoAtom != NULL);
-		_dependentDRInfoAtom->encode();
-	}
-
-	// build classic symbol table  
+	// build classic symbol table
 	assert(_symbolTableAtom != NULL);
 	_symbolTableAtom->encode();
 	assert(_indirectSymbolTableAtom != NULL);
@@ -1235,6 +1230,8 @@ static bool isPageKind(const ld::Fixup* fixup, bool mustBeGOT=false)
 			return !mustBeGOT;
 		case ld::Fixup::kindStoreTargetAddressARM64GOTLoadPage21:
 		case ld::Fixup::kindStoreTargetAddressARM64GOTLeaPage21:
+		case ld::Fixup::kindStoreTargetAddressARM64TLVPLoadPage21:
+		case ld::Fixup::kindStoreTargetAddressARM64TLVPLoadNowLeaPage21:
 			return true;
 		case ld::Fixup::kindSetTargetAddress:
 			f = fixup;
@@ -1246,6 +1243,8 @@ static bool isPageKind(const ld::Fixup* fixup, bool mustBeGOT=false)
 					return !mustBeGOT;
 				case ld::Fixup::kindStoreARM64GOTLoadPage21:
 				case ld::Fixup::kindStoreARM64GOTLeaPage21:
+				case ld::Fixup::kindStoreARM64TLVPLoadPage21:
+				case ld::Fixup::kindStoreARM64TLVPLoadNowLeaPage21:
 					return true;
 				default:
 					break;
@@ -1267,6 +1266,8 @@ static bool isPageOffsetKind(const ld::Fixup* fixup, bool mustBeGOT=false)
 			return !mustBeGOT;
 		case ld::Fixup::kindStoreTargetAddressARM64GOTLoadPageOff12:
 		case ld::Fixup::kindStoreTargetAddressARM64GOTLeaPageOff12:
+		case ld::Fixup::kindStoreTargetAddressARM64TLVPLoadPageOff12:
+		case ld::Fixup::kindStoreTargetAddressARM64TLVPLoadNowLeaPageOff12:
 			return true;
 		case ld::Fixup::kindSetTargetAddress:
 			f = fixup;
@@ -1278,6 +1279,8 @@ static bool isPageOffsetKind(const ld::Fixup* fixup, bool mustBeGOT=false)
 					return !mustBeGOT;
 				case ld::Fixup::kindStoreARM64GOTLoadPageOff12:
 				case ld::Fixup::kindStoreARM64GOTLeaPageOff12:
+				case ld::Fixup::kindStoreARM64TLVPLoadPageOff12:
+				case ld::Fixup::kindStoreARM64TLVPLoadNowLeaPageOff12:
 					return true;
 				default:
 					break;
@@ -1296,7 +1299,6 @@ static bool isPageOffsetKind(const ld::Fixup* fixup, bool mustBeGOT=false)
 		warning("ignoring linker optimzation hint at %s+0x%X because " #cond, atom->name(), fit->offsetInAtom); \
 		break; \
 	} 
-
 
 void OutputFile::applyFixUps(ld::Internal& state, uint64_t mhAddress, const ld::Atom* atom, uint8_t* buffer)
 {
@@ -2100,10 +2102,25 @@ void OutputFile::applyFixUps(ld::Internal& state, uint64_t mhAddress, const ld::
 				setInfo(state, atom, buffer, usedByHints, fit->offsetInAtom, (alt.info.delta3 << 2), &infoC);
 			if ( alt.info.count > 2 )
 				setInfo(state, atom, buffer, usedByHints, fit->offsetInAtom, (alt.info.delta4 << 2), &infoD);
-				
+
+			if ( _options.sharedRegionEligible() ) {
+				if ( _options.sharedRegionEncodingV2() ) {
+					// In v2 format, all references might be move at dyld shared cache creation time
+					usableSegment = false;
+				}
+				else {
+					// In v1 format, only references to something in __TEXT segment could be optimized
+					usableSegment = (strcmp(atom->section().segmentName(), infoB.target->section().segmentName()) == 0);
+				}
+			}
+			else {
+				// main executables can optimize any reference
+				usableSegment = true;
+			}
+
 			switch ( alt.info.kind ) {
 				case LOH_ARM64_ADRP_ADRP:
-					// processed in pass 2 beacuse some ADRP may have been removed
+					// processed in pass 2 because some ADRP may have been removed
 					break;
 				case LOH_ARM64_ADRP_LDR:
 					LOH_ASSERT(alt.info.count == 1);
@@ -2111,10 +2128,12 @@ void OutputFile::applyFixUps(ld::Internal& state, uint64_t mhAddress, const ld::
 					LOH_ASSERT(isPageOffsetKind(infoB.fixup));
 					LOH_ASSERT(infoA.target == infoB.target);
 					LOH_ASSERT(infoA.targetAddress == infoB.targetAddress);
-					usableSegment = ( !_options.sharedRegionEligible() || (strcmp(atom->section().segmentName(), infoB.target->section().segmentName()) == 0) );
 					isADRP = parseADRP(infoA.instruction, adrpInfoA);
 					LOH_ASSERT(isADRP);
 					isLDR = parseLoadOrStore(infoB.instruction, ldrInfoB);
+					// silently ignore LDRs transformed to ADD by TLV pass
+					if ( !isLDR && infoB.fixup->kind == ld::Fixup::kindStoreTargetAddressARM64TLVPLoadNowLeaPageOff12 )
+						break;
 					LOH_ASSERT(isLDR);
 					LOH_ASSERT(ldrInfoB.baseReg == adrpInfoA.destReg);
 					LOH_ASSERT(ldrInfoB.offset == (infoA.targetAddress & 0x00000FFF));
@@ -2124,7 +2143,7 @@ void OutputFile::applyFixUps(ld::Internal& state, uint64_t mhAddress, const ld::
 						set32LE(infoA.instructionContent, makeNOP());
 						set32LE(infoB.instructionContent, makeLDR_literal(ldrInfoB, infoA.targetAddress, infoB.instructionAddress));
 						if ( _options.verboseOptimizationHints() )
-							fprintf(stderr, "adrp-ldr at 0x%08llX transformed to LDR literal\n", infoB.instructionAddress);
+							fprintf(stderr, "adrp-ldr at 0x%08llX transformed to LDR literal, usableSegment=%d usableSegment\n", infoB.instructionAddress, usableSegment);
 					}
 					else {
 						if ( _options.verboseOptimizationHints() )
@@ -2139,7 +2158,6 @@ void OutputFile::applyFixUps(ld::Internal& state, uint64_t mhAddress, const ld::
 					LOH_ASSERT(infoC.fixup == NULL);
 					LOH_ASSERT(infoA.target == infoB.target);
 					LOH_ASSERT(infoA.targetAddress == infoB.targetAddress);
-					usableSegment = ( !_options.sharedRegionEligible() || (strcmp(atom->section().segmentName(), infoB.target->section().segmentName()) == 0) );
 					isADRP = parseADRP(infoA.instruction, adrpInfoA);
 					LOH_ASSERT(isADRP);
 					isADD = parseADD(infoB.instruction, addInfoB);
@@ -2195,7 +2213,6 @@ void OutputFile::applyFixUps(ld::Internal& state, uint64_t mhAddress, const ld::
 					isADD = parseADD(infoB.instruction, addInfoB);
 					LOH_ASSERT(isADD);
 					LOH_ASSERT(adrpInfoA.destReg == addInfoB.srcReg);
-					usableSegment = ( !_options.sharedRegionEligible() || (strcmp(atom->section().segmentName(), infoB.target->section().segmentName()) == 0) );
 					if ( usableSegment && withinOneMeg(infoA.targetAddress, infoA.instructionAddress) ) {
 						// can do T4 transformation and use ADR 
 						set32LE(infoA.instructionContent, makeADR(addInfoB.destReg, infoA.targetAddress, infoA.instructionAddress));
@@ -2229,7 +2246,6 @@ void OutputFile::applyFixUps(ld::Internal& state, uint64_t mhAddress, const ld::
 						LOH_ASSERT(!ldrInfoB.isFloat);
 						LOH_ASSERT(ldrInfoC.baseReg == ldrInfoB.reg);
 						//fprintf(stderr, "infoA.target=%p, %s, infoA.targetAddress=0x%08llX\n", infoA.target, infoA.target->name(), infoA.targetAddress);
-						usableSegment = ( !_options.sharedRegionEligible() || (strcmp(atom->section().segmentName(), infoB.target->section().segmentName()) == 0) );
 						targetFourByteAligned = ( ((infoA.targetAddress) & 0x3) == 0 );
 						if ( usableSegment && targetFourByteAligned && withinOneMeg(infoB.instructionAddress, infoA.targetAddress) ) {
 							// can do T5 transform
@@ -2248,7 +2264,6 @@ void OutputFile::applyFixUps(ld::Internal& state, uint64_t mhAddress, const ld::
 						// target of GOT is in same linkage unit and B instruction was changed to ADD to compute LEA of target
 						LOH_ASSERT(addInfoB.srcReg == adrpInfoA.destReg);
 						LOH_ASSERT(addInfoB.destReg == ldrInfoC.baseReg);
-						usableSegment = ( !_options.sharedRegionEligible() || (strcmp(atom->section().segmentName(), infoB.target->section().segmentName()) == 0) );
 						targetFourByteAligned = ( ((infoA.targetAddress) & 0x3) == 0 );
 						literalableSize  = ( (ldrInfoC.size != 1) && (ldrInfoC.size != 2) );
 						if ( usableSegment && literalableSize && targetFourByteAligned && withinOneMeg(infoC.instructionAddress, infoA.targetAddress) ) {
@@ -2297,7 +2312,6 @@ void OutputFile::applyFixUps(ld::Internal& state, uint64_t mhAddress, const ld::
 					LOH_ASSERT(infoC.fixup == NULL);
 					LOH_ASSERT(infoA.target == infoB.target);
 					LOH_ASSERT(infoA.targetAddress == infoB.targetAddress);
-					usableSegment = ( !_options.sharedRegionEligible() || (strcmp(atom->section().segmentName(), infoB.target->section().segmentName()) == 0) );
 					isADRP = parseADRP(infoA.instruction, adrpInfoA);
 					LOH_ASSERT(isADRP);
 					isADD = parseADD(infoB.instruction, addInfoB);
@@ -2350,7 +2364,6 @@ void OutputFile::applyFixUps(ld::Internal& state, uint64_t mhAddress, const ld::
 						LOH_ASSERT(ldrInfoB.size == 8);
 						LOH_ASSERT(!ldrInfoB.isFloat);
 						LOH_ASSERT(ldrInfoC.baseReg == ldrInfoB.reg);
-						usableSegment = ( !_options.sharedRegionEligible() || (strcmp(atom->section().segmentName(), infoB.target->section().segmentName()) == 0) );
 						targetFourByteAligned = ( ((infoA.targetAddress) & 0x3) == 0 );
 						if ( usableSegment && targetFourByteAligned && withinOneMeg(infoB.instructionAddress, infoA.targetAddress) ) {
 							// can do T5 transform
@@ -2369,7 +2382,6 @@ void OutputFile::applyFixUps(ld::Internal& state, uint64_t mhAddress, const ld::
 						// target of GOT is in same linkage unit and B instruction was changed to ADD to compute LEA of target
 						LOH_ASSERT(addInfoB.srcReg == adrpInfoA.destReg);
 						LOH_ASSERT(addInfoB.destReg == ldrInfoC.baseReg);
-						usableSegment = ( !_options.sharedRegionEligible() || (strcmp(atom->section().segmentName(), infoB.target->section().segmentName()) == 0) );
 						targetFourByteAligned = ( ((infoA.targetAddress) & 0x3) == 0 );
 						literalableSize  = ( (ldrInfoC.size != 1) && (ldrInfoC.size != 2) );
 						if ( usableSegment && withinOneMeg(infoA.instructionAddress, infoA.targetAddress) ) {
@@ -2412,7 +2424,6 @@ void OutputFile::applyFixUps(ld::Internal& state, uint64_t mhAddress, const ld::
 					isADRP = parseADRP(infoA.instruction, adrpInfoA);
 					isADD = parseADD(infoB.instruction, addInfoB);
 					isLDR = parseLoadOrStore(infoB.instruction, ldrInfoB);
-					usableSegment = ( !_options.sharedRegionEligible() || (strcmp(atom->section().segmentName(), infoB.target->section().segmentName()) == 0) );
 					if ( isADRP ) {
 						if ( isLDR ) {
 							if ( usableSegment && withinOneMeg(infoB.instructionAddress, infoA.targetAddress) ) {
@@ -2601,12 +2612,32 @@ void OutputFile::writeAtoms(ld::Internal& state, uint8_t* wholeBuffer)
 	}
 }
 
-
 void OutputFile::computeContentUUID(ld::Internal& state, uint8_t* wholeBuffer)
 {
 	const bool log = false;
 	if ( (_options.outputKind() != Options::kObjectFile) || state.someObjectFileHasDwarf ) {
 		uint8_t digest[CC_MD5_DIGEST_LENGTH];
+		std::vector<std::pair<uint64_t, uint64_t>> excludeRegions;
+		uint64_t bitcodeCmdOffset;
+		uint64_t bitcodeCmdEnd;
+		uint64_t bitcodeSectOffset;
+		uint64_t bitcodePaddingEnd;
+		if ( _headersAndLoadCommandAtom->bitcodeBundleCommand(bitcodeCmdOffset, bitcodeCmdEnd,
+															  bitcodeSectOffset, bitcodePaddingEnd) ) {
+			// Exclude embedded bitcode bundle section which contains timestamps in XAR header
+			// Note the timestamp is in the compressed XML header which means it might change the size of
+			// bitcode section. The load command which include the size of the section and the padding after
+			// the bitcode section should also be excluded in the UUID computation.
+			// Bitcode section should appears before LINKEDIT
+			// Exclude section cmd
+			if ( log ) fprintf(stderr, "bundle cmd start=0x%08llX, bundle cmd end=0x%08llX\n",
+							   bitcodeCmdOffset, bitcodeCmdEnd);
+			excludeRegions.emplace_back(std::pair<uint64_t, uint64_t>(bitcodeCmdOffset, bitcodeCmdEnd));
+			// Exclude section content
+			if ( log ) fprintf(stderr, "bundle start=0x%08llX, bundle end=0x%08llX\n",
+							   bitcodeSectOffset, bitcodePaddingEnd);
+			excludeRegions.emplace_back(std::pair<uint64_t, uint64_t>(bitcodeSectOffset, bitcodePaddingEnd));
+		}
 		uint32_t	stabsStringsOffsetStart;
 		uint32_t	tabsStringsOffsetEnd;
 		uint32_t	stabsOffsetStart;
@@ -2633,20 +2664,30 @@ void OutputFile::computeContentUUID(ld::Internal& state, uint8_t* wholeBuffer)
 			if ( log ) fprintf(stderr, "firstStabStringFileOffset=0x%08llX\n", firstStabStringFileOffset);
 			if ( log ) fprintf(stderr, "lastStabStringFileOffset=0x%08llX\n", lastStabStringFileOffset);
 			assert(firstStabNlistFileOffset <= firstStabStringFileOffset);
-			
+			excludeRegions.emplace_back(std::pair<uint64_t, uint64_t>(firstStabNlistFileOffset, lastStabNlistFileOffset));
+			excludeRegions.emplace_back(std::pair<uint64_t, uint64_t>(firstStabStringFileOffset, lastStabStringFileOffset));
+		}
+		if ( !excludeRegions.empty() ) {
 			CC_MD5_CTX md5state;
 			CC_MD5_Init(&md5state);
-			// checksum everything up to first stabs nlist
-			if ( log ) fprintf(stderr, "checksum 0x%08X -> 0x%08llX\n", 0, firstStabNlistFileOffset);
-			CC_MD5_Update(&md5state, &wholeBuffer[0], firstStabNlistFileOffset);
-			// checkusm everything after last stabs nlist and up to first stabs string
-			if ( log ) fprintf(stderr, "checksum 0x%08llX -> 0x%08llX\n", lastStabNlistFileOffset, firstStabStringFileOffset);
-			CC_MD5_Update(&md5state, &wholeBuffer[lastStabNlistFileOffset], firstStabStringFileOffset-lastStabNlistFileOffset);
-			// checksum everything after last stabs string to end of file
-			if ( log ) fprintf(stderr, "checksum 0x%08llX -> 0x%08llX\n", lastStabStringFileOffset, _fileSize);
-			CC_MD5_Update(&md5state, &wholeBuffer[lastStabStringFileOffset], _fileSize-lastStabStringFileOffset);
+			// rdar://problem/19487042 include the output leaf file name in the hash
+			const char* lastSlash = strrchr(_options.outputFilePath(), '/');
+			if ( lastSlash !=  NULL ) {
+				CC_MD5_Update(&md5state, lastSlash, strlen(lastSlash));
+			}
+			uint64_t checksumStart = 0;
+			for ( auto& region : excludeRegions ) {
+				uint64_t regionStart = region.first;
+				uint64_t regionEnd = region.second;
+				assert(checksumStart <= regionStart && regionStart <= regionEnd && "Region overlapped");
+				if ( log ) fprintf(stderr, "checksum 0x%08llX -> 0x%08llX\n", checksumStart, regionStart);
+				CC_MD5_Update(&md5state, &wholeBuffer[checksumStart], regionStart - checksumStart);
+				checksumStart = regionEnd;
+			}
+			if ( log ) fprintf(stderr, "checksum 0x%08llX -> 0x%08llX\n", checksumStart, _fileSize);
+			CC_MD5_Update(&md5state, &wholeBuffer[checksumStart], _fileSize-checksumStart);
 			CC_MD5_Final(digest, &md5state);
-			if ( log ) fprintf(stderr, "uuid=%02X, %02X, %02X, %02X, %02X, %02X, %02X, %02X\n", digest[0], digest[1], digest[2], 
+			if ( log ) fprintf(stderr, "uuid=%02X, %02X, %02X, %02X, %02X, %02X, %02X, %02X\n", digest[0], digest[1], digest[2],
 							   digest[3], digest[4], digest[5], digest[6],  digest[7]);
 		}
 		else {
@@ -2660,7 +2701,22 @@ void OutputFile::computeContentUUID(ld::Internal& state, uint8_t* wholeBuffer)
 		_headersAndLoadCommandAtom->recopyUUIDCommand();
 	}
 }
-	
+
+static int sDescriptorOfPathToRemove = -1;
+static void removePathAndExit(int sig)
+{
+#ifdef __APPLE__ // ld64-port
+	if ( sDescriptorOfPathToRemove != -1 ) {
+		char path[MAXPATHLEN];
+		if ( ::fcntl(sDescriptorOfPathToRemove, F_GETPATH, path) == 0 )
+			::unlink(path);
+	}
+#else
+	fprintf(stderr, "%s should be unreachable on non-Apple OSs; please report this!", __func__);
+#endif
+	fprintf(stderr, "ld: interrupted\n");
+	exit(1);
+}
 	
 void OutputFile::writeOutputFile(ld::Internal& state)
 {
@@ -2713,14 +2769,14 @@ void OutputFile::writeOutputFile(ld::Internal& state)
 		char* end = strrchr(dirPath, '/');
 		if ( end != NULL ) {
 			end[1] = '\0';
-#if 0
+#ifdef __APPLE__ // ld64-port
 			struct statfs fsInfo;
 			if ( statfs(dirPath, &fsInfo) != -1 ) {
 				if ( strcmp(fsInfo.f_fstypename, "hfs") == 0) {
 					outputIsMappableFile = true;
 				}
 			}
-#endif
+#endif /* __APPLE__ */
 		}
 	}
 	
@@ -2732,12 +2788,16 @@ void OutputFile::writeOutputFile(ld::Internal& state)
 	char tmpOutput[PATH_MAX];
 	uint8_t *wholeBuffer;
 	if ( outputIsRegularFile && outputIsMappableFile ) {
+		// <rdar://problem/20959031> ld64 should clean up temporary files on SIGINT
+		::signal(SIGINT, removePathAndExit);
+
 		strcpy(tmpOutput, _options.outputFilePath());
 		// If the path is too long to add a suffix for a temporary name then
 		// just fall back to using the output path. 
 		if (strlen(tmpOutput)+strlen(filenameTemplate) < PATH_MAX) {
 			strcat(tmpOutput, filenameTemplate);
 			fd = mkstemp(tmpOutput);
+			sDescriptorOfPathToRemove = fd;
 		} 
 		else {
 			fd = open(tmpOutput, O_RDWR|O_CREAT, permissions);
@@ -2800,10 +2860,26 @@ void OutputFile::writeOutputFile(ld::Internal& state)
 		if ( ::write(fd, wholeBuffer, _fileSize) == -1 ) {
 			throwf("can't write to output file: %s, errno=%d", _options.outputFilePath(), errno);
 		}
+		sDescriptorOfPathToRemove = -1;
 		::close(fd);
 		// <rdar://problem/13118223> NFS: iOS incremental builds in Xcode 4.6 fail with codesign error
 		// NFS seems to pad the end of the file sometimes.  Calling trunc seems to correct it...
 		::truncate(_options.outputFilePath(), _fileSize);
+	}
+	// Rename symbol map file if needed
+	if ( _options.renameReverseSymbolMap() ) {
+#ifdef HAVE_UUID_UUID_H // ld64-port
+		assert(_options.hideSymbols() && _options.reverseSymbolMapPath() != NULL && "Must hide symbol and specify a path");
+		uuid_string_t UUIDString;
+		const uint8_t* rawUUID = _headersAndLoadCommandAtom->getUUID();
+		uuid_unparse_upper(rawUUID, UUIDString);
+		char outputMapPath[PATH_MAX];
+		sprintf(outputMapPath, "%s/%s.bcsymbolmap", _options.reverseSymbolMapPath(), UUIDString);
+		if ( ::rename(_options.reverseMapTempPath().c_str(), outputMapPath) != 0 )
+			throwf("could not create bcsymbolmap file: %s", outputMapPath);
+#else
+		throwf("uuid support via libuuid not compiled in");
+#endif
 	}
 }
 
@@ -3126,7 +3202,7 @@ void OutputFile::addLinkEdit(ld::Internal& state)
 				localRelocationsSection = state.addAtom(*_localRelocsAtom);
 			}
 			if  ( _hasSplitSegInfo ) {
-				_splitSegInfoAtom = new SplitSegInfoAtom<x86>(_options, state, *this);
+				_splitSegInfoAtom = new SplitSegInfoV1Atom<x86>(_options, state, *this);
 				splitSegInfoSection = state.addAtom(*_splitSegInfoAtom);
 			}
 			if ( _hasFunctionStartsInfo ) {
@@ -3140,10 +3216,6 @@ void OutputFile::addLinkEdit(ld::Internal& state)
 			if ( _hasOptimizationHints ) {
 				_optimizationHintsAtom = new OptimizationHintsAtom<x86>(_options, state, *this);
 				optimizationHintsSection = state.addAtom(*_optimizationHintsAtom);
-			}
-			if ( _hasDependentDRInfo ) {
-				_dependentDRInfoAtom = new DependentDRAtom<x86>(_options, state, *this);
-				dependentDRsSection = state.addAtom(*_dependentDRInfoAtom);
 			}
 			if ( _hasSymbolTable ) {
 				_symbolTableAtom = new SymbolTableAtom<x86>(_options, state, *this);
@@ -3188,7 +3260,7 @@ void OutputFile::addLinkEdit(ld::Internal& state)
 				localRelocationsSection = state.addAtom(*_localRelocsAtom);
 			}
 			if  ( _hasSplitSegInfo ) {
-				_splitSegInfoAtom = new SplitSegInfoAtom<x86_64>(_options, state, *this);
+				_splitSegInfoAtom = new SplitSegInfoV1Atom<x86_64>(_options, state, *this);
 				splitSegInfoSection = state.addAtom(*_splitSegInfoAtom);
 			}
 			if ( _hasFunctionStartsInfo ) {
@@ -3202,10 +3274,6 @@ void OutputFile::addLinkEdit(ld::Internal& state)
 			if ( _hasOptimizationHints ) {
 				_optimizationHintsAtom = new OptimizationHintsAtom<x86_64>(_options, state, *this);
 				optimizationHintsSection = state.addAtom(*_optimizationHintsAtom);
-			}
-			if ( _hasDependentDRInfo ) {
-				_dependentDRInfoAtom = new DependentDRAtom<x86_64>(_options, state, *this);
-				dependentDRsSection = state.addAtom(*_dependentDRInfoAtom);
 			}
 			if ( _hasSymbolTable ) {
 				_symbolTableAtom = new SymbolTableAtom<x86_64>(_options, state, *this);
@@ -3250,7 +3318,10 @@ void OutputFile::addLinkEdit(ld::Internal& state)
 				localRelocationsSection = state.addAtom(*_localRelocsAtom);
 			}
 			if  ( _hasSplitSegInfo ) {
-				_splitSegInfoAtom = new SplitSegInfoAtom<arm>(_options, state, *this);
+				if ( _options.sharedRegionEncodingV2() )
+					_splitSegInfoAtom = new SplitSegInfoV2Atom<arm>(_options, state, *this);
+				else
+					_splitSegInfoAtom = new SplitSegInfoV1Atom<arm>(_options, state, *this);
 				splitSegInfoSection = state.addAtom(*_splitSegInfoAtom);
 			}
 			if ( _hasFunctionStartsInfo ) {
@@ -3264,10 +3335,6 @@ void OutputFile::addLinkEdit(ld::Internal& state)
 			if ( _hasOptimizationHints ) {
 				_optimizationHintsAtom = new OptimizationHintsAtom<arm>(_options, state, *this);
 				optimizationHintsSection = state.addAtom(*_optimizationHintsAtom);
-			}
-			if ( _hasDependentDRInfo ) {
-				_dependentDRInfoAtom = new DependentDRAtom<arm>(_options, state, *this);
-				dependentDRsSection = state.addAtom(*_dependentDRInfoAtom);
 			}
 			if ( _hasSymbolTable ) {
 				_symbolTableAtom = new SymbolTableAtom<arm>(_options, state, *this);
@@ -3312,7 +3379,10 @@ void OutputFile::addLinkEdit(ld::Internal& state)
 				localRelocationsSection = state.addAtom(*_localRelocsAtom);
 			}
 			if  ( _hasSplitSegInfo ) {
-				_splitSegInfoAtom = new SplitSegInfoAtom<arm64>(_options, state, *this);
+				if ( _options.sharedRegionEncodingV2() )
+					_splitSegInfoAtom = new SplitSegInfoV2Atom<arm64>(_options, state, *this);
+				else
+					_splitSegInfoAtom = new SplitSegInfoV1Atom<arm64>(_options, state, *this);
 				splitSegInfoSection = state.addAtom(*_splitSegInfoAtom);
 			}
 			if ( _hasFunctionStartsInfo ) {
@@ -3326,10 +3396,6 @@ void OutputFile::addLinkEdit(ld::Internal& state)
 			if ( _hasOptimizationHints ) {
 				_optimizationHintsAtom = new OptimizationHintsAtom<arm64>(_options, state, *this);
 				optimizationHintsSection = state.addAtom(*_optimizationHintsAtom);
-			}
-			if ( _hasDependentDRInfo ) {
-				_dependentDRInfoAtom = new DependentDRAtom<arm64>(_options, state, *this);
-				dependentDRsSection = state.addAtom(*_dependentDRInfoAtom);
 			}
 			if ( _hasSymbolTable ) {
 				_symbolTableAtom = new SymbolTableAtom<arm64>(_options, state, *this);
@@ -4413,7 +4479,6 @@ void OutputFile::addSectionRelocs(ld::Internal& state, ld::Internal::FinalSectio
 
 }
 
-
 void OutputFile::makeSplitSegInfo(ld::Internal& state)
 {
 	if ( !_options.sharedRegionEligible() )
@@ -4509,6 +4574,183 @@ void OutputFile::makeSplitSegInfo(ld::Internal& state)
 						break;
 					default:
 						break;
+				}
+			}
+		}
+	}
+}
+
+void OutputFile::makeSplitSegInfoV2(ld::Internal& state)
+{
+	static const bool log = false;
+	if ( !_options.sharedRegionEligible() )
+		return;
+	
+	for (std::vector<ld::Internal::FinalSection*>::iterator sit = state.sections.begin(); sit != state.sections.end(); ++sit) {
+		ld::Internal::FinalSection* sect = *sit;
+		if ( sect->isSectionHidden() )
+			continue;
+		bool codeSection = (sect->type() == ld::Section::typeCode);
+		if (log) fprintf(stderr, "sect: %s, address=0x%llX\n", sect->sectionName(), sect->address);
+		for (std::vector<const ld::Atom*>::iterator ait = sect->atoms.begin(); ait != sect->atoms.end(); ++ait) {
+			const ld::Atom* atom = *ait;
+			const ld::Atom* target = NULL;
+			const ld::Atom* fromTarget = NULL;
+			uint32_t picBase = 0;
+            uint64_t accumulator = 0;
+            bool thumbTarget;
+			bool hadSubtract = false;
+			uint8_t fromSectionIndex = atom->machoSection();
+			uint8_t toSectionIndex = 0; // ld64-port: added = 0
+			uint8_t kind = 0;
+			uint64_t fromOffset = 0;
+			uint64_t toOffset = 0;
+			uint64_t addend = 0;
+			for (ld::Fixup::iterator fit = atom->fixupsBegin(), end=atom->fixupsEnd(); fit != end; ++fit) {
+				if ( fit->firstInCluster() ) {
+					target = NULL;
+					fromTarget = NULL;
+					kind = 0;
+					addend = 0;
+					toSectionIndex = 255;
+					fromOffset = atom->finalAddress() + fit->offsetInAtom - sect->address;
+				}
+				if ( this->setsTarget(fit->kind) ) {
+					accumulator = addressOf(state, fit, &target);			
+					thumbTarget = targetIsThumb(state, fit);
+					if ( thumbTarget ) 
+						accumulator |= 1;
+					toOffset = accumulator - state.atomToSection[target]->address;
+					if ( target->definition() != ld::Atom::definitionProxy ) {
+						if ( target->section().type() == ld::Section::typeMachHeader )
+							toSectionIndex = 0;
+						else
+							toSectionIndex = target->machoSection();
+					}
+				}
+				switch ( fit->kind ) {
+					case ld::Fixup::kindSubtractTargetAddress:
+                        accumulator -= addressOf(state, fit, &fromTarget);
+						hadSubtract = true;
+						break;
+                    case ld::Fixup::kindAddAddend:
+						accumulator += fit->u.addend;
+						addend = fit->u.addend;
+						break;
+                    case ld::Fixup::kindSubtractAddend:
+						accumulator -= fit->u.addend;
+						picBase = fit->u.addend;
+						break;
+					case ld::Fixup::kindSetLazyOffset:
+						break;
+					case ld::Fixup::kindStoreBigEndian32:
+					case ld::Fixup::kindStoreLittleEndian32:
+					case ld::Fixup::kindStoreTargetAddressLittleEndian32:
+						if ( kind != DYLD_CACHE_ADJ_V2_IMAGE_OFF_32 ) {
+							if ( hadSubtract )
+								kind = DYLD_CACHE_ADJ_V2_DELTA_32;
+							else
+								kind = DYLD_CACHE_ADJ_V2_POINTER_32;
+						}
+						break;
+					case ld::Fixup::kindStoreLittleEndian64:
+					case ld::Fixup::kindStoreTargetAddressLittleEndian64:
+						if ( hadSubtract )
+							kind = DYLD_CACHE_ADJ_V2_DELTA_64;
+						else
+							kind = DYLD_CACHE_ADJ_V2_POINTER_64;
+						break;
+					case ld::Fixup::kindStoreX86PCRel32:
+					case ld::Fixup::kindStoreX86PCRel32_1:
+					case ld::Fixup::kindStoreX86PCRel32_2:
+					case ld::Fixup::kindStoreX86PCRel32_4:
+					case ld::Fixup::kindStoreX86PCRel32GOTLoad:
+					case ld::Fixup::kindStoreX86PCRel32GOTLoadNowLEA:
+					case ld::Fixup::kindStoreX86PCRel32GOT:
+					case ld::Fixup::kindStoreX86PCRel32TLVLoad:
+					case ld::Fixup::kindStoreX86PCRel32TLVLoadNowLEA:
+					case ld::Fixup::kindStoreTargetAddressX86PCRel32:
+					case ld::Fixup::kindStoreTargetAddressX86PCRel32GOTLoad:
+					case ld::Fixup::kindStoreTargetAddressX86PCRel32GOTLoadNowLEA:
+					case ld::Fixup::kindStoreTargetAddressX86PCRel32TLVLoad:
+					case ld::Fixup::kindStoreTargetAddressX86PCRel32TLVLoadNowLEA:
+#if SUPPORT_ARCH_arm64
+					case ld::Fixup::kindStoreARM64PCRelToGOT:
+#endif
+						if ( (fromSectionIndex != toSectionIndex) || !codeSection )
+							kind = DYLD_CACHE_ADJ_V2_DELTA_32;
+						break;
+#if SUPPORT_ARCH_arm64
+					case ld::Fixup::kindStoreARM64Page21:
+					case ld::Fixup::kindStoreARM64GOTLoadPage21:
+					case ld::Fixup::kindStoreARM64GOTLeaPage21:
+					case ld::Fixup::kindStoreARM64TLVPLoadPage21:
+					case ld::Fixup::kindStoreTargetAddressARM64Page21:
+					case ld::Fixup::kindStoreTargetAddressARM64GOTLoadPage21:
+					case ld::Fixup::kindStoreTargetAddressARM64GOTLeaPage21:
+						if ( fromSectionIndex != toSectionIndex )
+							kind = DYLD_CACHE_ADJ_V2_ARM64_ADRP;
+						break;
+					case ld::Fixup::kindStoreARM64PageOff12:
+					case ld::Fixup::kindStoreARM64GOTLeaPageOff12:
+					case ld::Fixup::kindStoreARM64TLVPLoadNowLeaPageOff12:
+					case ld::Fixup::kindStoreTargetAddressARM64PageOff12:
+					case ld::Fixup::kindStoreTargetAddressARM64GOTLeaPageOff12:
+					case ld::Fixup::kindStoreTargetAddressARM64GOTLoadPageOff12:
+					case ld::Fixup::kindStoreTargetAddressARM64TLVPLoadPageOff12:
+					case ld::Fixup::kindStoreTargetAddressARM64TLVPLoadNowLeaPageOff12:
+						if ( fromSectionIndex != toSectionIndex )
+							kind = DYLD_CACHE_ADJ_V2_ARM64_OFF12;
+						break;
+					case ld::Fixup::kindStoreARM64Branch26:
+					case ld::Fixup::kindStoreTargetAddressARM64Branch26:
+						if ( fromSectionIndex != toSectionIndex )
+							kind = DYLD_CACHE_ADJ_V2_ARM64_BR26;
+						break;
+#endif
+                    case ld::Fixup::kindStoreARMHigh16:
+                    case ld::Fixup::kindStoreARMLow16:
+						if ( (fromSectionIndex != toSectionIndex) && (fromTarget == atom) ) {
+							kind = DYLD_CACHE_ADJ_V2_ARM_MOVW_MOVT;
+						}
+						break;
+ 					case ld::Fixup::kindStoreARMBranch24:
+					case ld::Fixup::kindStoreTargetAddressARMBranch24:
+						if ( fromSectionIndex != toSectionIndex )
+							kind = DYLD_CACHE_ADJ_V2_ARM_BR24;
+						break;
+                    case ld::Fixup::kindStoreThumbLow16:
+                    case ld::Fixup::kindStoreThumbHigh16:
+						if ( (fromSectionIndex != toSectionIndex) && (fromTarget == atom) ) {
+							kind = DYLD_CACHE_ADJ_V2_THUMB_MOVW_MOVT;
+						}
+						break;
+					case ld::Fixup::kindStoreThumbBranch22:
+					case ld::Fixup::kindStoreTargetAddressThumbBranch22:
+						if ( fromSectionIndex != toSectionIndex )
+							kind = DYLD_CACHE_ADJ_V2_THUMB_BR22;
+						break;
+					case ld::Fixup::kindSetTargetImageOffset:
+						kind = DYLD_CACHE_ADJ_V2_IMAGE_OFF_32;
+						accumulator = addressOf(state, fit, &target);			
+						assert(target != NULL);
+						toSectionIndex = target->machoSection();
+						toOffset = accumulator - state.atomToSection[target]->address;
+						hadSubtract = true;
+						break;
+					default:
+						break;
+				}
+				if ( fit->lastInCluster() ) {
+					if ( (kind != 0) && (target != NULL) && (target->definition() != ld::Atom::definitionProxy) ) {
+						if ( !hadSubtract && addend )
+							toOffset += addend;
+						assert(toSectionIndex != 255);
+						if (log) fprintf(stderr, "from (%d.%s + 0x%llX) to (%d.%s + 0x%llX), kind=%d, atomAddr=0x%llX, sectAddr=0x%llx\n",
+										fromSectionIndex, sect->sectionName(), fromOffset, toSectionIndex, state.atomToSection[target]->sectionName(),
+										toOffset, kind, atom->finalAddress(), sect->address);
+						_splitSegV2Infos.push_back(SplitSegInfoV2Entry(fromSectionIndex, fromOffset, toSectionIndex, toOffset, kind));
+					}
 				}
 			}
 		}
@@ -4629,7 +4871,6 @@ void OutputFile::writeMapFile(ld::Internal& state)
 		}
 	}
 }
-
 
 // used to sort atoms with debug notes
 class DebugNoteSorter

@@ -23,6 +23,7 @@
  */
 
 
+#include <ctype.h> // ld64-port
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <mach/vm_prot.h>
@@ -36,13 +37,17 @@
 #include <Availability.h>
 
 #include <vector>
+#include <map>
+#include <sstream>
 
 #include "Options.h"
 #include "Architectures.hpp"
 #include "MachOFileAbstraction.hpp"
 #include "Snapshot.h"
 
-#include <ctype.h> // ld64-port
+
+// from FunctionNameDemangle.h
+extern "C" size_t fnd_get_demangled_name(const char *mangledName, char *outputBuffer, size_t length);
 
 // upward dependency on lto::version()
 namespace lto {
@@ -150,11 +155,11 @@ Options::Options(int argc, const char* argv[])
 	  fCommonsMode(kCommonsIgnoreDylibs),  fUUIDMode(kUUIDContent), fLocalSymbolHandling(kLocalSymbolsAll), fWarnCommons(false), 
 	  fVerbose(false), fKeepRelocations(false), fWarnStabs(false),
 	  fTraceDylibSearching(false), fPause(false), fStatistics(false), fPrintOptions(false),
-	  fSharedRegionEligible(false), fPrintOrderFileStatistics(false),  
+	  fSharedRegionEligible(false), fSharedRegionEligibleForceOff(false), fPrintOrderFileStatistics(false),
 	  fReadOnlyx86Stubs(false), fPositionIndependentExecutable(false), fPIEOnCommandLine(false),
 	  fDisablePositionIndependentExecutable(false), fMaxMinimumHeaderPad(false),
 	  fDeadStripDylibs(false),  fAllowTextRelocs(false), fWarnTextRelocs(false), fKextsUseStubs(false),
-	  fUsingLazyDylibLinking(false), fEncryptable(true), 
+	  fUsingLazyDylibLinking(false), fEncryptable(true), fEncryptableForceOn(false), fEncryptableForceOff(false),
 	  fOrderData(true), fMarkDeadStrippableDylib(false),
 	  fMakeCompressedDyldInfo(true), fMakeCompressedDyldInfoForceOff(false), fNoEHLabels(false),
 	  fAllowCpuSubtypeMismatches(false), fUseSimplifiedDylibReExports(false),
@@ -178,16 +183,19 @@ Options::Options(int argc, const char* argv[])
 	  fEntryPointLoadCommandForceOn(false), fEntryPointLoadCommandForceOff(false),
 	  fSourceVersionLoadCommand(false), 
 	  fSourceVersionLoadCommandForceOn(false), fSourceVersionLoadCommandForceOff(false), 
-	  fDependentDRInfo(false), fDependentDRInfoForcedOn(false), fDependentDRInfoForcedOff(false),
 	  fTargetIOSSimulator(false), fExportDynamic(false), fAbsoluteSymbols(false),
 	  fAllowSimulatorToLinkWithMacOSX(false), fKeepDwarfUnwind(true),
 	  fKeepDwarfUnwindForcedOn(false), fKeepDwarfUnwindForcedOff(false),
 	  fVerboseOptimizationHints(false), fIgnoreOptimizationHints(false),
 	  fGenerateDtraceDOF(true), fAllowBranchIslands(true), fTraceSymbolLayout(false), 
-	  fMarkAppExtensionSafe(false), fCheckAppExtensionSafe(false), fForceLoadSwiftLibs(false), 
-	  fDebugInfoStripping(kDebugInfoMinimal), fTraceOutputFile(NULL), 
-	  fMacVersionMin(ld::macVersionUnset), fIOSVersionMin(ld::iOSVersionUnset), 
-	  fSaveTempFiles(false), fSnapshotRequested(false), fPipelineFifo(NULL), 
+	  fMarkAppExtensionSafe(false), fCheckAppExtensionSafe(false), fForceLoadSwiftLibs(false),
+	  fSharedRegionEncodingV2(false), fUseDataConstSegment(false),
+	  fUseDataConstSegmentForceOn(false), fUseDataConstSegmentForceOff(false),
+	  fBundleBitcode(false), fHideSymbols(false), fReverseMapUUIDRename(false), fReverseMapPath(NULL), fLTOCodegenOnly(false),
+	  fIgnoreAutoLink(false), fPlatform(kPlatformUnknown),
+	  fDebugInfoStripping(kDebugInfoMinimal), fTraceOutputFile(NULL),
+	  fMacVersionMin(ld::macVersionUnset), fIOSVersionMin(ld::iOSVersionUnset), fWatchOSVersionMin(ld::wOSVersionUnset), // ld64-port: added fWatchOSVersionMin(ld::wOSVersionUnset) - https://gist.github.com/tpoechtrager/6537a058dfb4d587fff4
+	  fSaveTempFiles(false), fSnapshotRequested(false), fPipelineFifo(NULL),
 	  fDependencyInfoPath(NULL), fDependencyFileDescriptor(-1)
 {
 	this->checkForClassic(argc, argv);
@@ -243,7 +251,7 @@ bool Options::interposable(const char* name) const
 
 bool Options::printWhyLive(const char* symbolName) const
 {
-	return ( fWhyLive.find(symbolName) != fWhyLive.end() );
+	return fWhyLive.contains(symbolName);
 }
 
 
@@ -332,7 +340,7 @@ uint32_t Options::maxSegProtection(const char* segName) const
 {
 	// iPhoneOS always uses same protection for max and initial
 	// <rdar://problem/11663436> simulator apps need to use MacOSX max-prot
-	if ( (fIOSVersionMin != ld::iOSVersionUnset) && (fArchitecture != CPU_TYPE_I386) )
+	if ( (fPlatform != kPlatformOSX) && !fTargetIOSSimulator )
 		return initialSegProtection(segName);
 
 	for(std::vector<Options::SegmentProtect>::const_iterator it = fCustomSegmentProtections.begin(); it != fCustomSegmentProtections.end(); ++it) {
@@ -398,6 +406,17 @@ uint8_t Options::customSectionAlignment(const char* segName, const char* sectNam
 	return 0;
 }
 
+bool Options::segmentOrderAfterFixedAddressSegment(const char* segName) const
+{
+	bool nowPinned = false;
+	for (std::vector<const char*>::const_iterator it=fSegmentOrder.begin(); it != fSegmentOrder.end(); ++it) {
+		if ( strcmp(*it, segName) == 0 )
+			return nowPinned;
+		if ( hasCustomSegmentAddress(*it) )
+			nowPinned = true;
+	}
+	return false;
+}
 
 bool Options::hasExportedSymbolOrder()
 {
@@ -556,9 +575,26 @@ const std::vector<const char*>* Options::sectionOrder(const char* segName) const
 	return NULL;
 }
 
+uint32_t Options::minOSversion() const
+{
+	switch (fPlatform) {
+		case kPlatformiOS:
+			return iOSVersionMin();
+		case kPlatformOSX:
+			return macosxVersionMin();
+		case kPlatformWatchOS:
+			return watchOSVersionMin();
+#if SUPPORT_APPLE_TV
+		case Options::kPlatform_tvOS:
+			return iOSVersionMin();
+#endif
+		default:
+			break;
+	}
+	return 0;
+}
 
-
-void Options::setArchitecture(cpu_type_t type, cpu_subtype_t subtype)
+void Options::setArchitecture(cpu_type_t type, cpu_subtype_t subtype, Options::Platform platform)
 {
 	for (const ArchInfo* t=archInfoArray; t->archName != NULL; ++t) {
 		if ( (type == t->cpuType) && (subtype == t->cpuSubType) ) {
@@ -567,10 +603,11 @@ void Options::setArchitecture(cpu_type_t type, cpu_subtype_t subtype)
 			fArchitectureName = t->archName;
 			fHasPreferredSubType = t->isSubType;
 			fArchSupportsThumb2 = t->supportsThumb2;
+			fPlatform = platform;
 			switch ( type ) {
 				case CPU_TYPE_I386:
 				case CPU_TYPE_X86_64:
-					if ( (fMacVersionMin == ld::macVersionUnset) && (fIOSVersionMin == ld::iOSVersionUnset) && (fOutputKind != Options::kObjectFile) ) {
+					if ( (fPlatform == kPlatformOSX) && (fOutputKind != Options::kObjectFile) ) {
 				#ifdef DEFAULT_MACOSX_MIN_VERSION
 						warning("-macosx_version_min not specified, assuming " DEFAULT_MACOSX_MIN_VERSION);
 						setMacOSXVersionMin(DEFAULT_MACOSX_MIN_VERSION);
@@ -582,7 +619,7 @@ void Options::setArchitecture(cpu_type_t type, cpu_subtype_t subtype)
 					break;
 				case CPU_TYPE_ARM:
 				case CPU_TYPE_ARM64:
-					if ( (fMacVersionMin == ld::macVersionUnset) && (fIOSVersionMin == ld::iOSVersionUnset) && (fOutputKind != Options::kObjectFile) ) {
+					if ( (fPlatform == kPlatformiOS) && (fOutputKind != Options::kObjectFile) ) {
 				#if defined(DEFAULT_IPHONEOS_MIN_VERSION)
 						warning("-ios_version_min not specified, assuming " DEFAULT_IPHONEOS_MIN_VERSION);
 						setIOSVersionMin(DEFAULT_IPHONEOS_MIN_VERSION);
@@ -679,6 +716,8 @@ Options::FileInfo Options::findLibrary(const char* rootName, bool dylibsOnly) co
 						 it != fLibrarySearchPaths.end();
 						 it++) {
 						const char* dir = *it;
+						if ( checkForFile("%s/lib%s.tbd", dir, rootName, result) )
+							return result;
 						if ( checkForFile("%s/lib%s.dylib", dir, rootName, result) )
 							return result;
 					}
@@ -708,6 +747,8 @@ Options::FileInfo Options::findLibrary(const char* rootName, bool dylibsOnly) co
 					 it != fLibrarySearchPaths.end();
 					 it++) {
 					const char* dir = *it;
+					if ( lookForDylibs && checkForFile("%s/lib%s.tbd", dir, rootName, result) )
+						return result;
 					if ( lookForDylibs && checkForFile("%s/lib%s.dylib", dir, rootName, result) )
 						return result;
 					if ( lookForDylibs && checkForFile("%s/lib%s.so", dir, rootName, result) )
@@ -739,31 +780,21 @@ Options::FileInfo Options::findFramework(const char* frameworkName) const
 
 Options::FileInfo Options::findFramework(const char* rootName, const char* suffix) const
 {
-	for (std::vector<const char*>::const_iterator it = fFrameworkSearchPaths.begin();
-		 it != fFrameworkSearchPaths.end();
-		 it++) {
-		// ??? Shouldn't we be using String here and just initializing it?
-		// ??? Use str.c_str () to pull out the string for the stat call.
-		const char* dir = *it;
-		char possiblePath[PATH_MAX];
-		strcpy(possiblePath, dir);
-		strcat(possiblePath, "/");
-		strcat(possiblePath, rootName);
-		strcat(possiblePath, ".framework/");
-		strcat(possiblePath, rootName);
-		if ( suffix != NULL ) {
+	for (const auto* path : fFrameworkSearchPaths) {
+		auto possiblePath = std::string(path).append("/").append(rootName).append(".framework/").append(rootName);
+		if ( suffix != nullptr ) {
 			char realPath[PATH_MAX];
 			// no symlink in framework to suffix variants, so follow main symlink
-			if ( realpath(possiblePath, realPath) != NULL ) {
-				strcpy(possiblePath, realPath);
-				strcat(possiblePath, suffix);
-			}
+			if ( realpath(possiblePath.c_str(), realPath) != nullptr )
+				possiblePath = std::string(realPath).append(suffix);
 		}
         FileInfo result;
-		bool found = result.checkFileExists(*this, possiblePath);
+		bool found = result.checkFileExists(*this, (possiblePath + ".tbd").c_str());
+		if ( !found )
+			found = result.checkFileExists(*this, possiblePath.c_str());
 		if ( fTraceDylibSearching )
 			printf("[Logging for XBS]%sfound framework: '%s'\n",
-				   (found ? " " : " not "), possiblePath);
+				   (found ? " " : " not "), possiblePath.c_str());
 		if ( found ) {
 			return result;
 		}
@@ -775,68 +806,84 @@ Options::FileInfo Options::findFramework(const char* rootName, const char* suffi
 		throwf("framework not found %s", rootName);
 }
 
-Options::FileInfo Options::findFile(const char* path) const
+Options::FileInfo Options::findFile(const std::string &path) const
 {
 	FileInfo result;
 
-	// if absolute path and not a .o file, the use SDK prefix
-	if ( (path[0] == '/') && (strcmp(&path[strlen(path)-2], ".o") != 0) ) {
-		const int pathLen = strlen(path);
-		for (std::vector<const char*>::const_iterator it = fSDKPaths.begin(); it != fSDKPaths.end(); it++) {
-			// ??? Shouldn't we be using String here?
-			const char* sdkPathDir = *it;
-			const int sdkPathDirLen = strlen(sdkPathDir);
-			char possiblePath[sdkPathDirLen+pathLen+4];
-			strcpy(possiblePath, sdkPathDir);
-			if ( possiblePath[sdkPathDirLen-1] == '/' )
-				possiblePath[sdkPathDirLen-1] = '\0';
-			strcat(possiblePath, path);
-			if ( result.checkFileExists(*this, possiblePath) ) {
+	// if absolute path and not a .o file, then use SDK prefix
+	if ( (path[0] == '/') && (strcmp(&path[path.size()-2], ".o") != 0) ) {
+		auto tbdFile = path;
+		auto lastSlashIdx = tbdFile.find_last_of('/');
+		auto lastDotIdx = tbdFile.find_last_of('.');
+		if (lastDotIdx != std::string::npos && lastDotIdx > lastSlashIdx)
+			tbdFile.erase(lastDotIdx, std::string::npos);
+		tbdFile.append(".tbd");
+
+		for (const auto* sdkPathDir : fSDKPaths) {
+			auto possiblePath = std::string(sdkPathDir) + tbdFile;
+			if ( result.checkFileExists(*this, possiblePath.c_str()) )
 				return result;
-			}
+			possiblePath = std::string(sdkPathDir) + path;
+			if ( result.checkFileExists(*this, possiblePath.c_str()) )
+				return result;
 		}
 	}
 	// try raw path
-	if ( result.checkFileExists(*this, path) ) {
+	{
+		std::string file = path;
+		auto lastDotIdx = file.find_last_of('.');
+		if (lastDotIdx != std::string::npos)
+			file.erase(lastDotIdx, std::string::npos);
+		if ( result.checkFileExists(*this, file.append(".tbd").c_str()) )
+			return result;
+	}
+	if ( result.checkFileExists(*this, path.c_str()) ) {
 		return result;
 	}
 
+
 	// try @executable_path substitution
-	if ( (strncmp(path, "@executable_path/", 17) == 0) && (fExecutablePath != NULL) ) {
-		char newPath[strlen(fExecutablePath) + strlen(path)];
+	if ( (path.find("@executable_path/") == 0) && (fExecutablePath != nullptr) ) {
+		char newPath[strlen(fExecutablePath) + path.size()];
 		strcpy(newPath, fExecutablePath);
 		char* addPoint = strrchr(newPath,'/');
-		if ( addPoint != NULL )
+		if ( addPoint != nullptr )
 			strcpy(&addPoint[1], &path[17]);
 		else
 			strcpy(newPath, &path[17]);
+
+		std::string file = newPath;
+		auto lastDotIdx = file.find_last_of('.');
+		if (lastDotIdx != std::string::npos)
+			file.erase(lastDotIdx, std::string::npos);
+		if ( result.checkFileExists(*this, file.append(".tbd").c_str()) ) {
+			return result;
+		}
 		if ( result.checkFileExists(*this, newPath) ) {
 			return result;
 		}
 	}
 
 	// not found
-	throwf("file not found: %s", path);
+	throwf("file not found: %s", path.c_str());
 }
 
-Options::FileInfo Options::findFileUsingPaths(const char* path) const 
+Options::FileInfo Options::findFileUsingPaths(const std::string &path) const
 {
 	FileInfo result;
 
-	const char* lastSlash = strrchr(path, '/');
-	const char* leafName = (lastSlash == NULL) ? path : &lastSlash[1];
+	auto lastSlashPos = path.find_last_of('/');
+	auto pos = ( lastSlashPos != std::string::npos ) ? lastSlashPos + 1 : 0;
+	auto leafName = path.substr(pos);
 
 	// Is this in a framework?
 	// /path/Foo.framework/Foo							==> true (Foo)
 	// /path/Foo.framework/Frameworks/Bar.framework/Bar ==> true (Bar)
 	// /path/Foo.framework/Resources/Bar				==> false
 	bool isFramework = false;
-	if ( lastSlash != NULL ) {
-		char frameworkDir[strlen(leafName) + 20];
-		strcpy(frameworkDir, "/");
-		strcat(frameworkDir, leafName);
-		strcat(frameworkDir, ".framework/");
-		if ( strstr(path, frameworkDir) != NULL )
+	if ( lastSlashPos != std::string::npos ) {
+		auto frameworkDir = std::string("/").append(leafName).append(".framework/");
+		if ( path.rfind(frameworkDir) != std::string::npos )
 			isFramework = true;
 	}
 	
@@ -845,35 +892,28 @@ Options::FileInfo Options::findFileUsingPaths(const char* path) const
 	// don't need to try variations, just paths. We do need to add the additional bits
 	// onto the framework path though.
 	if ( isFramework ) {
-		for (std::vector<const char*>::const_iterator it = fFrameworkSearchPaths.begin();
-			 it != fFrameworkSearchPaths.end();
-			 it++) {
-			const char* dir = *it;
-			char possiblePath[PATH_MAX];
-			strcpy(possiblePath, dir);
-			strcat(possiblePath, "/");
-			strcat(possiblePath, leafName);
-			strcat(possiblePath, ".framework");
-
-			//fprintf(stderr,"Finding Framework: %s/%s, leafName=%s\n", possiblePath, leafName, leafName);
-			if ( checkForFile("%s/%s", possiblePath, leafName, result) )
+		auto endPos = path.rfind(".framework");
+		auto beginPos = path.find_last_of('/', endPos);
+		auto leafPath = path.substr(beginPos);
+		for (const auto* dir : fFrameworkSearchPaths) {
+			auto possiblePath = dir + leafPath;
+			if ( checkForFile("%s.%s", possiblePath.c_str(), "tbd", result) )
+				return result;
+			if ( checkForFile("%s", possiblePath.c_str(), "", result) )
 				return result;
 		}
-	} 
-	else {
+	} else {
 		// if this is a .dylib inside a framework, do not search -L paths
-		// <rdar://problem/5427952> ld64's re-export cycle detection logic prevents use of X11 libGL on Leopard 
-		int leafLen = strlen(leafName);
-		bool embeddedDylib = ( (leafLen > 6) 
-					&& (strcmp(&leafName[leafLen-6], ".dylib") == 0) 
-					&& (strstr(path, ".framework/") != NULL) );
+		// <rdar://problem/5427952> ld64's re-export cycle detection logic prevents use of X11 libGL on Leopard
+		bool embeddedDylib = ( (leafName.size() > 6)
+					&& (leafName.find(".dylib", leafName.size()-6) != std::string::npos)
+					&& (path.find(".framework/") != std::string::npos) );
 		if ( !embeddedDylib ) {
-			for (std::vector<const char*>::const_iterator it = fLibrarySearchPaths.begin();
-				 it != fLibrarySearchPaths.end();
-				 it++) {
-				const char* dir = *it;
+			for (const auto* dir : fLibrarySearchPaths) {
 				//fprintf(stderr,"Finding Library: %s/%s\n", dir, leafName);
-				if ( checkForFile("%s/%s", dir, leafName, result) )
+				if ( checkForFile("%s/%s", dir, std::string(leafName).append(".tbd").c_str(), result) )
+					return result;
+				if ( checkForFile("%s/%s", dir, leafName.c_str(), result) )
 					return result;
 			}
 		}
@@ -1077,6 +1117,23 @@ bool Options::SetWithWildcards::containsNonWildcard(const char* symbol) const
 }
 
 
+std::vector<const char*> Options::exportsData() const
+{
+	return fExportSymbols.data();
+}
+
+
+std::vector<const char*> Options::SetWithWildcards::data() const
+{
+	std::vector<const char*> data;
+	for (NameSet::const_iterator it=regularBegin(); it != regularEnd(); ++it) { // ld64-port: NameSet::iterator -> NameSet::const_iterator
+		data.push_back(*it);
+	}
+	for (std::vector<const char*>::const_iterator it=fWildCard.begin(); it != fWildCard.end(); ++it) {
+		data.push_back(*it);
+	}
+	return data;
+}
 
 bool Options::SetWithWildcards::inCharRange(const char*& p, unsigned char c) const
 {
@@ -1355,6 +1412,7 @@ void Options::setMacOSXVersionMin(const char* version)
 			minorVersion = 255;
 		}
 		fMacVersionMin = (ld::MacVersionMin)(0x000A0000 | (minorVersion << 8));
+		fPlatform = kPlatformOSX;
 	}
 	else {
 		warning("unknown option to -macosx_version_min, not 10.x");
@@ -1375,18 +1433,52 @@ void Options::setIOSVersionMin(const char* version)
 	unsigned int majorVersion = version[0] - '0';
 	unsigned int minorVersion = version[2] - '0';
 	fIOSVersionMin = (ld::IOSVersionMin)((majorVersion << 16) | (minorVersion << 8));
+	fPlatform = kPlatformiOS;
 }
+
+
+void Options::setWatchOSVersionMin(const char* version)
+{
+	if ( version == NULL )
+		throw "-watchos_version_min argument missing";
+	if ( ! isdigit(version[0]) )
+		throw "-watchos_version_min argument is not a number";
+	if ( version[1] != '.' )
+		throw "-watchos_version_min argument is missing period as second character";
+	if ( ! isdigit(version[2]) )
+		throw "-watchos_version_min argument is not a number";
+
+	unsigned int majorVersion = version[0] - '0';
+	unsigned int minorVersion = version[2] - '0';
+	fWatchOSVersionMin = (ld::WatchOSVersionMin)((majorVersion << 16) | (minorVersion << 8));
+	fPlatform = kPlatformWatchOS;
+}
+
 
 bool Options::minOS(ld::MacVersionMin requiredMacMin, ld::IOSVersionMin requirediPhoneOSMin)
 {
 	if ( fMacVersionMin != ld::macVersionUnset ) {
 		return ( fMacVersionMin >= requiredMacMin );
 	}
+	else if ( fWatchOSVersionMin != ld::wOSVersionUnset ) {
+		// Hack until we fully track watch and ios versions seperately
+		return ( (fWatchOSVersionMin + 0x00070000) >= requirediPhoneOSMin);
+	}
 	else {
-		return ( fIOSVersionMin >= requirediPhoneOSMin);
+		return ( fIOSVersionMin >= requirediPhoneOSMin );
 	}
 }
 
+bool Options::min_iOS(ld::IOSVersionMin requirediOSMin)
+{
+	 if ( fWatchOSVersionMin != ld::wOSVersionUnset ) {
+		// Hack until we fully track watch and ios versions seperately
+		return ( (fWatchOSVersionMin + 0x00070000) >= requirediOSMin);
+	}
+	else {
+		return ( fIOSVersionMin >= requirediOSMin );
+	}
+}
 
 void Options::setWeakReferenceMismatchTreatment(const char* treatment)
 {
@@ -1773,7 +1865,7 @@ void Options::addSection(const char* segment, const char* section, const char* p
 	::close(fd);
 
 	// record section to create
-	ExtraSection info = { segment, section, path, (uint8_t*)p, static_cast<uint64_t>(stat_buf.st_size) }; // ld64-port:  stat_buf.st_size -> static_cast<uint64_t>(stat_buf.st_size)
+	ExtraSection info = { segment, section, path, (uint8_t*)p, (uint64_t)stat_buf.st_size };
 	fExtraSections.push_back(info);
 }
 
@@ -1902,7 +1994,190 @@ void Options::warnObsolete(const char* arg)
 }
 
 
+void Options::cannotBeUsedWithBitcode(const char* arg)
+{
+	if ( fBundleBitcode )
+		throwf("%s and -bitcode_bundle (Xcode setting ENABLE_BITCODE=YES) cannot be used together", arg);
+}
 
+std::string Options::getVersionString32(uint32_t ver) const
+{
+	if (ver == 0 || ver >= 0x10000000)
+		return "0.0.0";
+
+	unsigned microVersion = ver & 0xFF;
+	unsigned minorVersion = (ver >> 8) & 0xFF;
+	unsigned majorVersion = (ver >> 16) & 0xFF;
+	std::stringstream versionString;
+	versionString << majorVersion << "." << minorVersion << "." << microVersion;
+	return versionString.str();
+}
+
+std::string Options::getVersionString64(uint64_t ver) const
+{
+	uint64_t a = (ver >> 40) & 0xFFFFFF;
+	uint64_t b = (ver >> 30) & 0x3FF;
+	uint64_t c = (ver >> 20) & 0x3FF;
+	uint64_t d = (ver >> 10) & 0x3FF;
+	uint64_t e = ver & 0x3FF;
+	std::stringstream versionString;
+	versionString << a << "." << b << "." << c << "." << d << "." << e;
+	return versionString.str();
+}
+
+std::string Options::getSDKVersionStr() const
+{
+	return getVersionString32(fSDKVersion);
+}
+
+std::string Options::getPlatformStr() const
+{
+	switch (fPlatform) {
+		case Options::kPlatformOSX:
+			return "MacOSX";
+		case Options::kPlatformiOS:
+			if (targetIOSSimulator())
+				return "iPhoneSimulator";
+			else
+				return "iPhoneOS";
+		case Options::kPlatformWatchOS:
+			if (targetIOSSimulator())
+				return "watchOS Simulator";
+			else
+				return "watchOS";
+#if SUPPORT_APPLE_TV
+		case Options::kPlatform_tvOS:
+			if (targetIOSSimulator())
+				return "AppleTVSimulator";
+			else
+				return "AppleTVOS";
+			break;
+#endif
+		case Options::kPlatformUnknown:
+			return "Unknown";
+		default: // ld64-port
+			__builtin_unreachable();
+	}
+}
+
+std::vector<std::string> Options::writeBitcodeLinkOptions() const
+{
+	std::vector<std::string> linkCommand;
+	switch ( fOutputKind ) {
+		case Options::kDynamicLibrary:
+			linkCommand.push_back("-dylib");
+			linkCommand.push_back("-compatibility_version");
+			if ( fDylibCompatVersion != 0 ) {
+				linkCommand.push_back(getVersionString32(fDylibCompatVersion));
+			} else {
+				linkCommand.push_back(getVersionString32(currentVersion32()));
+			}
+			if ( fDylibCurrentVersion != 0 ) {
+				linkCommand.push_back("-current_version");
+				linkCommand.push_back(getVersionString64(fDylibCurrentVersion));
+			}
+			linkCommand.push_back("-install_name");
+			linkCommand.push_back(installPath());
+			break;
+		case Options::kDynamicExecutable:
+			linkCommand.push_back("-execute");
+			break;
+		case Options::kObjectFile:
+			linkCommand.push_back("-r");
+			break;
+		default:
+			throwf("could not write bitcode options file output kind\n");
+	}
+
+	if (!fImplicitlyLinkPublicDylibs)
+		linkCommand.push_back("-no_implicit_dylibs");
+
+	// Add deployment target.
+	// Platform is allowed to be unknown for "ld -r".
+	switch (fPlatform) {
+		case Options::kPlatformOSX:
+			linkCommand.push_back("-macosx_version_min");
+			linkCommand.push_back(getVersionString32((unsigned)fMacVersionMin));
+			break;
+		case Options::kPlatformiOS:
+			if (targetIOSSimulator())
+				linkCommand.push_back("-ios_simulator_version_min");
+			else
+				linkCommand.push_back("-ios_version_min");
+			linkCommand.push_back(getVersionString32((unsigned)fIOSVersionMin));
+			break;
+		case Options::kPlatformWatchOS:
+			if (targetIOSSimulator())
+				linkCommand.push_back("-watchos_simulator_version_min");
+			else
+				linkCommand.push_back("-watchos_version_min");
+			linkCommand.push_back(getVersionString32((unsigned)fIOSVersionMin));
+			break;
+#if SUPPORT_APPLE_TV
+		case Options::kPlatform_tvOS:
+			if (targetIOSSimulator())
+				linkCommand.push_back("-tvos_simulator_version_min");
+			else
+				linkCommand.push_back("-tvos_version_min");
+			linkCommand.push_back(getVersionString32((unsigned)fIOSVersionMin));
+			break;
+#endif
+		case Options::kPlatformUnknown:
+			if ( fOutputKind != Options::kObjectFile ) {
+				throwf("platform is unknown for final bitcode bundle,"
+					   "deployment target and min version is required for -bitcode_bundle");
+			}
+			break;
+	}
+
+
+	// entry name
+	if ( fEntryName ) {
+		linkCommand.push_back("-e");
+		linkCommand.push_back(fEntryName);
+	}
+
+	// Write rpaths
+	if (!fRPaths.empty()) {
+		for (std::vector<const char*>::const_iterator it=fRPaths.begin(); it != fRPaths.end(); ++it) {
+			linkCommand.push_back("-rpath");
+			linkCommand.push_back(*it);
+		}
+	}
+
+	// Other bitcode compatiable options
+	if ( fObjCABIVersion1Override ) {
+		linkCommand.push_back("-objc_abi_version");
+		linkCommand.push_back("1");
+	} else if ( fObjCABIVersion2Override ) {
+		linkCommand.push_back("-objc_abi_version");
+		linkCommand.push_back("2");
+	}
+	if ( fExecutablePath ) {
+		linkCommand.push_back("-executable_path");
+		linkCommand.push_back(fExecutablePath);
+	}
+	if ( fDeadStrip )
+		linkCommand.push_back("-dead_strip");
+	if ( fExportDynamic )
+		linkCommand.push_back("-export_dynamic");
+	if ( fMarkAppExtensionSafe && fCheckAppExtensionSafe )
+		linkCommand.push_back("-application_extension");
+
+	if ( fSourceVersionLoadCommandForceOn )
+		linkCommand.push_back("-add_source_version");
+	if ( fSourceVersion != 0 ) {
+		linkCommand.push_back("-source_version");
+		linkCommand.push_back(getVersionString64(fSourceVersion));
+	}
+
+	// linker flag added by swift driver
+	// rdar://problem/20108072
+	if ( !fObjcCategoryMerging )
+		linkCommand.push_back("-no_objc_category_merging");
+
+	return linkCommand;
+}
 
 //
 // Process all command line arguments.
@@ -1964,15 +2239,18 @@ void Options::parse(int argc, const char* argv[])
 				if ( (fOutputKind != kObjectFile) && (fOutputKind != kKextBundle) ) {
 					fOutputKind = kStaticExecutable;
 				}
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-dylib") == 0 ) {
 				fOutputKind = kDynamicLibrary;
 			}
 			else if ( strcmp(arg, "-bundle") == 0 ) {
 				fOutputKind = kDynamicBundle;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-dylinker") == 0 ) {
 				fOutputKind = kDyld;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-execute") == 0 ) {
 				if ( fOutputKind != kStaticExecutable )
@@ -1980,12 +2258,14 @@ void Options::parse(int argc, const char* argv[])
 			}
 			else if ( strcmp(arg, "-preload") == 0 ) {
 				fOutputKind = kPreload;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-r") == 0 ) {
 				fOutputKind = kObjectFile;
 			}
 			else if ( strcmp(arg, "-kext") == 0 ) {
 				fOutputKind = kKextBundle;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-o") == 0 ) {
                 snapshotArgCount = 0;
@@ -1999,6 +2279,7 @@ void Options::parse(int argc, const char* argv[])
 				info.ordinal = ld::File::Ordinal::makeArgOrdinal((uint16_t)i);
 				addLibrary(info);
 				fUsingLazyDylibLinking = true;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-lto_library") == 0 ) {
                 snapshotFileArgIndex = 1;
@@ -2025,18 +2306,21 @@ void Options::parse(int argc, const char* argv[])
 			// Avoid lazy binding.
 			else if ( strcmp(arg, "-bind_at_load") == 0 ) {
 				fBindAtLoad = true;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-twolevel_namespace") == 0 ) {
 				fNameSpace = kTwoLevelNameSpace;
 			}
 			else if ( strcmp(arg, "-flat_namespace") == 0 ) {
 				fNameSpace = kFlatNameSpace;
+				cannotBeUsedWithBitcode(arg);
 			}
 			// Also sets a bit to ensure dyld causes everything
 			// in the namespace to be flat.
 			// ??? Deprecate
 			else if ( strcmp(arg, "-force_flat_namespace") == 0 ) {
 				fNameSpace = kForceFlatNameSpace;
+				cannotBeUsedWithBitcode(arg);
 			}
 			// Similar to --whole-archive.
 			else if ( strcmp(arg, "-all_load") == 0 ) {
@@ -2077,13 +2361,16 @@ void Options::parse(int argc, const char* argv[])
                 snapshotFileArgIndex = 3;
 				parseSectionOrderFile(argv[i+1], argv[i+2], argv[i+3]);
 				i += 3;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-order_file") == 0 ) {
                 snapshotFileArgIndex = 1;
 				parseOrderFile(argv[++i], false);
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-order_file_statistics") == 0 ) {
 				fPrintOrderFileStatistics = true;
+				cannotBeUsedWithBitcode(arg);
 			}
 			// ??? Deprecate segcreate.
 			// -sectcreate puts whole files into a section in the output.
@@ -2113,6 +2400,7 @@ void Options::parse(int argc, const char* argv[])
 					warning("-seg1addr not %lld byte aligned, rounding up", fSegmentAlignment);
 					fBaseAddress = temp;
 				}
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-e") == 0 ) {
 				fEntryName = argv[++i];
@@ -2127,7 +2415,8 @@ void Options::parse(int argc, const char* argv[])
 				 loadFileList(path, baseOrdinal);
 			}
 			else if ( strcmp(arg, "-keep_private_externs") == 0 ) {
-				 fKeepPrivateExterns = true;
+				cannotBeUsedWithBitcode(arg);
+				fKeepPrivateExterns = true;
 			}
 			else if ( strcmp(arg, "-final_output") == 0 ) {
 				fFinalName = argv[++i];
@@ -2144,11 +2433,13 @@ void Options::parse(int argc, const char* argv[])
 						// do nothing, -interposable_list overrides -interposable"
 						break;
 				}
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-interposable_list") == 0 ) {
                 snapshotFileArgIndex = 1;
 				fInterposeMode = kInterposeSome;
 				loadExportFile(argv[++i], "-interposable_list", fInterposeList);
+				cannotBeUsedWithBitcode(arg);
 			}
 			// Default for -interposable/-multi_module/-single_module.
 			else if ( strcmp(arg, "-single_module") == 0 ) {
@@ -2167,6 +2458,7 @@ void Options::parse(int argc, const char* argv[])
 					throw "can't use -unexported_symbols_list and -exported_symbols_list";
 				fExportMode = kDontExportSome;
 				loadExportFile(argv[++i], "-unexported_symbols_list", fDontExportSymbols);
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-exported_symbol") == 0 ) {
 				if ( fExportMode == kDontExportSome )
@@ -2179,6 +2471,7 @@ void Options::parse(int argc, const char* argv[])
 					throw "can't use -unexported_symbol and -exported_symbol";
 				fExportMode = kDontExportSome;
 				fDontExportSymbols.insert(argv[++i]);
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-non_global_symbols_no_strip_list") == 0 ) {
                 snapshotFileArgIndex = 1;
@@ -2186,6 +2479,7 @@ void Options::parse(int argc, const char* argv[])
 					throw "can't use -non_global_symbols_no_strip_list and -non_global_symbols_strip_list";
 				fLocalSymbolHandling = kLocalSymbolsSelectiveInclude;
 				loadExportFile(argv[++i], "-non_global_symbols_no_strip_list", fLocalSymbolsIncluded);
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-non_global_symbols_strip_list") == 0 ) {
                 snapshotFileArgIndex = 1;
@@ -2193,6 +2487,7 @@ void Options::parse(int argc, const char* argv[])
 					throw "can't use -non_global_symbols_no_strip_list and -non_global_symbols_strip_list";
 				fLocalSymbolHandling = kLocalSymbolsSelectiveExclude;
 				loadExportFile(argv[++i], "-non_global_symbols_strip_list", fLocalSymbolsExcluded);
+				cannotBeUsedWithBitcode(arg);
 			}
 			// ??? Deprecate
 			else if ( strcmp(arg, "-no_arch_warnings") == 0 ) {
@@ -2201,6 +2496,7 @@ void Options::parse(int argc, const char* argv[])
 			else if ( strcmp(arg, "-force_cpusubtype_ALL") == 0 ) {
 				fForceSubtypeAll = true;
 				fAllowCpuSubtypeMismatches = true;
+				cannotBeUsedWithBitcode(arg);
 			}
 			// Similar to -weak-l but uses the absolute path name to the library.
 			else if ( strcmp(arg, "-weak_library") == 0 ) {
@@ -2210,6 +2506,7 @@ void Options::parse(int argc, const char* argv[])
 				info.options.fWeakImport = true;
 				info.ordinal = ld::File::Ordinal::makeArgOrdinal((uint16_t)i);
 				addLibrary(info);
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-lazy_library") == 0 ) {
                 // SNAPSHOT FIXME: what should we do for link snapshots? (ignore for now)
@@ -2219,6 +2516,7 @@ void Options::parse(int argc, const char* argv[])
 				info.ordinal = ld::File::Ordinal::makeArgOrdinal((uint16_t)i);
 				addLibrary(info);
 				fUsingLazyDylibLinking = true;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-framework") == 0 ) {
                 snapshotArgCount = 0;
@@ -2242,6 +2540,7 @@ void Options::parse(int argc, const char* argv[])
 				info.ordinal = ld::File::Ordinal::makeArgOrdinal((uint16_t)i);
 				addLibrary(info);
 				fUsingLazyDylibLinking = true;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-search_paths_first") == 0 ) {
 				// previously handled by buildSearchPaths()
@@ -2251,6 +2550,7 @@ void Options::parse(int argc, const char* argv[])
 			}
 			else if ( strcmp(arg, "-undefined") == 0 ) {
                 setUndefinedTreatment(argv[++i]);
+				cannotBeUsedWithBitcode(arg);
 			}
 			// Debugging output flag.
 			else if ( strcmp(arg, "-arch_multiple") == 0 ) {
@@ -2268,10 +2568,12 @@ void Options::parse(int argc, const char* argv[])
 					case kWarning:
 						fWarnTextRelocs = true;
 						fAllowTextRelocs = true;
+						cannotBeUsedWithBitcode(arg);
 						break;
 					case kSuppress:
 						fWarnTextRelocs = false;
 						fAllowTextRelocs = true;
+						cannotBeUsedWithBitcode(arg);
 						break;
 					case kError:
 						fWarnTextRelocs = false;
@@ -2294,6 +2596,7 @@ void Options::parse(int argc, const char* argv[])
 			// later.  Prebinding is less useful on 10.4 and greater.
 			else if ( strcmp(arg, "-prebind") == 0 ) {
 				fPrebind = true;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-noprebind") == 0 ) {
 				warnObsolete(arg);
@@ -2317,6 +2620,7 @@ void Options::parse(int argc, const char* argv[])
                 // ignore for snapshot because a stub dylib will be created in the snapshot
                  snapshotArgCount = 0;
 				 addDylibOverride(argv[++i]);
+				cannotBeUsedWithBitcode(arg);
 			}
 			// What to expand @executable_path to if found in dependent dylibs
 			else if ( strcmp(arg, "-executable_path") == 0 ) {
@@ -2347,6 +2651,7 @@ void Options::parse(int argc, const char* argv[])
 					warning("alignment for -segalign %s is not a power of two, using 0x%X", size, p2aligned);
 					fSegmentAlignment = p2aligned;
 				}
+				cannotBeUsedWithBitcode(arg);
 			}
 			// Puts a specified segment at a particular address that must
 			// be a multiple of the segment alignment.
@@ -2360,15 +2665,18 @@ void Options::parse(int argc, const char* argv[])
 				if ( seg.address != temp )
 					warning("-segaddr %s not %lld byte aligned", seg.name, fSegmentAlignment);
 				fCustomSegmentAddresses.push_back(seg);
+				cannotBeUsedWithBitcode(arg);
 			}
 			// ??? Deprecate when we deprecate split-seg.
 			else if ( strcmp(arg, "-segs_read_only_addr") == 0 ) {
 				fBaseAddress = parseAddress(argv[++i]);
+				cannotBeUsedWithBitcode(arg);
 			}
 			// ??? Deprecate when we deprecate split-seg.
 			else if ( strcmp(arg, "-segs_read_write_addr") == 0 ) {
 				fBaseWritableAddress = parseAddress(argv[++i]);
 				fSplitSegs = true;
+				cannotBeUsedWithBitcode(arg);
 			}
 			// ??? Deprecate when we get rid of basing at build time.
 			else if ( strcmp(arg, "-seg_addr_table") == 0 ) {
@@ -2377,6 +2685,7 @@ void Options::parse(int argc, const char* argv[])
 				if ( name == NULL )
 					throw "-seg_addr_table missing argument";
 				fSegAddrTablePath = name;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-seg_addr_table_filename") == 0 ) {
 				warnObsolete(arg);
@@ -2390,6 +2699,7 @@ void Options::parse(int argc, const char* argv[])
 				seg.max = parseProtection(argv[++i]);
 				seg.init = parseProtection(argv[++i]);
 				fCustomSegmentProtections.push_back(seg);
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-pagezero_size") == 0 ) {
 				 const char* size = argv[++i];
@@ -2400,12 +2710,14 @@ void Options::parse(int argc, const char* argv[])
 				if ( (fZeroPageSize != temp)  )
 					warning("-pagezero_size not page aligned, rounding down");
 				 fZeroPageSize = temp;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-stack_addr") == 0 ) {
 				 const char* address = argv[++i];
 				 if ( address == NULL )
 					throw "-stack_addr missing <address>";
 				fStackAddr = parseAddress(address);
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-stack_size") == 0 ) {
 				 const char* size = argv[++i];
@@ -2418,15 +2730,18 @@ void Options::parse(int argc, const char* argv[])
 			}
 			else if ( strcmp(arg, "-allow_stack_execute") == 0 ) {
 				fExecutableStack = true;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-allow_heap_execute") == 0 ) {
 				fDisableNonExecutableHeap = true;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-sectalign") == 0 ) {
 				 if ( (argv[i+1]==NULL) || (argv[i+2]==NULL) || (argv[i+3]==NULL) )
 					throw "-sectalign missing <segment> <section> <file-path>";
 				addSectionAlignment(argv[i+1], argv[i+2], argv[i+3]);
 				i += 3;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-sectorder_detail") == 0 ) {
 				warnObsolete(arg);
@@ -2486,6 +2801,24 @@ void Options::parse(int argc, const char* argv[])
 				setIOSVersionMin(argv[++i]);
 				fTargetIOSSimulator = true;
 			}
+			else if ( strcmp(arg, "-watchos_version_min") == 0 ) {
+				setWatchOSVersionMin(argv[++i]);
+			}
+			else if ( strcmp(arg, "-watchos_simulator_version_min") == 0 ) {
+				setWatchOSVersionMin(argv[++i]);
+				fTargetIOSSimulator = true;
+			}
+	#if SUPPORT_APPLE_TV
+			else if ( strcmp(arg, "-tvos_version_min") == 0 ) {
+				setIOSVersionMin(argv[++i]);
+				fPlatform = kPlatform_tvOS;
+			}
+			else if ( strcmp(arg, "-tvos_simulator_version_min") == 0 ) {
+				setIOSVersionMin(argv[++i]);
+				fPlatform = kPlatform_tvOS;
+				fTargetIOSSimulator = true;
+			}
+	#endif
 			else if ( strcmp(arg, "-multiply_defined") == 0 ) {
 				//warnObsolete(arg);
 				++i;
@@ -2526,12 +2859,14 @@ void Options::parse(int argc, const char* argv[])
 				if ( name == NULL )
 					throw "-u missing argument";
 				fInitialUndefines.push_back(name);
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-U") == 0 ) {
 				const char* name = argv[++i];
 				if ( name == NULL )
 					throw "-U missing argument";
 				fAllowedUndefined.insert(name);
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-s") == 0 ) {
 				warnObsolete(arg);
@@ -2584,9 +2919,15 @@ void Options::parse(int argc, const char* argv[])
 				if ( size == NULL )
 					throw "-headerpad missing argument";
 				 fMinimumHeaderPad = parseAddress(size);
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-headerpad_max_install_names") == 0 ) {
-				fMaxMinimumHeaderPad = true;
+				// ignore -headerpad_max_install_names when compiling with bitcode
+				// rdar://problem/20748962
+				if ( fBundleBitcode )
+					warning("-headerpad_max_install_names is ignored when used with -bitcode_bundle (Xcode setting ENABLE_BITCODE=YES)");
+				else
+					fMaxMinimumHeaderPad = true;
 			}
 			else if ( strcmp(arg, "-t") == 0 ) {
 				fLogAllFiles = true;
@@ -2603,6 +2944,7 @@ void Options::parse(int argc, const char* argv[])
 				if ( name == NULL )
 					throw "-umbrella missing argument";
 				fUmbrellaName = name;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-allowable_client") == 0 ) {
 				const char* name = argv[++i];
@@ -2611,6 +2953,7 @@ void Options::parse(int argc, const char* argv[])
 					throw "-allowable_client missing argument";
 
 				fAllowableClients.push_back(name);
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-client_name") == 0 ) {
 				const char* name = argv[++i];
@@ -2619,30 +2962,35 @@ void Options::parse(int argc, const char* argv[])
 					throw "-client_name missing argument";
 
 				fClientName = name;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-sub_umbrella") == 0 ) {
 				const char* name = argv[++i];
 				if ( name == NULL )
 					throw "-sub_umbrella missing argument";
 				 fSubUmbellas.push_back(name);
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-sub_library") == 0 ) {
 				const char* name = argv[++i];
 				if ( name == NULL )
 					throw "-sub_library missing argument";
 				 fSubLibraries.push_back(name);
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-init") == 0 ) {
 				const char* name = argv[++i];
 				if ( name == NULL )
 					throw "-init missing argument";
 				fInitFunctionName = name;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-dot") == 0 ) {
 				const char* name = argv[++i];
 				if ( name == NULL )
 					throw "-dot missing argument";
 				fDotOutputFile = name;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-warn_commons") == 0 ) {
 				fWarnCommons = true;
@@ -2676,11 +3024,17 @@ void Options::parse(int argc, const char* argv[])
 				++i;
 				// previously handled by buildSearchPaths()
 			}
+			else if ( strcmp(arg, "-bitcode_bundle") == 0 ) {
+				snapshotArgCount = 0;
+				// previously handled by buildSearchPaths()
+			}
 			else if ( strcmp(arg, "-no_uuid") == 0 ) {
 				fUUIDMode = kUUIDNone;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-random_uuid") == 0 ) {
 				fUUIDMode = kUUIDRandom;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-dtrace") == 0 ) {
                 snapshotFileArgIndex = 1;
@@ -2688,6 +3042,7 @@ void Options::parse(int argc, const char* argv[])
 				if ( name == NULL )
 					throw "-dtrace missing argument";
 				fDtraceScriptName = name;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-root_safe") == 0 ) {
 				fRootSafe = true;
@@ -2704,13 +3059,44 @@ void Options::parse(int argc, const char* argv[])
 				if ( pair.alias == NULL )
 					throw "missing argument to -alias";
 				fAliases.push_back(pair);
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-alias_list") == 0 ) {
                 snapshotFileArgIndex = 1;
 				parseAliasFile(argv[++i]);
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-save-temps") == 0 ) {
 				fSaveTempFiles = true;
+			}
+			else if ( strcmp(arg, "-bitcode_hide_symbols") == 0 ) {
+				fHideSymbols = true;
+				if ( !fBundleBitcode )
+					warning("-bitcode_hide_symbols is ignored without -bitcode_bundle");
+			}
+			else if ( strcmp(arg, "-bitcode_symbol_map") == 0) {
+				fReverseMapPath = argv[++i];
+				if ( fReverseMapPath == NULL )
+					throw "missing argument to -bitcode_symbol_map";
+				struct stat statbuf;
+				::stat(fReverseMapPath, &statbuf);
+				if (S_ISDIR(statbuf.st_mode)) {
+					char tempPath[PATH_MAX];
+					sprintf(tempPath, "%s/XXXXXX", fReverseMapPath);
+					int tempFile = ::mkstemp(tempPath);
+					if (tempFile == -1)
+						throwf("could not write file to symbol map directory: %s", fReverseMapPath);
+					::close(tempFile);
+					fReverseMapTempPath = std::string(tempPath);
+					fReverseMapUUIDRename = true;
+				} else
+					fReverseMapTempPath = std::string(fReverseMapPath);
+			}
+			else if ( strcmp(argv[i], "-flto-codegen-only") == 0) {
+				fLTOCodegenOnly = true;
+			}
+			else if ( strcmp(argv[i], "-ignore_auto_link") == 0) {
+				fIgnoreAutoLink = true;
 			}
 			else if ( strcmp(arg, "-rpath") == 0 ) {
 				const char* path = argv[++i];
@@ -2735,6 +3121,7 @@ void Options::parse(int argc, const char* argv[])
 			}
 			else if ( strcmp(arg, "-no_pie") == 0 ) {
 				fDisablePositionIndependentExecutable = true;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strncmp(arg, "-reexport-l", 11) == 0 ) {
                 // SNAPSHOT FIXME: what should we do for link snapshots? (ignore for now)
@@ -2743,6 +3130,7 @@ void Options::parse(int argc, const char* argv[])
 				info.options.fReExport = true;
 				info.ordinal = ld::File::Ordinal::makeArgOrdinal((uint16_t)i);
 				addLibrary(info);
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-reexport_library") == 0 ) {
                 // SNAPSHOT FIXME: what should we do for link snapshots? (ignore for now)
@@ -2751,6 +3139,7 @@ void Options::parse(int argc, const char* argv[])
 				info.options.fReExport = true;
 				info.ordinal = ld::File::Ordinal::makeArgOrdinal((uint16_t)i);
 				addLibrary(info);
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-reexport_framework") == 0 ) {
                 // SNAPSHOT FIXME: what should we do for link snapshots? (ignore for now)
@@ -2759,6 +3148,7 @@ void Options::parse(int argc, const char* argv[])
 				info.options.fReExport = true;
 				info.ordinal = ld::File::Ordinal::makeArgOrdinal((uint16_t)i);
 				addLibrary(info);
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strncmp(arg, "-upward-l", 9) == 0 ) {
                 // SNAPSHOT FIXME: what should we do for link snapshots? (ignore for now)
@@ -2767,6 +3157,7 @@ void Options::parse(int argc, const char* argv[])
 				info.options.fUpward = true;
 				info.ordinal = ld::File::Ordinal::makeArgOrdinal((uint16_t)i);
 				addLibrary(info);
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-upward_library") == 0 ) {
                 // SNAPSHOT FIXME: what should we do for link snapshots? (ignore for now)
@@ -2775,6 +3166,7 @@ void Options::parse(int argc, const char* argv[])
 				info.options.fUpward = true;
 				info.ordinal = ld::File::Ordinal::makeArgOrdinal((uint16_t)i);
 				addLibrary(info);
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-upward_framework") == 0 ) {
                 // SNAPSHOT FIXME: what should we do for link snapshots? (ignore for now)
@@ -2783,9 +3175,11 @@ void Options::parse(int argc, const char* argv[])
 				info.options.fUpward = true;
 				info.ordinal = ld::File::Ordinal::makeArgOrdinal((uint16_t)i);
 				addLibrary(info);
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-dead_strip_dylibs") == 0 ) {
 				fDeadStripDylibs = true;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-no_implicit_dylibs") == 0 ) {
 				fImplicitlyLinkPublicDylibs = false;
@@ -2794,28 +3188,38 @@ void Options::parse(int argc, const char* argv[])
 				// ignore
 			}
 			else if ( strcmp(arg, "-no_encryption") == 0 ) {
-				fEncryptable = false;
+				fEncryptableForceOff = true;
+				cannotBeUsedWithBitcode(arg);
+			}
+			else if ( strcmp(arg, "-encryptable") == 0 ) {
+				fEncryptableForceOn = true;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-no_compact_unwind") == 0 ) {
 				fAddCompactUnwindEncoding = false;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-mllvm") == 0 ) {
 				const char* opts = argv[++i];
 				if ( opts == NULL )
 					throw "missing argument to -mllvm";
 				fLLVMOptions.push_back(opts);
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-mcpu") == 0 ) {
 				const char* cpu = argv[++i];
 				if ( cpu == NULL )
 					throw "missing argument to -mcpu";
 				fLtoCpu = cpu;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-no_order_inits") == 0 ) {
 				fAutoOrderInitializers = false;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-no_order_data") == 0 ) {
 				fOrderData = false;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-seg_page_size") == 0 ) {
 				SegmentSize seg;
@@ -2827,31 +3231,38 @@ void Options::parse(int argc, const char* argv[])
 				if ( (seg.size != temp)  )
 					warning("-seg_page_size %s not 4K aligned, rounding down", seg.name);
 				fCustomSegmentSizes.push_back(seg);
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-mark_dead_strippable_dylib") == 0 ) {
 				fMarkDeadStrippableDylib = true;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-exported_symbols_order") == 0 ) {
                 snapshotFileArgIndex = 1;
 				loadSymbolOrderFile(argv[++i], fExportSymbolsOrder);
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-no_compact_linkedit") == 0 ) {
 				warnObsolete("-no_compact_linkedit");
 			}
 			else if ( strcmp(arg, "-no_eh_labels") == 0 ) {
 				fNoEHLabels = true;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-warn_compact_unwind") == 0 ) {
 				fWarnCompactUnwind = true;
 			}
 			else if ( strcmp(arg, "-allow_sub_type_mismatches") == 0 ) {
 				fAllowCpuSubtypeMismatches = true;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-no_zero_fill_sections") == 0 ) {
 				fOptimizeZeroFill = false;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-merge_zero_fill_sections") == 0 ) {
 				fMergeZeroFill = true;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-objc_abi_version") == 0 ) {
 				const char* version = argv[++i];
@@ -2873,6 +3284,7 @@ void Options::parse(int argc, const char* argv[])
 			}
 			else if ( strcmp(arg, "-objc_gc_compaction") == 0 ) {
 				fObjcGcCompaction = true;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-objc_gc") == 0 ) {
 				fObjCGc = true;
@@ -2880,6 +3292,7 @@ void Options::parse(int argc, const char* argv[])
 					warning("-objc_gc overriding -objc_gc_only");
 					fObjCGcOnly = false;	
 				}
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-objc_gc_only") == 0 ) {
 				fObjCGcOnly = true;
@@ -2887,6 +3300,7 @@ void Options::parse(int argc, const char* argv[])
 					warning("-objc_gc_only overriding -objc_gc");
 					fObjCGc = false;	
 				}
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-demangle") == 0 ) {
 				fDemangle = true;
@@ -2898,6 +3312,7 @@ void Options::parse(int argc, const char* argv[])
 			else if ( strcmp(arg, "-no_version_load_command") == 0 ) {
 				fVersionLoadCommandForcedOff = true;
 				fVersionLoadCommandForcedOn = false;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-function_starts") == 0 ) {
 				fFunctionStartsForcedOn = true;
@@ -2906,10 +3321,12 @@ void Options::parse(int argc, const char* argv[])
 			else if ( strcmp(arg, "-no_function_starts") == 0 ) {
 				fFunctionStartsForcedOff = true;
 				fFunctionStartsForcedOn = false;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-no_data_in_code_info") == 0 ) {
 				fDataInCodeInfoLoadCommandForcedOff = true;
 				fDataInCodeInfoLoadCommandForcedOn = false;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-data_in_code_info") == 0 ) {
 				fDataInCodeInfoLoadCommandForcedOn  = true;
@@ -2926,22 +3343,26 @@ void Options::parse(int argc, const char* argv[])
 			else if ( strcmp(arg, "-force_symbols_weak_list") == 0 ) {
                 snapshotFileArgIndex = 1;
 				loadExportFile(argv[++i], "-force_symbols_weak_list", fForceWeakSymbols);
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-force_symbols_not_weak_list") == 0 ) {
                 snapshotFileArgIndex = 1;
 				loadExportFile(argv[++i], "-force_symbols_not_weak_list", fForceNotWeakSymbols);
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-force_symbol_weak") == 0 ) {
 				const char* symbol = argv[++i];
 				if ( symbol == NULL )
 					throw "-force_symbol_weak missing <symbol>";
 				fForceWeakSymbols.insert(symbol);
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-force_symbol_not_weak") == 0 ) {
 				const char* symbol = argv[++i];
 				if ( symbol == NULL )
 					throw "-force_symbol_not_weak missing <symbol>";
 				fForceNotWeakSymbols.insert(symbol);
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-reexported_symbols_list") == 0 ) {
                 snapshotFileArgIndex = 1;
@@ -2956,13 +3377,16 @@ void Options::parse(int argc, const char* argv[])
 				if ( strchr(envarg, '=') == NULL )
 					throw "-dyld_env missing ENV=VALUE";
 				fDyldEnvironExtras.push_back(envarg);
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-page_align_data_atoms") == 0 ) {
 				fPageAlignDataAtoms = true;
+				cannotBeUsedWithBitcode(arg);
 			} 
 			else if (strcmp(arg, "-debug_snapshot") == 0) {
                 fLinkSnapshot.setSnapshotMode(Snapshot::SNAPSHOT_DEBUG);
                 fSnapshotRequested = true;
+				cannotBeUsedWithBitcode(arg);
             }
  			else if (strcmp(arg, "-snapshot_dir") == 0) {
 				const char* path = argv[++i];
@@ -2971,12 +3395,15 @@ void Options::parse(int argc, const char* argv[])
 				fLinkSnapshot.setSnapshotMode(Snapshot::SNAPSHOT_DEBUG);
 				fLinkSnapshot.setSnapshotPath(path);
 				fSnapshotRequested = true;
+				cannotBeUsedWithBitcode(arg);
             }
 			else if ( strcmp(arg, "-new_main") == 0 ) {
 				fEntryPointLoadCommandForceOn = true;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-no_new_main") == 0 ) {
 				fEntryPointLoadCommandForceOff = true;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-source_version") == 0 ) {
 				 const char* vers = argv[++i];
@@ -2989,6 +3416,7 @@ void Options::parse(int argc, const char* argv[])
 			}
 			else if ( strcmp(arg, "-no_source_version") == 0 ) {
 				fSourceVersionLoadCommandForceOff = true;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-sdk_version") == 0 ) {
 				 const char* vers = argv[++i];
@@ -2997,13 +3425,14 @@ void Options::parse(int argc, const char* argv[])
 				fSDKVersion = parseVersionNumber32(vers);
 			}
 			else if ( strcmp(arg, "-dependent_dr_info") == 0 ) {
-				fDependentDRInfoForcedOn = true;
+				warnObsolete(arg);
 			}
 			else if ( strcmp(arg, "-no_dependent_dr_info") == 0 ) {
-				fDependentDRInfoForcedOff = true;
+				warnObsolete(arg);
 			}
 			else if ( strcmp(arg, "-kexts_use_stubs") == 0 ) {
 				fKextsUseStubs = true;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(argv[i], "-dependency_info") == 0 ) {
                 snapshotArgCount = 0;
@@ -3038,23 +3467,28 @@ void Options::parse(int argc, const char* argv[])
 					}
 				}
 				fLinkerOptions.push_back(opts);
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-allow_simulator_linking_to_macosx_dylibs") == 0 ) {
 				fAllowSimulatorToLinkWithMacOSX = true;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-keep_dwarf_unwind") == 0 ) {
 				fKeepDwarfUnwindForcedOn = true;
 				fKeepDwarfUnwindForcedOff = false;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-no_keep_dwarf_unwind") == 0 ) {
 				fKeepDwarfUnwindForcedOn = false;
 				fKeepDwarfUnwindForcedOff = true;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-verbose_optimization_hints") == 0 ) {
 				fVerboseOptimizationHints = true;
 			}
 			else if ( strcmp(arg, "-ignore_optimization_hints") == 0 ) {
 				fIgnoreOptimizationHints = true;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-no_dtrace_dof") == 0 ) {
 				fGenerateDtraceDOF = false;
@@ -3064,30 +3498,35 @@ void Options::parse(int argc, const char* argv[])
 					throw "-rename_section missing <segment> <section> <segment> <section>";
 				addSectionRename(argv[i+1], argv[i+2], argv[i+3], argv[i+4]);
 				i += 4;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-rename_segment") == 0 ) {
 				 if ( (argv[i+1]==NULL) || (argv[i+2]==NULL) )
 					throw "-rename_segment missing <existing-segment> <new-segment>";
 				addSegmentRename(argv[i+1], argv[i+2]);
 				i += 2;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-move_to_ro_segment") == 0 ) {
 				 if ( (argv[i+1]==NULL) || (argv[i+2]==NULL) )
 					throw "-move_to_ro_segment missing <segment> <symbol-list-file>";
 				addSymbolMove(argv[i+1], argv[i+2], fSymbolsMovesCode, "-move_to_ro_segment");
 				i += 2;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-move_to_rw_segment") == 0 ) {
 				 if ( (argv[i+1]==NULL) || (argv[i+2]==NULL) )
 					throw "-move_to_rw_segment missing <segment> <symbol-list-file>";
 				addSymbolMove(argv[i+1], argv[i+2], fSymbolsMovesData, "-move_to_rw_segment");
 				i += 2;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-trace_symbol_layout") == 0 ) {
 				fTraceSymbolLayout = true;
 			}
 			else if ( strcmp(arg, "-no_branch_islands") == 0 ) {
 				fAllowBranchIslands = false;
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-segment_order") == 0 ) {
 				// ex: -segment_order __TEXT:__DATA:__JUNK
@@ -3110,6 +3549,7 @@ void Options::parse(int argc, const char* argv[])
 						break;
 					}
 				}
+				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-section_order") == 0 ) {
 				// ex: -section_order __DATA  __data:__const:__nl_pointers
@@ -3137,6 +3577,7 @@ void Options::parse(int argc, const char* argv[])
 						break;
 					}
 				}
+				cannotBeUsedWithBitcode(arg);
 			}			
 			else if ( strcmp(arg, "-application_extension") == 0 ) {
 				fMarkAppExtensionSafe = true;
@@ -3154,6 +3595,25 @@ void Options::parse(int argc, const char* argv[])
 			}
 			else if ( strcmp(arg, "-force_load_swift_libs") == 0 ) {
 				fForceLoadSwiftLibs = true;
+			}
+			else if ( strcmp(arg, "-not_for_dyld_shared_cache") == 0 ) {
+				fSharedRegionEligibleForceOff = true;
+				cannotBeUsedWithBitcode(arg);
+			}
+			else if ( strcmp(arg, "-dirty_data_list") == 0 ) {
+				 if ( argv[i+1] == NULL )
+					throw "-dirty_data_list missing <symbol-list-file>";
+				addSymbolMove("__DATA_DIRTY", argv[i+1], fSymbolsMovesData, "-dirty_data_list");
+				++i;
+				cannotBeUsedWithBitcode(arg);
+			}
+			else if ( strcmp(arg, "-data_const") == 0 ) {
+				fUseDataConstSegmentForceOn = true;
+				cannotBeUsedWithBitcode(arg);
+			}
+			else if ( strcmp(arg, "-no_data_const") == 0 ) {
+				fUseDataConstSegmentForceOff = true;
+				cannotBeUsedWithBitcode(arg);
 			}
 			// put this last so that it does not interfer with other options starting with 'i'
 			else if ( strncmp(arg, "-i", 2) == 0 ) {
@@ -3303,6 +3763,12 @@ void Options::buildSearchPaths(int argc, const char* argv[])
 			 if ( path == NULL )
 				throw "-dependency_info missing <path>";
 			fDependencyInfoPath = path;
+		}
+		else if ( strcmp(argv[i], "-bitcode_bundle") == 0 ) {
+#if !defined(HAVE_XAR_XAR_H) || !defined(LTO_SUPPORT) // ld64-port
+			throwf("-bitcode_bundle support via llvm/libxar not compiled in");
+#endif // !HAVE_XAR_XAR_H || !LTO_SUPPORT
+			fBundleBitcode = true;
 		}
 	}
 	int standardLibraryPathsStartIndex = libraryPaths.size();
@@ -3557,21 +4023,20 @@ void Options::reconfigureDefaults()
 	}
 
 	// set default min OS version
-	if ( (fMacVersionMin == ld::macVersionUnset)
-		&& (fIOSVersionMin == ld::iOSVersionUnset) ) {
+	if ( (fMacVersionMin == ld::macVersionUnset) && (fIOSVersionMin == ld::iOSVersionUnset) && (fWatchOSVersionMin == ld::wOSVersionUnset) ) {
 		// if neither -macosx_version_min nor -iphoneos_version_min used, try environment variables
 		const char* macVers = getenv("MACOSX_DEPLOYMENT_TARGET");
 		const char* iPhoneVers = getenv("IPHONEOS_DEPLOYMENT_TARGET");
 		const char* iOSVers = getenv("IOS_DEPLOYMENT_TARGET");
-		const char* iOSSimulatorVers = getenv("IOS_SIMULATOR_DEPLOYMENT_TARGET");
-		if ( macVers != NULL ) 
+		const char* wOSVers = getenv("WATCHOS_DEPLOYMENT_TARGET");
+		if ( macVers != NULL )
 			setMacOSXVersionMin(macVers);
 		else if ( iPhoneVers != NULL )
 			setIOSVersionMin(iPhoneVers);
 		else if ( iOSVers != NULL )
 			setIOSVersionMin(iOSVers);
-		else if ( iOSSimulatorVers != NULL )
-			setIOSVersionMin(iOSSimulatorVers);
+		else if ( wOSVers != NULL )
+			setWatchOSVersionMin(wOSVers);
 		else {
 			// if still nothing, set default based on architecture
 			switch ( fArchitecture ) {
@@ -3583,7 +4048,7 @@ void Options::reconfigureDefaults()
 						setMacOSXVersionMin(DEFAULT_MACOSX_MIN_VERSION);
 			#else
 						warning("-macosx_version_min not specified, assuming 10.6");
-						fMacVersionMin = ld::mac10_6;
+						setMacOSXVersionMin("10.6");
 			#endif		
 					}
 					break;
@@ -3593,8 +4058,14 @@ void Options::reconfigureDefaults()
 						warning("-ios_version_min not specified, assuming " DEFAULT_IPHONEOS_MIN_VERSION);
 						setIOSVersionMin(DEFAULT_IPHONEOS_MIN_VERSION);
 			#else
-						warning("-ios_version_min not specified, assuming 6.0");
-						setIOSVersionMin("6.0");
+						if ( fSubArchitecture == CPU_SUBTYPE_ARM_V7K ) {
+							warning("-watchos_version_min not specified, assuming 2.0");
+							setWatchOSVersionMin("2.0");
+						}
+						else {
+							warning("-ios_version_min not specified, assuming 6.0");
+							setIOSVersionMin("6.0");
+						}
 			#endif
 					}
 					break;
@@ -3609,19 +4080,19 @@ void Options::reconfigureDefaults()
 	// adjust min based on architecture
 	switch ( fArchitecture ) {
 		case CPU_TYPE_I386:
-			if ( (fMacVersionMin < ld::mac10_4) && (fIOSVersionMin == ld::iOSVersionUnset) ) {
+			if ( (fPlatform == kPlatformOSX) && (fMacVersionMin < ld::mac10_4) ) {
 				//warning("-macosx_version_min should be 10.4 or later for i386");
 				fMacVersionMin = ld::mac10_4;
 			}
 			break;
 		case CPU_TYPE_X86_64:
-			if ( (fMacVersionMin < ld::mac10_4) && (fIOSVersionMin == ld::iOSVersionUnset) ) {
+			if ( (fPlatform == kPlatformOSX) && (fMacVersionMin < ld::mac10_4) ) {
 				//warning("-macosx_version_min should be 10.4 or later for x86_64");
 				fMacVersionMin = ld::mac10_4;
 			}
 			break;
 		case CPU_TYPE_ARM64:
-			if ( fIOSVersionMin < ld::iOS_7_0 ) {
+			if ( (fPlatform == kPlatformiOS) && (fIOSVersionMin < ld::iOS_7_0) ) {
 				//warning("-mios_version_min should be 7.0 or later for arm64");
 				fIOSVersionMin = ld::iOS_7_0;
 			}
@@ -3674,12 +4145,12 @@ void Options::reconfigureDefaults()
 				fUndefinedTreatment = kUndefinedDynamicLookup;
 				break;
 			case CPU_TYPE_ARM:
-				if ( fIOSVersionMin >= ld::iOS_5_0 ) {
+				if ( min_iOS(ld::iOS_5_0) ) {
                     // iOS 5.0 and later use new MH_KEXT_BUNDLE type
                     fMakeCompressedDyldInfo = false;
                     fMakeCompressedDyldInfoForceOff = true;
 					// kexts are PIC in iOS 6.0 and later
-					fAllowTextRelocs = (fIOSVersionMin < ld::iOS_6_0);
+					fAllowTextRelocs = !min_iOS(ld::iOS_6_0);
 					fKextsUseStubs = !fAllowTextRelocs;
                     fUndefinedTreatment = kUndefinedDynamicLookup;
 					break;
@@ -3854,7 +4325,7 @@ void Options::reconfigureDefaults()
 	// determine if info for shared region should be added
 	if ( fOutputKind == Options::kDynamicLibrary ) {
 		if ( minOS(ld::mac10_5, ld::iOS_3_1) )
-			if ( !fPrebind )
+			if ( !fPrebind && !fSharedRegionEligibleForceOff )
 				if ( (strncmp(this->installPath(), "/usr/lib/", 9) == 0)
 					|| (strncmp(this->installPath(), "/System/Library/", 16) == 0) )
 					fSharedRegionEligible = true;
@@ -3863,7 +4334,41 @@ void Options::reconfigureDefaults()
         // <rdar://problem/10111122> Enable dyld to be put into the dyld shared cache
         fSharedRegionEligible = true;
 	}
-    
+
+	// <rdar://problem/18719327> warn if -rpath is used with OS dylibs
+	if ( fSharedRegionEligible && !fRPaths.empty() ) 
+		warning("-rpath cannot be used with dylibs that will be in the dyld shared cache");
+
+	// automatically use __DATA_CONST in iOS dylibs
+	if ( fSharedRegionEligible && minOS(ld::mac10_Future, ld::iOS_9_0) && !fUseDataConstSegmentForceOff ) {
+		fUseDataConstSegment = true;
+	}
+	if ( fUseDataConstSegmentForceOn ) {
+		fUseDataConstSegment = true;
+	}
+	if ( fUseDataConstSegment ) {
+		addSectionRename("__DATA", "__got",				"__DATA_CONST", "__got");
+		addSectionRename("__DATA", "__la_symbol_ptr",	"__DATA_CONST", "__la_symbol_ptr");
+		addSectionRename("__DATA", "__nl_symbol_ptr",	"__DATA_CONST", "__nl_symbol_ptr");
+		addSectionRename("__DATA", "__const",			"__DATA_CONST", "__const");
+		addSectionRename("__DATA", "__cfstring",		"__DATA_CONST", "__cfstring");
+		addSectionRename("__DATA", "__mod_init_func",   "__DATA_CONST", "__mod_init_func");
+		addSectionRename("__DATA", "__mod_term_func",   "__DATA_CONST", "__mod_term_func");
+		addSectionRename("__DATA", "__objc_classlist",  "__DATA_CONST", "__objc_classlist");
+		addSectionRename("__DATA", "__objc_nlclslist",	"__DATA_CONST", "__objc_nlclslist");
+		addSectionRename("__DATA", "__objc_catlist",	"__DATA_CONST", "__objc_catlist");
+		addSectionRename("__DATA", "__objc_nlcatlist",	"__DATA_CONST", "__objc_nlcatlist");
+		addSectionRename("__DATA", "__objc_protolist",	"__DATA_CONST", "__objc_protolist");
+		addSectionRename("__DATA", "__objc_imageinfo",	"__DATA_CONST", "__objc_imageinfo");
+		addSectionRename("__DATA", "__objc_const",	    "__DATA_CONST", "__objc_const");
+	}
+	
+	// Use V2 shared cache info when targetting newer OSs
+	if ( fSharedRegionEligible && minOS(ld::mac10_Future, ld::iOS_9_0)) {
+		fSharedRegionEncodingV2 = true;
+		fIgnoreOptimizationHints = true;
+	}
+
 	// figure out if module table is needed for compatibility with old ld/dyld
 	if ( fOutputKind == Options::kDynamicLibrary ) {
 		switch ( fArchitecture ) {
@@ -3948,11 +4453,15 @@ void Options::reconfigureDefaults()
 		case Options::kDynamicLibrary:
 		case Options::kDynamicBundle:
 			// <rdar://problem/16293398> Add LC_ENCRYPTION_INFO load command to bundled frameworks
-			if ( fIOSVersionMin < ld::iOS_8_0 )
+			if ( !min_iOS(ld::iOS_7_0) )
 				fEncryptable = false;
 			break;
 	}
 	if ( (fArchitecture != CPU_TYPE_ARM) && (fArchitecture != CPU_TYPE_ARM64) )
+		fEncryptable = false;
+	if ( fEncryptableForceOn )
+		fEncryptable = true;
+	else if ( fEncryptableForceOff )
 		fEncryptable = false;
 
 	// don't move inits in dyld because dyld wants certain
@@ -4058,7 +4567,7 @@ void Options::reconfigureDefaults()
 	if ( (fArchitecture == CPU_TYPE_ARM) 
 		&& fArchSupportsThumb2
 		&& (fOutputKind == kDynamicExecutable) 
-		&& (fIOSVersionMin >= ld::iOS_4_3) ) {
+		&& min_iOS(ld::iOS_4_3) ) {
 			fPositionIndependentExecutable = true;
 	}
 
@@ -4099,7 +4608,10 @@ void Options::reconfigureDefaults()
 	if ( fMacVersionMin >= ld::mac10_7 ) {
 		fTLVSupport = true;
 	}
-	else if ( (fArchitecture == CPU_TYPE_ARM64) && (fIOSVersionMin >= ld::iOS_8_0) ) {
+	else if ( (fArchitecture == CPU_TYPE_ARM64) && min_iOS(ld::iOS_8_0) ) {
+		fTLVSupport = true;
+	}
+	else if ( (fArchitecture == CPU_TYPE_ARM) && min_iOS(ld::iOS_9_0) ) {
 		fTLVSupport = true;
 	}
 
@@ -4221,35 +4733,7 @@ void Options::reconfigureDefaults()
 			fSourceVersionLoadCommand = false;
 			break;
 	}
-	
-	
-	// add LC_DYLIB_CODE_SIGN_DRS
-	switch ( fOutputKind ) {
-		case Options::kDynamicExecutable:
-		case Options::kDynamicLibrary:
-		case Options::kDynamicBundle:
-			if ( fDependentDRInfoForcedOn ) {
-				fDependentDRInfo = true;
-			}
-			else if ( fDependentDRInfoForcedOff ) {
-				fDependentDRInfo = false;
-			}
-			else {
-				if ( minOS(ld::mac10_8, ld::iOS_6_0) ) 
-					fDependentDRInfo = true;
-				else
-					fDependentDRInfo = false;
-			}
-			break;
-		case Options::kKextBundle:
-		case Options::kDyld:
-		case Options::kStaticExecutable:
-		case Options::kObjectFile:
-		case Options::kPreload:
-			fDependentDRInfo = false;
-			break;
-	}
-	
+
 	// if -sdk_version not on command line, infer from -syslibroot
 	if ( (fSDKVersion == 0) && (fSDKPaths.size() > 0) ) {
 		const char* sdkPath = fSDKPaths.front();
@@ -4294,9 +4778,7 @@ void Options::reconfigureDefaults()
 	// allow trie based absolute symbols if targeting new enough OS
 	if ( fMakeCompressedDyldInfo ) {
 		if ( minOS(ld::mac10_9, ld::iOS_7_0) ) {
-			// <rdar://problem/13179029> Allow absolute symbols in export trie for device but not simulator
-			if ( !fTargetIOSSimulator ) 
-				fAbsoluteSymbols = true;
+			fAbsoluteSymbols = true;
 		}
 	}
 	
@@ -4318,15 +4800,14 @@ void Options::reconfigureDefaults()
 			case Options::kDynamicBundle:
 			case Options::kDyld:
 				if ( (fArchitecture == CPU_TYPE_ARM64) 
-				|| ((fArchitecture == CPU_TYPE_ARM) && (fIOSVersionMin >= ld::iOS_8_0) && 
-					((fSubArchitecture == CPU_SUBTYPE_ARM_V7S) || (fSubArchitecture == CPU_SUBTYPE_ARM_V7))) ) {
+				|| ((fArchitecture == CPU_TYPE_ARM) && min_iOS(ld::iOS_7_0)) ) {
 					fSegmentAlignment = 4096*4;
 				}
 				break;
 			case Options::kStaticExecutable:
 			case Options::kKextBundle:
 				// <rdar://problem/14676611> 16KB segments for arm64 kexts
-				if ( (fArchitecture == CPU_TYPE_ARM64) && (fIOSVersionMin >= ld::iOS_9_0) ) {
+				if ( (fArchitecture == CPU_TYPE_ARM64) && min_iOS(ld::iOS_9_0) ) {
 					fSegmentAlignment = 4096*4;
 				}
 				break;
@@ -4370,6 +4851,21 @@ void Options::reconfigureDefaults()
 	if ( alignedBaseAddress != fBaseAddress ) {
 		warning("base address 0x%llX is not properly aligned. Changing it to 0x%llX", fBaseAddress, alignedBaseAddress);
 		fBaseAddress = alignedBaseAddress;
+	}
+
+	// If -dirty_data_list not specified, look in $SDKROOT/AppleInternal/DirtyDataFiles/<dylib>.dirty for dirty data list
+	if ( fSymbolsMovesData.empty() && fUseDataConstSegment && ( fDylibInstallName != NULL) && !fSDKPaths.empty() ) {
+		const char* dylibLeaf = strrchr(fDylibInstallName, '/');
+		if ( dylibLeaf ) {
+			char path[PATH_MAX];
+			strlcpy(path , fSDKPaths.front(), sizeof(path));
+			strlcat(path , "/AppleInternal/DirtyDataFiles", sizeof(path));
+			strlcat(path , dylibLeaf, sizeof(path));
+			strlcat(path , ".dirty", sizeof(path));
+			FileInfo info;
+			if ( info.checkFileExists(*this, path) )
+				addSymbolMove("__DATA_DIRTY", path, fSymbolsMovesData, "-dirty_data_list");
+		}
 	}
 
 }
@@ -4817,8 +5313,9 @@ void Options::checkIllegalOptionCombinations()
 		throw "-segment_order can only used used with -preload output";
 
 	// <rdar://problem/17598404> warn if building an embedded iOS dylib for pre-iOS 8
+	// <rdar://problem/18935714> How can we suppress "ld: warning: embedded dylibs/frameworks only run on iOS 8 or later” when building XCTest?
 	if ( (fOutputKind == Options::kDynamicLibrary) && (fIOSVersionMin != ld::iOSVersionUnset) && (fDylibInstallName != NULL) ) {
-		if ( (fIOSVersionMin < ld::iOS_8_0) && (fDylibInstallName[0] == '@') ) 
+		if ( !min_iOS(ld::iOS_8_0) && (fDylibInstallName[0] == '@') && !fEncryptableForceOff )
 			warning("embedded dylibs/frameworks only run on iOS 8 or later");
 	}
 }	
@@ -4956,14 +5453,28 @@ const char* Options::demangleSymbol(const char* sym) const
 	if ( !fDemangle )
 		return sym;
 
+	static size_t size = 1024;
+	static char* buff = (char*)malloc(size);
+	
+#if DEMANGLE_SWIFT
+	// only try to demangle symbols that look like Swift symbols
+	if ( strncmp(sym, "__T", 3) == 0 ) {
+		size_t demangledSize = fnd_get_demangled_name(&sym[1], buff, size);
+		if ( demangledSize > size ) {
+			size = demangledSize+2;
+			buff = (char*)realloc(buff, size);
+			demangledSize = fnd_get_demangled_name(&sym[1], buff, size);
+		}
+		if ( demangledSize != 0 )
+			return buff;
+	}
+#endif
+
 	// only try to demangle symbols that look like C++ symbols
 	if ( strncmp(sym, "__Z", 3) != 0 )
 		return sym;
 
-	static size_t size = 1024;
-	static char* buff = (char*)malloc(size);
 	int status;
-	
 	char* result = abi::__cxa_demangle(&sym[1], buff, &size, &status); 
 	if ( result != NULL ) {
 		// if demangling successful, keep buffer for next demangle

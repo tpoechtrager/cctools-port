@@ -83,7 +83,6 @@ public:
 	ld::Internal::FinalSection*	functionStartsSection;
 	ld::Internal::FinalSection*	dataInCodeSection;
 	ld::Internal::FinalSection*	optimizationHintsSection;
-	ld::Internal::FinalSection*	dependentDRsSection;
 	ld::Internal::FinalSection*	symbolTableSection;
 	ld::Internal::FinalSection*	stringPoolSection;
 	ld::Internal::FinalSection*	localRelocationsSection;
@@ -132,12 +131,23 @@ public:
 	};
 	
 	struct SplitSegInfoEntry {
-						SplitSegInfoEntry(uint64_t a, ld::Fixup::Kind k, uint32_t e=0) : address(a), kind(k), extra(e) {}
-		uint64_t		address;
+						SplitSegInfoEntry(uint64_t a, ld::Fixup::Kind k, uint32_t e=0)
+							: fixupAddress(a), kind(k), extra(e) {}
+		uint64_t		fixupAddress;
 		ld::Fixup::Kind	kind;
         uint32_t        extra;
 	};
 	
+	struct SplitSegInfoV2Entry {
+						SplitSegInfoV2Entry(uint8_t fi, uint64_t fo, uint8_t ti, uint64_t to, uint8_t k)
+							: fixupSectionOffset(fo), targetSectionOffset(to), fixupSectionIndex(fi), targetSectionIndex(ti), referenceKind(k) {}
+		uint64_t		fixupSectionOffset;
+		uint64_t		targetSectionOffset;
+		uint8_t			fixupSectionIndex;
+		uint8_t			targetSectionIndex;
+		uint8_t			referenceKind;
+	};
+
 private:
 	void						writeAtoms(ld::Internal& state, uint8_t* wholeBuffer);
 	void						computeContentUUID(ld::Internal& state, uint8_t* wholeBuffer);
@@ -192,6 +202,7 @@ private:
 	void						makeSectionRelocations(ld::Internal& state);
 	void						makeDyldInfo(ld::Internal& state);
 	void						makeSplitSegInfo(ld::Internal& state);
+	void						makeSplitSegInfoV2(ld::Internal& state);
 	void						writeMapFile(ld::Internal& state);
 	uint64_t					lookBackAddend(ld::Fixup::iterator fit);
 	bool						takesNoDiskSpace(const ld::Section* sect);
@@ -271,7 +282,6 @@ private:
 	const bool								_hasSplitSegInfo;
 	const bool								_hasFunctionStartsInfo;
 	const bool								_hasDataInCodeInfo;
-	const bool								_hasDependentDRInfo;
 		  bool								_hasDynamicSymbolTable;
 		  bool								_hasLocalRelocations;
 		  bool								_hasExternalRelocations;
@@ -296,6 +306,7 @@ public:
 	std::vector<BindingInfo>				_lazyBindingInfo;
 	std::vector<BindingInfo>				_weakBindingInfo;
 	std::vector<SplitSegInfoEntry>			_splitSegInfos;
+	std::vector<SplitSegInfoV2Entry>		_splitSegV2Infos;
 	class HeaderAndLoadCommandsAbtract*		_headersAndLoadCommandAtom;
 	class RelocationsAtomAbstract*			_sectionsRelocationsAtom;
 	class RelocationsAtomAbstract*			_localRelocsAtom;
@@ -311,7 +322,6 @@ public:
 	class LinkEditAtom*						_splitSegInfoAtom;
 	class LinkEditAtom*						_functionStartsAtom;
 	class LinkEditAtom*						_dataInCodeAtom;
-	class LinkEditAtom*						_dependentDRInfoAtom;
 	class LinkEditAtom*						_optimizationHintsAtom;
 };
 

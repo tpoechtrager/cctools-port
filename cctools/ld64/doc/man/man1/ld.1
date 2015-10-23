@@ -117,6 +117,10 @@ Produce a mach-o dylinker that has file type MH_DYLINKER.  Only used when buildi
 The default.  Implied by -dylib, -bundle, or -execute
 .It Fl static
 Produces a mach-o file that does not use the dyld.  Only used building the kernel. 
+.It Fl preload
+Produces a mach-o file in which the mach_header, load commands, and symbol table are
+not in any segment.  This output type is used for firmware or embedded development
+where the segments are copied out of the mach-o into ROM/Flash.
 .It Fl arch Ar arch_name
 Specifies which architecture (e.g. ppc, ppc64, i386, x86_64) the output file should be.
 .It Fl o Ar path
@@ -480,6 +484,7 @@ Logs a chain of references to
 .Ar symbol_name .
 Only applicable with -dead_strip .
 It can help debug why something that you think should be dead strip removed is not removed.
+See -exported_symbols_list for syntax and use of wildcards.
 .It Fl print_statistics
 Logs information about the amount of memory and time the linker used.
 .It Fl t
@@ -515,10 +520,31 @@ contains a list of non-global symbol names that should be remain in the output f
 symbol names will be removed from the output file's symbol table. See -exported_symbols_list for syntax and use
 of wildcards.
 .El
+.Ss Options for Bitcode build flow
+.Bl -tag
+.It Fl bitcode_bundle
+Generates an embedded bitcode bundle in the output binary. The bitcode bundle is embedded in __LLVM, __bundle section.
+This option requires all the object files, static libraries and user frameworks/dylibs contain bitcode.
+Note: not all the linker options are supported to use together with -bitcode_bundle.
+.It Fl bitcode_hide_symbol
+Specifies this option together with -bitcode_bundle to hide all non-exported symbols from output bitcode bundle.
+The hide symbol process might not be reversible. To obtain a reverse mapping file to recover all the symbols, use
+-bitcode_symbol_map option.
+.It Fl bitcode_symbol_map Ar path
+Specifies the output for bitcode symbol reverse mapping (.bcsymbolmap). If
+.Ar path
+is an existing directory, UUID.bcsymbolmap will be written to that directory.
+Otherwise, the reverse map will be written to a file at
+.Ar path .
+.El
 .Ss Rarely used Options
 .Bl -tag
 .It Fl v
 Prints the version of the linker.
+.It Fl dirty_data_list Ar filename
+Specifies a file containing the names of data symbols likely to be dirtied.
+If the linker is creating a __DATA_DIRTY segment, those symbols will be moved
+to that segment.
 .It Fl move_to_rw_segment Ar segment_name Ar filename
 Moves data symbols to another segment.  The command line option specifies the
 target segment name and a path to a file containing a list of symbols to move.
@@ -738,6 +764,10 @@ info in the temporary object file.
 During development, this option can be used to space out all global variables so each is on a separate page. 
 This is useful when analyzing dirty and resident pages.  The information can then be used to create an 
 order file  to cluster commonly used/dirty globals onto the same page(s).
+.It Fl not_for_dyld_shared_cache
+Normally, the linker will add extra info to dylibs with -install_name starting with /usr/lib or
+/System/Library/ that allows the dylib to be placed into the dyld shared cache.  Adding this option
+tells the linker to not add that extra info.
 .El
 .Ss Obsolete Options
 .Bl -tag
@@ -749,8 +779,6 @@ Object files (MH_OBJECT) with a LINKEDIT segment are no longer supported. This o
 This is the default.  This option is obsolete.
 .It Fl fvmlib
 Fixed VM shared libraries (MH_FVMLIB) are no longer supported. This option is obsolete.
-.It Fl preload
-Preload executables (MH_PRELOAD) are no longer supported. 
 .It Fl sectobjectsymbols Ar segname Ar sectname
 Adding a local label at a section start is no longer supported.  This option is obsolete.
 .It Fl nofixprebinding

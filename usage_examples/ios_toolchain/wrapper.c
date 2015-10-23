@@ -176,7 +176,7 @@ int main(int argc, char *argv[])
     }
 
     args[i++] = osvermin;
-    args[i++] = "-mlinker-version=242.2";
+    args[i++] = "-mlinker-version=253.3";
 
     for (j = 1; j < argc; ++i, ++j)
         args[i] = argv[j];

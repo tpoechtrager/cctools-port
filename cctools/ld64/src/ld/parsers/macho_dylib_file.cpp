@@ -1,4 +1,3 @@
-
 /* -*- mode: C++; c-basic-offset: 4; tab-width: 4 -*-
  *
  * Copyright (c) 2005-2011 Apple Inc. All rights reserved.
@@ -33,11 +32,14 @@
 
 #include <vector>
 #include <set>
+#include <map>
 #include <algorithm>
 #include <unordered_map>
 #include <unordered_set>
+#include <memory> // ld64-port (std::unique_ptr)
 
 #include "Architectures.hpp"
+#include "Bitcode.hpp"
 #include "MachOFileAbstraction.hpp"
 #include "MachOTrie.hpp"
 #include "macho_dylib_file.h"
@@ -143,8 +145,10 @@ public:
 											File(const uint8_t* fileContent, uint64_t fileLength, const char* path,   
 													time_t mTime, ld::File::Ordinal ordinal, bool linkingFlatNamespace, 
 													bool linkingMainExecutable, bool hoistImplicitPublicDylibs, 
-													ld::MacVersionMin macMin, ld::IOSVersionMin iPhoneMin, bool allowSimToMacOSX, bool addVers, 
-													bool logAllFiles, const char* installPath, bool indirectDylib);
+													Options::Platform platform, uint32_t linkMinOSVersion, bool allowSimToMacOSX,
+													bool addVers,  bool buildingForSimulator,
+													bool logAllFiles, const char* installPath,
+													bool indirectDylib, bool ignoreMismatchPlatform);
 	virtual									~File() {}
 
 	// overrides of ld::File
@@ -152,7 +156,9 @@ public:
 	virtual bool							justInTimeforEachAtom(const char* name, ld::File::AtomHandler&) const;
 	virtual ld::File::ObjcConstraint		objCConstraint() const		{ return _objcContraint; }
 	virtual uint8_t							swiftVersion() const		{ return _swiftVersion; }
-	
+	virtual uint32_t						minOSVersion() const		{ return _minVersionInDylib; }
+	virtual uint32_t						platformLoadCommand() const	{ return _platformInDylib; }
+
 	// overrides of ld::dylib::File
 	virtual void							processIndirectLibraries(ld::dylib::File::DylibHandler*, bool);
 	virtual bool							providedExportAtom() const	{ return _providedAtom; }
@@ -163,18 +169,12 @@ public:
 	virtual bool							hasPublicInstallName() const{ return _hasPublicInstallName; }
 	virtual bool							hasWeakDefinition(const char* name) const;
 	virtual bool							allSymbolsAreWeakImported() const;
-	virtual const void*						codeSignatureDR() const		{ return _codeSignatureDR; }
 	virtual bool							installPathVersionSpecific() const { return _installPathOverride; }
 	virtual bool							appExtensionSafe() const	{ return _appExtensionSafe; };
-	virtual ld::MacVersionMin				macMinVersion() const		{ return _macMinVersionInDylib; }
-	virtual ld::IOSVersionMin				iOSMinVersion() const		{ return _iOSMinVersionInDylib; }
-
+	virtual ld::Bitcode*					getBitcode() const			{ return _bitcode.get(); }
 
 protected:
-
-	struct ReExportChain { ReExportChain* prev; File<A>* file; };
-
-	void											assertNoReExportCycles(ReExportChain*);
+	virtual void							assertNoReExportCycles(ReExportChain*) const;
 
 private:
 	typedef typename A::P					P;
@@ -192,13 +192,14 @@ private:
 			return size_t(__h);
 		};
 	};
-	struct AtomAndWeak { ld::Atom* atom; bool weakDef; bool tlv; pint_t address; };
+	struct AtomAndWeak { ld::Atom* atom; bool weakDef; bool tlv; uint64_t address; };
 	typedef std::unordered_map<const char*, AtomAndWeak, ld::CStringHash, ld::CStringEquals> NameToAtomMap;
 	typedef std::unordered_set<const char*, CStringHash, ld::CStringEquals>  NameSet;
 
 	struct Dependent { const char* path; File<A>* dylib; bool reExport; };
 
-	bool										containsOrReExports(const char* name, bool* weakDef, bool* tlv, pint_t* defAddress) const;
+	virtual std::pair<bool, bool>				hasWeakDefinitionImpl(const char* name) const;
+	virtual bool								containsOrReExports(const char* name, bool& weakDef, bool& tlv, uint64_t& defAddress) const;
 	bool										isPublicLocation(const char* pth);
 	bool										wrongOS() { return _wrongOS; }
 	void										addSymbol(const char* name, bool weak, bool tlv, pint_t address);
@@ -211,9 +212,9 @@ private:
 	static uint32_t								parseVersionNumber32(const char* versionString);
 	static const char*							objCInfoSegmentName();
 	static const char*							objCInfoSectionName();
-	
-	const ld::MacVersionMin						_macVersionMin;
-	const ld::IOSVersionMin						_iOSVersionMin;
+
+	const Options::Platform						_platform;
+	const uint32_t								_linkMinOSVersion;
 	const bool									_allowSimToMacOSXLinking;
 	const bool									_addVersionLoadCommand;
 	bool										_linkingFlat;
@@ -228,7 +229,6 @@ private:
 	NameSet										_ignoreExports;
 	const char*									_parentUmbrella;
 	ImportAtom<A>*								_importAtom;
-	const void*									_codeSignatureDR;
 	bool										_noRexports;
 	bool										_hasWeakExports;
 	bool										_deadStrippable;
@@ -239,8 +239,9 @@ private:
 	bool										_installPathOverride;
 	bool										_indirectDylibsProcessed;
 	bool										_appExtensionSafe;
-	ld::MacVersionMin							_macMinVersionInDylib;
-	ld::IOSVersionMin							_iOSMinVersionInDylib;
+	uint32_t									_minVersionInDylib;
+	uint32_t									_platformInDylib;
+	std::unique_ptr<ld::Bitcode>				_bitcode;
 	
 	static bool									_s_logHashtable;
 };
@@ -259,20 +260,20 @@ template <typename A> const char* File<A>::objCInfoSectionName() { return "__ima
 template <typename A>
 File<A>::File(const uint8_t* fileContent, uint64_t fileLength, const char* pth, time_t mTime, ld::File::Ordinal ord,
 				bool linkingFlatNamespace, bool linkingMainExecutable, bool hoistImplicitPublicDylibs,
-				ld::MacVersionMin macMin, ld::IOSVersionMin iOSMin, bool allowSimToMacOSX, bool addVers,
-				bool logAllFiles, const char* targetInstallPath, bool indirectDylib)
+				Options::Platform platform, uint32_t linkMinOSVersion, bool allowSimToMacOSX, bool addVers, bool buildingForSimulator,
+				bool logAllFiles, const char* targetInstallPath, bool indirectDylib, bool ignoreMismatchPlatform)
 	: ld::dylib::File(strdup(pth), mTime, ord), 
-	_macVersionMin(macMin), _iOSVersionMin(iOSMin), _allowSimToMacOSXLinking(allowSimToMacOSX), _addVersionLoadCommand(addVers), 
+	_platform(platform), _linkMinOSVersion(linkMinOSVersion), _allowSimToMacOSXLinking(allowSimToMacOSX), _addVersionLoadCommand(addVers), 
 	_linkingFlat(linkingFlatNamespace), _implicitlyLinkPublicDylibs(hoistImplicitPublicDylibs),
 	_objcContraint(ld::File::objcConstraintNone), _swiftVersion(0),
 	_importProxySection("__TEXT", "__import", ld::Section::typeImportProxies, true),
 	_flatDummySection("__LINKEDIT", "__flat_dummy", ld::Section::typeLinkEdit, true),
-	_parentUmbrella(NULL), _importAtom(NULL), _codeSignatureDR(NULL), 
+	_parentUmbrella(NULL), _importAtom(NULL),
 	_noRexports(false), _hasWeakExports(false), 
 	_deadStrippable(false), _hasPublicInstallName(false), 
 	 _providedAtom(false), _explictReExportFound(false), _wrongOS(false), _installPathOverride(false), 
 	_indirectDylibsProcessed(false), _appExtensionSafe(false),
-	_macMinVersionInDylib(ld::macVersionUnset), _iOSMinVersionInDylib(ld::iOSVersionUnset)
+	_minVersionInDylib(0), _platformInDylib(Options::kPlatformUnknown)
 {
 	const macho_header<P>* header = (const macho_header<P>*)fileContent;
 	const uint32_t cmd_count = header->ncmds();
@@ -302,11 +303,11 @@ File<A>::File(const uint8_t* fileContent, uint64_t fileLength, const char* pth, 
 	// pass 1: get pointers, and see if this dylib uses compressed LINKEDIT format
 	const macho_dysymtab_command<P>* dynamicInfo = NULL;
 	const macho_dyld_info_command<P>* dyldInfo = NULL;
-	const macho_linkedit_data_command<P>* codeSignature = NULL;
 	const macho_nlist<P>* symbolTable = NULL;
 	const char*	strings = NULL;
 	bool compressedLinkEdit = false;
 	uint32_t dependentLibCount = 0;
+	Options::Platform lcPlatform = Options::kPlatformUnknown;
 	const macho_load_command<P>* cmd = cmds;
 	for (uint32_t i = 0; i < cmd_count; ++i) {
 		macho_dylib_command<P>* dylibID;
@@ -348,29 +349,24 @@ File<A>::File(const uint8_t* fileContent, uint64_t fileLength, const char* pth, 
 				break;
 			case LC_SUB_CLIENT:
 				_allowableClients.push_back(strdup(((macho_sub_client_command<P>*)cmd)->client()));
+				// <rdar://problem/20627554> Don't hoist "public" (in /usr/lib/) dylibs that should not be directly linked
+				_hasPublicInstallName = false;
 				break;
 			case LC_VERSION_MIN_MACOSX:
-				if ( (_iOSVersionMin != ld::iOSVersionUnset) && !_allowSimToMacOSXLinking ) { 
-					_wrongOS = true;
-					if ( _addVersionLoadCommand && !indirectDylib )
-						throw "building for iOS Simulator, but linking against dylib built for MacOSX";
-				}
-				_macMinVersionInDylib = (ld::MacVersionMin)((macho_version_min_command<P>*)cmd)->version();
-				break;
 			case LC_VERSION_MIN_IPHONEOS:
-				if ( _macVersionMin != ld::macVersionUnset ) {
-					_wrongOS = true;
-					if ( _addVersionLoadCommand && !indirectDylib )
-						throw "building for MacOSX, but linking against dylib built for iOS Simulator";
-				}
-				_iOSMinVersionInDylib = (ld::IOSVersionMin)((macho_version_min_command<P>*)cmd)->version();
+			case LC_VERSION_MIN_WATCHOS:
+	#if SUPPORT_APPLE_TV
+			case LC_VERSION_MIN_TVOS:
+	#endif
+				_minVersionInDylib = (ld::MacVersionMin)((macho_version_min_command<P>*)cmd)->version();
+				_platformInDylib = cmd->cmd();
+				lcPlatform = Options::platformForLoadCommand(_platformInDylib);
 				break;
 			case LC_CODE_SIGNATURE:
-				codeSignature = (macho_linkedit_data_command<P>* )cmd;
 				break;
 			case macho_segment_command<P>::CMD:
 				// check for Objective-C info
-				if ( strcmp(((macho_segment_command<P>*)cmd)->segname(), objCInfoSegmentName()) == 0 ) {
+				if ( strncmp(((macho_segment_command<P>*)cmd)->segname(), objCInfoSegmentName(), 6) == 0 ) {
 					const macho_segment_command<P>* segment = (macho_segment_command<P>*)cmd;
 					const macho_section<P>* const sectionsStart = (macho_section<P>*)((char*)segment + sizeof(macho_segment_command<P>));
 					const macho_section<P>* const sectionsEnd = &sectionsStart[segment->nsects()];
@@ -403,10 +399,87 @@ File<A>::File(const uint8_t* fileContent, uint64_t fileLength, const char* pth, 
 						}
 					}
 				}
+				// Construct bitcode if there is a bitcode bundle section in the dylib
+				// Record the size of the section because the content is not checked
+				else if ( strcmp(((macho_segment_command<P>*)cmd)->segname(), "__LLVM") == 0 ) {
+					const macho_section<P>* const sect = (macho_section<P>*)((char*)cmd + sizeof(macho_segment_command<P>));
+					if ( strncmp(sect->sectname(), "__bundle", 8) == 0 )
+						_bitcode = std::unique_ptr<ld::Bitcode>(new ld::Bitcode(NULL, sect->size()));
+				}
 		}
 		cmd = (const macho_load_command<P>*)(((char*)cmd)+cmd->cmdsize());
 		if ( cmd > cmdsEnd )
 			throwf("malformed dylb, load command #%d is outside size of load commands in %s", i, pth);
+	}
+	// arm/arm64 objects are default to ios platform if not set.
+	// rdar://problem/21746314
+	if (lcPlatform == Options::kPlatformUnknown &&
+		(std::is_same<A, arm>::value || std::is_same<A, arm64>::value))
+		lcPlatform = Options::kPlatformiOS;
+
+	// check cross-linking
+	if ( lcPlatform != platform ) {
+		_wrongOS = true;
+		if ( _addVersionLoadCommand && !indirectDylib && !ignoreMismatchPlatform ) {
+			if ( buildingForSimulator ) {
+				if ( !_allowSimToMacOSXLinking ) {
+					switch (platform) {
+						case Options::kPlatformOSX:
+						case Options::kPlatformiOS:
+							if ( lcPlatform == Options::kPlatformUnknown )
+								break;
+							// fall through if the Platform is not Unknown
+						case Options::kPlatformWatchOS:
+							// WatchOS errors on cross-linking all the time.
+							throwf("building for %s simulator, but linking against dylib built for %s,",
+								   Options::platformName(platform),
+								   Options::platformName(lcPlatform));
+							break;
+	#if SUPPORT_APPLE_TV
+						case Options::kPlatform_tvOS:
+							// tvOS is a warning temporarily. rdar://problem/21746965
+							if (platform == Options::kPlatform_tvOS)
+								warning("URGENT: building for %s simulator, but linking against dylib (%s) built for %s. "
+										"Note: This will be an error in the future.",
+										Options::platformName(platform), path(),
+										Options::platformName(lcPlatform));
+							break;
+	#endif
+						case Options::kPlatformUnknown:
+							// skip if the target platform is unknown
+							break;
+					}
+				}
+			}
+			else {
+				switch (platform) {
+					case Options::kPlatformOSX:
+					case Options::kPlatformiOS:
+						if ( lcPlatform == Options::kPlatformUnknown )
+							break;
+						// fall through if the Platform is not Unknown
+					case Options::kPlatformWatchOS:
+						// WatchOS errors on cross-linking all the time.
+						throwf("building for %s, but linking against dylib built for %s,",
+							   Options::platformName(platform),
+							   Options::platformName(lcPlatform));
+						break;
+	#if SUPPORT_APPLE_TV
+					case Options::kPlatform_tvOS:
+						// tvOS is a warning temporarily. rdar://problem/21746965
+						if (platform == Options::kPlatform_tvOS)
+							warning("URGENT: building for %s, but linking against dylib (%s) built for %s. "
+									"Note: This will be an error in the future.",
+									Options::platformName(platform), path(),
+									Options::platformName(lcPlatform));
+						break;
+	#endif
+					case Options::kPlatformUnknown:
+						// skip if the target platform is unknown
+						break;
+				}
+			}
+		}
 	}
 
 	// figure out if we need to examine dependent dylibs
@@ -441,7 +514,8 @@ File<A>::File(const uint8_t* fileContent, uint64_t fileLength, const char* pth, 
 		}
 		// verify MH_NO_REEXPORTED_DYLIBS bit was correct
 		if ( compressedLinkEdit && !linkingFlatNamespace ) {
-			assert(reExportDylibCount != 0);
+			if ( reExportDylibCount == 0 )
+				throwf("malformed dylib has MH_NO_REEXPORTED_DYLIBS flag but no LC_REEXPORT_DYLIB load commands: %s", pth);
 		}
 		// pass 3 add re-export info
 		cmd = cmds;
@@ -500,26 +574,7 @@ File<A>::File(const uint8_t* fileContent, uint64_t fileLength, const char* pth, 
 		}
 		_importAtom = new ImportAtom<A>(*this, importNames);
 	}
-	
-	// if the dylib is code signed, look for its Designated Requirement
-	if ( codeSignature != NULL ) {
-		const Security::BlobCore* overallSignature = (Security::BlobCore*)((char*)header + codeSignature->dataoff());
-		typedef Security::SuperBlob<Security::kSecCodeMagicEmbeddedSignature> EmbeddedSignatureBlob;
-		typedef Security::SuperBlob<Security::kSecCodeMagicRequirementSet> InternalRequirementsBlob;
-		const EmbeddedSignatureBlob* signature = EmbeddedSignatureBlob::specific(overallSignature);
-		if ( signature->validateBlob(codeSignature->datasize()) ) {
-			const InternalRequirementsBlob* ireq = signature->find<InternalRequirementsBlob>(Security::cdRequirementsSlot);
-			if ( (ireq != NULL) && ireq->validateBlob() ) {
-				const Security::BlobCore* dr = ireq->find(Security::kSecDesignatedRequirementType);
-				if ( (dr != NULL) && dr->validateBlob(Security::kSecCodeMagicRequirement) ) {
-					// <rdar://problem/10968461> make copy because mapped file is about to be unmapped
-					_codeSignatureDR = ::malloc(dr->length());
-					::memcpy((void*)_codeSignatureDR, dr, dr->length());
-				}
-			}
-		}
-	}
-	
+
 	// build hash table
 	if ( dyldInfo != NULL ) 
 		buildExportHashTableFromExportInfo(dyldInfo, fileContent);
@@ -529,6 +584,7 @@ File<A>::File(const uint8_t* fileContent, uint64_t fileLength, const char* pth, 
 	// unmap file
 	munmap((caddr_t)fileContent, fileLength);
 }
+
 
 //
 // Parses number of form X[.Y[.Z]] into a uint32_t where the nibbles are xxxx.yy.zz
@@ -634,15 +690,7 @@ void File<A>::addSymbol(const char* name, bool weakDef, bool tlv, pint_t address
 		const char* symCond = strchr(symAction, '$');
 		if ( symCond != NULL ) {
 			char curOSVers[16];
-			if ( _macVersionMin != ld::macVersionUnset ) {
-				sprintf(curOSVers, "$os%d.%d$", (_macVersionMin >> 16), ((_macVersionMin >> 8) & 0xFF));
-			}
-			else if ( _iOSVersionMin != ld::iOSVersionUnset ) {
-				sprintf(curOSVers, "$os%d.%d$", (_iOSVersionMin >> 16), ((_iOSVersionMin >> 8) & 0xFF));
-			}
-			else {
-				assert(0 && "targeting neither macosx nor iphoneos");
-			}
+			sprintf(curOSVers, "$os%d.%d$", (_linkMinOSVersion >> 16), ((_linkMinOSVersion >> 8) & 0xFF));
 			if ( strncmp(symCond, curOSVers, strlen(curOSVers)) == 0 ) {
 				const char* symName = strchr(&symCond[1], '$');
 				if ( symName != NULL ) {
@@ -705,29 +753,34 @@ bool File<A>::forEachAtom(ld::File::AtomHandler& handler) const
 	return false;
 }
 
+
+template <typename A>
+std::pair<bool, bool> File<A>::hasWeakDefinitionImpl(const char* name) const
+{
+	const auto pos = _atoms.find(name);
+	if ( pos != _atoms.end() )
+		return std::make_pair(true, pos->second.weakDef);
+
+	// look in children that I re-export
+	for (const auto &dep : _dependentDylibs) {
+		if ( dep.reExport ) {
+			auto ret = dep.dylib->hasWeakDefinitionImpl(name);
+			if ( ret.first )
+				return ret;
+		}
+	}
+	return std::make_pair(false, false);
+}
+
+
 template <typename A>
 bool File<A>::hasWeakDefinition(const char* name) const
 {
 	// if supposed to ignore this export, then pretend I don't have it
 	if ( _ignoreExports.count(name) != 0 )
 		return false;
-		
-	typename NameToAtomMap::const_iterator pos = _atoms.find(name);
-	if ( pos != _atoms.end() ) {
-		return pos->second.weakDef;
-	}
-	else {
-		// look in children that I re-export
-		for (typename std::vector<Dependent>::const_iterator it = _dependentDylibs.begin(); it != _dependentDylibs.end(); ++it) {
-			if ( it->reExport ) {
-				//fprintf(stderr, "getJustInTimeAtomsFor: %s NOT found in %s, looking in child %s\n", name, this->path(), (*it)->getInstallPath());
-				typename NameToAtomMap::iterator cpos = it->dylib->_atoms.find(name);
-				if ( cpos != it->dylib->_atoms.end() ) 
-					return cpos->second.weakDef;
-			}
-		}
-	}
-	return false;
+
+	return hasWeakDefinitionImpl(name).second;
 }
 
 
@@ -756,24 +809,24 @@ bool File<A>::allSymbolsAreWeakImported() const
 
 
 template <typename A>
-bool File<A>::containsOrReExports(const char* name, bool* weakDef, bool* tlv, pint_t* defAddress) const
+bool File<A>::containsOrReExports(const char* name, bool& weakDef, bool& tlv, uint64_t& defAddress) const
 {
 	if ( _ignoreExports.count(name) != 0 )
 		return false;
 
 	// check myself
-	typename NameToAtomMap::iterator pos = _atoms.find(name);
+	const auto pos = _atoms.find(name);
 	if ( pos != _atoms.end() ) {
-		*weakDef = pos->second.weakDef;
-		*tlv = pos->second.tlv;
-		*defAddress = pos->second.address;
+		weakDef = pos->second.weakDef;
+		tlv = pos->second.tlv;
+		defAddress = pos->second.address;
 		return true;
 	}
 	
 	// check dylibs I re-export
-	for (typename std::vector<Dependent>::const_iterator it = _dependentDylibs.begin(); it != _dependentDylibs.end(); ++it) {
-		if ( it->reExport && !it->dylib->implicitlyLinked() ) {
-			if ( it->dylib->containsOrReExports(name, weakDef, tlv, defAddress) )
+	for (const auto &dep : _dependentDylibs) {
+		if ( dep.reExport && !dep.dylib->implicitlyLinked() ) {
+			if ( dep.dylib->containsOrReExports(name, weakDef, tlv, defAddress) )
 				return true;
 		}
 	}
@@ -791,7 +844,7 @@ bool File<A>::justInTimeforEachAtom(const char* name, ld::File::AtomHandler& han
 	
 	
 	AtomAndWeak bucket;
-	if ( this->containsOrReExports(name, &bucket.weakDef, &bucket.tlv, &bucket.address) ) {
+	if ( this->containsOrReExports(name, bucket.weakDef, bucket.tlv, bucket.address) ) {
 		bucket.atom = new ExportAtom<A>(*this, name, bucket.weakDef, bucket.tlv, bucket.address);
 		_atoms[name] = bucket;
 		_providedAtom = true;
@@ -903,23 +956,23 @@ void File<A>::processIndirectLibraries(ld::dylib::File::DylibHandler* handler, b
 }
 
 template <typename A>
-void File<A>::assertNoReExportCycles(ReExportChain* prev)
+void File<A>::assertNoReExportCycles(ReExportChain* prev) const
 {
 	// recursively check my re-exported dylibs
 	ReExportChain chain;
 	chain.prev = prev;
 	chain.file = this;
-	for (typename std::vector<Dependent>::iterator it = _dependentDylibs.begin(); it != _dependentDylibs.end(); it++) {
-		if ( it->reExport ) {
-			ld::File* child = it->dylib;
+	for (const auto &dep : _dependentDylibs) {
+		if ( dep.reExport ) {
+			ld::File* child = dep.dylib;
 			// check child is not already in chain 
-			for (ReExportChain* p = prev; p != NULL; p = p->prev) {
+			for (ReExportChain* p = prev; p != nullptr; p = p->prev) {
 				if ( p->file == child ) {
 					throwf("cycle in dylib re-exports with %s and %s", child->path(), this->path());
 				}
 			}
-			if ( it->dylib != NULL )
-				it->dylib->assertNoReExportCycles(&chain);
+			if ( dep.dylib != nullptr )
+				dep.dylib->assertNoReExportCycles(&chain);
 		}
 	}
 }
@@ -940,13 +993,15 @@ public:
 																			ordinal, opts.flatNamespace(), 
 																			opts.linkingMainExecutable(),
 																			opts.implicitlyLinkIndirectPublicDylibs(), 
-																			opts.macosxVersionMin(), 
-																			opts.iOSVersionMin(),
+																			opts.platform(), 
+																			opts.minOSversion(),
 																			opts.allowSimulatorToLinkWithMacOSX(),
 																			opts.addVersionLoadCommand(),
-																			opts.logAllFiles(), 
+																			opts.targetIOSSimulator(),
+																			opts.logAllFiles(),
 																			opts.installPath(),
-																			indirectDylib);
+																			indirectDylib,
+																			opts.outputKind() == Options::kPreload);
 														}
 
 };
