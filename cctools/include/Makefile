@@ -39,7 +39,7 @@ OTHER_SRCS = notes gnu/symseg.h \
 	     coff/base_relocs.h coff/bytesex.h coff/ms_dos_stub.h \
 	     coff/filehdr.h coff/aouthdr.h coff/scnhdr.h coff/syment.h \
 	     coff/debug_directory.h elf/dwarf2.h llvm-c/Disassembler.h \
-	     $(GAS_OTHER_SRCS)
+	     xar/xar.h $(GAS_OTHER_SRCS)
 
 ENCUMBERED_SRCS = gnu/a.out.h gnu/exec.h
 

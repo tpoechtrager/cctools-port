@@ -32,7 +32,8 @@
 #include "string.h"
 #include "stdint.h"            /* cctools-port: intptr_t */
 #include "mach-o/loader.h"
-#include "objc/runtime.h"      /* cctools-port: objc/objc-runtime.h -> objc/runtime.h */
+#include "objc/runtime.h"      /* cctools-port:
+				  objc/objc-runtime.h -> objc/runtime.h */
 #include "stuff/allocate.h"
 #include "stuff/bytesex.h"
 #include "stuff/symbol.h"

@@ -40,5 +40,6 @@ libstuff_la_SOURCES =  \
 	SymLoc.c  \
 	unix_standard_mode.c  \
 	version_number.c  \
-	writeout.c
+	writeout.c \
+	coff_bytesex.c
 

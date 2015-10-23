@@ -149,6 +149,10 @@ struct object {
 	*hints_cmd;
     struct prebind_cksum_command *cs;/* the prebind check sum command */
     struct segment_command
+	*seg_bitcode;	    	    /* the 32-bit bitcode segment command */
+    struct segment_command_64
+	*seg_bitcode64;    	    /* the 64-bit bitcode segment command */
+    struct segment_command
 	*seg_linkedit;	    	    /* the 32-bit link edit segment command */
     struct segment_command_64
 	*seg_linkedit64;    	    /* the 64-bit link edit segment command */

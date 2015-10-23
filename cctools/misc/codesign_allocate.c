@@ -372,6 +372,12 @@ struct object *object)
 		    object->st->strsize;
 	    }
 	}
+	else if(object->st != NULL && object->st->strsize != 0){
+	    object->output_strings =
+		object->object_addr + object->st->stroff;
+	    object->output_strings_size = object->st->strsize;
+	    object->input_sym_info_size = object->st->strsize;
+	}
 	if(object->dyld_info != NULL){
 	    /* there are five parts to the dyld info, but
 	     codesign_allocate does not alter them, so copy as a block */

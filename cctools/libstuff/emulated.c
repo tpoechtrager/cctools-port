@@ -6,7 +6,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/mman.h>
-//#include <sys/attr.h>
+/* #include <sys/attr.h> */
 #include <errno.h>
 #include <inttypes.h>
 #include <mach/mach_time.h>
@@ -27,184 +27,182 @@
 int _NSGetExecutablePath(char *epath, unsigned int *size)
 {
 #if defined(__FreeBSD__) || defined(__DragonFly__)
-  int mib[4];
-  mib[0] = CTL_KERN;
-  mib[1] = KERN_PROC;
-  mib[2] = KERN_PROC_PATHNAME;
-  mib[3] = -1;
-  size_t cb = *size;
-  if (sysctl(mib, 4, epath, &cb, NULL, 0) != 0)
-    return -1;
-  *size = cb;
-  return 0;
+    int mib[4];
+    mib[0] = CTL_KERN;
+    mib[1] = KERN_PROC;
+    mib[2] = KERN_PROC_PATHNAME;
+    mib[3] = -1;
+    size_t cb = *size;
+    if (sysctl(mib, 4, epath, &cb, NULL, 0) != 0)
+        return -1;
+    *size = cb;
+    return 0;
 #elif defined(__OpenBSD__)
-  int mib[4];
-  char **argv;
-  size_t len;
-  const char *comm;
-  int ok = 0;
-  mib[0] = CTL_KERN;
-  mib[1] = KERN_PROC_ARGS;
-  mib[2] = getpid();
-  mib[3] = KERN_PROC_ARGV;
-  if (sysctl(mib, 4, NULL, &len, NULL, 0) < 0)
-    abort();
-  if (!(argv = malloc(len)))
-    abort();
-  if (sysctl(mib, 4, argv, &len, NULL, 0) < 0)
-    abort();
-  comm = argv[0];
-  if (*comm == '/' || *comm == '.') {
-    char *rpath;
-    if ((rpath = realpath(comm, NULL))) {
-      strlcpy(epath, rpath, *size);
-      free(rpath);
-      ok = 1;
+    int mib[4];
+    char **argv;
+    size_t len;
+    const char *comm;
+    int ok = 0;
+    mib[0] = CTL_KERN;
+    mib[1] = KERN_PROC_ARGS;
+    mib[2] = getpid();
+    mib[3] = KERN_PROC_ARGV;
+    if (sysctl(mib, 4, NULL, &len, NULL, 0) < 0)
+        abort();
+    if (!(argv = malloc(len)))
+        abort();
+    if (sysctl(mib, 4, argv, &len, NULL, 0) < 0)
+        abort();
+    comm = argv[0];
+    if (*comm == '/' || *comm == '.')
+    {
+        char *rpath;
+        if ((rpath = realpath(comm, NULL)))
+        {
+          strlcpy(epath, rpath, *size);
+          free(rpath);
+          ok = 1;
+        }
     }
-  } else {
-    char *sp;
-    char *xpath = strdup(getenv("PATH"));
-    char *path = strtok_r(xpath, ":", &sp);
-    struct stat st;
-    if (!xpath)
-      abort();
-    while (path) {
-      snprintf(epath, *size, "%s/%s", path, comm);
-      if (!stat(epath, &st) && (st.st_mode & S_IXUSR)) {
-        ok = 1;
-        break;
-      }
-      path = strtok_r(NULL, ":", &sp);
+    else
+    {
+        char *sp;
+        char *xpath = strdup(getenv("PATH"));
+        char *path = strtok_r(xpath, ":", &sp);
+        struct stat st;
+        if (!xpath)
+            abort();
+        while (path)
+        {
+            snprintf(epath, *size, "%s/%s", path, comm);
+            if (!stat(epath, &st) && (st.st_mode & S_IXUSR))
+            {
+                ok = 1;
+                break;
+            }
+            path = strtok_r(NULL, ":", &sp);
+        }
+        free(xpath);
     }
-    free(xpath);
-  }
-  free(argv);
-  if (ok) {
-    *size = strlen(epath);
-    return 0;
-  }
-  return -1;
-#else
-  int bufsize = *size;
-  int ret_size;
-  ret_size = readlink("/proc/self/exe", epath, bufsize-1);
-  if (ret_size != -1)
-  {
-    *size = ret_size;
-    epath[ret_size]=0;
-    return 0;
-  }
-  else
+    free(argv);
+    if (ok)
+    {
+        *size = strlen(epath);
+        return 0;
+    }
     return -1;
+#else
+    int bufsize = *size;
+    int ret_size;
+    ret_size = readlink("/proc/self/exe", epath, bufsize-1);
+    if (ret_size != -1)
+    {
+        *size = ret_size;
+        epath[ret_size]=0;
+        return 0;
+    }
+    else
+        return -1;
 #endif
-}
-
-kern_return_t mach_timebase_info( mach_timebase_info_t info) {
-   info->numer = 1;
-   info->denom = 1;
-   return 0;
 }
 
 char *mach_error_string(mach_error_t error_value)
 {
-  return "Unknown mach error";
+    return "Unknown mach error";
 }
 
 mach_port_t mach_host_self(void)
 {
-  return 0;
+    return 0;
 }
 
-kern_return_t host_info
-(
- host_t host,
- host_flavor_t flavor,
- host_info_t host_info_out,
- mach_msg_type_number_t *host_info_outCnt
- )
+kern_return_t host_info(host_t host, host_flavor_t flavor,
+                        host_info_t host_info_out,
+                        mach_msg_type_number_t *host_info_outCnt)
 {
-  if(flavor == HOST_BASIC_INFO) {
-    host_basic_info_t      basic_info;
+    if (flavor == HOST_BASIC_INFO)
+    {
+        host_basic_info_t basic_info;
 
-    basic_info = (host_basic_info_t) host_info_out;
-    memset(basic_info, 0x00, sizeof(*basic_info));
-    basic_info->cpu_type = EMULATED_HOST_CPU_TYPE;
-    basic_info->cpu_subtype = EMULATED_HOST_CPU_SUBTYPE;
-  }
+        basic_info = (host_basic_info_t) host_info_out;
+        memset(basic_info, 0x00, sizeof(*basic_info));
+        basic_info->cpu_type = EMULATED_HOST_CPU_TYPE;
+        basic_info->cpu_subtype = EMULATED_HOST_CPU_SUBTYPE;
+    }
 
   return 0;
 }
 
 mach_port_t mach_task_self_ = 0;
 
-kern_return_t mach_port_deallocate
-(
- ipc_space_t task,
- mach_port_name_t name
- )
+kern_return_t mach_port_deallocate(ipc_space_t task, mach_port_name_t name)
 {
-  return 0;
+    return 0;
 }
 
-kern_return_t vm_allocate
-(
- vm_map_t target_task,
- vm_address_t *address,
- vm_size_t size,
-        int flags
- )
+kern_return_t vm_allocate(vm_map_t target_task, vm_address_t *address,
+                          vm_size_t size, int flags)
 {
 
-  vm_address_t addr = 0;
+    vm_address_t addr = 0;
 
-  addr = (vm_address_t)calloc(size, sizeof(char));
-  if(addr == 0)
-    return 1;
+    addr = (vm_address_t)calloc(size, sizeof(char));
 
-  *address = addr;
+    if (addr == 0)
+        return 1;
 
-  return 0;
+    *address = addr;
+
+    return 0;
 }
 
-kern_return_t vm_deallocate
-(
- vm_map_t target_task,
- vm_address_t address,
-        vm_size_t size
- )
+kern_return_t vm_deallocate(vm_map_t target_task,
+                            vm_address_t address, vm_size_t size)
 {
-  //  free((void *)address); leak it here
-
-  return 0;
-}
-kern_return_t host_statistics ( host_t host_priv, host_flavor_t flavor, host_info_t host_info_out, mach_msg_type_number_t *host_info_outCnt)
-{
- return ENOTSUP;
-}
-kern_return_t map_fd(
-                     int fd,
-                     vm_offset_t offset,
-                     vm_offset_t *va,
-                     boolean_t findspace,
-                     vm_size_t size)
-{
-  void *addr = NULL;
-  addr = mmap(0, size, PROT_READ|PROT_WRITE,
-	      MAP_PRIVATE|MAP_FILE, fd, offset);
-  if(addr == (void *)-1) {
-    return 1;
-  }
-  *va = (vm_offset_t)addr;
-  return 0;
+    /* free((void *)address); leak it here */
+    return 0;
 }
 
-uint64_t  mach_absolute_time(void) {
-  uint64_t t = 0;
-  struct timeval tv;
-  if (gettimeofday(&tv,NULL)) return t;
-  t = ((uint64_t)tv.tv_sec << 32)  | tv.tv_usec;
-  return t;
+kern_return_t host_statistics (host_t host_priv, host_flavor_t flavor,
+                               host_info_t host_info_out,
+                               mach_msg_type_number_t *host_info_outCnt)
+{
+    return ENOTSUP;
 }
+
+kern_return_t map_fd(int fd, vm_offset_t offset, vm_offset_t *va,
+                     boolean_t findspace, vm_size_t size)
+{
+    void *addr = NULL;
+    addr = mmap(0, size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FILE, fd, offset);
+    if (addr == (void *)-1)
+        return 1;
+    *va = (vm_offset_t)addr;
+    return 0;
+}
+
+uint64_t mach_absolute_time(void)
+{
+    struct timeval tv;
+    if (gettimeofday(&tv, NULL))
+      return 0;
+    return (tv.tv_sec*1000000ULL)+tv.tv_usec;
+}
+
+kern_return_t mach_timebase_info(mach_timebase_info_t info)
+{
+    info->numer = 1000;
+    info->denom = 1;
+    return 0;
+}
+
+int getattrlist(const char *a,void *b, void *c, size_t d, unsigned int e)
+{
+    errno = ENOTSUP;
+    return -1;
+}
+
+vm_size_t vm_page_size = 4096; /* hardcoded to match expectations of darwin */
 
 
 #ifndef HAVE_STRMODE
@@ -213,8 +211,7 @@ uint64_t  mach_absolute_time(void) {
 #include <sys/stat.h>
 #include <string.h>
 
-void
-strmode(/* mode_t */ int mode, char *p)
+void strmode(/* mode_t */ int mode, char *p)
 {
      /* print type */
     switch (mode & S_IFMT) {
@@ -324,16 +321,6 @@ strmode(/* mode_t */ int mode, char *p)
 }
 #endif
 
-int getattrlist(const char* a,void* b,void* c,size_t d,unsigned int e)
-{
-  errno = ENOTSUP;
-  return -1;
-}
-
-vm_size_t       vm_page_size = 4096; // hardcoded to match expectations of darwin
-
-
-
 /*      $OpenBSD: strlcpy.c,v 1.11 2006/05/05 15:27:38 millert Exp $        */
 
 /*
@@ -355,36 +342,34 @@ vm_size_t       vm_page_size = 4096; // hardcoded to match expectations of darwi
 #include <sys/types.h>
 #include <string.h>
 
-
 /*
  * Copy src to string dst of size siz.  At most siz-1 characters
  * will be copied.  Always NUL terminates (unless siz == 0).
  * Returns strlen(src); if retval >= siz, truncation occurred.
  */
-size_t
-strlcpy(char *dst, const char *src, size_t siz)
+size_t strlcpy(char *dst, const char *src, size_t siz)
 {
-        char *d = dst;
-        const char *s = src;
-        size_t n = siz;
+    char *d = dst;
+    const char *s = src;
+    size_t n = siz;
 
-        /* Copy as many bytes as will fit */
-        if (n != 0) {
-                while (--n != 0) {
-                        if ((*d++ = *s++) == '\0')
-                                break;
-                }
+    /* Copy as many bytes as will fit */
+    if (n != 0) {
+        while (--n != 0) {
+            if ((*d++ = *s++) == '\0')
+                break;
         }
+    }
 
-        /* Not enough room in dst, add NUL and traverse rest of src */
-        if (n == 0) {
-                if (siz != 0)
-                        *d = '\0';                /* NUL-terminate dst */
-                while (*s++)
-                        ;
-        }
+    /* Not enough room in dst, add NUL and traverse rest of src */
+    if (n == 0) {
+        if (siz != 0)
+            *d = '\0';                /* NUL-terminate dst */
+        while (*s++)
+            ;
+    }
 
-        return(s - src - 1);        /* count does not include NUL */
+    return(s - src - 1);        /* count does not include NUL */
 }
 
 #endif /* __APPLE__ */

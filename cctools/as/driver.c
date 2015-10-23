@@ -270,10 +270,6 @@ char **envp)
 	    run_clang = 1;
 	}
 
-#if 0
-/*
- * See rdar://9801003 where this will be changed before before NMOs and NMiOS.
- */
 	/*
 	 * Use the LLVM integrated assembler as the default with the as(1)
 	 * driver for Intel (64-bit & 32-bit) as well as ARM for 32-bit too
@@ -283,7 +279,6 @@ char **envp)
 	   arch_flag.cputype == CPU_TYPE_I386 ||
 	   arch_flag.cputype == CPU_TYPE_ARM)
 	    run_clang = 1;
-#endif
 
 	/*
 	 * Use the clang as the assembler if is the default or asked to with

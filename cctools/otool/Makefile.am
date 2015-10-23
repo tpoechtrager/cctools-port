@@ -12,9 +12,9 @@ $(PTHREAD_FLAGS) $(CXXABI_LIB) $(DL_LIB)
 endif
 
 if ISDARWIN
-otool_CFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/include/foreign -I$(top_srcdir)/libstuff $(WARNINGS) $(LTO_DEF) -D_DARWIN_C_SOURCE -D__DARWIN_UNIX03 $(ENDIAN_FLAG) -DOTOOL
+otool_CFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/include/foreign -I$(top_srcdir)/libstuff $(WARNINGS) $(LTO_DEF) -D_DARWIN_C_SOURCE -D__DARWIN_UNIX03 $(ENDIAN_FLAG) -DOTOOL -DEFI_SUPPORT
 else
-otool_CFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/include/foreign -I$(top_srcdir)/libstuff -I$(top_srcdir)/libobjc2 $(WARNINGS) $(LTO_DEF) -D_DARWIN_C_SOURCE -D__DARWIN_UNIX03 $(ENDIAN_FLAG) -DOTOOL
+otool_CFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/include/foreign -I$(top_srcdir)/libstuff -I$(top_srcdir)/libobjc2 $(WARNINGS) $(LTO_DEF) -D_DARWIN_C_SOURCE -D__DARWIN_UNIX03 $(ENDIAN_FLAG) -DOTOOL -DEFI_SUPPORT
 endif
 
 otool_SOURCES =  \
@@ -32,5 +32,7 @@ otool_SOURCES =  \
 	print_objc.c \
 	print_objc2_32bit.c \
 	print_objc2_64bit.c \
+	print_bitcode.c \
+	coff_print.c \
 	arm64_disasm.c \
 	dyld_bind_info.c

@@ -1,6 +1,6 @@
 # Apple cctools port for Linux, *BSD and Windows (Cygwin) #
 
-Current Version: 870 + ld64-242.2.  
+Current Version: 877.5 + ld64-253.3.  
 Originally ported by [cjacker](http://ios-toolchain-based-on-clang-for-linux.googlecode.com).
 
 ## SUPPORTED HOSTS ##
@@ -18,19 +18,24 @@ Untested, but compiles:
 
 aarch64, ppc, ppc64
 
-## SUPPORTED TARGETS ##
+## SUPPORTED TARGET ARCHITECTURES ##
 
 armv4t, armv5, armv6, armv7, armv7f, armv7k, armv7s, armv6m  
 armv7m, armv7em, armv8, arm64, arm64v8, i386, x86_64 and x86_64h.
 
+## SUPPORTED TARGET OPERATING SYSTEMS ##
+
+Mac OS X, iOS, watchOS (untested), tvOS (untested)
+
 ## DEPENDENCIES ##
 
-`Clang 3.2+ or gcc/g++/gcc-objc 4.6+`, `automake`, `autogen` and `libtool`.
+`Clang 3.2+ or gcc/g++/gcc-objc 4.7+`, `automake`, `autogen` and `libtool`.
 
 Optional, but recommended:
 
-`llvm-devel` (For Link Time Optimization Support)  
-`uuid-devel` (For ld64 `-random_uuid` Support)
+`llvm-devel`               (For Link Time Optimization Support)  
+`uuid-devel`               (For ld64 `-random_uuid` Support)  
+`llvm-devel` + `xar-devel` (For ld64 `-bitcode_bundle` Support)
 
 ## INSTALLATION ##
 

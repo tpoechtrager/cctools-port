@@ -340,23 +340,26 @@ extern void print_cstring_section(
     enum bool print_addresses);
 
 extern void print_literal4_section(
+    cpu_type_t cputype,
     char *sect,
     uint32_t sect_size,
-    uint32_t sect_addr,
+    uint64_t sect_addr,
     enum byte_sex literal_byte_sex,
     enum bool print_addresses);
 
 extern void print_literal8_section(
+    cpu_type_t cputype,
     char *sect,
     uint32_t sect_size,
-    uint32_t sect_addr,
+    uint64_t sect_addr,
     enum byte_sex literal_byte_sex,
     enum bool print_addresses);
 
 extern void print_literal16_section(
+    cpu_type_t cputype,
     char *sect,
     uint32_t sect_size,
-    uint32_t sect_addr,
+    uint64_t sect_addr,
     enum byte_sex literal_byte_sex,
     enum bool print_addresses);
 
@@ -547,6 +550,12 @@ extern void print_objc_runtime_setup_section(
     char *object_addr,
     uint32_t object_size,
     enum bool verbose);
+
+extern void print_bitcode_section(
+    char *sect,
+    uint64_t sect_size,
+    enum bool verbose,
+    enum bool print_xar_header);
 
 extern char *get_objc2_64bit_cfstring_name(
     uint64_t p,
