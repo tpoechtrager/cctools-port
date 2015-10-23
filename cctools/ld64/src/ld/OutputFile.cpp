@@ -30,6 +30,7 @@
 #include <sys/sysctl.h>
 #include <sys/param.h>
 #include <sys/mount.h>
+#include <signal.h> // ld64-port
 #include <fcntl.h>
 #include <errno.h>
 #include <limits.h>
