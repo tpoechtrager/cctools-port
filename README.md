@@ -25,7 +25,7 @@ armv7m, armv7em, armv8, arm64, arm64v8, i386, x86_64 and x86_64h.
 
 ## SUPPORTED TARGET OPERATING SYSTEMS ##
 
-Mac OS X, iOS, watchOS (untested), tvOS (untested)
+Mac OS X, iOS, watchOS (untested) and tvOS (untested)
 
 ## DEPENDENCIES ##
 
