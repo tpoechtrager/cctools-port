@@ -47,6 +47,18 @@ extern "C" {
 #include "Bitcode.hpp"
 #include "macho_relocatable_file.h"
 
+// ld64-port start
+#if LTO_API_VERSION < 12
+static unsigned int lto_api_version() {
+  return LTO_API_VERSION;
+}
+
+static lto_code_gen_t lto_codegen_create_in_local_context() {
+    // ::lto_api_version() < 14   makes this function unreachable
+    __builtin_unreachable();
+}
+#endif
+// ld64-port end
 
 namespace ld {
 namespace passes {
