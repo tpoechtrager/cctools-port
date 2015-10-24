@@ -1,29 +1,11 @@
-#ifndef __APPLE__
 #include <stdlib.h>
-#include <stdio.h>
 #include <string.h>
 #include <unistd.h>
-#include <errno.h>
-#include <inttypes.h>
-#include <sys/types.h>
-#include <sys/mman.h>
+#include <stdio.h>
 #include <sys/stat.h>
 #include <sys/param.h>
-#include <sys/time.h>
-#include <mach/mach.h>
-#include <mach/mach_error.h>
-#include <mach/mach_time.h>
-#include <mach/mach_host.h>
-#include <mach/host_info.h>
 
-#if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__DragonFly__)
-#include <sys/sysctl.h>
-#endif
-
-#ifdef __OpenBSD__
-#include <sys/user.h>
-#endif
-
+#ifndef DISABLE_CLANG_AS
 char *find_clang()
 {
     char *p, *path = getenv("PATH");
@@ -53,6 +35,29 @@ char *find_clang()
     free(path);
     return NULL;
 }
+#endif /* ! DISABLE_CLANG_AS */
+
+#ifndef __APPLE__
+
+#include <errno.h>
+#include <inttypes.h>
+#include <sys/types.h>
+#include <sys/mman.h>
+#include <sys/time.h>
+#include <mach/mach.h>
+#include <mach/mach_error.h>
+#include <mach/mach_time.h>
+#include <mach/mach_host.h>
+#include <mach/host_info.h>
+
+#if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__DragonFly__)
+#include <sys/sysctl.h>
+#endif
+
+#ifdef __OpenBSD__
+#include <sys/user.h>
+#endif
+
 
 int _NSGetExecutablePath(char *epath, unsigned int *size)
 {

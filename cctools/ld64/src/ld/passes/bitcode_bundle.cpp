@@ -53,10 +53,12 @@ static unsigned int lto_api_version() {
     return LTO_API_VERSION;
 }
 
+#if LTO_API_VERSION < 11
 static lto_code_gen_t lto_codegen_create_in_local_context() {
     // ::lto_api_version() < 14   makes this function unreachable
     __builtin_unreachable();
 }
+#endif
 #endif
 // ld64-port end
 
