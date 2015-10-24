@@ -302,10 +302,13 @@ char **envp)
 	    as = find_clang();
 #endif
 	    if(!as || access(as, F_OK) != 0){ /* cctools-port: added  !as || */
-		printf("%s: assembler (%s) not installed\n", progname, as);
+		printf("%s: assembler (%s) not installed\n", progname,
+		       as ? as : "clang"); /* cctools-port:
+					      added  ? as : "clang" */
 		exit(1);
 	    }
-	    new_argv = allocate((argc + 10) * sizeof(char *)); /* cctools-port: + 8 -> + 10 */
+	    new_argv = allocate((argc + 10) * sizeof(char *)); /* cctools-port:
+								  + 8 -> + 10 */
 	    new_argv[0] = as;
 	    j = 1;
 	    /*
