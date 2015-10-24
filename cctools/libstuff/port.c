@@ -1,28 +1,58 @@
 #ifndef __APPLE__
-#include <mach/mach.h>
-#include <mach/mach_error.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <unistd.h>
-#include <sys/types.h>
-#include <sys/mman.h>
-/* #include <sys/attr.h> */
 #include <errno.h>
 #include <inttypes.h>
+#include <sys/types.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/param.h>
+#include <sys/time.h>
+#include <mach/mach.h>
+#include <mach/mach_error.h>
 #include <mach/mach_time.h>
 #include <mach/mach_host.h>
 #include <mach/host_info.h>
-#include <sys/time.h>
 
 #if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__DragonFly__)
 #include <sys/sysctl.h>
 #endif
 
 #ifdef __OpenBSD__
-#include <sys/types.h>
 #include <sys/user.h>
-#include <sys/stat.h>
 #endif
+
+char *find_clang()
+{
+    char *p, *path = getenv("PATH");
+    char clang[MAXPATHLEN];
+    struct stat st;
+
+    if (!path)
+        return NULL;
+
+    path = strdup(path);
+
+    if (!path)
+        return NULL;
+
+    p = strtok(path, ":");
+
+    while (p != NULL)
+    {
+        snprintf(clang, sizeof(clang), "%s/clang", p);
+
+        if (stat(clang, &st) == 0 && access(clang, F_OK|X_OK) == 0)
+            return strdup(clang);
+
+        p = strtok(NULL, ":");
+    }
+
+    free(path);
+    return NULL;
+}
 
 int _NSGetExecutablePath(char *epath, unsigned int *size)
 {
@@ -207,9 +237,6 @@ vm_size_t vm_page_size = 4096; /* hardcoded to match expectations of darwin */
 
 #ifndef HAVE_STRMODE
 #include <sys/cdefs.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <string.h>
 
 void strmode(/* mode_t */ int mode, char *p)
 {
@@ -338,9 +365,6 @@ void strmode(/* mode_t */ int mode, char *p)
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
-
-#include <sys/types.h>
-#include <string.h>
 
 /*
  * Copy src to string dst of size siz.  At most siz-1 characters

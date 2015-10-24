@@ -324,6 +324,17 @@ AC_SUBST(XAR_LIB)
 
 fi
 
+### Check whether we want to use clang as assembler ###
+
+AC_ARG_ENABLE([clang-as],
+AS_HELP_STRING([--disable-clang-as],
+               [do not use clang for assembling]),
+[], [enable_clang_as=yes])
+
+if test "x$enable_clang_as" != "xyes"; then
+  CFLAGS="$CFLAGS -DDISABLE_CLANG_AS"
+fi
+
 ### Check endianness ###
 
 AC_C_BIGENDIAN([AC_SUBST([ENDIAN_FLAG],[-D__BIG_ENDIAN__=1])],

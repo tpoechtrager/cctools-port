@@ -14,7 +14,7 @@ libstuff_la_SOURCES =  \
 	crc32.c  \
 	dylib_roots.c  \
 	dylib_table.c  \
-	emulated.c  \
+	port.c  \
 	errors.c  \
 	execute.c  \
 	fatal_arch.c  \
