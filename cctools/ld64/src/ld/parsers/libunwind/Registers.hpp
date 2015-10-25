@@ -467,7 +467,6 @@ inline void Registers_x86_64::setVectorRegister(int num, v128 value)
 }
 
 
-#if SUPPORT_ARCH_ppc
 ///
 /// Registers_ppc holds the register state of a thread in a 32-bit PowerPC process.  
 ///
@@ -1045,13 +1044,11 @@ inline const char* Registers_ppc::getRegisterName(int regNum)
 	}
 
 }
-#endif
 
 
 
 
 
-#if SUPPORT_ARCH_arm64
 struct arm_thread_state64_t
 {
 	__uint64_t    __x[29];	/* General purpose registers x0-x28 */
@@ -1326,7 +1323,6 @@ inline void Registers_arm64::setVectorRegister(int regNum, v128 value)
 {
 	ABORT("no arm64 vector register support yet");
 }
-#endif
 
 
 ///

@@ -106,12 +106,7 @@ public:
 											ld::Atom(target.section(), target.definition(), ld::Atom::combineNever,
 													ld::Atom::scopeGlobal, target.contentType(), 
 													target.symbolTableInclusion(), target.dontDeadStrip(), 
-#if SUPPORT_ARCH_arm_any
-													target.isThumb(),
-#else
-													false,
-#endif
-													true, target.alignment()),
+													target.isThumb(), true, target.alignment()),
 											_name(nm), 
 											_aliasOf(target),
 											_fixup(0, ld::Fixup::k1of1, ld::Fixup::kindNoneFollowOn, &target) { }
@@ -311,7 +306,6 @@ void Resolver::buildAtomList()
 	//_symbolTable.printStatistics();
 }
 
-#if SUPPORT_ARCH_ppc
 unsigned int Resolver::ppcSubTypeIndex(uint32_t subtype)
 {
 	switch ( subtype ) {
@@ -332,7 +326,6 @@ unsigned int Resolver::ppcSubTypeIndex(uint32_t subtype)
 			break;
 	}
 }
-#endif
 
 void Resolver::doLinkerOption(const std::vector<const char*>& linkerOption, const char* fileName)
 {
@@ -529,7 +522,6 @@ void Resolver::doFile(const ld::File& file)
 		// update cpu-sub-type
 		cpu_subtype_t nextObjectSubType = file.cpuSubType();
 		switch ( _options.architecture() ) {
-#if SUPPORT_ARCH_ppc
 			case CPU_TYPE_POWERPC:
 				// no checking when -force_cpusubtype_ALL is used
 				if ( _options.forceCpuSubtypeAll() )
@@ -552,9 +544,7 @@ void Resolver::doFile(const ld::File& file)
 					}
 				}
 				break;
-#endif
 
-#if SUPPORT_ARCH_arm_any
 			case CPU_TYPE_ARM:
 				if ( _options.subArchitecture() != nextObjectSubType ) {
 					if ( (_options.subArchitecture() == CPU_SUBTYPE_ARM_ALL) && _options.forceCpuSubtypeAll() ) {
@@ -573,12 +563,9 @@ void Resolver::doFile(const ld::File& file)
 					}
 				}
 				break;
-#endif
 			
-#if SUPPORT_ARCH_ppc64
 			case CPU_TYPE_POWERPC64:
 				break;
-#endif
 
 			case CPU_TYPE_I386:
 				_internal.cpuSubType = CPU_SUBTYPE_I386_ALL;
@@ -837,22 +824,14 @@ bool Resolver::isDtraceProbe(ld::Fixup::Kind kind)
 	switch (kind) {
 		case ld::Fixup::kindStoreX86DtraceCallSiteNop:
 		case ld::Fixup::kindStoreX86DtraceIsEnableSiteClear:
-#if SUPPORT_ARCH_arm_any
 		case ld::Fixup::kindStoreARMDtraceCallSiteNop:
 		case ld::Fixup::kindStoreARMDtraceIsEnableSiteClear:
-#endif
-#if SUPPORT_ARCH_arm64
 		case ld::Fixup::kindStoreARM64DtraceCallSiteNop:
 		case ld::Fixup::kindStoreARM64DtraceIsEnableSiteClear:
-#endif
-#if SUPPORT_ARCH_arm_any
 		case ld::Fixup::kindStoreThumbDtraceCallSiteNop:
 		case ld::Fixup::kindStoreThumbDtraceIsEnableSiteClear:
-#endif
-#if SUPPORT_ARCH_ppc
 		case ld::Fixup::kindStorePPCDtraceCallSiteNop:
 		case ld::Fixup::kindStorePPCDtraceIsEnableSiteClear:
-#endif
 		case ld::Fixup::kindDtraceExtra:
 			return true;
 		default: 
@@ -1075,10 +1054,8 @@ void Resolver::markLive(const ld::Atom& atom, WhyLiveBackChain* previous)
 			case ld::Fixup::kindStoreTargetAddressX86PCRel32TLVLoadNowLEA:
 			case ld::Fixup::kindStoreTargetAddressX86Abs32TLVLoad:
 			case ld::Fixup::kindStoreTargetAddressX86Abs32TLVLoadNowLEA:
-#if SUPPORT_ARCH_arm_any
 			case ld::Fixup::kindStoreTargetAddressARMBranch24:
 			case ld::Fixup::kindStoreTargetAddressThumbBranch22:
-#endif
 #if SUPPORT_ARCH_arm64
 			case ld::Fixup::kindStoreTargetAddressARM64Branch26:
 			case ld::Fixup::kindStoreTargetAddressARM64Page21:
@@ -1087,9 +1064,7 @@ void Resolver::markLive(const ld::Atom& atom, WhyLiveBackChain* previous)
 			case ld::Fixup::kindStoreTargetAddressARM64TLVPLoadPage21:
 			case ld::Fixup::kindStoreTargetAddressARM64TLVPLoadNowLeaPage21:
 #endif
-#if SUPPORT_ARCH_ppc
 			case ld::Fixup::kindStoreTargetAddressPPCBranch24:
-#endif
 				if ( fit->binding == ld::Fixup::bindingByContentBound ) {
 					// normally this was done in convertReferencesToIndirect()
 					// but a archive loaded .o file may have a forward reference

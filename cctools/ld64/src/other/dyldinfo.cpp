@@ -165,7 +165,6 @@ private:
 
 
 
-#if SUPPORT_ARCH_ppc
 template <>
 bool DyldInfoPrinter<ppc>::validFile(const uint8_t* fileContent)
 {	
@@ -184,9 +183,7 @@ bool DyldInfoPrinter<ppc>::validFile(const uint8_t* fileContent)
 	}
 	return false;
 }
-#endif
 
-#if SUPPORT_ARCH_ppc64
 template <>
 bool DyldInfoPrinter<ppc64>::validFile(const uint8_t* fileContent)
 {	
@@ -205,7 +202,6 @@ bool DyldInfoPrinter<ppc64>::validFile(const uint8_t* fileContent)
 	}
 	return false;
 }
-#endif
 
 template <>
 bool DyldInfoPrinter<x86>::validFile(const uint8_t* fileContent)
@@ -1885,7 +1881,6 @@ void DyldInfoPrinter<A>::printDataInCode()
 
 
 
-#if SUPPORT_ARCH_ppc
 template <>
 ppc::P::uint_t DyldInfoPrinter<ppc>::relocBase()
 {
@@ -1894,9 +1889,7 @@ ppc::P::uint_t DyldInfoPrinter<ppc>::relocBase()
 	else
 		return fFirstSegment->vmaddr();
 }
-#endif
 
-#if SUPPORT_ARCH_ppc64
 template <>
 ppc64::P::uint_t DyldInfoPrinter<ppc64>::relocBase()
 {
@@ -1905,7 +1898,6 @@ ppc64::P::uint_t DyldInfoPrinter<ppc64>::relocBase()
 	else
 		return fFirstSegment->vmaddr();
 }
-#endif
 
 template <>
 x86::P::uint_t DyldInfoPrinter<x86>::relocBase()
@@ -1941,7 +1933,6 @@ arm64::P::uint_t DyldInfoPrinter<arm64>::relocBase()
 }
 #endif
 
-#if SUPPORT_ARCH_ppc
 template <>
 const char*	DyldInfoPrinter<ppc>::relocTypeName(uint8_t r_type)
 {
@@ -1952,9 +1943,7 @@ const char*	DyldInfoPrinter<ppc>::relocTypeName(uint8_t r_type)
 	else
 		return "??";
 }
-#endif
 	
-#if SUPPORT_ARCH_ppc64
 template <>
 const char*	DyldInfoPrinter<ppc64>::relocTypeName(uint8_t r_type)
 {
@@ -1963,7 +1952,6 @@ const char*	DyldInfoPrinter<ppc64>::relocTypeName(uint8_t r_type)
 	else
 		return "??";
 }
-#endif
 	
 template <>
 const char*	DyldInfoPrinter<x86>::relocTypeName(uint8_t r_type)
@@ -2083,10 +2071,8 @@ void DyldInfoPrinter<A>::printSymbolTableExportInfo()
 			if ( sym->n_desc() & N_WEAK_DEF )
 				flags = "[weak_def] ";
 			pint_t thumb = 0;
-#if SUPPORT_ARCH_arm_any
 			if ( sym->n_desc() & N_ARM_THUMB_DEF )
 				thumb = 1;
-#endif
 			printf("0x%08llX %s%s\n", sym->n_value()+thumb, flags, &fStrings[sym->n_strx()]);
 		}
 	}
@@ -2303,28 +2289,24 @@ static void dump(const char* path)
 					&& ((sPreferredSubArch==0) || (sPreferredSubArch==cpusubtype)))
 					|| (sPreferredArch == 0) ) {	
 					switch(cputype) {
-#if SUPPORT_ARCH_ppc
 					case CPU_TYPE_POWERPC:
 						if ( DyldInfoPrinter<ppc>::validFile(p + offset) )
 							DyldInfoPrinter<ppc>::make(p + offset, size, path, (sPreferredArch == 0));
 						else
 							throw "in universal file, ppc slice does not contain ppc mach-o";
 						break;
-#endif
 					case CPU_TYPE_I386:
 						if ( DyldInfoPrinter<x86>::validFile(p + offset) )
 							DyldInfoPrinter<x86>::make(p + offset, size, path, (sPreferredArch == 0));
 						else
 							throw "in universal file, i386 slice does not contain i386 mach-o";
 						break;
-#if SUPPORT_ARCH_ppc64
 					case CPU_TYPE_POWERPC64:
 						if ( DyldInfoPrinter<ppc64>::validFile(p + offset) )
 							DyldInfoPrinter<ppc64>::make(p + offset, size, path, (sPreferredArch == 0));
 						else
 							throw "in universal file, ppc64 slice does not contain ppc64 mach-o";
 						break;
-#endif
 					case CPU_TYPE_X86_64:
 						if ( DyldInfoPrinter<x86_64>::validFile(p + offset) )
 							DyldInfoPrinter<x86_64>::make(p + offset, size, path, (sPreferredArch == 0));
@@ -2356,16 +2338,12 @@ static void dump(const char* path)
 		else if ( DyldInfoPrinter<x86>::validFile(p) ) {
 			DyldInfoPrinter<x86>::make(p, length, path, false);
 		}
-#if SUPPORT_ARCH_ppc
 		else if ( DyldInfoPrinter<ppc>::validFile(p) ) {
 			DyldInfoPrinter<ppc>::make(p, length, path, false);
 		}
-#endif
-#if SUPPORT_ARCH_ppc64
 		else if ( DyldInfoPrinter<ppc64>::validFile(p) ) {
 			DyldInfoPrinter<ppc64>::make(p, length, path, false);
 		}
-#endif
 		else if ( DyldInfoPrinter<x86_64>::validFile(p) ) {
 			DyldInfoPrinter<x86_64>::make(p, length, path, false);
 		}
@@ -2420,15 +2398,10 @@ int main(int argc, const char* argv[])
 			if ( arg[0] == '-' ) {
 				if ( strcmp(arg, "-arch") == 0 ) {
 					const char* arch = ++i<argc? argv[i]: "";
-					if (0) { }
-#if SUPPORT_ARCH_ppc64
-					else if ( strcmp(arch, "ppc64") == 0 )
+					if ( strcmp(arch, "ppc64") == 0 )
 						sPreferredArch = CPU_TYPE_POWERPC64;
-#endif
-#if SUPPORT_ARCH_ppc
 					else if ( strcmp(arch, "ppc") == 0 )
 						sPreferredArch = CPU_TYPE_POWERPC;
-#endif
 					else if ( strcmp(arch, "i386") == 0 )
 						sPreferredArch = CPU_TYPE_I386;
 					else if ( strcmp(arch, "x86_64") == 0 )
@@ -2440,7 +2413,6 @@ int main(int argc, const char* argv[])
 					else {
 						if ( arch == NULL )
 							throw "-arch missing architecture name";
-#if SUPPORT_ARCH_arm_any
 						bool found = false;
 						for (const ArchInfo* t=archInfoArray; t->archName != NULL; ++t) {
 							if ( strcmp(t->archName,arch) == 0 ) {
@@ -2452,7 +2424,6 @@ int main(int argc, const char* argv[])
 							}
 						}
 						if ( !found )
-#endif
 							throwf("unknown architecture %s", arch);
 					}
 				}

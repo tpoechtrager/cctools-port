@@ -23,7 +23,6 @@
  */
 
 
-#if SUPPORT_ARCH_arm64
 // already in ld::passes::stubs namespace
 namespace arm64 {
 
@@ -408,4 +407,4 @@ ld::Section KextStubAtom::_s_section("__TEXT", "__stubs", ld::Section::typeCode)
 
 
 } // namespace x86_64 
-#endif
+

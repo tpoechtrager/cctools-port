@@ -96,17 +96,11 @@ private:
 };
 
 
-#if SUPPORT_ARCH_ppc
 template <>	 const char*	UnwindPrinter<ppc>::archName()		{ return "ppc"; }
-#endif
-#if SUPPORT_ARCH_ppc64
 template <>	 const char*	UnwindPrinter<ppc64>::archName()	{ return "ppc64"; }
-#endif
 template <>	 const char*	UnwindPrinter<x86>::archName()		{ return "i386"; }
 template <>	 const char*	UnwindPrinter<x86_64>::archName()	{ return "x86_64"; }
-#if SUPPORT_ARCH_arm_any
 template <>	 const char*	UnwindPrinter<arm>::archName()		{ return "arm"; }
-#endif
 #if SUPPORT_ARCH_arm64
 template <>	 const char*	UnwindPrinter<arm64>::archName()	{ return "arm64"; }
 #endif
@@ -171,7 +165,6 @@ bool UnwindPrinter<arm64>::validFile(const uint8_t* fileContent)
 }
 #endif
 
-#if SUPPORT_ARCH_arm_any
 template <>
 bool UnwindPrinter<arm>::validFile(const uint8_t* fileContent)
 {	
@@ -190,7 +183,6 @@ bool UnwindPrinter<arm>::validFile(const uint8_t* fileContent)
 	}
 	return false;
 }
-#endif
 
 template <typename A>
 UnwindPrinter<A>::UnwindPrinter(const uint8_t* fileContent, uint32_t fileLength, const char* path, bool showFunctionNames)
@@ -766,7 +758,6 @@ void UnwindPrinter<arm64>::decode(uint32_t encoding, const uint8_t* funcStart, c
 }
 #endif
 
-#if SUPPORT_ARCH_arm_any
 template <>
 void UnwindPrinter<arm>::decode(uint32_t encoding, const uint8_t* funcStart, char* str)
 {
@@ -852,7 +843,7 @@ void UnwindPrinter<arm>::decode(uint32_t encoding, const uint8_t* funcStart, cha
 			break;
 	}
 }
-#endif
+
 
 template <>
 const char* UnwindPrinter<x86_64>::personalityName(const macho_relocation_info<x86_64::P>* reloc)
@@ -883,7 +874,6 @@ const char* UnwindPrinter<arm64>::personalityName(const macho_relocation_info<ar
 }
 #endif
 
-#if SUPPORT_ARCH_arm_any
 template <>
 const char* UnwindPrinter<arm>::personalityName(const macho_relocation_info<arm::P>* reloc)
 {
@@ -892,7 +882,6 @@ const char* UnwindPrinter<arm>::personalityName(const macho_relocation_info<arm:
 	const macho_nlist<P>& sym = fSymbols[reloc->r_symbolnum()];
 	return &fStrings[sym.n_strx()];
 }
-#endif
 
 template <typename A>
 bool UnwindPrinter<A>::hasExernReloc(uint64_t sectionOffset, const char** personalityStr, pint_t* addr)
@@ -1129,14 +1118,12 @@ static void dump(const char* path, const std::set<cpu_type_t>& onlyArchs, bool s
 							throw "in universal file, arm64 slice does not contain arm64 mach-o";
 						break;
 #endif
-#if SUPPORT_ARCH_arm_any
 					case CPU_TYPE_ARM:
 						if ( UnwindPrinter<arm>::validFile(p + offset) )
 							UnwindPrinter<arm>::make(p + offset, size, path, showFunctionNames);
 						else
 							throw "in universal file, arm slice does not contain arm mach-o";
 						break;
-#endif
 					default:
 							throwf("in universal file, unknown architecture slice 0x%x\n", cputype);
 					}
@@ -1154,11 +1141,9 @@ static void dump(const char* path, const std::set<cpu_type_t>& onlyArchs, bool s
 			UnwindPrinter<arm64>::make(p, length, path, showFunctionNames);
 		}
 #endif		
-#if SUPPORT_ARCH_arm_any
 		else if ( UnwindPrinter<arm>::validFile(p) && onlyArchs.count(CPU_TYPE_ARM) ) {
 			UnwindPrinter<arm>::make(p, length, path, showFunctionNames);
 		}
-#endif
 		else {
 			throw "not a known file type";
 		}

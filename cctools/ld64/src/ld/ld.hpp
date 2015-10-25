@@ -419,13 +419,11 @@ struct Fixup
 					kindStoreX86PCRel32GOTLoad, kindStoreX86PCRel32GOTLoadNowLEA, kindStoreX86PCRel32GOT, 
 					kindStoreX86PCRel32TLVLoad, kindStoreX86PCRel32TLVLoadNowLEA,
 					kindStoreX86Abs32TLVLoad, kindStoreX86Abs32TLVLoadNowLEA,
-#if SUPPORT_ARCH_arm_any
 					// ARM specific store kinds
 					kindStoreARMBranch24, kindStoreThumbBranch22, 
 					kindStoreARMLoad12,
 					kindStoreARMLow16, kindStoreARMHigh16, 
 					kindStoreThumbLow16, kindStoreThumbHigh16, 
-#endif
 #if SUPPORT_ARCH_arm64
 					// ARM64 specific store kinds
 					kindStoreARM64Branch26,  
@@ -436,27 +434,17 @@ struct Fixup
 					kindStoreARM64TLVPLoadNowLeaPage21, kindStoreARM64TLVPLoadNowLeaPageOff12,
 					kindStoreARM64PointerToGOT, kindStoreARM64PCRelToGOT,
 #endif
-#if SUPPORT_ARCH_ppc
 					// PowerPC specific store kinds
 					kindStorePPCBranch24, kindStorePPCBranch14,
 					kindStorePPCPicLow14, kindStorePPCPicLow16, kindStorePPCPicHigh16AddLow,
 					kindStorePPCAbsLow14, kindStorePPCAbsLow16, kindStorePPCAbsHigh16AddLow, kindStorePPCAbsHigh16,
-#endif
 					// dtrace probes
 					kindDtraceExtra,
 					kindStoreX86DtraceCallSiteNop, kindStoreX86DtraceIsEnableSiteClear,
-#if SUPPORT_ARCH_arm_any
 					kindStoreARMDtraceCallSiteNop, kindStoreARMDtraceIsEnableSiteClear,
-#endif
-#if SUPPORT_ARCH_arm64
 					kindStoreARM64DtraceCallSiteNop, kindStoreARM64DtraceIsEnableSiteClear,
-#endif
-#if SUPPORT_ARCH_arm_any
 					kindStoreThumbDtraceCallSiteNop, kindStoreThumbDtraceIsEnableSiteClear,
-#endif
-#if SUPPORT_ARCH_ppc
 					kindStorePPCDtraceCallSiteNop, kindStorePPCDtraceIsEnableSiteClear,
-#endif
 					// lazy binding
 					kindLazyTarget, kindSetLazyOffset,
 					// islands
@@ -482,12 +470,10 @@ struct Fixup
 					kindStoreTargetAddressX86PCRel32TLVLoadNowLEA, // kindSetTargetAddress + kindStoreX86PCRel32TLVLoadNowLEA
 					kindStoreTargetAddressX86Abs32TLVLoad,		// kindSetTargetAddress + kindStoreX86Abs32TLVLoad
 					kindStoreTargetAddressX86Abs32TLVLoadNowLEA,	// kindSetTargetAddress + kindStoreX86Abs32TLVLoadNowLEA
-#if SUPPORT_ARCH_arm_any
 					// ARM value calculation and store combinations
 					kindStoreTargetAddressARMBranch24,		// kindSetTargetAddress + kindStoreARMBranch24
 					kindStoreTargetAddressThumbBranch22,	// kindSetTargetAddress + kindStoreThumbBranch22
 					kindStoreTargetAddressARMLoad12,		// kindSetTargetAddress + kindStoreARMLoad12
-#endif
 #if SUPPORT_ARCH_arm64
 					// ARM64 value calculation and store combinations
 					kindStoreTargetAddressARM64Branch26,		// kindSetTargetAddress + kindStoreARM64Branch26
@@ -502,10 +488,8 @@ struct Fixup
 					kindStoreTargetAddressARM64TLVPLoadNowLeaPage21,	// kindSetTargetAddress + kindStoreARM64TLVPLoadNowLeaPage21
 					kindStoreTargetAddressARM64TLVPLoadNowLeaPageOff12,	// kindSetTargetAddress + kindStoreARM64TLVPLoadNowLeaPageOff12
 #endif
-#if SUPPORT_ARCH_ppc
 					// PowerPC value calculation and store combinations
 					kindStoreTargetAddressPPCBranch24,		// kindSetTargetAddress + kindStorePPCBranch24
-#endif
 			};
 
 	union {
@@ -570,7 +554,6 @@ struct Fixup
 		contentAddendOnly(false), contentDetlaToAddendOnly(false), contentIgnoresAddend(false) 
 			{ u.addend = addend; }
 			
-#if SUPPORT_ARCH_arm64
 	Fixup(Kind k, uint32_t lohKind, uint32_t off1, uint32_t off2) :
 		offsetInAtom(off1), kind(k), clusterSize(k1of1),  
 		weakImport(false), binding(Fixup::bindingNone), contentAddendOnly(false), 
@@ -584,7 +567,6 @@ struct Fixup
 			extra.info.delta2 = (off2 - off1) >> 2;
 			u.addend = extra.addend; 
 		}
-#endif
 			
 
 	bool firstInCluster() const { 
@@ -615,7 +597,6 @@ struct Fixup
 		return false;
 	}
 	
-#if SUPPORT_ARCH_arm64
 	union LOH_arm64 {
 		uint64_t	addend;
 		struct {
@@ -627,7 +608,6 @@ struct Fixup
 						delta4 : 14;	
 		} info;
 	};
-#endif
 	
 };
 
@@ -748,9 +728,7 @@ public:
 	SymbolTableInclusion					symbolTableInclusion() const{ return _symbolTableInclusion; }
 	bool									dontDeadStrip() const		{ return _dontDeadStrip; }
 	bool									dontDeadStripIfReferencesLive() const { return _dontDeadStripIfRefLive; }
-#if SUPPORT_ARCH_arm_any
 	bool									isThumb() const				{ return _thumb; }
-#endif
 	bool									isAlias() const				{ return _alias; }
 	Alignment								alignment() const			{ return Alignment(_alignmentPowerOf2, _alignmentModulus); }
 	bool									overridesDylibsWeakDef() const	{ return _overridesADylibsWeakDef; }

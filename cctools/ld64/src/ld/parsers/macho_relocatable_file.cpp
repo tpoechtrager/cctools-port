@@ -189,9 +189,7 @@ protected:
 								_beginAtoms(NULL), _endAtoms(NULL), _hasAliases(false) { }
 
 
-#if SUPPORT_ARCH_ppc || SUPPORT_ARCH_ppc64
 	bool	addRelocFixup_powerpc(class Parser<A>& parser,const macho_relocation_info<typename A::P>* reloc);
-#endif
 	Atom<A>*						findContentAtomByAddress(pint_t addr, class Atom<A>* start, class Atom<A>* end);
 	uint32_t						x86_64PcRelOffset(uint8_t r_type);
 	void							addLOH(class Parser<A>& parser, int kind, int count, const uint64_t addrs[]);
@@ -915,7 +913,6 @@ void Atom<A>::copyRawContent(uint8_t buffer[]) const
 	}
 }
 
-#if SUPPORT_ARCH_arm_any
 template <>
 void Atom<arm>::verifyAlignment(const macho_section<P>&) const
 {
@@ -924,7 +921,6 @@ void Atom<arm>::verifyAlignment(const macho_section<P>&) const
 			warning("ARM function not 4-byte aligned: %s from %s", this->name(), this->file()->path());
 	}
 }
-#endif
 
 #if SUPPORT_ARCH_arm64
 template <>
@@ -1293,7 +1289,6 @@ Parser<A>::Parser(const uint8_t* fileContent, uint64_t fileLength, const char* p
 {
 }
 
-#if SUPPORT_ARCH_ppc
 template <>
 bool Parser<ppc>::validFile(const uint8_t* fileContent, bool, cpu_subtype_t)
 {
@@ -1306,9 +1301,7 @@ bool Parser<ppc>::validFile(const uint8_t* fileContent, bool, cpu_subtype_t)
 		return false;
 	return true;
 }
-#endif
 
-#if SUPPORT_ARCH_ppc64
 template <>
 bool Parser<ppc64>::validFile(const uint8_t* fileContent, bool, cpu_subtype_t)
 {
@@ -1321,7 +1314,6 @@ bool Parser<ppc64>::validFile(const uint8_t* fileContent, bool, cpu_subtype_t)
 		return false;
 	return true;
 }
-#endif
 
 template <>
 bool Parser<x86>::validFile(const uint8_t* fileContent, bool, cpu_subtype_t)
@@ -1349,7 +1341,6 @@ bool Parser<x86_64>::validFile(const uint8_t* fileContent, bool, cpu_subtype_t)
 	return true;
 }
 
-#if SUPPORT_ARCH_arm_any
 template <>
 bool Parser<arm>::validFile(const uint8_t* fileContent, bool subtypeMustMatch, cpu_subtype_t subtype)
 {
@@ -1370,10 +1361,8 @@ bool Parser<arm>::validFile(const uint8_t* fileContent, bool subtypeMustMatch, c
 	}
 	return true;
 }
-#endif
 
 
-#if SUPPORT_ARCH_arm64
 template <>
 bool Parser<arm64>::validFile(const uint8_t* fileContent, bool subtypeMustMatch, cpu_subtype_t subtype)
 {
@@ -1386,9 +1375,7 @@ bool Parser<arm64>::validFile(const uint8_t* fileContent, bool subtypeMustMatch,
 		return false;
 	return true;
 }
-#endif
 
-#if SUPPORT_ARCH_ppc
 template <>
 const char* Parser<ppc>::fileKind(const uint8_t* fileContent)
 {
@@ -1411,9 +1398,7 @@ const char* Parser<ppc>::fileKind(const uint8_t* fileContent)
 	}
 	return "ppc???";
 }
-#endif
 
-#if SUPPORT_ARCH_ppc64
 template <>
 const char* Parser<ppc64>::fileKind(const uint8_t* fileContent)
 {
@@ -1424,7 +1409,6 @@ const char* Parser<ppc64>::fileKind(const uint8_t* fileContent)
 		return NULL;
 	return "ppc64";
 }
-#endif
 
 template <>
 const char* Parser<x86>::fileKind(const uint8_t* fileContent)
@@ -1448,7 +1432,6 @@ const char* Parser<x86_64>::fileKind(const uint8_t* fileContent)
 	return "x86_64";
 }
 
-#if SUPPORT_ARCH_arm_any
 template <>
 const char* Parser<arm>::fileKind(const uint8_t* fileContent)
 {
@@ -1464,7 +1447,6 @@ const char* Parser<arm>::fileKind(const uint8_t* fileContent)
 	}
 	return "arm???";
 }
-#endif
 
 #if SUPPORT_ARCH_arm64
 template <>
@@ -1762,13 +1744,11 @@ bool Parser<A>::LabelAndCFIBreakIterator::next(Parser<A>& parser, const Section<
 	return false;
 }
 
-#if SUPPORT_ARCH_arm_any
 template <>
 typename arm::P::uint_t Parser<arm>::realAddr(typename arm::P::uint_t addr)
 {
 	return addr & (-2);
 }
-#endif
 
 template <typename A>
 typename A::P::uint_t Parser<A>::realAddr(typename A::P::uint_t addr)
@@ -2042,20 +2022,12 @@ static void versionToString(uint32_t value, char buffer[32])
 		sprintf(buffer, "%d.%d", value >> 16, (value >> 8) & 0xFF);
 }
 
-#if SUPPORT_ARCH_ppc
 template <> uint8_t Parser<ppc>::loadCommandSizeMask()		{ return 0x03; }
-#endif
-#if SUPPORT_ARCH_ppc64
 template <> uint8_t Parser<ppc64>::loadCommandSizeMask()	{ return 0x07; }
-#endif
 template <> uint8_t Parser<x86>::loadCommandSizeMask()		{ return 0x03; }
 template <> uint8_t Parser<x86_64>::loadCommandSizeMask()	{ return 0x07; }
-#if SUPPORT_ARCH_arm_any
 template <> uint8_t Parser<arm>::loadCommandSizeMask()		{ return 0x03; }
-#endif
-#if SUPPORT_ARCH_arm64
 template <> uint8_t Parser<arm64>::loadCommandSizeMask()	{ return 0x07; }
-#endif
 
 template <typename A>
 bool Parser<A>::parseLoadCommands(Options::Platform platform, uint32_t linkMinOSVersion, bool simulator, bool ignoreMismatchPlatform)
@@ -3101,14 +3073,12 @@ void Parser<A>::addFixups(const SourceLocation& src, ld::Fixup::Kind setKind, co
 			case ld::Fixup::kindStoreX86Abs32TLVLoad:
 				firstKind = ld::Fixup::kindStoreTargetAddressX86Abs32TLVLoad;
 				break;
-#if SUPPORT_ARCH_arm_any
 			case ld::Fixup::kindStoreARMBranch24:
 				firstKind = ld::Fixup::kindStoreTargetAddressARMBranch24;
 				break;
 			case ld::Fixup::kindStoreThumbBranch22:
 				firstKind = ld::Fixup::kindStoreTargetAddressThumbBranch22;
 				break;
-#endif
 #if SUPPORT_ARCH_arm64
 			case ld::Fixup::kindStoreARM64Branch26:
 				firstKind = ld::Fixup::kindStoreTargetAddressARM64Branch26;
@@ -3132,11 +3102,9 @@ void Parser<A>::addFixups(const SourceLocation& src, ld::Fixup::Kind setKind, co
 				firstKind = ld::Fixup::kindStoreTargetAddressARM64TLVPLoadPageOff12;
 				break;
 #endif
-#if SUPPORT_ARCH_ppc
 			case ld::Fixup::kindStorePPCBranch24:
 				firstKind = ld::Fixup::kindStoreTargetAddressPPCBranch24;
 				break;
-#endif
 			default:
 				combined = false;
 				cl = ld::Fixup::k1of2;
@@ -3423,11 +3391,7 @@ bool Parser<A>::dontDeadStripFromSymbol(const macho_nlist<P>& sym)
 template <typename A>
 bool Parser<A>::isThumbFromSymbol(const macho_nlist<P>& sym)
 {
-#if SUPPORT_ARCH_arm_any
 	return ( sym.n_desc() & N_ARM_THUMB_DEF );
-#else
-	return false;
-#endif
 }
 
 template <typename A>
@@ -4398,14 +4362,11 @@ uint32_t Section<A>::sectionNum(class Parser<A>& parser) const
 		return 1 + (this->_machOSection - parser.firstMachOSection());
 }
 
-#if SUPPORT_ARCH_ppc64
 // libunwind does not support ppc64
 template <> uint32_t CFISection<ppc64>::cfiCount(Parser<ppc64>& parser) {
 	return 0;
 }
-#endif
 
-#if SUPPORT_ARCH_arm_any
 // arm does not have zero cost exceptions
 template <> 
 uint32_t CFISection<arm>::cfiCount(Parser<arm>& parser) 
@@ -4418,7 +4379,6 @@ uint32_t CFISection<arm>::cfiCount(Parser<arm>& parser)
 	}
 	return 0; 
 }
-#endif
 
 template <typename A>
 uint32_t CFISection<A>::cfiCount(Parser<A>& parser)
@@ -4451,13 +4411,11 @@ bool CFISection<x86_64>::needsRelocating()
 	return true;
 }
 
-#if SUPPORT_ARCH_arm64
 template <>
 bool CFISection<arm64>::needsRelocating()
 {
 	return true;
 }
-#endif
 
 template <typename A>
 bool CFISection<A>::needsRelocating()
@@ -4546,7 +4504,6 @@ void CFISection<x86>::cfiParse(class Parser<x86>& parser, uint8_t* buffer,
 }
 
 
-#if SUPPORT_ARCH_ppc
 // need to change libunwind parseCFIs() to work for ppc
 template <>
 void CFISection<ppc>::cfiParse(class Parser<ppc>& parser, uint8_t* buffer,
@@ -4565,9 +4522,7 @@ void CFISection<ppc>::cfiParse(class Parser<ppc>& parser, uint8_t* buffer,
 	if ( msg != NULL )
 		throwf("malformed __eh_frame section: %s", msg);
 }
-#endif
 
-#if SUPPORT_ARCH_ppc64
 template <>
 void CFISection<ppc64>::cfiParse(class Parser<ppc64>& parser, uint8_t* buffer,
 	libunwind::CFI_Atom_Info<CFISection<ppc64>::OAS> cfiArray[], // ld64-port: removed superfluous ::CFI_Atom_Info
@@ -4576,9 +4531,7 @@ void CFISection<ppc64>::cfiParse(class Parser<ppc64>& parser, uint8_t* buffer,
 	// libunwind does not support ppc64
 	assert(count == 0);
 }
-#endif
 
-#if SUPPORT_ARCH_arm_any
 template <>
 void CFISection<arm>::cfiParse(class Parser<arm>& parser, uint8_t* buffer, 
 									libunwind::CFI_Atom_Info<CFISection<arm>::OAS> cfiArray[], // ld64-port: removed superfluous ::CFI_Atom_Info
@@ -4601,9 +4554,10 @@ void CFISection<arm>::cfiParse(class Parser<arm>& parser, uint8_t* buffer,
 	if ( msg != NULL ) 
 		throwf("malformed __eh_frame section: %s", msg);
 }
-#endif
 
-#if SUPPORT_ARCH_arm64
+
+
+
 template <>
 void CFISection<arm64>::cfiParse(class Parser<arm64>& parser, uint8_t* buffer, 
 									libunwind::CFI_Atom_Info<CFISection<arm64>::OAS> cfiArray[], // ld64-port: removed superfluous ::CFI_Atom_Info
@@ -4668,7 +4622,6 @@ void CFISection<arm64>::cfiParse(class Parser<arm64>& parser, uint8_t* buffer,
 	if ( msg != NULL ) 
 		throwf("malformed __eh_frame section: %s", msg);
 }
-#endif
 
 
 template <typename A>
@@ -4705,18 +4658,10 @@ uint32_t CFISection<A>::appendAtoms(class Parser<A>& parser, uint8_t* p,
 
 template <> bool CFISection<x86_64>::bigEndian() { return false; }
 template <> bool CFISection<x86>::bigEndian() { return false; }
-#if SUPPORT_ARCH_arm_any
 template <> bool CFISection<arm>::bigEndian() { return false; }
-#endif
-#if SUPPORT_ARCH_arm64
 template <> bool CFISection<arm64>::bigEndian() { return false; }
-#endif
-#if SUPPORT_ARCH_ppc
 template <> bool CFISection<ppc>::bigEndian() { return true; }
-#endif
-#if SUPPORT_ARCH_ppc64
 template <> bool CFISection<ppc64>::bigEndian() { return true; }
-#endif
 
 
 template <>
@@ -4790,7 +4735,6 @@ void CFISection<arm64>::addCiePersonalityFixups(class Parser<arm64>& parser, con
 }
 #endif
 
-#if SUPPORT_ARCH_arm_any
 template <>
 void CFISection<arm>::addCiePersonalityFixups(class Parser<arm>& parser, const CFI_Atom_Info* cieInfo)
 {
@@ -4812,9 +4756,7 @@ void CFISection<arm>::addCiePersonalityFixups(class Parser<arm>& parser, const C
 		throwf("unsupported address encoding (%02X) of personality function in CIE", personalityEncoding);
 	}
 }
-#endif
 
-#if SUPPORT_ARCH_ppc
 template <>
 void CFISection<ppc>::addCiePersonalityFixups(class Parser<ppc>& parser, const CFI_Atom_Info* cieInfo)
 {
@@ -4837,7 +4779,6 @@ void CFISection<ppc>::addCiePersonalityFixups(class Parser<ppc>& parser, const C
 			personalityEncoding);
 	}
 }
-#endif
 
 template <typename A>
 void CFISection<A>::addCiePersonalityFixups(class Parser<A>& parser, const CFI_Atom_Info* cieInfo)
@@ -5204,7 +5145,6 @@ bool CUSection<arm64>::encodingMeansUseDwarf(compact_unwind_encoding_t enc)
 }
 #endif
 
-#if SUPPORT_ARCH_ppc
 /* No unwind headers saying anything about PPC to be found anywhere. So the
  * encoding shouldn't be able to ask for DWARF. */
 template <>
@@ -5212,15 +5152,12 @@ bool CUSection<ppc>::encodingMeansUseDwarf(compact_unwind_encoding_t enc)
 {
 	return false;
 }
-#endif
 
-#if SUPPORT_ARCH_ppc64
 template <>
 bool CUSection<ppc64>::encodingMeansUseDwarf(compact_unwind_encoding_t enc)
 {
 	return false;
 }
-#endif
 
 template <typename A>
 int CUSection<A>::infoSorter(const void* l, const void* r)
@@ -5452,13 +5389,11 @@ uint32_t SymboledSection<A>::appendAtoms(class Parser<A>& parser, uint8_t* p,
 }
 
 
-#if SUPPORT_ARCH_arm64
 template <>
 ld::Atom::SymbolTableInclusion ImplicitSizeSection<arm64>::symbolTableInclusion()
 {
 	return ld::Atom::symbolTableInWithRandomAutoStripLabel;
 }
-#endif
 
 template <typename A>
 ld::Atom::SymbolTableInclusion ImplicitSizeSection<A>::symbolTableInclusion()
@@ -5748,37 +5683,29 @@ ld::Fixup::Kind NonLazyPointerSection<x86>::fixupKind()
 	return ld::Fixup::kindStoreLittleEndian32;
 }
 
-#if SUPPORT_ARCH_arm_any
 template <>
 ld::Fixup::Kind NonLazyPointerSection<arm>::fixupKind()
 {
 	return ld::Fixup::kindStoreLittleEndian32;
 }
-#endif
 
-#if SUPPORT_ARCH_arm64
 template <>
 ld::Fixup::Kind NonLazyPointerSection<arm64>::fixupKind()
 {
 	return ld::Fixup::kindStoreLittleEndian64;
 }
-#endif
 
-#if SUPPORT_ARCH_ppc
 template <>
 ld::Fixup::Kind NonLazyPointerSection<ppc>::fixupKind()
 {
 	return ld::Fixup::kindStoreBigEndian32;
 }
-#endif
 
-#if SUPPORT_ARCH_ppc64
 template <>
 ld::Fixup::Kind NonLazyPointerSection<ppc64>::fixupKind()
 {
 	return ld::Fixup::kindStoreBigEndian64;
 }
-#endif
 
 template <>
 void NonLazyPointerSection<x86_64>::makeFixups(class Parser<x86_64>& parser, const struct Parser<x86_64>::CFI_CU_InfoArrays&)
@@ -5809,11 +5736,9 @@ void NonLazyPointerSection<A>::makeFixups(class Parser<A>& parser, const struct 
 			target.atom = parser.findAtomByAddress(targetAddr);
 			target.weakImport = false;
 			target.addend = (targetAddr - target.atom->objectAddress());
-#if SUPPORT_ARCH_arm_any
 			// <rdar://problem/8385011> if pointer to thumb function, mask of thumb bit (not an addend of +1)
 			if ( target.atom->isThumb() )
 				target.addend &= (-2); 
-#endif
 			assert(src.atom->combine() == ld::Atom::combineNever);
 		}
 		else {
@@ -6791,7 +6716,6 @@ bool Section<x86>::addRelocFixup(class Parser<x86>& parser, const macho_relocati
 
 
 	
-#if SUPPORT_ARCH_ppc || SUPPORT_ARCH_ppc64
 //
 // ppc and ppc64 both use the same relocations, so process them in one common routine
 //
@@ -7177,25 +7101,20 @@ bool Section<A>::addRelocFixup_powerpc(class Parser<A>& parser,
 	}
 	return result;
 }
-#endif
 
 
-#if SUPPORT_ARCH_ppc
 template <>
 bool Section<ppc>::addRelocFixup(class Parser<ppc>& parser, const macho_relocation_info<P>* reloc)
 {
 	return addRelocFixup_powerpc(parser, reloc);
 }
-#endif
 
 
-#if SUPPORT_ARCH_ppc64
 template <>
 bool Section<ppc64>::addRelocFixup(class Parser<ppc64>& parser, const macho_relocation_info<P>* reloc)
 {
 	return addRelocFixup_powerpc(parser, reloc);
 }
-#endif
 
 
 
@@ -8019,7 +7938,6 @@ bool ObjC1ClassSection<x86>::addRelocFixup(class Parser<x86>& parser, const mach
 	return FixedSizeSection<x86>::addRelocFixup(parser, reloc);
 }
 
-#if SUPPORT_ARCH_ppc
 template <>
 bool ObjC1ClassSection<ppc>::addRelocFixup(class Parser<ppc>& parser, const macho_relocation_info<ppc::P>* reloc)
 {
@@ -8053,7 +7971,6 @@ bool ObjC1ClassSection<ppc>::addRelocFixup(class Parser<ppc>& parser, const mach
 	// inherited
 	return FixedSizeSection<ppc>::addRelocFixup(parser, reloc);
 }
-#endif
 
 
 
@@ -8069,7 +7986,6 @@ bool Objc1ClassReferences<A>::addRelocFixup(class Parser<A>& parser, const macho
 }
 
 
-#if SUPPORT_ARCH_ppc
 template <>
 bool Objc1ClassReferences<ppc>::addRelocFixup(class Parser<ppc>& parser, const macho_relocation_info<ppc::P>* reloc)
 {
@@ -8101,7 +8017,6 @@ bool Objc1ClassReferences<ppc>::addRelocFixup(class Parser<ppc>& parser, const m
 	// inherited
 	return PointerToCStringSection<ppc>::addRelocFixup(parser, reloc);
 }
-#endif
 
 
 template <>
@@ -8416,18 +8331,14 @@ ld::relocatable::File* parse(const uint8_t* fileContent, uint64_t fileLength,
 				return mach_o::relocatable::Parser<arm64>::parse(fileContent, fileLength, path, modTime, ordinal, opts);
 			break;
 #endif
-#if SUPPORT_ARCH_ppc
 		case CPU_TYPE_POWERPC:
 			if ( mach_o::relocatable::Parser<ppc>::validFile(fileContent) )
 				return mach_o::relocatable::Parser<ppc>::parse(fileContent, fileLength, path, modTime, ordinal, opts);
 			break;
-#endif
-#if SUPPORT_ARCH_ppc64
 		case CPU_TYPE_POWERPC64:
 			if ( mach_o::relocatable::Parser<ppc64>::validFile(fileContent) )
 				return mach_o::relocatable::Parser<ppc64>::parse(fileContent, fileLength, path, modTime, ordinal, opts);
 			break;
-#endif
 	}
 	return NULL;
 }
@@ -8442,22 +8353,14 @@ bool isObjectFile(const uint8_t* fileContent, uint64_t fileLength, const ParserO
 			return ( mach_o::relocatable::Parser<x86_64>::validFile(fileContent) );
 		case CPU_TYPE_I386:
 			return ( mach_o::relocatable::Parser<x86>::validFile(fileContent) );
-#if SUPPORT_ARCH_arm_any
 		case CPU_TYPE_ARM:
 			return ( mach_o::relocatable::Parser<arm>::validFile(fileContent, opts.objSubtypeMustMatch, opts.subType) );
-#endif
-#if SUPPORT_ARCH_arm64
 		case CPU_TYPE_ARM64:
 			return ( mach_o::relocatable::Parser<arm64>::validFile(fileContent, opts.objSubtypeMustMatch, opts.subType) );
-#endif
-#if SUPPORT_ARCH_ppc
 		case CPU_TYPE_POWERPC:
 			return ( mach_o::relocatable::Parser<ppc>::validFile(fileContent) );
-#endif
-#if SUPPORT_ARCH_ppc64
 		case CPU_TYPE_POWERPC64:
 			return ( mach_o::relocatable::Parser<ppc64>::validFile(fileContent) );
-#endif
 	}
 	return false;
 }
@@ -8481,7 +8384,6 @@ bool isObjectFile(const uint8_t* fileContent, cpu_type_t* result, cpu_subtype_t*
 		*platform = Parser<x86>::findPlatform(header);
 		return true;
 	}
-#if SUPPORT_ARCH_arm_any
 	if ( mach_o::relocatable::Parser<arm>::validFile(fileContent, false, 0) ) {
 		const macho_header<Pointer32<LittleEndian> >* header = (const macho_header<Pointer32<LittleEndian> >*)fileContent;
 		*result = CPU_TYPE_ARM;
@@ -8489,8 +8391,6 @@ bool isObjectFile(const uint8_t* fileContent, cpu_type_t* result, cpu_subtype_t*
 		*platform = Parser<arm>::findPlatform(header);
 		return true;
 	}
-#endif
-#if SUPPORT_ARCH_arm64
 	if ( mach_o::relocatable::Parser<arm64>::validFile(fileContent, false, 0) ) {
 		const macho_header<Pointer64<LittleEndian> >* header = (const macho_header<Pointer64<LittleEndian> >*)fileContent;
 		*result = CPU_TYPE_ARM64;
@@ -8498,22 +8398,17 @@ bool isObjectFile(const uint8_t* fileContent, cpu_type_t* result, cpu_subtype_t*
 		*platform = Parser<arm64>::findPlatform(header);
 		return true;
 	}
-#endif
-#if SUPPORT_ARCH_ppc
 	if ( mach_o::relocatable::Parser<ppc>::validFile(fileContent) ) {
 		*result = CPU_TYPE_POWERPC;
 		const macho_header<Pointer32<BigEndian> >* header = (const macho_header<Pointer32<BigEndian> >*)fileContent;
 		*subResult = header->cpusubtype();
 		return true;
 	}
-#endif
-#if SUPPORT_ARCH_ppc64
 	if ( mach_o::relocatable::Parser<ppc64>::validFile(fileContent) ) {
 		*result = CPU_TYPE_POWERPC64;
 		*subResult = CPU_SUBTYPE_POWERPC_ALL;
 		return true;
 	}
-#endif
 	return false;
 }					
 
@@ -8528,21 +8423,15 @@ const char* archName(const uint8_t* fileContent)
 	if ( mach_o::relocatable::Parser<x86>::validFile(fileContent) ) {
 		return mach_o::relocatable::Parser<x86>::fileKind(fileContent);
 	}
-#if SUPPORT_ARCH_arm_any
 	if ( mach_o::relocatable::Parser<arm>::validFile(fileContent, false, 0) ) {
 		return mach_o::relocatable::Parser<arm>::fileKind(fileContent);
 	}
-#endif
-#if SUPPORT_ARCH_ppc
 	if ( mach_o::relocatable::Parser<ppc>::validFile(fileContent) ) {
 		return mach_o::relocatable::Parser<ppc>::fileKind(fileContent);
 	}
-#endif
-#if SUPPORT_ARCH_ppc64
 	if ( mach_o::relocatable::Parser<ppc64>::validFile(fileContent) ) {
 		return mach_o::relocatable::Parser<ppc64>::fileKind(fileContent);
 	}
-#endif
 	return NULL;
 }
 
@@ -8554,11 +8443,9 @@ bool hasObjC2Categories(const uint8_t* fileContent)
 	if ( mach_o::relocatable::Parser<x86_64>::validFile(fileContent) ) {
 		return mach_o::relocatable::Parser<x86_64>::hasObjC2Categories(fileContent);
 	}
-#if SUPPORT_ARCH_arm_any
 	else if ( mach_o::relocatable::Parser<arm>::validFile(fileContent, false, 0) ) {
 		return mach_o::relocatable::Parser<arm>::hasObjC2Categories(fileContent);
 	}
-#endif
 	else if ( mach_o::relocatable::Parser<x86>::validFile(fileContent, false, 0) ) {
 		return mach_o::relocatable::Parser<x86>::hasObjC2Categories(fileContent);
 	}

@@ -22,7 +22,6 @@
  * @APPLE_LICENSE_HEADER_END@
  */
 
-#if SUPPORT_ARCH_arm_any
 // already in ld::passes::stubs namespace
 namespace arm {
 namespace classic {
@@ -147,4 +146,4 @@ ld::Section StubNoPICAtom::_s_section("__TEXT", "__symbol_stub4", ld::Section::t
 
 } // namespace classic 
 } // namespace arm 
-#endif
+

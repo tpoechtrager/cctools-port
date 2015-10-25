@@ -280,10 +280,8 @@ static void dumpAtom(ld::Atom* atom)
 		printf("attrs:   ");
 		if ( atom->dontDeadStrip() )
 			printf("dont-dead-strip ");
-#if SUPPORT_ARCH_arm_any
 		if ( atom->isThumb() )
 			printf("thumb ");
-#endif
 		printf("\n");
 	}
 	
@@ -554,10 +552,8 @@ const char*	dumper::attributeString(const ld::Atom& atom)
 	if ( atom.dontDeadStrip() )
 		strcat(buffer, "dont-dead-strip ");
 
-#if SUPPORT_ARCH_arm_any
 	if ( atom.isThumb() )
 		strcat(buffer, "thumb ");
-#endif
 		
 	if ( atom.isAlias() )
 		strcat(buffer, "alias ");
@@ -746,7 +742,6 @@ void dumper::dumpFixup(const ld::Fixup* ref)
 		case ld::Fixup::kindStoreBigEndian64:
 			printf(", then store 64-bit big endian");
 			break;
-#if SUPPORT_ARCH_ppc
 		case ld::Fixup::kindStorePPCBranch24:
 			printf(", then store as PPC branch24");
 			break;
@@ -774,7 +769,6 @@ void dumper::dumpFixup(const ld::Fixup* ref)
 		case ld::Fixup::kindStorePPCAbsHigh16:
 			printf(", then store as PPC high16 abs, no carry");
 			break;
-#endif
 		case ld::Fixup::kindStoreX86BranchPCRel8:
 			printf(", then store as x86 8-bit pcrel branch");
 			break;
@@ -820,7 +814,6 @@ void dumper::dumpFixup(const ld::Fixup* ref)
 		case ld::Fixup::kindStoreX86Abs32TLVLoadNowLEA:
 			printf(", then store as x86 32-bit absolute TLV load -> LEA");
 			break;
-#if SUPPORT_ARCH_arm_any
 		case ld::Fixup::kindStoreARMBranch24:
 			printf(", then store as ARM 24-bit pcrel branch");
 			break;
@@ -842,8 +835,6 @@ void dumper::dumpFixup(const ld::Fixup* ref)
 		case ld::Fixup::kindStoreThumbHigh16:
 			printf(", then store high-16 in Thumb movt");
 			break;
-#endif
-#if SUPPORT_ARCH_arm64
 		case ld::Fixup::kindStoreARM64Branch26:
 			printf(", then store as ARM64 26-bit pcrel branch");
 			break;
@@ -883,7 +874,6 @@ void dumper::dumpFixup(const ld::Fixup* ref)
 		case ld::Fixup::kindStoreARM64PCRelToGOT:
 			printf(", then store as 32-bit delta to GOT entry");
 			break;
-#endif
 		case ld::Fixup::kindDtraceExtra:
 			printf("dtrace static probe extra info");
 			break;
@@ -893,15 +883,12 @@ void dumper::dumpFixup(const ld::Fixup* ref)
 		case ld::Fixup::kindStoreX86DtraceIsEnableSiteClear:
 			printf("x86 dtrace static is-enabled site");
 			break;
-#if SUPPORT_ARCH_ppc
 		case ld::Fixup::kindStorePPCDtraceCallSiteNop:
 			printf("ppc dtrace static probe site");
 			break;
 		case ld::Fixup::kindStorePPCDtraceIsEnableSiteClear:
 			printf("ppc dtrace static is-enabled site");
 			break;
-#endif
-#if SUPPORT_ARCH_arm_any
 		case ld::Fixup::kindStoreARMDtraceCallSiteNop:
 			printf("ARM dtrace static probe site");
 			break;
@@ -914,15 +901,12 @@ void dumper::dumpFixup(const ld::Fixup* ref)
 		case ld::Fixup::kindStoreThumbDtraceIsEnableSiteClear:
 			printf("Thumb dtrace static is-enabled site");
 			break;
-#endif
-#if SUPPORT_ARCH_arm64
 		case ld::Fixup::kindStoreARM64DtraceCallSiteNop:
 			printf("ARM64 dtrace static probe site");
 			break;
 		case ld::Fixup::kindStoreARM64DtraceIsEnableSiteClear:
 			printf("ARM64 dtrace static is-enabled site");
 			break;
-#endif
 		case ld::Fixup::kindLazyTarget:
 			printf("lazy reference to external symbol %s", referenceTargetAtomName(ref));
 			break;
@@ -1026,7 +1010,6 @@ void dumper::dumpFixup(const ld::Fixup* ref)
 		case ld::Fixup::kindStoreTargetAddressX86Abs32TLVLoadNowLEA:
 			printf("x86 store 32-bit absolute TLV lea of %s", referenceTargetAtomName(ref));
 			break;
-#if SUPPORT_ARCH_arm_any
 		case ld::Fixup::kindStoreTargetAddressARMBranch24:
 			printf("ARM store 24-bit pc-rel branch to %s", referenceTargetAtomName(ref));
 			break;
@@ -1036,18 +1019,14 @@ void dumper::dumpFixup(const ld::Fixup* ref)
 		case ld::Fixup::kindStoreTargetAddressARMLoad12:
 			printf("ARM store 12-bit pc-rel branch to %s", referenceTargetAtomName(ref));
 			break;
-#endif
-#if SUPPORT_ARCH_ppc
 		case ld::Fixup::kindStoreTargetAddressPPCBranch24:
 			printf("PowerPC store 24-bit pc-rel load of %s", referenceTargetAtomName(ref));
 			break;
-#endif
 		case ld::Fixup::kindSetTargetTLVTemplateOffset:
 		case ld::Fixup::kindSetTargetTLVTemplateOffsetLittleEndian32:
 		case ld::Fixup::kindSetTargetTLVTemplateOffsetLittleEndian64:
 			printf("tlv template offset of %s", referenceTargetAtomName(ref));
 			break;
-#if SUPPORT_ARCH_arm64
 		case ld::Fixup::kindStoreTargetAddressARM64Branch26:
 			printf("ARM64 store 26-bit pcrel branch to %s", referenceTargetAtomName(ref));
 			break;
@@ -1081,7 +1060,6 @@ void dumper::dumpFixup(const ld::Fixup* ref)
 		case ld::Fixup::kindStoreTargetAddressARM64TLVPLoadNowLeaPageOff12:
 			printf("ARM64 store 12-bit page offset of lea for TLV of %s", referenceTargetAtomName(ref));
 			break;
-#endif
 		//default:
 		//	printf("unknown fixup");
 		//	break;

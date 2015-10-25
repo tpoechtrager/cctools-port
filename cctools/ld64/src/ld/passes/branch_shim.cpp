@@ -44,7 +44,6 @@ namespace branch_shim {
 static bool _s_log = false;
 
 
-#if SUPPORT_ARCH_arm_any
 class Thumb2ToArmShimAtom : public ld::Atom {
 public:
 											Thumb2ToArmShimAtom(const ld::Atom* target, const ld::Section& inSect)
@@ -263,7 +262,6 @@ static void extractTarget(ld::Fixup::iterator fixup, ld::Internal& state, const 
 			break;
 	}
 }
-#endif
 
 
 
@@ -278,7 +276,6 @@ static void extractTarget(ld::Fixup::iterator fixup, ld::Internal& state, const 
 //
 void doPass(const Options& opts, ld::Internal& state)
 {	
-#if SUPPORT_ARCH_arm_any
 	// only make branch shims in final linked images
 	if ( opts.outputKind() == Options::kObjectFile )
 		return;
@@ -391,9 +388,6 @@ void doPass(const Options& opts, ld::Internal& state)
 		// append all new shims to end of __text
 		sect->atoms.insert(sect->atoms.end(), shims.begin(), shims.end());
 	}
-#else
-	return;
-#endif
 }
 
 
