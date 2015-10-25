@@ -1,4 +1,4 @@
-AC_INIT([cctools], [870], [t.poechtrager@gmail.com])
+AC_INIT([cctools], [877.5], [t.poechtrager@gmail.com])
 
 AC_CANONICAL_BUILD
 AC_CANONICAL_HOST
@@ -259,11 +259,12 @@ AC_SUBST(DL_LIB)
 AC_CHECK_LIB([pthread],[pthread_create],[PTHREAD_FLAGS=-pthread])
 AC_SUBST(PTHREAD_FLAGS)
 
-AC_CHECK_LIB([execinfo],[backtrace],[DL_LIB=-lexecinfo])
+AC_CHECK_HEADERS([execinfo.h], [
+  AC_CHECK_LIB([execinfo],[backtrace],[EXECINFO_LIB=-lexecinfo])], [])
 AC_SUBST(EXECINFO_LIB)
 
-AC_CHECK_HEADERS([uuid/uuid.h], [
-  AC_CHECK_LIB([uuid],[uuid_generate_random],[UUID_LIB=-luuid])], [])
+AC_CHECK_LIB([uuid],[uuid_generate_random],[
+  AC_CHECK_HEADERS([uuid/uuid.h], [UUID_LIB=-luuid])], [])
 AC_SUBST(UUID_LIB)
 
 AC_CHECK_FUNCS([strmode])
@@ -312,6 +313,27 @@ LDFLAGS=$ORIGLDFLAGS
 CHECK_LLVM
 
 LDFLAGS="$LDFLAGS $LTO_RPATH"
+
+### Check for libxar ###
+
+if test "x$LLVM_CONFIG" != "xno"; then
+
+AC_CHECK_LIB([xar],[xar_prop_create],[
+  AC_CHECK_HEADERS([xar/xar.h], [XAR_LIB=-lxar])], [])
+AC_SUBST(XAR_LIB)
+
+fi
+
+### Check whether we want to use clang as assembler ###
+
+AC_ARG_ENABLE([clang-as],
+AS_HELP_STRING([--disable-clang-as],
+               [do not use clang for assembling]),
+[], [enable_clang_as=yes])
+
+if test "x$enable_clang_as" != "xyes"; then
+  CFLAGS="$CFLAGS -DDISABLE_CLANG_AS"
+fi
 
 ### Check endianness ###
 

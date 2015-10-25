@@ -30,6 +30,7 @@
 #include <mach/machine.h>
 
 #include <vector>
+#include <map>
 
 #include "ld.hpp"
 #include "dylibs.h"

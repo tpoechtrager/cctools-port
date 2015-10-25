@@ -294,7 +294,8 @@ static void print_literal4(
 static void print_literal8(
     uint32_t l0,
     uint32_t l1,
-    double d);
+    double d,
+    enum byte_sex literal_byte_sex);
 static void print_literal16(
     uint32_t l0,
     uint32_t l1,
@@ -2291,6 +2292,7 @@ enum bool very_verbose)
 
 	    case LC_VERSION_MIN_MACOSX:
 	    case LC_VERSION_MIN_IPHONEOS:
+	    case LC_VERSION_MIN_WATCHOS:
 		memset((char *)&vd, '\0', sizeof(struct version_min_command));
 		size = left < sizeof(struct version_min_command) ?
 		       left : sizeof(struct version_min_command);
@@ -3500,6 +3502,8 @@ struct version_min_command *vd)
 	    printf("      cmd LC_VERSION_MIN_MACOSX\n");
 	else if(vd->cmd == LC_VERSION_MIN_IPHONEOS)
 	    printf("      cmd LC_VERSION_MIN_IPHONEOS\n");
+	else if(vd->cmd == LC_VERSION_MIN_WATCHOS)
+	    printf("      cmd LC_VERSION_MIN_WATCHOS\n");
 	else
 	    printf("      cmd %u (?)\n", vd->cmd);
 	printf("  cmdsize %u", vd->cmdsize);
@@ -7627,7 +7631,7 @@ enum bool print_addresses)
 	for(i = 0; i < sect_size ; i++){
 	    if(print_addresses == TRUE){
 	        if(cputype & CPU_ARCH_ABI64)
-		    printf("0x%016llx  ", sect_addr + i);
+		    printf("%016llx  ", sect_addr + i);
 		else
 		    printf("%08x  ", (unsigned int)(sect_addr + i));
 	    }
@@ -7681,9 +7685,10 @@ char c)
 
 void
 print_literal4_section(
+cpu_type_t cputype,
 char *sect,
 uint32_t sect_size,
-uint32_t sect_addr,
+uint64_t sect_addr,
 enum byte_sex literal_byte_sex,
 enum bool print_addresses)
 {
@@ -7696,8 +7701,12 @@ enum bool print_addresses)
 	swapped = host_byte_sex != literal_byte_sex;
 
 	for(i = 0; i < sect_size ; i += sizeof(float)){
-	    if(print_addresses == TRUE)
-		printf("%08x  ", (unsigned int)(sect_addr + i));
+	    if(print_addresses == TRUE){
+	        if(cputype & CPU_ARCH_ABI64)
+		    printf("%016llx  ", sect_addr + i);
+		else
+		    printf("%08x  ", (unsigned int)(sect_addr + i));
+	    }
 	    memcpy((char *)&f, sect + i, sizeof(float));
 	    memcpy((char *)&l, sect + i, sizeof(uint32_t));
 	    if(swapped){
@@ -7732,9 +7741,10 @@ float f)
 
 void
 print_literal8_section(
+cpu_type_t cputype,
 char *sect,
 uint32_t sect_size,
-uint32_t sect_addr,
+uint64_t sect_addr,
 enum byte_sex literal_byte_sex,
 enum bool print_addresses)
 {
@@ -7747,8 +7757,12 @@ enum bool print_addresses)
 	swapped = host_byte_sex != literal_byte_sex;
 
 	for(i = 0; i < sect_size ; i += sizeof(double)){
-	    if(print_addresses == TRUE)
-		printf("%08x  ", (unsigned int)(sect_addr + i));
+	    if(print_addresses == TRUE){
+	        if(cputype & CPU_ARCH_ABI64)
+		    printf("%016llx  ", sect_addr + i);
+		else
+		    printf("%08x  ", (unsigned int)(sect_addr + i));
+	    }
 	    memcpy((char *)&d, sect + i, sizeof(double));
 	    memcpy((char *)&l0, sect + i, sizeof(uint32_t));
 	    memcpy((char *)&l1, sect + i + sizeof(uint32_t),
@@ -7758,7 +7772,7 @@ enum bool print_addresses)
 		l0 = SWAP_INT(l0);
 		l1 = SWAP_INT(l1);
 	    }
-	    print_literal8(l0, l1, d);
+	    print_literal8(l0, l1, d, literal_byte_sex);
 	}
 }
 
@@ -7767,18 +7781,28 @@ void
 print_literal8(
 uint32_t l0,
 uint32_t l1,
-double d)
+double d,
+enum byte_sex literal_byte_sex)
 {
+    uint32_t hi, lo;
+
 	printf("0x%08x 0x%08x", (unsigned int)l0, (unsigned int)l1);
-	/* l0 is the high word, so this is equivalent to if(isfinite(d)) */
-	if((l0 & 0x7ff00000) != 0x7ff00000)
+	if(literal_byte_sex == LITTLE_ENDIAN_BYTE_SEX){
+	    hi = l1;
+	    lo = l0;
+	} else {
+	    hi = l0;
+	    lo = l1;
+	}
+	/* hi is the high word, so this is equivalent to if(isfinite(d)) */
+	if((hi & 0x7ff00000) != 0x7ff00000)
 	    printf(" (%.16e)\n", d);
 	else{
-	    if(l0 == 0x7ff00000 && l1 == 0)
+	    if(hi == 0x7ff00000 && lo == 0)
 		printf(" (+Infinity)\n");
-	    else if(l0 == 0xfff00000 && l1 == 0)
+	    else if(hi == 0xfff00000 && lo == 0)
 		printf(" (-Infinity)\n");
-	    else if((l0 & 0x00080000) == 0x00080000)
+	    else if((hi & 0x00080000) == 0x00080000)
 		printf(" (non-signaling Not-a-Number)\n");
 	    else
 		printf(" (signaling Not-a-Number)\n");
@@ -7787,9 +7811,10 @@ double d)
 
 void
 print_literal16_section(
+cpu_type_t cputype,
 char *sect,
 uint32_t sect_size,
-uint32_t sect_addr,
+uint64_t sect_addr,
 enum byte_sex literal_byte_sex,
 enum bool print_addresses)
 {
@@ -7801,8 +7826,12 @@ enum bool print_addresses)
 	swapped = host_byte_sex != literal_byte_sex;
 
 	for(i = 0; i < sect_size ; i += 4 * sizeof(uint32_t)){
-	    if(print_addresses == TRUE)
-		printf("%08x  ", (unsigned int)(sect_addr + i));
+	    if(print_addresses == TRUE){
+	        if(cputype & CPU_ARCH_ABI64)
+		    printf("%016llx  ", sect_addr + i);
+		else
+		    printf("%08x  ", (unsigned int)(sect_addr + i));
+	    }
 	    memcpy((char *)&l0, sect + i, sizeof(uint32_t));
 	    memcpy((char *)&l1, sect + i + sizeof(uint32_t),
 		   sizeof(uint32_t));
@@ -8047,7 +8076,7 @@ enum bool print_addresses)
 	for(i = 0; i < sect_size ; i += lp_size){
 	    if(print_addresses == TRUE){
 	        if(cputype & CPU_ARCH_ABI64)
-		    printf("0x%016llx  ", sect_addr + i);
+		    printf("%016llx  ", sect_addr + i);
 		else
 		    printf("%08x  ", (unsigned int)(sect_addr + i));
 	    }
@@ -8144,7 +8173,7 @@ enum bool print_addresses)
 			    l0 = SWAP_INT(l0);
 			    l1 = SWAP_INT(l1);
 			}
-			print_literal8(l0, l1, d);
+			print_literal8(l0, l1, d, object_byte_sex);
 			break;
 		    case S_16BYTE_LITERALS:
 			memcpy((char *)&l0,

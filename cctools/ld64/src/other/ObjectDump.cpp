@@ -1306,11 +1306,13 @@ static ld::relocatable::File* createReader(const char* path)
 	objOpts.verboseOptimizationHints = true;
 	objOpts.armUsesZeroCostExceptions = true;
 	objOpts.subType				= sPreferredSubArch;
+	objOpts.srcKind				= ld::relocatable::File::kSourceObj;
 #if 1
 	if ( ! foundFatSlice ) {
 		cpu_type_t archOfObj;
 		cpu_subtype_t subArchOfObj;
-		if ( mach_o::relocatable::isObjectFile(p, &archOfObj, &subArchOfObj) ) {
+		Options::Platform platform;
+		if ( mach_o::relocatable::isObjectFile(p, &archOfObj, &subArchOfObj, &platform) ) {
 			objOpts.architecture = archOfObj;
 			objOpts.subType = subArchOfObj;
 		}

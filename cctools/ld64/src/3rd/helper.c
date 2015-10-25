@@ -1,4 +1,4 @@
-const char ldVersionString[] = "242.2\n";
+const char ldVersionString[] = "253.3\n";
 
 #ifndef __APPLE__
 
@@ -41,7 +41,6 @@ void __assert_rtn(const char *func, const char *file, int line, const char *msg)
 #endif /* __FreeBSD__ */
 }
 
-
 int _NSGetExecutablePath(char *epath, unsigned int *size)
 {
 #if defined(__FreeBSD__) || defined(__DragonFly__)
@@ -72,23 +71,29 @@ int _NSGetExecutablePath(char *epath, unsigned int *size)
     if (sysctl(mib, 4, argv, &len, NULL, 0) < 0)
         abort();
     comm = argv[0];
-    if (*comm == '/' || *comm == '.') {
+    if (*comm == '/' || *comm == '.')
+    {
         char *rpath;
-        if ((rpath = realpath(comm, NULL))) {
+        if ((rpath = realpath(comm, NULL)))
+        {
           strlcpy(epath, rpath, *size);
           free(rpath);
           ok = 1;
         }
-    } else {
+    }
+    else
+    {
         char *sp;
         char *xpath = strdup(getenv("PATH"));
         char *path = strtok_r(xpath, ":", &sp);
         struct stat st;
         if (!xpath)
             abort();
-        while (path) {
+        while (path)
+        {
             snprintf(epath, *size, "%s/%s", path, comm);
-            if (!stat(epath, &st) && (st.st_mode & S_IXUSR)) {
+            if (!stat(epath, &st) && (st.st_mode & S_IXUSR))
+            {
                 ok = 1;
                 break;
             }
@@ -97,7 +102,8 @@ int _NSGetExecutablePath(char *epath, unsigned int *size)
         free(xpath);
     }
     free(argv);
-    if (ok) {
+    if (ok)
+    {
         *size = strlen(epath);
         return 0;
     }
@@ -117,7 +123,7 @@ int _NSGetExecutablePath(char *epath, unsigned int *size)
 #endif
 }
 
-int _dyld_find_unwind_sections(void* i, struct dyld_unwind_sections* sec)
+int _dyld_find_unwind_sections(void *i, struct dyld_unwind_sections* sec)
 {
     return 0;
 }
@@ -127,23 +133,24 @@ mach_port_t mach_host_self(void)
     return 0;
 }
 
-kern_return_t host_statistics ( host_t host_priv, host_flavor_t flavor, host_info_t host_info_out, mach_msg_type_number_t *host_info_outCnt)
+kern_return_t host_statistics(host_t host_priv, host_flavor_t flavor,
+                              host_info_t host_info_out,
+                              mach_msg_type_number_t *host_info_outCnt)
 {
     return ENOTSUP;
 }
 
-uint64_t  mach_absolute_time(void)
+uint64_t mach_absolute_time(void)
 {
-    uint64_t t = 0;
     struct timeval tv;
-    if (gettimeofday(&tv,NULL)) return t;
-    t = ((uint64_t)tv.tv_sec << 32)  | tv.tv_usec;
-    return t;
+    if (gettimeofday(&tv, NULL))
+      return 0;
+    return (tv.tv_sec*1000000ULL)+tv.tv_usec;
 }
 
-kern_return_t     mach_timebase_info( mach_timebase_info_t info)
+kern_return_t mach_timebase_info(mach_timebase_info_t info)
 {
-    info->numer = 1;
+    info->numer = 1000;
     info->denom = 1;
     return 0;
 }

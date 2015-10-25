@@ -827,6 +827,15 @@ SymbolTable::IndirectBindingSlot SymbolTable::findSlotForReferences(const ld::At
 			slot = _indirectBindingTable.size();
 			_pointerToCStringTable[atom] = slot;
 			break;
+		case ld::Section::typeTLVPointers:
+			pos = _threadPointerTable.find(atom);
+			if ( pos != _threadPointerTable.end() ) {
+				*existingAtom = _indirectBindingTable[pos->second];
+				return pos->second;
+			}
+			slot = _indirectBindingTable.size();
+			_threadPointerTable[atom] = slot;
+			break;
 		default:
 			assert(0 && "section type does not support coalescing by references");
 	}

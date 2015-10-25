@@ -59,6 +59,8 @@
 #include <mach-o/nlist.h>
 #include <mach-o/reloc.h>
 #include <mach-o/ranlib.h>
+#include "../include/xar/xar.h" /* cctools-port:
+				   force the use of the bundled xar header */
 #include "stuff/bool.h"
 
 enum byte_sex {
@@ -429,6 +431,10 @@ __private_extern__ void swap_twolevel_hint(
 __private_extern__ void swap_data_in_code_entry(
     struct data_in_code_entry *dices,
     uint32_t ndices,
+    enum byte_sex target_byte_sex);
+
+__private_extern__ void swap_xar_header(
+    struct xar_header *xar,
     enum byte_sex target_byte_sex);
 
 /*

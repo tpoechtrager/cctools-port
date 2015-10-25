@@ -1,8 +1,11 @@
-PRE-REQUISITES:
+PREREQUISITES:
 
-See cctools/ld64 README + git + bash + a jailbroken iOS device
+See cctools/ld64 README + libssl-dev, git, bash and a jailbroken iOS device
 
 USAGE:
+
+Please ensure you have read and understood the Xcode license terms before
+building this toolchain: https://www.apple.com/legal/sla/docs/xcode.pdf.
 
 ./build.sh /path/to/sdk.tar.* <target cpu>
 

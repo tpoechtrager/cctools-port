@@ -308,6 +308,7 @@
     <File Name="otool/print_objc2_64bit.c"/>
     <File Name="otool/sparc_disasm.c"/>
     <File Name="otool/sparc_disasm.h"/>
+    <File Name="otool/print_bitcode.c"/>
   </VirtualDirectory>
   <VirtualDirectory Name="libstuff">
     <File Name="libstuff/SymLoc.c"/>
@@ -323,7 +324,6 @@
     <File Name="libstuff/crc32.c"/>
     <File Name="libstuff/dylib_roots.c"/>
     <File Name="libstuff/dylib_table.c"/>
-    <File Name="libstuff/emulated.c"/>
     <File Name="libstuff/errors.c"/>
     <File Name="libstuff/execute.c"/>
     <File Name="libstuff/fatal_arch.c"/>
@@ -350,6 +350,7 @@
     <File Name="libstuff/version_number.c"/>
     <File Name="libstuff/vm_flush_cache.c"/>
     <File Name="libstuff/writeout.c"/>
+    <File Name="libstuff/port.c"/>
   </VirtualDirectory>
   <VirtualDirectory Name="ld">
     <File Name="ld/4byte_literals.c"/>
@@ -909,6 +910,9 @@
       <File Name="include/gnu/a.out.h"/>
       <File Name="include/gnu/exec.h"/>
     </VirtualDirectory>
+    <VirtualDirectory Name="xar">
+      <File Name="include/xar/xar.h"/>
+    </VirtualDirectory>
   </VirtualDirectory>
   <VirtualDirectory Name="cbt">
     <File Name="include/cbt/libsyminfo.h"/>
@@ -933,6 +937,7 @@
     <File Name="misc/size.c"/>
     <File Name="misc/indr.c"/>
     <File Name="misc/seg_addr_table.c"/>
+    <File Name="misc/bitcode_strip.c"/>
   </VirtualDirectory>
   <Dependencies Name="Debug"/>
   <Dependencies Name="Release"/>

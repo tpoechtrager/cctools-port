@@ -211,7 +211,10 @@ struct member {
     struct section **sections;	    /* array of section structs for 32-bit */
     struct section_64 **sections64; /* array of section structs for 64-bit */
 #ifdef LTO_SUPPORT
-    void *lto;			    /* lto module */
+    enum bool lto_contents;	    /* TRUE if this member has lto contents */
+    uint32_t lto_toc_nsyms;	    /* number of symbols for the toc */
+    uint32_t lto_toc_strsize;	    /* the size of the strings for the toc */
+    char *lto_toc_strings;	    /* the strings of the symbols for the toc */
 #endif /* LTO_SUPPORT */
 
     /* the name of the member in the output */
@@ -263,6 +266,11 @@ static void create_dynamic_shared_library_cleanup(
 static void make_table_of_contents(
     struct arch *arch,
     char *output);
+#ifdef LTO_SUPPORT /* cctools-port */
+static void save_lto_member_toc_info(
+    struct member *member,
+    void *mod);
+#endif
 static int toc_name_qsort(
     const struct toc *toc1,
     const struct toc *toc2);
@@ -1518,7 +1526,7 @@ void)
 			for(k = 0; k < archs[j].nmembers; k++){
 			    if(archs[j].members[k].mh == NULL &&
 #ifdef LTO_SUPPORT
-			       archs[j].members[k].lto == NULL &&
+			       archs[j].members[k].lto_contents == TRUE &&
 #endif /* LTO_SUPPORT */
 			       archs[j].members[k].mh64 == NULL){
 				error("library member: %s(%.*s) is not an "
@@ -2183,7 +2191,10 @@ struct ofile *ofile)
 	else if(ofile->file_type == OFILE_LLVM_BITCODE){
 	    member->object_addr = ofile->file_addr;
 	    member->object_size = ofile->file_size;
-	    member->lto = ofile->lto;
+	    member->lto_contents = TRUE;
+	    save_lto_member_toc_info(member, ofile->lto);
+	    lto_free(ofile->lto);
+	    ofile->lto = NULL;
 	    member->object_byte_sex = get_byte_sex_from_flag(&arch->arch_flag);
 	}
         else if((ofile->file_type == OFILE_FAT &&
@@ -2193,7 +2204,10 @@ struct ofile *ofile)
                  ofile->arch_type == OFILE_LLVM_BITCODE)){
             member->object_addr = ofile->object_addr;
             member->object_size = ofile->object_size;
-            member->lto = ofile->lto;
+	    member->lto_contents = TRUE;
+	    save_lto_member_toc_info(member, ofile->lto);
+	    lto_free(ofile->lto);
+	    ofile->lto = NULL;
             member->object_byte_sex = get_byte_sex_from_flag(&arch->arch_flag);
         }
 #endif /* LTO_SUPPORT */
@@ -2202,7 +2216,10 @@ struct ofile *ofile)
 	    member->object_size = ofile->member_size;
 #ifdef LTO_SUPPORT
 	    if(ofile->lto != NULL){
-		member->lto = ofile->lto;
+		member->lto_contents = TRUE;
+	        save_lto_member_toc_info(member, ofile->lto);
+		lto_free(ofile->lto);
+		ofile->lto = NULL;
 		member->object_byte_sex = get_byte_sex_from_flag(
 							&arch->arch_flag);
 	    }
@@ -3478,7 +3495,7 @@ char *output)
     struct section_64 *section64;
     uint8_t n_type, n_sect;
 #ifdef LTO_SUPPORT
-    uint32_t nsyms;
+    char *lto_toc_string;
 #endif /* LTO_SUPPORT */
 
 	symbols = NULL;
@@ -3606,15 +3623,9 @@ char *output)
 		}
 	    }
 #ifdef LTO_SUPPORT
-	    else if(member->lto != NULL){
-		nsyms = lto_get_nsyms(member->lto);
-		for(j = 0; j < nsyms; j++){
-		    if(lto_toc_symbol(member->lto, j, cmd_flags.c) == TRUE){
-			arch->toc_nranlibs++;
-			arch->toc_strsize +=
-			    strlen(lto_symbol_name(member->lto, j)) + 1;
-		    }
-		}
+	    else if(member->lto_contents == TRUE){
+		arch->toc_nranlibs += member->lto_toc_nsyms;
+		arch->toc_strsize += member->lto_toc_strsize;
 	    }
 #endif /* LTO_SUPPORT */
 	    else{
@@ -3691,17 +3702,15 @@ char *output)
 		}
 	    }
 #ifdef LTO_SUPPORT
-	    else if(member->lto != NULL){
-		nsyms = lto_get_nsyms(member->lto);
-		for(j = 0; j < nsyms; j++){
-		    if(lto_toc_symbol(member->lto, j, cmd_flags.c) == TRUE){
-			strcpy(arch->toc_strings + s,
-			       lto_symbol_name(member->lto, j));
-			arch->tocs[r].name = arch->toc_strings + s;
-			arch->tocs[r].index1 = i + 1;
-			r++;
-			s += strlen(lto_symbol_name(member->lto, j)) + 1;
-		    }
+	    else if(member->lto_contents == TRUE){
+		lto_toc_string = member->lto_toc_strings;
+		for(j = 0; j < member->lto_toc_nsyms; j++){
+		    strcpy(arch->toc_strings + s, lto_toc_string);
+		    arch->tocs[r].name = arch->toc_strings + s;
+		    arch->tocs[r].index1 = i + 1;
+		    r++;
+		    s += strlen(lto_toc_string) + 1;
+		    lto_toc_string += strlen(lto_toc_string) + 1;
 		}
 	    }
 #endif /* LTO_SUPPORT */
@@ -3831,6 +3840,41 @@ char *output)
 	memcpy(arch->toc_ar_hdr.ar_fmag, ARFMAG,
 	       (int)sizeof(arch->toc_ar_hdr.ar_fmag));
 }
+
+/*
+ * save_lto_member_toc_info() saves away the table of contents info for a
+ * member that has lto_content.  This allows the lto module to be disposed of
+ * after reading to keep only on in memory at a time.  As these turn out to
+ * use a lot of memory.
+ */
+#ifdef LTO_SUPPORT /* cctools-port */
+static
+void
+save_lto_member_toc_info(
+struct member *member,
+void *mod)
+{
+    uint32_t i, nsyms;
+    char *s;
+
+        member->lto_toc_nsyms = 0;
+	nsyms = lto_get_nsyms(mod);
+	for(i = 0; i < nsyms; i++){
+	    if(lto_toc_symbol(mod, i, cmd_flags.c) == TRUE){
+		member->lto_toc_nsyms++;
+		member->lto_toc_strsize += strlen(lto_symbol_name(mod, i)) + 1;
+	    }
+	}
+	member->lto_toc_strings = allocate(member->lto_toc_strsize);
+        s = member->lto_toc_strings;
+	for(i = 0; i < nsyms; i++){
+	    if(lto_toc_symbol(mod, i, cmd_flags.c) == TRUE){
+		strcpy(s, lto_symbol_name(mod, i));
+		s += strlen(lto_symbol_name(mod, i)) + 1;
+	    }
+	}
+}
+#endif /* LTO_SUPPORT */
 
 /*
  * Function for qsort() for comparing toc structures by name.

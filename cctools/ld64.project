@@ -52,6 +52,8 @@
       <File Name="ld64/src/ld/passes/objc.h"/>
       <File Name="ld64/src/ld/passes/compact_unwind.h"/>
       <File Name="ld64/src/ld/passes/huge.cpp"/>
+      <File Name="ld64/src/ld/passes/bitcode_bundle.cpp"/>
+      <File Name="ld64/src/ld/passes/bitcode_bundle.h"/>
     </VirtualDirectory>
     <VirtualDirectory Name="parsers">
       <VirtualDirectory Name="libunwind">
@@ -71,6 +73,8 @@
       <File Name="ld64/src/ld/parsers/archive_file.h"/>
       <File Name="ld64/src/ld/parsers/macho_dylib_file.h"/>
       <File Name="ld64/src/ld/parsers/opaque_section_file.cpp"/>
+      <File Name="ld64/src/ld/parsers/textstub_dylib_file.hpp"/>
+      <File Name="ld64/src/ld/parsers/textstub_dylib_file.cpp"/>
     </VirtualDirectory>
     <VirtualDirectory Name="code-sign-blobs">
       <File Name="ld64/src/ld/code-sign-blobs/blob.cpp"/>
@@ -100,6 +104,7 @@
     <File Name="ld64/src/ld/Snapshot.cpp"/>
     <File Name="ld64/src/ld/InputFiles.cpp"/>
     <File Name="ld64/src/ld/debugline.h"/>
+    <File Name="ld64/src/ld/Bitcode.hpp"/>
   </VirtualDirectory>
   <Description/>
   <Dependencies/>

@@ -235,8 +235,9 @@ class LazyPointerAtom : public ld::Atom {
 public:
 											LazyPointerAtom(ld::passes::stubs::Pass& pass, const ld::Atom& stubTo,
 															bool stubToGlobalWeakDef, bool stubToResolver, 
-															bool weakImport, bool close)
-				: ld::Atom(close ? _s_sectionClose : _s_section, ld::Atom::definitionRegular, 
+															bool weakImport, bool close, bool usingDataConst)
+				: ld::Atom(selectSection(close, stubToGlobalWeakDef, stubToResolver, usingDataConst),
+							ld::Atom::definitionRegular,
 							ld::Atom::combineNever, ld::Atom::scopeLinkageUnit, ld::Atom::typeLazyPointer, 
 							symbolTableNotIn, false, false, false, ld::Atom::Alignment(2)), 
 				_stubTo(stubTo),
@@ -244,7 +245,7 @@ public:
 				_resolverHelper(pass, stubTo, this),
 				_fixup1(0, ld::Fixup::k1of1, ld::Fixup::kindStoreTargetAddressLittleEndian32, 
 								stubToResolver ? &_resolverHelper : (stubToGlobalWeakDef ?  &stubTo : &_helper)),
-				_fixup2(0, ld::Fixup::k1of1, ld::Fixup::kindLazyTarget, &stubTo) { 
+				_fixup2(0, ld::Fixup::k1of1, ld::Fixup::kindLazyTarget, &stubTo) {
 						_fixup2.weakImport = weakImport; pass.addAtom(*this); 
 						if ( stubToResolver )
 							pass.addAtom(_resolverHelper);
@@ -262,6 +263,17 @@ public:
 	virtual ld::Fixup::iterator				fixupsEnd()	const 				{ return &((ld::Fixup*)&_fixup2)[1]; }
 
 private:
+	static ld::Section& selectSection(bool close, bool stubToGlobalWeakDef, bool stubToResolver, bool usingDataConst) {
+		if ( close )
+			return _s_sectionClose;
+		else if ( stubToGlobalWeakDef && usingDataConst )
+			return _s_sectionWeak;
+		else if ( stubToResolver && usingDataConst )
+			return _s_sectionResolver;
+		else
+			return _s_section;
+	}
+
 	const ld::Atom&							_stubTo;
 	StubHelperAtom							_helper;
 	ResolverHelperAtom						_resolverHelper;
@@ -270,10 +282,14 @@ private:
 	
 	static ld::Section						_s_section;
 	static ld::Section						_s_sectionClose;
+	static ld::Section						_s_sectionResolver;
+	static ld::Section						_s_sectionWeak;
 };
 
 ld::Section LazyPointerAtom::_s_section("__DATA", "__la_symbol_ptr", ld::Section::typeLazyPointer);
 ld::Section LazyPointerAtom::_s_sectionClose("__DATA", "__lazy_symbol", ld::Section::typeLazyPointerClose);
+ld::Section LazyPointerAtom::_s_sectionResolver("__DATA_DIRTY", "__la_resolver", ld::Section::typeLazyPointer);
+ld::Section LazyPointerAtom::_s_sectionWeak("__DATA", "__la_weak_ptr", ld::Section::typeLazyPointer);
 
 
 class NonLazyPointerAtom : public ld::Atom {
@@ -365,12 +381,12 @@ ld::Section StubPICKextAtom::_s_section("__TEXT", "__stub", ld::Section::typeCod
 class StubPICAtom : public ld::Atom {
 public:
 											StubPICAtom(ld::passes::stubs::Pass& pass, const ld::Atom& stubTo,
-														bool stubToGlobalWeakDef, bool stubToResolver, bool weakImport)
+														bool stubToGlobalWeakDef, bool stubToResolver, bool weakImport, bool usingDataConst)
 				: ld::Atom(_s_section, ld::Atom::definitionRegular, ld::Atom::combineNever,
 							ld::Atom::scopeLinkageUnit, ld::Atom::typeStub, 
 							symbolTableNotIn, false, false, false, ld::Atom::Alignment(2)), 
 				_stubTo(stubTo), 
-				_lazyPointer(pass, stubTo, stubToGlobalWeakDef, stubToResolver, weakImport, false),
+				_lazyPointer(pass, stubTo, stubToGlobalWeakDef, stubToResolver, weakImport, false, usingDataConst),
 				_fixup1(12, ld::Fixup::k1of4, ld::Fixup::kindSetTargetAddress, &_lazyPointer),
 				_fixup2(12, ld::Fixup::k2of4, ld::Fixup::kindSubtractTargetAddress, this),
 				_fixup3(12, ld::Fixup::k3of4, ld::Fixup::kindSubtractAddend, 12),
@@ -414,7 +430,7 @@ public:
 							ld::Atom::scopeLinkageUnit, ld::Atom::typeStub, 
 							symbolTableNotIn, false, false, false, ld::Atom::Alignment(2)), 
 				_stubTo(stubTo), 
-				_lazyPointer(pass, stubTo, stubToGlobalWeakDef, stubToResolver, weakImport, false),
+				_lazyPointer(pass, stubTo, stubToGlobalWeakDef, stubToResolver, weakImport, false, false),
 				_fixup(8, ld::Fixup::k1of1, ld::Fixup::kindStoreTargetAddressLittleEndian32, &_lazyPointer) 
 					{ pass.addAtom(*this); }
 
@@ -452,7 +468,7 @@ public:
 							ld::Atom::scopeLinkageUnit, ld::Atom::typeStub, 
 							symbolTableNotIn, false, false, false, ld::Atom::Alignment(2)), 
 				_stubTo(stubTo), 
-				_lazyPointer(pass, stubTo, stubToGlobalWeakDef, stubToResolver, weakImport, true),
+				_lazyPointer(pass, stubTo, stubToGlobalWeakDef, stubToResolver, weakImport, true, false),
 				_fixup(0, ld::Fixup::k1of1, ld::Fixup::kindStoreTargetAddressARMLoad12, &_lazyPointer) 
 				{ pass.addAtom(*this); }
 

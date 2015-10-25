@@ -632,7 +632,7 @@ static void makeIslandsForSection(const Options& opts, ld::Internal& state, ld::
 				if ( target->section().type() == ld::Section::typeStub )
 					dstAddr = totalTextSize;
 				int64_t displacement = dstAddr - srcAddr;
-				TargetAndOffset finalTargetAndOffset = { target, static_cast<uint32_t>(addend) }; // ld64-port: addend -> static_cast<uint32_t>(addend)
+				TargetAndOffset finalTargetAndOffset = { target, (uint32_t)addend };
 				const int64_t kBranchLimit = kBetweenRegions;
 				if ( crossSectionBranch && ((displacement > kBranchLimit) || (displacement < (-kBranchLimit))) ) {
 					const ld::Atom* island;
@@ -645,6 +645,7 @@ static void makeIslandsForSection(const Options& opts, ld::Internal& state, ld::
 												island, island->name(), displacement);
 						++islandCount;
 						regionsIslands[0]->push_back(island);
+						state.atomToSection[island] = textSection;
 					}
 					else {
 						island = pos->second;
@@ -668,6 +669,7 @@ static void makeIslandsForSection(const Options& opts, ld::Internal& state, ld::
 								(*region)[finalTargetAndOffset] = island;
 								if (_s_log) fprintf(stderr, "added forward branching island %p %s to region %d for %s\n", island, island->name(), i, atom->name());
 								regionsIslands[i]->push_back(island);
+								state.atomToSection[island] = textSection;
 								++islandCount;
 								nextTarget = island;
 							}
@@ -694,6 +696,7 @@ static void makeIslandsForSection(const Options& opts, ld::Internal& state, ld::
 								(*region)[finalTargetAndOffset] = island;
 								if (_s_log) fprintf(stderr, "added back branching island %p %s to region %d for %s\n", island, island->name(), i, atom->name());
 								regionsIslands[i]->push_back(island);
+								state.atomToSection[island] = textSection;
 								++islandCount;
 								prevTarget = island;
 							}

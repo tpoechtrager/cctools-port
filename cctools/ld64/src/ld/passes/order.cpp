@@ -510,8 +510,14 @@ void Layout::buildOrdinalOverrideMap()
 			switch ( atom->section().type() ) {
 				case ld::Section::typeZeroFill:
 				case ld::Section::typeTentativeDefs:
-					if ( atom->size() <= 512 ) 
-						moveToData.insert(atom);
+					if ( atom->size() <= 512 ) {
+						const char* dstSeg;
+						bool wildCardMatch;
+						const ld::File* f = atom->file();
+						const char* path = (f != NULL) ? f->path() : NULL;
+						if ( !_options.moveRwSymbol(atom->name(), path, dstSeg, wildCardMatch) )
+							moveToData.insert(atom);
+					}
 					break;
 				default:
 					break;
@@ -578,6 +584,10 @@ void Layout::buildOrdinalOverrideMap()
 					default:
 						break;
 				}
+			}
+			// update atom-to-section map
+			for (std::set<const ld::Atom*>::iterator it=moveToData.begin(); it != moveToData.end(); ++it) {
+				_state.atomToSection[*it] = dataSect;
 			}
 		}
 	}

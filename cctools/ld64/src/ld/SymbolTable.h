@@ -155,6 +155,7 @@ private:
 	CStringToSlot					_cstringTable;
 	NameToMap						_nonStdCStringSectionToMap;
 	ReferencesToSlot				_nonLazyPointerTable;
+	ReferencesToSlot				_threadPointerTable;
 	ReferencesToSlot				_cfStringTable;
 	ReferencesToSlot				_objc2ClassRefTable;
 	ReferencesToSlot				_pointerToCStringTable;

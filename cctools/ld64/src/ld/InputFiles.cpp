@@ -58,6 +58,7 @@
 #include "InputFiles.h"
 #include "macho_relocatable_file.h"
 #include "macho_dylib_file.h"
+#include "textstub_dylib_file.hpp"
 #include "archive_file.h"
 #include "lto_file.h"
 #include "opaque_section_file.h"
@@ -302,7 +303,17 @@ ld::File* InputFiles::makeFile(const Options::FileInfo& info, bool indirectDylib
 	objOpts.neverConvertDwarf   = !_options.needsUnwindInfoSection();
 	objOpts.verboseOptimizationHints = _options.verboseOptimizationHints();
 	objOpts.armUsesZeroCostExceptions = _options.armUsesZeroCostExceptions();
+	objOpts.simulator			= _options.targetIOSSimulator();
+	objOpts.ignoreMismatchPlatform = ((_options.outputKind() == Options::kPreload) || (_options.outputKind() == Options::kStaticExecutable));
 	objOpts.subType				= _options.subArchitecture();
+	objOpts.platform			= _options.platform();
+	objOpts.minOSVersion		= _options.minOSversion();
+	// workaround for strip -S
+	// when ld -r has single input file, set the srcKind to kSourceSingle so __LLVM segment will be kept
+	if (_options.outputKind() == Options::kObjectFile && _options.getInputFiles().size() == 1)
+		objOpts.srcKind			= ld::relocatable::File::kSourceSingle;
+	else
+		objOpts.srcKind				= ld::relocatable::File::kSourceObj;
 	ld::relocatable::File* objResult = mach_o::relocatable::parse(p, len, info.path, info.modTime, info.ordinal, objOpts);
 	if ( objResult != NULL ) {
 		OSAtomicAdd64(len, &_totalObjectSize);
@@ -320,7 +331,7 @@ ld::File* InputFiles::makeFile(const Options::FileInfo& info, bool indirectDylib
 	}
 #endif /* LTO_SUPPORT */
 	
-	// see if it is a dynamic library
+	// see if it is a dynamic library (or text-based dynamic library)
 	ld::dylib::File* dylibResult;
 	bool dylibsNotAllowed = false;
 	switch ( _options.outputKind() ) {
@@ -328,6 +339,10 @@ ld::File* InputFiles::makeFile(const Options::FileInfo& info, bool indirectDylib
 		case Options::kDynamicLibrary:
 		case Options::kDynamicBundle:	
 			dylibResult = mach_o::dylib::parse(p, len, info.path, info.modTime, _options, info.ordinal, info.options.fBundleLoader, indirectDylib);
+			if ( dylibResult != NULL ) {
+				return dylibResult;
+			}
+			dylibResult = textstub::dylib::parse(p, len, info.path, info.modTime, _options, info.ordinal, info.options.fBundleLoader, indirectDylib);
 			if ( dylibResult != NULL ) {
 				return dylibResult;
 			}
@@ -341,7 +356,6 @@ ld::File* InputFiles::makeFile(const Options::FileInfo& info, bool indirectDylib
 			break;
 	}
 
-
 	// see if it is a static library
 	::archive::ParserOptions archOpts;
 	archOpts.objOpts				= objOpts;
@@ -351,6 +365,12 @@ ld::File* InputFiles::makeFile(const Options::FileInfo& info, bool indirectDylib
 	archOpts.objcABI2				= _options.objCABIVersion2POverride();
 	archOpts.verboseLoad			= _options.whyLoad();
 	archOpts.logAllFiles			= _options.logAllFiles();
+	// Set ObjSource Kind, libclang_rt is compiler static library
+	const char* libName = strrchr(info.path, '/');
+	if ( (libName != NULL) && (strncmp(libName, "/libclang_rt", 12) == 0) )
+		archOpts.objOpts.srcKind = ld::relocatable::File::kSourceCompilerArchive;
+	else
+		archOpts.objOpts.srcKind = ld::relocatable::File::kSourceArchive;
 	ld::archive::File* archiveResult = ::archive::parse(p, len, info.path, info.modTime, info.ordinal, archOpts);
 	if ( archiveResult != NULL ) {
 		OSAtomicAdd64(len, &_totalArchiveSize);
@@ -604,6 +624,7 @@ void InputFiles::addLinkerOptionLibraries(ld::Internal& state, ld::File::AtomHan
 				ld::dylib::File* dylibReader = dynamic_cast<ld::dylib::File*>(reader);
 				if ( dylibReader != NULL ) {
 					if ( ! dylibReader->installPathVersionSpecific() ) {
+						dylibReader->forEachAtom(handler);
 						dylibReader->setImplicitlyLinked();
 						this->addDylib(dylibReader, info);
 					}
@@ -630,6 +651,7 @@ void InputFiles::addLinkerOptionLibraries(ld::Internal& state, ld::File::AtomHan
 				ld::dylib::File* dylibReader = dynamic_cast<ld::dylib::File*>(reader);
 				ld::archive::File* archiveReader = dynamic_cast<ld::archive::File*>(reader);
 				if ( dylibReader != NULL ) {
+					dylibReader->forEachAtom(handler);
 					dylibReader->setImplicitlyLinked();
 					this->addDylib(dylibReader, info);
 				}
@@ -792,20 +814,27 @@ void InputFiles::inferArchitecture(Options& opts, const char** archName)
 	_inferredArch = true;
 	// scan all input files, looking for a thin .o file.
 	// the first one found is presumably the architecture to link
-	uint8_t buffer[sizeof(mach_header_64)];
+	uint8_t buffer[4096];
 	const std::vector<Options::FileInfo>& files = opts.getInputFiles();
 	for (std::vector<Options::FileInfo>::const_iterator it = files.begin(); it != files.end(); ++it) {
 		int fd = ::open(it->path, O_RDONLY, 0);
 		if ( fd != -1 ) {
-			ssize_t amount = read(fd, buffer, sizeof(buffer));
-			::close(fd);
-			if ( amount >= (ssize_t)sizeof(buffer) ) {
-				cpu_type_t type;
-				cpu_subtype_t subtype;
-				if ( mach_o::relocatable::isObjectFile(buffer, &type, &subtype) ) {
-					opts.setArchitecture(type, subtype);
-					*archName = opts.architectureName();
-					return;
+			struct stat stat_buf;
+			if ( fstat(fd, &stat_buf) != -1) {
+				ssize_t readAmount = stat_buf.st_size;
+				if ( 4096 < readAmount )
+					readAmount = 4096;
+				ssize_t amount = read(fd, buffer, readAmount);
+				::close(fd);
+				if ( amount >= readAmount ) {
+					cpu_type_t type;
+					cpu_subtype_t subtype;
+					Options::Platform platform;
+					if ( mach_o::relocatable::isObjectFile(buffer, &type, &subtype, &platform) ) {
+						opts.setArchitecture(type, subtype, platform);
+						*archName = opts.architectureName();
+						return;
+					}
 				}
 			}
 		}
@@ -814,21 +843,17 @@ void InputFiles::inferArchitecture(Options& opts, const char** archName)
 	// no thin .o files found, so default to same architecture this tool was built as
 	warning("-arch not specified");
 #if __i386__
-	opts.setArchitecture(CPU_TYPE_I386, CPU_SUBTYPE_X86_ALL);
-#elif __ppc__
-	opts.setArchitecture(CPU_TYPE_POWERPC, CPU_SUBTYPE_POWERPC_ALL);
-#elif __ppc64__
-	opts.setArchitecture(CPU_TYPE_POWERPC64, CPU_SUBTYPE_POWERPC_ALL);
+	opts.setArchitecture(CPU_TYPE_I386, CPU_SUBTYPE_X86_ALL, Options::kPlatformOSX);
 #elif __x86_64__
-	opts.setArchitecture(CPU_TYPE_X86_64, CPU_SUBTYPE_X86_64_ALL);
-#elif __ppc__ // ld64-port
-    opts.setArchitecture(CPU_TYPE_POWERPC, CPU_SUBTYPE_POWERPC_ALL);
-#elif __ppc64__ // ld64-port
-    opts.setArchitecture(CPU_TYPE_POWERPC64, CPU_SUBTYPE_POWERPC_ALL);
+	opts.setArchitecture(CPU_TYPE_X86_64, CPU_SUBTYPE_X86_64_ALL, Options::kPlatformOSX);
+#elif __ppc__
+    opts.setArchitecture(CPU_TYPE_POWERPC, CPU_SUBTYPE_POWERPC_ALL, Options::kPlatformOSX);
+#elif __ppc64__
+    opts.setArchitecture(CPU_TYPE_POWERPC64, CPU_SUBTYPE_POWERPC_ALL, Options::kPlatformOSX);
 #elif __arm__
-	opts.setArchitecture(CPU_TYPE_ARM, CPU_SUBTYPE_ARM_V6);
+	opts.setArchitecture(CPU_TYPE_ARM, CPU_SUBTYPE_ARM_V6, Options::kPlatformiOS); // ld64-port: Options::kPlatformOSX -> Options::kPlatformiOS
 #elif __arm64__ // ld64-port
-	opts.setArchitecture(CPU_TYPE_ARM, CPU_SUBTYPE_ARM64_ALL);
+	opts.setArchitecture(CPU_TYPE_ARM, CPU_SUBTYPE_ARM64_ALL, Options::kPlatformiOS);
 #else
 	#error unknown default architecture
 #endif

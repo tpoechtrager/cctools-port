@@ -44,12 +44,21 @@
 #define SUPPORT_ARCH_ppc970 1
 #define SUPPORT_ARCH_ppc64 1
 
-#define ALL_SUPPORTED_ARCHS  "armv4t armv5 armv6 armv7 armv7f armv7k armv7s armv6m armv7m armv7em armv8 arm64 arm64v8 i386 x86_64 x86_64h ppc ppc750 ppc7400 ppc7450 ppc970 ppc64"
+#define SUPPORT_APPLE_TV 1
+#define ALL_SUPPORTED_ARCHS  "armv4t armv5 armv6 armv7 armv7f armv7k armv7s armv6m armv7m armv7em armv8 arm64 arm64v8 i386 x86_64 x86_64h ppc ppc750 ppc7400 ppc7450 ppc970 ppc64 (tvOS)"
 
-#define HW_NCPU      3
-#define CTL_HW      6
+#define BITCODE_XAR_VERSION "1.0"
 
-#undef ARG_MAX
-#define ARG_MAX       131072
+#ifndef HW_NCPU
+#define HW_NCPU 3
+#endif
+
+#ifndef CTL_HW
+#define CTL_HW  6
+#endif
+
+#ifndef ARG_MAX
+#define ARG_MAX 31072
+#endif
 
 #endif

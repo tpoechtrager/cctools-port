@@ -1511,6 +1511,15 @@ void *cookie) /* cookie is not used */
 		   mh_sizeofcmds, ofile->object_byte_sex, ofile->object_addr,
 		   ofile->object_size, vflag);
 	    }
+	    else if(strcmp(segname, "__LLVM") == 0 &&
+	       strcmp(sectname, "__bundle") == 0 &&
+	       (vflag == TRUE || Vflag == TRUE) &&
+	       get_sect_info(segname, sectname, ofile->load_commands,
+                   mh_ncmds, mh_sizeofcmds, mh_filetype, ofile->object_byte_sex,
+                   addr, size, &sect, &sect_size, &sect_addr, &sect_relocs,
+		   &sect_nrelocs, &sect_flags, &seg_addr) == TRUE){
+		print_bitcode_section(sect, sect_size, vflag, Vflag);
+	    }
 #ifdef EFI_SUPPORT
 	    else if(strcmp(segname, "__RELOC") == 0 &&
 	       strcmp(sectname, "__reloc") == 0 && vflag == TRUE){
@@ -1544,19 +1553,22 @@ void *cookie) /* cookie is not used */
 					      Xflag == TRUE ? FALSE : TRUE);
 			break;
 		    case S_4BYTE_LITERALS:
-			print_literal4_section(sect, sect_size, sect_addr,
-					      ofile->object_byte_sex,
-					      Xflag == TRUE ? FALSE : TRUE);
-			break;
-		    case S_8BYTE_LITERALS:
-			print_literal8_section(sect, sect_size, sect_addr,
-					      ofile->object_byte_sex,
-					      Xflag == TRUE ? FALSE : TRUE);
-			break;
-		    case S_16BYTE_LITERALS:
-			print_literal16_section(sect, sect_size, sect_addr,
+			print_literal4_section(mh_cputype, sect, sect_size,
+					       sect_addr,
 					       ofile->object_byte_sex,
 					       Xflag == TRUE ? FALSE : TRUE);
+			break;
+		    case S_8BYTE_LITERALS:
+			print_literal8_section(mh_cputype, sect, sect_size,
+					       sect_addr,
+					       ofile->object_byte_sex,
+					       Xflag == TRUE ? FALSE : TRUE);
+			break;
+		    case S_16BYTE_LITERALS:
+			print_literal16_section(mh_cputype, sect, sect_size,
+						sect_addr,
+					        ofile->object_byte_sex,
+					        Xflag == TRUE ? FALSE : TRUE);
 			break;
 		    case S_LITERAL_POINTERS:
 			/* create aligned, sorted relocations entries */

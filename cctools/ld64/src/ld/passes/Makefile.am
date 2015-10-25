@@ -9,7 +9,9 @@ noinst_HEADERS =  \
 	huge.h  \
 	objc.h  \
 	order.h  \
-	tlvp.h
+	tlvp.h \
+	bitcode_bundle.h
+
 
 libPasses_la_CXXFLAGS = \
 	-D__DARWIN_UNIX03 \
@@ -20,8 +22,9 @@ libPasses_la_CXXFLAGS = \
 	-I$(top_srcdir)/include/foreign \
 	-I$(top_srcdir)/ld64/src/abstraction \
 	-I$(top_srcdir)/ld64/src/ld \
+	-I$(top_srcdir)/ld64/src/ld/parsers \
 	-I$(top_srcdir)/ld64/src/3rd \
-	-I$(top_srcdir)/ld64/src 
+	-I$(top_srcdir)/ld64/src
 
 libPasses_la_SOURCES =  \
 	branch_island.cpp  \
@@ -34,4 +37,6 @@ libPasses_la_SOURCES =  \
 	objc.cpp  \
 	order.cpp  \
 	tlvp.cpp \
-	stubs/stubs.cpp 
+	stubs/stubs.cpp \
+	bitcode_bundle.cpp
+

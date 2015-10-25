@@ -32,6 +32,7 @@
 #include <unistd.h>
 
 #include <vector>
+#include <unordered_map>
 
 #include "Options.h"
 #include "ld.hpp"
@@ -81,6 +82,17 @@ public:
 		while( more );
 	}
 	
+	void append_delta_encoded_uleb128_run(uint64_t start, const std::vector<uint64_t>& locations) {
+		uint64_t lastAddr = start;
+		for(std::vector<uint64_t>::const_iterator it = locations.begin(); it != locations.end(); ++it) {
+			uint64_t nextAddr = *it;
+			uint64_t delta = nextAddr - lastAddr;
+			assert(delta != 0);
+			append_uleb128(delta);
+			lastAddr = nextAddr;
+		}
+	}
+
 	void append_string(const char* str) {
 		for (const char* s = str; *s != '\0'; ++s)
 			_data.push_back(*s);
@@ -219,6 +231,8 @@ void RebaseInfoAtom<A>::encode() const
 		}
 		mid.push_back(rebase_tmp(REBASE_OPCODE_DO_REBASE_ULEB_TIMES, 1));
 		address += sizeof(pint_t);
+		if ( address >= curSegEnd )
+			address = 0;
 	}
 	mid.push_back(rebase_tmp(REBASE_OPCODE_DONE, 0));
 
@@ -969,6 +983,7 @@ void ExportInfoAtom<A>::encode() const
 	std::vector<const ld::Atom*>& exports = this->_writer._exportedAtoms;
 	uint64_t imageBaseAddress = this->_writer.headerAndLoadCommandsSection->address;
 	std::vector<mach_o::trie::Entry> entries;
+	unsigned int padding = 0;
 	entries.reserve(exports.size());
 	for (std::vector<const ld::Atom*>::const_iterator it = exports.begin(); it != exports.end(); ++it) {
 		const ld::Atom* atom = *it;
@@ -1040,6 +1055,13 @@ void ExportInfoAtom<A>::encode() const
 			entry.importName = NULL;
 			entries.push_back(entry);
 		}
+
+		if (_options.sharedRegionEligible() && strncmp(atom->section().segmentName(), "__DATA", 6) == 0) {
+			// Maximum address is 64bit which is 10 bytes as a uleb128. Minimum is 1 byte
+			// Pad the section out so we can deal with addresses getting larger when __DATA segment
+			// is moved before __TEXT in dyld shared cache.
+			padding += 9;
+		}
 	}
 
 	// sort vector by -exported_symbols_order, and any others by address
@@ -1047,6 +1069,10 @@ void ExportInfoAtom<A>::encode() const
 	
 	// create trie
 	mach_o::trie::makeTrie(entries, this->_encodedData.bytes());
+
+	//Add additional data padding for the unoptimized shared cache
+	for (unsigned int i = 0; i < padding; ++i)
+		this->_encodedData.append_byte(0);
 
 	// align to pointer size
 	this->_encodedData.pad_to_size(sizeof(pint_t));
@@ -1056,10 +1082,10 @@ void ExportInfoAtom<A>::encode() const
 
 
 template <typename A>
-class SplitSegInfoAtom : public LinkEditAtom
+class SplitSegInfoV1Atom : public LinkEditAtom
 {
 public:
-												SplitSegInfoAtom(const Options& opts, ld::Internal& state, OutputFile& writer)
+												SplitSegInfoV1Atom(const Options& opts, ld::Internal& state, OutputFile& writer)
 													: LinkEditAtom(opts, state, writer, _s_section, sizeof(pint_t)) { }
 
 	// overrides of ld::Atom
@@ -1095,10 +1121,10 @@ private:
 };
 
 template <typename A>
-ld::Section SplitSegInfoAtom<A>::_s_section("__LINKEDIT", "__splitSegInfo", ld::Section::typeLinkEdit, true);
+ld::Section SplitSegInfoV1Atom<A>::_s_section("__LINKEDIT", "__splitSegInfo", ld::Section::typeLinkEdit, true);
 
 template <>
-void SplitSegInfoAtom<x86_64>::addSplitSegInfo(uint64_t address, ld::Fixup::Kind kind, uint32_t extra) const
+void SplitSegInfoV1Atom<x86_64>::addSplitSegInfo(uint64_t address, ld::Fixup::Kind kind, uint32_t extra) const
 {
 	switch (kind) {
 		case ld::Fixup::kindStoreX86PCRel32:
@@ -1128,7 +1154,7 @@ void SplitSegInfoAtom<x86_64>::addSplitSegInfo(uint64_t address, ld::Fixup::Kind
 }
 
 template <>
-void SplitSegInfoAtom<x86>::addSplitSegInfo(uint64_t address, ld::Fixup::Kind kind, uint32_t extra) const
+void SplitSegInfoV1Atom<x86>::addSplitSegInfo(uint64_t address, ld::Fixup::Kind kind, uint32_t extra) const
 {
 	switch (kind) {
 		case ld::Fixup::kindStoreLittleEndian32:
@@ -1145,7 +1171,7 @@ void SplitSegInfoAtom<x86>::addSplitSegInfo(uint64_t address, ld::Fixup::Kind ki
 
 #if SUPPORT_ARCH_arm_any
 template <>
-void SplitSegInfoAtom<arm>::addSplitSegInfo(uint64_t address, ld::Fixup::Kind kind, uint32_t extra) const
+void SplitSegInfoV1Atom<arm>::addSplitSegInfo(uint64_t address, ld::Fixup::Kind kind, uint32_t extra) const
 {
 	switch (kind) {
 		case ld::Fixup::kindStoreLittleEndian32:
@@ -1174,7 +1200,7 @@ void SplitSegInfoAtom<arm>::addSplitSegInfo(uint64_t address, ld::Fixup::Kind ki
 
 #if SUPPORT_ARCH_arm64
 template <>
-void SplitSegInfoAtom<arm64>::addSplitSegInfo(uint64_t address, ld::Fixup::Kind kind, uint32_t extra) const
+void SplitSegInfoV1Atom<arm64>::addSplitSegInfo(uint64_t address, ld::Fixup::Kind kind, uint32_t extra) const
 {
 	switch (kind) {
 		case ld::Fixup::kindStoreARM64Page21:
@@ -1203,7 +1229,7 @@ void SplitSegInfoAtom<arm64>::addSplitSegInfo(uint64_t address, ld::Fixup::Kind 
 
 #if SUPPORT_ARCH_ppc
 template <>
-void SplitSegInfoAtom<ppc>::addSplitSegInfo(uint64_t address, ld::Fixup::Kind kind, uint32_t extra) const
+void SplitSegInfoV1Atom<ppc>::addSplitSegInfo(uint64_t address, ld::Fixup::Kind kind, uint32_t extra) const
 {
 	switch (kind) {
 		case ld::Fixup::kindStorePPCPicHigh16AddLow:
@@ -1221,7 +1247,7 @@ void SplitSegInfoAtom<ppc>::addSplitSegInfo(uint64_t address, ld::Fixup::Kind ki
 
 #if SUPPORT_ARCH_ppc64
 template <>
-void SplitSegInfoAtom<ppc64>::addSplitSegInfo(uint64_t address, ld::Fixup::Kind kind, uint32_t extra) const
+void SplitSegInfoV1Atom<ppc64>::addSplitSegInfo(uint64_t address, ld::Fixup::Kind kind, uint32_t extra) const
 {
 	switch (kind) {
 		case ld::Fixup::kindStorePPCPicHigh16AddLow:
@@ -1235,7 +1261,7 @@ void SplitSegInfoAtom<ppc64>::addSplitSegInfo(uint64_t address, ld::Fixup::Kind 
 #endif
 
 template <typename A>
-void SplitSegInfoAtom<A>::uleb128EncodeAddresses(const std::vector<uint64_t>& locations) const
+void SplitSegInfoV1Atom<A>::uleb128EncodeAddresses(const std::vector<uint64_t>& locations) const
 {
 	pint_t addr = this->_options.baseAddress();
 	for(typename std::vector<uint64_t>::const_iterator it = locations.begin(); it != locations.end(); ++it) {
@@ -1262,12 +1288,12 @@ void SplitSegInfoAtom<A>::uleb128EncodeAddresses(const std::vector<uint64_t>& lo
 
 
 template <typename A>
-void SplitSegInfoAtom<A>::encode() const
+void SplitSegInfoV1Atom<A>::encode() const
 {
 	// sort into group by pointer adjustment kind
 	std::vector<OutputFile::SplitSegInfoEntry>& info = this->_writer._splitSegInfos;
 	for (std::vector<OutputFile::SplitSegInfoEntry>::const_iterator it = info.begin(); it != info.end(); ++it) {
-		this->addSplitSegInfo(it->address, it->kind, it->extra);
+		this->addSplitSegInfo(it->fixupAddress, it->kind, it->extra);
 	}
 
 	// delta compress runs of addresses
@@ -1361,6 +1387,108 @@ void SplitSegInfoAtom<A>::encode() const
 	_ppcHi16Locations.clear();
 #endif
 }
+
+
+template <typename A>
+class SplitSegInfoV2Atom : public LinkEditAtom
+{
+public:
+												SplitSegInfoV2Atom(const Options& opts, ld::Internal& state, OutputFile& writer)
+													: LinkEditAtom(opts, state, writer, _s_section, sizeof(pint_t)) { }
+
+	// overrides of ld::Atom
+	virtual const char*							name() const		{ return "split seg info"; }
+	// overrides of LinkEditAtom
+	virtual void								encode() const;
+
+private:
+	typedef typename A::P						P;
+	typedef typename A::P::E					E;
+	typedef typename A::P::uint_t				pint_t;
+
+	// Whole		 :== <count> FromToSection+
+	// FromToSection :== <from-sect-index> <to-sect-index> <count> ToOffset+
+	// ToOffset		 :== <to-sect-offset-delta> <count> FromOffset+
+	// FromOffset	 :== <kind> <count> <from-sect-offset-delta>
+
+	typedef uint32_t SectionIndexes;
+	typedef std::map<uint8_t, std::vector<uint64_t> > FromOffsetMap;
+	typedef std::map<uint64_t, FromOffsetMap> ToOffsetMap;
+	typedef std::map<SectionIndexes, ToOffsetMap> WholeMap;
+
+
+	static ld::Section			_s_section;
+};
+
+template <typename A>
+ld::Section SplitSegInfoV2Atom<A>::_s_section("__LINKEDIT", "__splitSegInfo", ld::Section::typeLinkEdit, true);
+
+
+template <typename A>
+void SplitSegInfoV2Atom<A>::encode() const
+{
+	// sort into group by adjustment kind
+	//fprintf(stderr, "_splitSegV2Infos.size=%lu\n", this->_writer._splitSegV2Infos.size());
+	WholeMap whole;
+	for (const OutputFile::SplitSegInfoV2Entry&  entry : this->_writer._splitSegV2Infos) {
+		//fprintf(stderr, "from=%d, to=%d\n", entry.fixupSectionIndex, entry.targetSectionIndex);
+		SectionIndexes index = entry.fixupSectionIndex << 16 | entry.targetSectionIndex;
+		ToOffsetMap& toOffsets = whole[index];
+		FromOffsetMap& fromOffsets = toOffsets[entry.targetSectionOffset];
+		fromOffsets[entry.referenceKind].push_back(entry.fixupSectionOffset);
+	}
+
+	// Add marker that this is V2 data
+	this->_encodedData.reserve(8192);
+	this->_encodedData.append_byte(DYLD_CACHE_ADJ_V2_FORMAT); 
+
+	// stream out
+	// Whole :== <count> FromToSection+
+	this->_encodedData.append_uleb128(whole.size());
+	for (auto& fromToSection : whole) {
+		uint8_t fromSectionIndex = fromToSection.first >> 16;
+		uint8_t toSectionIndex   = fromToSection.first & 0xFFFF;
+		ToOffsetMap& toOffsets   = fromToSection.second;
+		// FromToSection :== <from-sect-index> <to-sect-index> <count> ToOffset+
+		this->_encodedData.append_uleb128(fromSectionIndex);
+		this->_encodedData.append_uleb128(toSectionIndex);
+		this->_encodedData.append_uleb128(toOffsets.size());
+		//fprintf(stderr, "from sect=%d, to sect=%d, count=%lu\n", fromSectionIndex, toSectionIndex, toOffsets.size());
+		uint64_t lastToOffset = 0;
+		for (auto& fromToOffsets : toOffsets) {
+			uint64_t toSectionOffset = fromToOffsets.first;
+			FromOffsetMap& fromOffsets = fromToOffsets.second;
+			// ToOffset	:== <to-sect-offset-delta> <count> FromOffset+
+			this->_encodedData.append_uleb128(toSectionOffset - lastToOffset);
+			this->_encodedData.append_uleb128(fromOffsets.size());
+			for (auto& kindAndOffsets : fromOffsets) {
+				uint8_t kind = kindAndOffsets.first;
+				std::vector<uint64_t>& fromOffsets = kindAndOffsets.second;
+				// FromOffset :== <kind> <count> <from-sect-offset-delta>
+				this->_encodedData.append_uleb128(kind);
+				this->_encodedData.append_uleb128(fromOffsets.size());
+				std::sort(fromOffsets.begin(), fromOffsets.end());
+				uint64_t lastFromOffset = 0;
+				for (uint64_t offset : fromOffsets) {
+					this->_encodedData.append_uleb128(offset - lastFromOffset);
+					lastFromOffset = offset;
+				}
+			}
+			lastToOffset = toSectionOffset;
+		}
+	}
+
+
+	// always add zero byte to mark end
+	this->_encodedData.append_byte(0);
+
+	// align to pointer size
+	this->_encodedData.pad_to_size(sizeof(pint_t));
+	
+	this->_encoded = true;
+}
+
+
 
 template <typename A>
 class FunctionStartsAtom : public LinkEditAtom
@@ -1561,63 +1689,6 @@ void DataInCodeAtom<A>::encode() const
 
 
 
-
-
-// <rdar://problem/7209249> linker needs to cache "Designated Requirements" in linked binary
-template <typename A>
-class DependentDRAtom : public LinkEditAtom
-{
-public:
-												DependentDRAtom(const Options& opts, ld::Internal& state, OutputFile& writer)
-													: LinkEditAtom(opts, state, writer, _s_section, sizeof(pint_t)) { }
-
-	// overrides of ld::Atom
-	virtual const char*							name() const		{ return "dependent dylib DR info"; }
-	// overrides of LinkEditAtom
-	virtual void								encode() const;
-
-private:
-	typedef typename A::P						P;
-	typedef typename A::P::E					E;
-	typedef typename A::P::uint_t				pint_t;
-
-	static ld::Section			_s_section;
-
-};
-
-template <typename A>
-ld::Section DependentDRAtom<A>::_s_section("__LINKEDIT", "__dependentDR", ld::Section::typeLinkEdit, true);
-
-
-template <typename A>
-void DependentDRAtom<A>::encode() const
-{
-	Security::SuperBlobCore<Security::SuperBlob<Security::kSecCodeMagicDRList>, Security::kSecCodeMagicDRList, uint32_t>::Maker maker;
-	
-	uint32_t index = 0;
-	for(std::vector<ld::dylib::File*>::iterator it=_state.dylibs.begin(); it != _state.dylibs.end(); ++it) {
-		const ld::dylib::File* dylib = *it;
-		Security::BlobCore* dylibDR = (Security::BlobCore*)dylib->codeSignatureDR();
-		void* dup = NULL;
-		if ( dylibDR != NULL ) {
-			// <rdar://problem/11315321> Maker takes ownership of every blob added
-			// We need to make a copy here because dylib still owns the pointer returned by codeSignatureDR()
-			dup = ::malloc(dylibDR->length());
-			::memcpy(dup, dylibDR, dylibDR->length());
-		}
-		maker.add(index, (Security::BlobCore*)dup);
-		++index;
-	}
-	
-	Security::SuperBlob<Security::kSecCodeMagicDRList>* topBlob = maker.make();
-	const uint8_t* data = (uint8_t*)topBlob->data();
-	for(size_t i=0; i < topBlob->length(); ++i)
-		_encodedData.append_byte(data[i]);
-	
-	this->_encodedData.pad_to_size(sizeof(pint_t));
-
-	this->_encoded = true;
-}
 
 
 

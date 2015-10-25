@@ -26,6 +26,11 @@ extern "C" {
 #define __USE_GNU
 #endif
 
+#ifndef __APPLE__
+typedef char uuid_string_t__[37];
+#define uuid_string_t uuid_string_t__
+#endif
+
 #include <dlfcn.h>
 
 struct dyld_unwind_sections

@@ -127,6 +127,7 @@ private:
 	ld::Internal&					_internal;
 	std::vector<const ld::Atom*>	_atoms;
 	std::set<const ld::Atom*>		_deadStripRoots;
+	std::vector<const ld::Atom*>	_dontDeadStripIfReferencesLive;
 	std::vector<const ld::Atom*>	_atomsWithUnresolvedReferences;
 	std::vector<const class AliasAtom*>	_aliasesFromCmdLine;
 	SymbolTable						_symbolTable;

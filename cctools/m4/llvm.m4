@@ -1,16 +1,16 @@
 AC_DEFUN([CHECK_LLVM],
 [
-    AC_ARG_ENABLE([lto],
-    AS_HELP_STRING([--enable-lto],
+    AC_ARG_ENABLE([lto-support],
+    AS_HELP_STRING([--enable-lto-support],
                    [enable link time optimization support]),
-    [], [enable_lto=yes])
+    [], [enable_lto_support=yes])
 
     AC_ARG_WITH([llvm-config],
     AS_HELP_STRING([--with-llvm-config],
                    [llvm config tool]),
     [LLVM_CONFIG=$with_llvm_config], [LLVM_CONFIG=no])
 
-    if test "x$enable_lto" = "xyes"; then
+    if test "x$enable_lto_support" = "xyes"; then
         if test "x$LLVM_CONFIG" = "xno"; then
             AC_PATH_PROGS(LLVM_CONFIG,
                 [llvm-config                                    \

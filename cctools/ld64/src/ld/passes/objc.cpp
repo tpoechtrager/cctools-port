@@ -813,7 +813,7 @@ void OptimizeCategories<A>::doit(const Options& opts, ld::Internal& state)
 	std::set<const ld::Atom*> nlcatListAtoms;
 	for (std::vector<ld::Internal::FinalSection*>::iterator sit=state.sections.begin(); sit != state.sections.end(); ++sit) {
 		ld::Internal::FinalSection* sect = *sit;
-		if ( (strcmp(sect->sectionName(), "__objc_nlcatlist") == 0) && (strcmp(sect->segmentName(), "__DATA") == 0) ) {
+		if ( (strcmp(sect->sectionName(), "__objc_nlcatlist") == 0) && (strncmp(sect->segmentName(), "__DATA", 6) == 0) ) {
 			for (std::vector<const ld::Atom*>::iterator ait=sect->atoms.begin(); ait != sect->atoms.end(); ++ait) {
 				const ld::Atom* categoryListElementAtom = *ait;
 				for (unsigned int offset=0; offset < categoryListElementAtom->size(); offset += sizeof(pint_t)) {
@@ -873,7 +873,7 @@ void OptimizeCategories<A>::doit(const Options& opts, ld::Internal& state)
 			}
 		}
 		// record method list section
-		if ( (strcmp(sect->sectionName(), "__objc_const") == 0) && (strcmp(sect->segmentName(), "__DATA") == 0) )
+		if ( (strcmp(sect->sectionName(), "__objc_const") == 0) && (strncmp(sect->segmentName(), "__DATA", 6) == 0) )
 			methodListSection = sect;
 	}
 
@@ -893,9 +893,11 @@ void OptimizeCategories<A>::doit(const Options& opts, ld::Internal& state)
 				const ld::Atom* newClassRO = Class<A>::setInstanceMethodList(state, classAtom, newInstanceMethodListAtom, deadAtoms);
 				// add new method list to final sections
 				methodListSection->atoms.push_back(newInstanceMethodListAtom);
+				state.atomToSection[newInstanceMethodListAtom] = methodListSection;
 				if ( newClassRO != NULL ) {
 					assert(strcmp(newClassRO->section().sectionName(), "__objc_const") == 0);
 					methodListSection->atoms.push_back(newClassRO);
+					state.atomToSection[newClassRO] = methodListSection;
 				}
 			}
 			// if any category adds class methods, generate new merged method list, and replace
@@ -905,9 +907,11 @@ void OptimizeCategories<A>::doit(const Options& opts, ld::Internal& state)
 				const ld::Atom* newClassRO = Class<A>::setClassMethodList(state, classAtom, newClassMethodListAtom, deadAtoms);
 				// add new method list to final sections
 				methodListSection->atoms.push_back(newClassMethodListAtom);
+				state.atomToSection[newClassMethodListAtom] = methodListSection;
 				if ( newClassRO != NULL ) {
 					assert(strcmp(newClassRO->section().sectionName(), "__objc_const") == 0);
 					methodListSection->atoms.push_back(newClassRO);
+					state.atomToSection[newClassRO] = methodListSection;
 				}
 			}
 			// if any category adds protocols, generate new merged protocol list, and replace
@@ -918,13 +922,16 @@ void OptimizeCategories<A>::doit(const Options& opts, ld::Internal& state)
 				const ld::Atom* newMetaClassRO = Class<A>::setClassProtocolList(state, classAtom, newProtocolListAtom, deadAtoms);
 				// add new protocol list to final sections
 				methodListSection->atoms.push_back(newProtocolListAtom);
+				state.atomToSection[newProtocolListAtom] = methodListSection;
 				if ( newClassRO != NULL ) {
 					assert(strcmp(newClassRO->section().sectionName(), "__objc_const") == 0);
 					methodListSection->atoms.push_back(newClassRO);
+					state.atomToSection[newClassRO] = methodListSection;
 				}
 				if ( newMetaClassRO != NULL ) {
 					assert(strcmp(newMetaClassRO->section().sectionName(), "__objc_const") == 0);
 					methodListSection->atoms.push_back(newMetaClassRO);
+					state.atomToSection[newMetaClassRO] = methodListSection;
 				}
 			}
 			// if any category adds properties, generate new merged property list, and replace
@@ -934,9 +941,11 @@ void OptimizeCategories<A>::doit(const Options& opts, ld::Internal& state)
 				const ld::Atom* newClassRO = Class<A>::setInstancePropertyList(state, classAtom, newPropertyListAtom, deadAtoms);
 				// add new property list to final sections
 				methodListSection->atoms.push_back(newPropertyListAtom);
+				state.atomToSection[newPropertyListAtom] = methodListSection;
 				if ( newClassRO != NULL ) {
 					assert(strcmp(newClassRO->section().sectionName(), "__objc_const") == 0);
 					methodListSection->atoms.push_back(newClassRO);
+					state.atomToSection[newClassRO] = methodListSection;
 				}
 			}
 		 

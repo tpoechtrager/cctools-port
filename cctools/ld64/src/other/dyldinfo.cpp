@@ -104,12 +104,19 @@ private:
 	void										printClassicLazyBindingInfo();
 	void										printClassicBindingInfo();
 	void										printSharedRegionInfo();
+	const char*									sharedRegionKindName(uint8_t kind);
 	void										printFunctionStartsInfo();
 	void										printDylibsInfo();
 	void										printDRInfo();
 	void										printDataInCode();
 	void										printFunctionStartLine(uint64_t addr);
-	const uint8_t*								printSharedRegionInfoForEachULEB128Address(const uint8_t* p, uint8_t kind);
+	const uint8_t*								printSharedRegionV1InfoForEachULEB128Address(const uint8_t* p, const uint8_t* end, uint8_t kind);
+	const uint8_t*								printSharedRegionV2InfoForEachULEB128Address(const uint8_t* p, const uint8_t* end);
+	const uint8_t*								printSharedRegionV2InfoForEachULEB128AddressAndAdj(const uint8_t* p, const uint8_t* end);
+	const uint8_t*								printSharedRegionV2SectionPair(const uint8_t* p, const uint8_t* end);
+	const uint8_t*								printSharedRegionV2ToSectionOffset(const uint8_t* p, const uint8_t* end);
+	const uint8_t*								printSharedRegionV2Kind(const uint8_t* p, const uint8_t* end);
+
 	pint_t										relocBase();
 	const char*									relocTypeName(uint8_t r_type);
 	uint8_t										segmentIndexForAddress(pint_t addr);
@@ -129,6 +136,7 @@ private:
 	const char*									classicOrdinalName(int libraryOrdinal);
 	pint_t*										mappedAddressForVMAddress(pint_t vmaddress);
 	const char*									symbolNameForAddress(uint64_t);
+	const char*									closestSymbolNameForAddress(uint64_t addr, uint64_t* offset, uint8_t sectIndex=0);
 
 		
 	const char*									fPath;
@@ -149,8 +157,10 @@ private:
 	const macho_segment_command<P>*				fFirstWritableSegment;
 	bool										fWriteableSegmentWithAddrOver4G;
 	std::vector<const macho_segment_command<P>*>fSegments;
+	std::vector<const macho_section<P>*>		fSections;
 	std::vector<const char*>					fDylibs;
 	std::vector<const macho_dylib_command<P>*>	fDylibLoadCommands;
+	macho_section<P>							fMachHeaderPseudoSection;
 };
 
 
@@ -290,7 +300,12 @@ DyldInfoPrinter<A>::DyldInfoPrinter(const uint8_t* fileContent, uint32_t fileLen
 
 	fPath = strdup(path);
 	fHeader = (const macho_header<P>*)fileContent;
-	
+
+	fMachHeaderPseudoSection.set_segname("__TEXT");
+	fMachHeaderPseudoSection.set_sectname("");
+	fMachHeaderPseudoSection.set_addr(0);
+	fSections.push_back(&fMachHeaderPseudoSection);
+
 	// get LC_DYLD_INFO
 	const uint8_t* const endOfFile = (uint8_t*)fHeader + fLength;
 	const uint8_t* const endOfLoadCommands = (uint8_t*)fHeader + sizeof(macho_header<P>) + fHeader->sizeofcmds();
@@ -322,6 +337,10 @@ DyldInfoPrinter<A>::DyldInfoPrinter(const uint8_t* fileContent, uint32_t fileLen
 					if ( segCmd->vmaddr() > 0x100000000ULL )
 						fWriteableSegmentWithAddrOver4G = true;
 				}
+				const macho_section<P>* const sectionsStart = (macho_section<P>*)((char*)segCmd + sizeof(macho_segment_command<P>));
+				const macho_section<P>* const sectionsEnd = &sectionsStart[segCmd->nsects()];
+				for(const macho_section<P>* sect = sectionsStart; sect < sectionsEnd; ++sect)
+					fSections.push_back(sect);
 				}
 				break;
 			case LC_LOAD_DYLIB:
@@ -708,9 +727,10 @@ void DyldInfoPrinter<A>::printRebaseInfoOpcodes()
 	}
 	else {
 		printf("rebase opcodes:\n");
-		const uint8_t* p = (uint8_t*)fHeader + fInfo->rebase_off();
-		const uint8_t* end = &p[fInfo->rebase_size()];
-		
+		const uint8_t* start = (uint8_t*)fHeader + fInfo->rebase_off();
+		const uint8_t* end = &start[fInfo->rebase_size()];
+		const uint8_t* p = start;
+
 		uint8_t type = 0;
 		uint64_t address = fBaseAddress;
 		uint32_t count;
@@ -720,44 +740,45 @@ void DyldInfoPrinter<A>::printRebaseInfoOpcodes()
 		while ( !done && (p < end) ) {
 			uint8_t immediate = *p & REBASE_IMMEDIATE_MASK;
 			uint8_t opcode = *p & REBASE_OPCODE_MASK;
+			uint32_t opcodeOffset = p-start;
 			++p;
 			switch (opcode) {
 				case REBASE_OPCODE_DONE:
 					done = true;
-					printf("REBASE_OPCODE_DONE()\n");
+					printf("0x%04X REBASE_OPCODE_DONE()\n", opcodeOffset);
 					break;
 				case REBASE_OPCODE_SET_TYPE_IMM:
 					type = immediate;
-					printf("REBASE_OPCODE_SET_TYPE_IMM(%d)\n", type);
+					printf("0x%04X REBASE_OPCODE_SET_TYPE_IMM(%d)\n", opcodeOffset, type);
 					break;
 				case REBASE_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB:
 					segmentIndex = immediate;
 					address = read_uleb128(p, end);
-					printf("REBASE_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB(%d, 0x%08llX)\n", segmentIndex, address);
+					printf("0x%04X REBASE_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB(%d, 0x%08llX)\n", opcodeOffset, segmentIndex, address);
 					break;
 				case REBASE_OPCODE_ADD_ADDR_ULEB:
 					address = read_uleb128(p, end);
-					printf("REBASE_OPCODE_ADD_ADDR_ULEB(0x%0llX)\n", address);
+					printf("0x%04X REBASE_OPCODE_ADD_ADDR_ULEB(0x%0llX)\n", opcodeOffset, address);
 					break;
 				case REBASE_OPCODE_ADD_ADDR_IMM_SCALED:
 					address = immediate*sizeof(pint_t);
-					printf("REBASE_OPCODE_ADD_ADDR_IMM_SCALED(0x%0llX)\n", address);
+					printf("0x%04X REBASE_OPCODE_ADD_ADDR_IMM_SCALED(0x%0llX)\n", opcodeOffset, address);
 					break;
 				case REBASE_OPCODE_DO_REBASE_IMM_TIMES:
-					printf("REBASE_OPCODE_DO_REBASE_IMM_TIMES(%d)\n", immediate);
+					printf("0x%04X REBASE_OPCODE_DO_REBASE_IMM_TIMES(%d)\n", opcodeOffset, immediate);
 					break;
 				case REBASE_OPCODE_DO_REBASE_ULEB_TIMES:
 					count = read_uleb128(p, end);
-					printf("REBASE_OPCODE_DO_REBASE_ULEB_TIMES(%d)\n", count);
+					printf("0x%04X REBASE_OPCODE_DO_REBASE_ULEB_TIMES(%d)\n", opcodeOffset, count);
 					break;
 				case REBASE_OPCODE_DO_REBASE_ADD_ADDR_ULEB:
 					skip = read_uleb128(p, end) + sizeof(pint_t);
-					printf("REBASE_OPCODE_DO_REBASE_ADD_ADDR_ULEB(%d)\n", skip);
+					printf("0x%04X REBASE_OPCODE_DO_REBASE_ADD_ADDR_ULEB(%d)\n", opcodeOffset, skip);
 					break;
 				case REBASE_OPCODE_DO_REBASE_ULEB_TIMES_SKIPPING_ULEB:
 					count = read_uleb128(p, end);
 					skip = read_uleb128(p, end);
-					printf("REBASE_OPCODE_DO_REBASE_ULEB_TIMES_SKIPPING_ULEB(%d, %d)\n", count, skip);
+					printf("0x%04X REBASE_OPCODE_DO_REBASE_ULEB_TIMES_SKIPPING_ULEB(%d, %d)\n", opcodeOffset, count, skip);
 					break;
 				default:
 					throwf("bad rebase opcode %d", *p);
@@ -1489,102 +1510,126 @@ void DyldInfoPrinter<A>::printExportInfoNodes()
 
 
 template <typename A>
-const uint8_t* DyldInfoPrinter<A>::printSharedRegionInfoForEachULEB128Address(const uint8_t* p, uint8_t kind)
+const uint8_t* DyldInfoPrinter<A>::printSharedRegionV1InfoForEachULEB128Address(const uint8_t* p, const uint8_t* end, uint8_t kind)
 {
 	const char* kindStr =  "??";
-	switch (kind) {
-		case 1:
+	switch (kind ) {
+		case DYLD_CACHE_ADJ_V1_POINTER_32:
 			kindStr = "32-bit pointer";
 			break;
-		case 2:
+		case DYLD_CACHE_ADJ_V1_POINTER_64:
 			kindStr = "64-bit pointer";
 			break;
-		case 3:
-#if SUPPORT_ARCH_arm64
-			if ( fHeader->cputype() == CPU_TYPE_ARM64 )
-				kindStr = "arm64 ADRP";
-			else
-#endif
-				kindStr = "ppc hi16";
+		case DYLD_CACHE_ADJ_V1_ADRP:
+			kindStr = "arm64 ADRP";
 			break;
-		case 4:
-			kindStr = "32-bit offset to IMPORT";
-			break;
-		case 5:
-			kindStr = "thumb2 movw";
-			break;
-		case 6:
-			kindStr = "ARM movw";
-			break;
-		case 0x10:
+		case DYLD_CACHE_ADJ_V1_ARM_THUMB_MOVT+0:
 			kindStr = "thumb2 movt low high 4 bits=0";
 			break;
-		case 0x11:
+		case DYLD_CACHE_ADJ_V1_ARM_THUMB_MOVT+1:
 			kindStr = "thumb2 movt low high 4 bits=1";
 			break;
-		case 0x12:
+		case DYLD_CACHE_ADJ_V1_ARM_THUMB_MOVT+2:
 			kindStr = "thumb2 movt low high 4 bits=2";
 			break;
-		case 0x13:
+		case DYLD_CACHE_ADJ_V1_ARM_THUMB_MOVT+3:
 			kindStr = "thumb2 movt low high 4 bits=3";
 			break;
-		case 0x14:
+		case DYLD_CACHE_ADJ_V1_ARM_THUMB_MOVT+4:
 			kindStr = "thumb2 movt low high 4 bits=4";
 			break;
-		case 0x15:
+		case DYLD_CACHE_ADJ_V1_ARM_THUMB_MOVT+5:
 			kindStr = "thumb2 movt low high 4 bits=5";
 			break;
-		case 0x16:
+		case DYLD_CACHE_ADJ_V1_ARM_THUMB_MOVT+6:
 			kindStr = "thumb2 movt low high 4 bits=6";
 			break;
-		case 0x17:
+		case DYLD_CACHE_ADJ_V1_ARM_THUMB_MOVT+7:
 			kindStr = "thumb2 movt low high 4 bits=7";
 			break;
-		case 0x18:
+		case DYLD_CACHE_ADJ_V1_ARM_THUMB_MOVT+8:
 			kindStr = "thumb2 movt low high 4 bits=8";
 			break;
-		case 0x19:
+		case DYLD_CACHE_ADJ_V1_ARM_THUMB_MOVT+9:
 			kindStr = "thumb2 movt low high 4 bits=9";
 			break;
-		case 0x1A:
-			kindStr = "thumb2 movt low high 4 bits=0xA";
+		case DYLD_CACHE_ADJ_V1_ARM_THUMB_MOVT+10:
+			kindStr = "thumb2 movt low high 4 bits=10";
 			break;
-		case 0x1B:
-			kindStr = "thumb2 movt low high 4 bits=0xB";
+		case DYLD_CACHE_ADJ_V1_ARM_THUMB_MOVT+11:
+			kindStr = "thumb2 movt low high 4 bits=11";
 			break;
-		case 0x1C:
-			kindStr = "thumb2 movt low high 4 bits=0xC";
+		case DYLD_CACHE_ADJ_V1_ARM_THUMB_MOVT+12:
+			kindStr = "thumb2 movt low high 4 bits=12";
 			break;
-		case 0x1D:
-			kindStr = "thumb2 movt low high 4 bits=0xD";
+		case DYLD_CACHE_ADJ_V1_ARM_THUMB_MOVT+13:
+			kindStr = "thumb2 movt low high 4 bits=13";
 			break;
-		case 0x1E:
-			kindStr = "thumb2 movt low high 4 bits=0xE";
+		case DYLD_CACHE_ADJ_V1_ARM_THUMB_MOVT+14:
+			kindStr = "thumb2 movt low high 4 bits=14";
 			break;
-		case 0x1F:
-			kindStr = "thumb2 movt low high 4 bits=0xF";
+		case DYLD_CACHE_ADJ_V1_ARM_THUMB_MOVT+15:
+			kindStr = "thumb2 movt low high 4 bits=15";
 			break;
+		case DYLD_CACHE_ADJ_V1_ARM_MOVT+0:
+			kindStr = "arm movt low high 4 bits=0";
+			break;
+		case DYLD_CACHE_ADJ_V1_ARM_MOVT+1:
+			kindStr = "arm movt low high 4 bits=1";
+			break;
+		case DYLD_CACHE_ADJ_V1_ARM_MOVT+2:
+			kindStr = "arm movt low high 4 bits=2";
+			break;
+		case DYLD_CACHE_ADJ_V1_ARM_MOVT+3:
+			kindStr = "arm movt low high 4 bits=3";
+			break;
+		case DYLD_CACHE_ADJ_V1_ARM_MOVT+4:
+			kindStr = "arm movt low high 4 bits=4";
+			break;
+		case DYLD_CACHE_ADJ_V1_ARM_MOVT+5:
+			kindStr = "arm movt low high 4 bits=5";
+			break;
+		case DYLD_CACHE_ADJ_V1_ARM_MOVT+6:
+			kindStr = "arm movt low high 4 bits=6";
+			break;
+		case DYLD_CACHE_ADJ_V1_ARM_MOVT+7:
+			kindStr = "arm movt low high 4 bits=7";
+			break;
+		case DYLD_CACHE_ADJ_V1_ARM_MOVT+8:
+			kindStr = "arm movt low high 4 bits=8";
+			break;
+		case DYLD_CACHE_ADJ_V1_ARM_MOVT+9:
+			kindStr = "arm movt low high 4 bits=9";
+			break;
+		case DYLD_CACHE_ADJ_V1_ARM_MOVT+10:
+			kindStr = "arm movt low high 4 bits=10";
+			break;
+		case DYLD_CACHE_ADJ_V1_ARM_MOVT+11:
+			kindStr = "arm movt low high 4 bits=11";
+			break;
+		case DYLD_CACHE_ADJ_V1_ARM_MOVT+12:
+			kindStr = "arm movt low high 4 bits=12";
+			break;
+		case DYLD_CACHE_ADJ_V1_ARM_MOVT+13:
+			kindStr = "arm movt low high 4 bits=13";
+			break;
+		case DYLD_CACHE_ADJ_V1_ARM_MOVT+14:
+			kindStr = "arm movt low high 4 bits=14";
+			break;
+		case DYLD_CACHE_ADJ_V1_ARM_MOVT+15:
+			kindStr = "arm movt low high 4 bits=15";
+			break;
+		default:
+			kindStr = "<<unknown>>";
 	}
 	uint64_t address = 0;
 	uint64_t delta = 0;
-	uint32_t shift = 0;
-	bool more = true;
 	do {
-		uint8_t byte = *p++;
-		delta |= ((byte & 0x7F) << shift);
-		shift += 7;
-		if ( byte < 0x80 ) {
-			if ( delta != 0 ) {
-				address += delta;
-				printf("0x%0llX   %s\n", address+fBaseAddress, kindStr); 
-				delta = 0;
-				shift = 0;
-			}
-			else {
-				more = false;
-			}
-		}
-	} while (more);
+		delta = read_uleb128(p, end);
+		address += delta;
+		printf("0x%0llX   %s\n", address+fBaseAddress, kindStr); 
+	} while (delta);
+
 	return p;
 }
 
@@ -1597,13 +1642,95 @@ void DyldInfoPrinter<A>::printSharedRegionInfo()
 	else {
 		const uint8_t* infoStart = (uint8_t*)fHeader + fSharedRegionInfo->dataoff();
 		const uint8_t* infoEnd = &infoStart[fSharedRegionInfo->datasize()];
-		for(const uint8_t* p = infoStart; (*p != 0) && (p < infoEnd);) {
-			uint8_t kind = *p++;
-			p = this->printSharedRegionInfoForEachULEB128Address(p, kind);
+		if ( *infoStart == DYLD_CACHE_ADJ_V2_FORMAT ) {
+			++infoStart;
+			// Whole		 :== <count> FromToSection+
+			// FromToSection :== <from-sect-index> <to-sect-index> <count> ToOffset+
+			// ToOffset		 :== <to-sect-offset-delta> <count> FromOffset+
+			// FromOffset	 :== <kind> <count> <from-sect-offset-delta>
+			const uint8_t* p = infoStart;
+			uint64_t sectionCount = read_uleb128(p, infoEnd);
+			for (uint64_t i=0; i < sectionCount; ++i) {
+				uint64_t fromSectionIndex = read_uleb128(p, infoEnd);
+				uint64_t toSectionIndex = read_uleb128(p, infoEnd);
+				uint64_t toOffsetCount = read_uleb128(p, infoEnd);
+				const macho_section<P>* fromSection = fSections[fromSectionIndex];
+				const macho_section<P>* toSection = fSections[toSectionIndex];
+				printf("from sect=%s, to sect=%s, count=%lld:\n", fromSection->sectname(), toSection->sectname(), toOffsetCount);
+				uint64_t toSectionOffset = 0;
+				const char* lastFromSymbol = NULL;
+				for (uint64_t j=0; j < toOffsetCount; ++j) {
+					uint64_t toSectionDelta = read_uleb128(p, infoEnd);
+					uint64_t fromOffsetCount = read_uleb128(p, infoEnd);
+					toSectionOffset += toSectionDelta;
+					for (uint64_t k=0; k < fromOffsetCount; ++k) {
+						uint64_t kind = read_uleb128(p, infoEnd);
+						uint64_t fromSectDeltaCount = read_uleb128(p, infoEnd);
+						uint64_t fromSectionOffset = 0;
+						for (uint64_t l=0; l < fromSectDeltaCount; ++l) {
+							uint64_t delta = read_uleb128(p, infoEnd);
+							fromSectionOffset += delta;
+							uint64_t symbolOffset;
+							const char* s = closestSymbolNameForAddress(fromSection->addr()+fromSectionOffset, &symbolOffset, fromSectionIndex);
+							if ( (s != lastFromSymbol) && (s != NULL) )
+								printf("  %s:\n", s);
+							const char* toSymbol = closestSymbolNameForAddress(toSection->addr()+toSectionOffset, &symbolOffset, toSectionIndex);
+							printf("       from addr=0x%0llX %s to addr=0x%0llX", fromSection->addr()+fromSectionOffset, sharedRegionKindName(kind), toSection->addr()+toSectionOffset);
+							if ( toSymbol != NULL ) {
+								if ( symbolOffset == 0 )
+									printf(" (%s)", toSymbol);
+								else
+									printf(" (%s + %lld)", toSymbol, symbolOffset);
+							}
+							printf("\n");
+							lastFromSymbol = s;
+						}
+					}
+				}
+			}
 		}
-
+		else {
+			for(const uint8_t* p = infoStart; (*p != 0) && (p < infoEnd);) {
+				uint8_t kind = *p++;
+				p = this->printSharedRegionV1InfoForEachULEB128Address(p, infoEnd, kind);
+			}
+		}
 	}
 }
+
+template <typename A>
+const char* DyldInfoPrinter<A>::sharedRegionKindName(uint8_t kind)
+{
+	switch (kind) {
+		default:
+			return "<<unknown>>";
+		case DYLD_CACHE_ADJ_V2_POINTER_32:
+			return "pointer32";
+		case DYLD_CACHE_ADJ_V2_POINTER_64:
+			return "pointer64";
+		case DYLD_CACHE_ADJ_V2_DELTA_32:
+			return "delta32";
+		case DYLD_CACHE_ADJ_V2_DELTA_64:
+			return "delta64";
+		case DYLD_CACHE_ADJ_V2_ARM64_ADRP:
+			return "adrp";
+		case DYLD_CACHE_ADJ_V2_ARM64_OFF12:
+			return "off12";
+		case DYLD_CACHE_ADJ_V2_ARM64_BR26:
+			return "br26";
+		case DYLD_CACHE_ADJ_V2_ARM_MOVW_MOVT:
+			return "movw/movt";
+		case DYLD_CACHE_ADJ_V2_ARM_BR24:
+			return "br24";
+		case DYLD_CACHE_ADJ_V2_THUMB_MOVW_MOVT:
+			return "movw/movt";
+		case DYLD_CACHE_ADJ_V2_THUMB_BR22:
+			return "br22";
+		case DYLD_CACHE_ADJ_V2_IMAGE_OFF_32:
+			return "off32";
+	}
+}
+
 
 #if SUPPORT_ARCH_arm_any
 template <>
@@ -1690,7 +1817,6 @@ void DyldInfoPrinter<A>::printDRInfo()
 		const uint8_t* start = ((uint8_t*)fHeader + fDRInfo->dataoff());
 		//const uint8_t* end   = ((uint8_t*)fHeader + fDRInfo->dataoff() + fDRInfo->datasize());
 		typedef Security::SuperBlob<Security::kSecCodeMagicDRList> DRListSuperBlob;
-		//typedef Security::SuperBlob<Security::kSecCodeMagicRequirementSet> InternalRequirementsSetBlob; // ld64-port: commented
 		const DRListSuperBlob* topBlob = (DRListSuperBlob*)start;
 		if ( topBlob->validateBlob(fDRInfo->datasize()) ) {
 			if ( topBlob->count() == fDylibLoadCommands.size() ) {
@@ -1967,37 +2093,65 @@ void DyldInfoPrinter<A>::printSymbolTableExportInfo()
 }
 
 template <typename A>
-const char* DyldInfoPrinter<A>::symbolNameForAddress(uint64_t addr)
+const char* DyldInfoPrinter<A>::closestSymbolNameForAddress(uint64_t addr, uint64_t* offset, uint8_t sectIndex)
 {
+	const macho_nlist<P>* bestSymbol = NULL;
 	if ( fDynamicSymbolTable != NULL ) {
-		// find exact match in globals
-		const macho_nlist<P>* lastExport = &fSymbols[fDynamicSymbolTable->iextdefsym()+fDynamicSymbolTable->nextdefsym()];
-		for (const macho_nlist<P>* sym = &fSymbols[fDynamicSymbolTable->iextdefsym()]; sym < lastExport; ++sym) {
-			if ( (sym->n_value() == addr) && ((sym->n_type() & N_TYPE) == N_SECT) && ((sym->n_type() & N_STAB) == 0) ) {
-				return &fStrings[sym->n_strx()];
+		// find closest match in globals
+		const macho_nlist<P>* const globalsStart = &fSymbols[fDynamicSymbolTable->iextdefsym()];
+		const macho_nlist<P>* const globalsEnd   = &globalsStart[fDynamicSymbolTable->nextdefsym()];
+		for (const macho_nlist<P>* s = globalsStart; s < globalsEnd; ++s) {
+			if ( (s->n_type() & N_TYPE) == N_SECT ) {
+				if ( (s->n_value() <= addr) && ((s->n_sect() == sectIndex) || (sectIndex ==0)) ) {
+					if ( (bestSymbol == NULL) || (bestSymbol->n_value() < s->n_value()) )
+						bestSymbol = s;
+				}
 			}
 		}
-		// find exact match in local symbols
-		const macho_nlist<P>* lastLocal = &fSymbols[fDynamicSymbolTable->ilocalsym()+fDynamicSymbolTable->nlocalsym()];
-		for (const macho_nlist<P>* sym = &fSymbols[fDynamicSymbolTable->ilocalsym()]; sym < lastLocal; ++sym) {
-			if ( (sym->n_value() == addr) && ((sym->n_type() & N_TYPE) == N_SECT) && ((sym->n_type() & N_STAB) == 0) ) {
-				return &fStrings[sym->n_strx()];
+
+		// find closest match in locals
+		const macho_nlist<P>* const localsStart = &fSymbols[fDynamicSymbolTable->ilocalsym()];
+		const macho_nlist<P>* const localsEnd   = &localsStart[fDynamicSymbolTable->nlocalsym()];
+		for (const macho_nlist<P>* s = localsStart; s < localsEnd; ++s) {
+			if ( ((s->n_type() & N_TYPE) == N_SECT) && ((s->n_type() & N_STAB) == 0) ) {
+				if ( (s->n_value() <= addr) && ((s->n_sect() == sectIndex) || (sectIndex ==0)) ) {
+					if ( (bestSymbol == NULL) || (bestSymbol->n_value() < s->n_value()) )
+						bestSymbol = s;
+				}
 			}
 		}
 	}
 	else {
-		// find exact match in all symbols
-		const macho_nlist<P>* lastSym = &fSymbols[fSymbolCount];
-		for (const macho_nlist<P>* sym = &fSymbols[0]; sym < lastSym; ++sym) {
-			if ( (sym->n_value() == addr) && ((sym->n_type() & N_TYPE) == N_SECT) && ((sym->n_type() & N_STAB) == 0) ) {
-				return &fStrings[sym->n_strx()];
+		// find closest match in locals
+		const macho_nlist<P>* const allStart = &fSymbols[0];
+		const macho_nlist<P>* const allEnd   = &fSymbols[fSymbolCount];
+		for (const macho_nlist<P>* s = allStart; s < allEnd; ++s) {
+			if ( ((s->n_type() & N_TYPE) == N_SECT) && ((s->n_type() & N_STAB) == 0) ) {
+				if ( (s->n_value() <= addr) && ((s->n_sect() == sectIndex) || (sectIndex ==0)) ) {
+					if ( (bestSymbol == NULL) || (bestSymbol->n_value() < s->n_value()) )
+						bestSymbol = s;
+				}
 			}
 		}
 	}
+	if ( bestSymbol != NULL ) {
+		*offset = addr - bestSymbol->n_value();
+		return &fStrings[bestSymbol->n_strx()];
+	}
+	*offset = 0;
+	return NULL;
+}
 
+template <typename A>
+const char* DyldInfoPrinter<A>::symbolNameForAddress(uint64_t addr)
+{
+	uint64_t offset;
+	const char* s = closestSymbolNameForAddress(addr, &offset);
+	if ( (offset == 0) && (s != NULL) )
+		return s;
 	return "?";
 }
- 
+
 template <typename A>
 void DyldInfoPrinter<A>::printClassicBindingInfo()
 {
@@ -2247,7 +2401,7 @@ static void usage()
 			"\t-opcodes          print opcodes used to generate the rebase and binding information\n"
 			"\t-function_starts  print table of function start addresses\n"
 			"\t-export_dot       print a GraphViz .dot file of the exported symbols trie\n"
-			"\t-data_in_code     print any data-in-code inforamtion\n"
+			"\t-data_in_code     print any data-in-code information\n"
 		);
 }
 

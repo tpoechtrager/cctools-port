@@ -1172,6 +1172,16 @@ check_dylinker_command:
 		break;
 
 
+	    case LC_VERSION_MIN_WATCHOS:
+		vc = (struct version_min_command *)lc;
+		if(vc->cmdsize != sizeof(struct version_min_command)){
+		    error("in swap_object_headers(): malformed load commands "
+			  "(LC_VERSION_MIN_WATCHOS command %lu has incorrect "
+			  "cmdsize", i);
+		    return(FALSE);
+		}
+		break;
+
 	    case LC_RPATH:
 		rpath = (struct rpath_command *)lc;
 		if(rpath->cmdsize < sizeof(struct rpath_command)){
@@ -1749,6 +1759,7 @@ check_dylinker_command:
 		
 	    case LC_VERSION_MIN_MACOSX:
 	    case LC_VERSION_MIN_IPHONEOS:
+	    case LC_VERSION_MIN_WATCHOS:
 		vc = (struct version_min_command *)lc;
 		swap_version_min_command(vc, target_byte_sex);
 		break;
