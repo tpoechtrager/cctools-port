@@ -65,9 +65,9 @@ if [ -z "$SDK_VERSION" ]; then
     exit 1
 fi
 extract $1
-SYSLIB=$(find $SDKDIR -name "libSystem.dylib" | head -n1)
+SYSLIB=$(find $SDKDIR -name libSystem.dylib -o -name libSystem.tbd | head -n1)
 if [ -z "$SYSLIB" ]; then
-    echo "SDK should contain libSystem.dylib" 1>&2
+    echo "SDK should contain libSystem{.dylib,.tbd}" 1>&2
     exit 1
 fi
 SYSROOT="$(dirname $SYSLIB)/../.."
