@@ -6927,13 +6927,13 @@ bool Section<A>::addRelocFixup_powerpc(class Parser<A>& parser,
 					case 1:
 						throw "unsuppored r_length < 2 for scattered PPC_RELOC_VANILLA";
 					case 2:
-						contentValue = BigEndian::get32(*(uint32_t*)fixUpPtr);
-						target.addend = contentValue - target.atom->_objAddress;
+						contentValue = (int64_t)(int32_t)BigEndian::get32(*(uint32_t*)fixUpPtr);
+						target.addend = (uint64_t)contentValue - (uint64_t)target.atom->_objAddress;
 						parser.addFixups(src, ld::Fixup::kindStoreBigEndian32, target);
 						break;
 					case 3:
 						contentValue = BigEndian::get64(*(uint64_t*)fixUpPtr);
-						target.addend = contentValue - target.atom->_objAddress;
+						target.addend = (uint64_t)contentValue - (uint64_t)target.atom->_objAddress;
 						parser.addFixups(src, ld::Fixup::kindStoreBigEndian64, target);
 						break;
 				}
@@ -6943,7 +6943,7 @@ bool Section<A>::addRelocFixup_powerpc(class Parser<A>& parser,
 				if ( (displacement & 0x00008000) != 0 )
 					displacement |= 0xFFFF0000;
 				target.atom = parser.findAtomByAddress(sreloc->r_value());
-				target.addend = (srcAddr + displacement) - target.atom->_objAddress;
+				target.addend = (uint64_t)(srcAddr + displacement) - (uint64_t)target.atom->_objAddress;
 				parser.addFixups(src, ld::Fixup::kindStorePPCBranch14, target);
 				break;
 			case PPC_RELOC_BR24:
@@ -6952,7 +6952,7 @@ bool Section<A>::addRelocFixup_powerpc(class Parser<A>& parser,
 				if ( (displacement & 0x02000000) != 0 )
 					displacement |= 0xFC000000;
 				target.atom = parser.findAtomByAddress(sreloc->r_value());
-				target.addend = (srcAddr + displacement) - target.atom->_objAddress;
+				target.addend = (uint64_t)(srcAddr + displacement) - (uint64_t)target.atom->_objAddress;
 				parser.addFixups(src, ld::Fixup::kindStorePPCBranch24, target);
 				break;
 			case PPC_RELOC_LO16_SECTDIFF:
@@ -6962,9 +6962,9 @@ bool Section<A>::addRelocFixup_powerpc(class Parser<A>& parser,
 				dstAddr = nextRelocValue + ((nextRelocAddress << 16) | ((uint32_t)lowBits & 0x0000FFFF));
 				parser.findTargetFromAddress(sreloc->r_value(), target);
 				if ( target.atom != NULL )
-					target.addend = dstAddr - target.atom->_objAddress;
+					target.addend = (uint64_t)dstAddr - (uint64_t)target.atom->_objAddress;
 				picBase.atom = parser.findAtomByAddress(nextRelocValue);
-				picBase.addend = nextRelocValue - picBase.atom->_objAddress;
+				picBase.addend = (uint64_t)nextRelocValue - (uint64_t)picBase.atom->_objAddress;
 				picBase.weakImport = false;
 				picBase.name = NULL;
 				parser.addFixups(src, ld::Fixup::kindStorePPCPicLow16, target, picBase);
@@ -6976,9 +6976,9 @@ bool Section<A>::addRelocFixup_powerpc(class Parser<A>& parser,
 				dstAddr = nextRelocValue + ((nextRelocAddress << 16) | ((uint32_t)lowBits & 0x0000FFFF));
 				parser.findTargetFromAddress(sreloc->r_value(), target);
 				if ( target.atom != NULL )
-					target.addend = dstAddr - target.atom->_objAddress;
+					target.addend = (uint64_t)dstAddr - (uint64_t)target.atom->_objAddress;
 				picBase.atom = parser.findAtomByAddress(nextRelocValue);
-				picBase.addend = nextRelocValue - picBase.atom->_objAddress;
+				picBase.addend = (uint64_t)nextRelocValue - (uint64_t)picBase.atom->_objAddress;
 				picBase.weakImport = false;
 				picBase.name = NULL;
 				parser.addFixups(src, ld::Fixup::kindStorePPCPicLow14, target, picBase);
@@ -6990,9 +6990,9 @@ bool Section<A>::addRelocFixup_powerpc(class Parser<A>& parser,
 				dstAddr = nextRelocValue + (((instruction & 0x0000FFFF) << 16) + (int32_t)lowBits);
 				parser.findTargetFromAddress(sreloc->r_value(), target);
 				if ( target.atom != NULL )
-					target.addend = dstAddr - target.atom->_objAddress;
+					target.addend = (uint64_t)dstAddr - (uint64_t)target.atom->_objAddress;
 				picBase.atom = parser.findAtomByAddress(nextRelocValue);
-				picBase.addend = nextRelocValue - picBase.atom->_objAddress;
+				picBase.addend = (uint64_t)nextRelocValue - (uint64_t)picBase.atom->_objAddress;
 				picBase.weakImport = false;
 				picBase.name = NULL;
 				parser.addFixups(src, ld::Fixup::kindStorePPCPicHigh16AddLow, target, picBase);
@@ -7039,11 +7039,11 @@ bool Section<A>::addRelocFixup_powerpc(class Parser<A>& parser,
 						case 0:
 							throw "bad length for PPC_RELOC_SECTDIFF";
 						case 1:
-							contentValue = (int32_t)(int16_t)BigEndian::get16(*((uint16_t*)fixUpPtr));
+							contentValue = (int64_t)(int16_t)BigEndian::get16(*((uint16_t*)fixUpPtr));
 							kind = ld::Fixup::kindStoreBigEndian16;
 							break;
 						case 2:
-							contentValue = BigEndian::get32(*((uint32_t*)fixUpPtr));
+							contentValue = (int64_t)(int32_t)BigEndian::get32(*((uint32_t*)fixUpPtr));
 							kind = ld::Fixup::kindStoreBigEndian32;
 							break;
 						case 3:
@@ -7054,10 +7054,10 @@ bool Section<A>::addRelocFixup_powerpc(class Parser<A>& parser,
 					}
 					Atom<A>* fromAtom  = parser.findAtomByAddress(nextRelocValue);
 					Atom<A>* targetAtom = parser.findAtomByAddress(sreloc->r_value());
-					uint32_t offsetInFrom = nextRelocValue - fromAtom->_objAddress;
-					uint32_t offsetInTarget = sreloc->r_value() - targetAtom->_objAddress;
+					uint64_t offsetInFrom = (uint64_t)nextRelocValue - (uint64_t)fromAtom->_objAddress;
+					uint64_t offsetInTarget = (uint64_t)sreloc->r_value() - (uint64_t)targetAtom->_objAddress;
 					// check for addend encoded in the section content
-					int32_t addend = contentValue - (sreloc->r_value() - nextRelocValue);
+					int32_t addend = (uint64_t)contentValue - (int64_t)((uint64_t)sreloc->r_value() - (uint64_t)nextRelocValue);
 					if ( addend < 0 ) {
 						if ( targetAtom->scope() == ld::Atom::scopeTranslationUnit ) {
 							parser.addFixup(src, ld::Fixup::k1of5, ld::Fixup::kindSetTargetAddress, targetAtom);
