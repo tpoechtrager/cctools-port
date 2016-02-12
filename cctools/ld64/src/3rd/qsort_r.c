@@ -28,7 +28,6 @@
  */
 
 #define I_AM_QSORT_R
-#define qsort_r qsort_r_local
 
 #include <sys/cdefs.h>
 
@@ -36,6 +35,8 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+
+#define qsort_r qsort_r_local
 
 #ifndef __FreeBSD__
 /* flsl.c */
