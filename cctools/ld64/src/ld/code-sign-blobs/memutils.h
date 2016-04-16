@@ -31,6 +31,7 @@
 //#include <security_utilities/utilities.h>
 #include <sys/types.h>
 #include <stdlib.h>
+#include <stddef.h> // ld64-port
 #include <algorithm>
 
 #ifdef __GLIBCXX__ // ld64-port
