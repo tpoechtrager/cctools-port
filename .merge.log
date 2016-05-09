@@ -1,3 +1,15 @@
+## cctools 877.5 -> 877.8 ##
+
+patching file include/mach-o/loader.h
+patching file libstuff/execute.c
+patching file libstuff/ofile.c
+patching file libstuff/swap_headers.c
+patching file misc/bitcode_strip.c
+Hunk #11 NOT MERGED at 364-373, merged at 377, merged at 382-385.
+Hunk #20 merged at 547-557.
+patching file otool/main.c
+patching file otool/ofile_print.c
+
 ## ld64 253.3 -> ld64 253.9 ##
 
 patching file src/ld/InputFiles.cpp
@@ -27,8 +39,8 @@ The text leading up to this was:
 |--- ../cctools-870/Makefile    2015-08-26 07:49:15.000000000 +0200
 |+++ ./Makefile 2015-09-15 03:35:14.000000000 +0200
 --------------------------
-File to patch: 
-Skip this patch? [y] 
+File to patch:
+Skip this patch? [y]
 Skipping patch.
 3 out of 3 hunks ignored
 patching file ./as/driver.c
@@ -64,8 +76,8 @@ The text leading up to this was:
 |--- ../cctools-870/misc/Makefile       2013-12-10 20:28:11.000000000 +0100
 |+++ ./misc/Makefile    2015-03-10 01:33:19.000000000 +0100
 --------------------------
-File to patch: 
-Skip this patch? [y] 
+File to patch:
+Skip this patch? [y]
 Skipping patch.
 7 out of 7 hunks ignored
 patching file ./misc/bitcode_strip.c
@@ -90,8 +102,8 @@ The text leading up to this was:
 |--- ../cctools-870/otool/Makefile      2014-01-14 01:21:55.000000000 +0100
 |+++ ./otool/Makefile   2015-03-10 01:33:19.000000000 +0100
 --------------------------
-File to patch: 
-Skip this patch? [y] 
+File to patch:
+Skip this patch? [y]
 Skipping patch.
 1 out of 1 hunk ignored
 patching file ./otool/main.c
@@ -128,8 +140,8 @@ The text leading up to this was:
 |--- ../ld64-242.2/ld64.xcodeproj/project.pbxproj       2014-08-20 00:19:03.000000000 +0200
 |+++ ./ld64.xcodeproj/project.pbxproj   2015-05-20 08:11:58.000000000 +0200
 --------------------------
-File to patch: 
-Skip this patch? [y] 
+File to patch:
+Skip this patch? [y]
 Skipping patch.
 22 out of 22 hunks ignored
 patching file ./src/abstraction/MachOFileAbstraction.hpp
@@ -158,8 +170,8 @@ patching file ./src/ld/ld.cpp
 patching file ./src/ld/ld.hpp
 Hunk #1 merged at 35-36,38,45-47.
 The next patch would delete the file ./src/ld/lto_file.hpp,
-which does not exist!  Assume -R? [n] 
-Apply anyway? [n] 
+which does not exist!  Assume -R? [n]
+Apply anyway? [n]
 Skipping patch.
 1 out of 1 hunk ignored
 patching file ./src/ld/parsers/lto_file.cpp
@@ -206,8 +218,8 @@ The text leading up to this was:
 |--- ../ld64-242/unit-tests/test-cases/branch-islands/space.s   2013-10-19 03:10:28.000000000 +0200
 |+++ ./unit-tests/test-cases/branch-islands/space.s     2015-05-05 21:42:23.000000000 +0200
 --------------------------
-File to patch: 
-Skip this patch? [y] 
+File to patch:
+Skip this patch? [y]
 Skipping patch.
 1 out of 1 hunk ignored
 
@@ -307,7 +319,7 @@ patching file ./src/ld/parsers/lto_file.cpp
 Hunk #2 NOT MERGED at 499-507.                                        # Resolved.
 patching file ./src/ld/parsers/lto_file.h
 patching file ./src/ld/parsers/macho_relocatable_file.cpp
-Hunk #8 merged at 4219-4234. 
+Hunk #8 merged at 4219-4234.
 patching file ./src/ld/parsers/macho_relocatable_file.h
 patching file ./src/ld/passes/compact_unwind.cpp
 patching file ./src/other/ObjectDump.cpp
@@ -318,28 +330,28 @@ patching file ./src/other/unwinddump.cpp
 ## cctools 855 -> 862 ##
 
 patching file efitools/mtoc.c
-Reversed (or previously applied) patch detected!  Assume -R? [n] 
-Apply anyway? [n] 
+Reversed (or previously applied) patch detected!  Assume -R? [n]
+Apply anyway? [n]
 Skipping patch.
 2 out of 2 hunks ignored -- saving rejects to file efitools/mtoc.c.rej
 patching file include/llvm-c/Disassembler.h
-Reversed (or previously applied) patch detected!  Assume -R? [n] 
-Apply anyway? [n] 
+Reversed (or previously applied) patch detected!  Assume -R? [n]
+Apply anyway? [n]
 Skipping patch.
 1 out of 1 hunk ignored -- saving rejects to file include/llvm-c/Disassembler.h.rej
 patching file include/mach-o/loader.h
-Reversed (or previously applied) patch detected!  Assume -R? [n] 
-Apply anyway? [n] 
+Reversed (or previously applied) patch detected!  Assume -R? [n]
+Apply anyway? [n]
 Skipping patch.
 1 out of 1 hunk ignored -- saving rejects to file include/mach-o/loader.h.rej
 patching file include/mach-o/nlist.h
-Reversed (or previously applied) patch detected!  Assume -R? [n] 
-Apply anyway? [n] 
+Reversed (or previously applied) patch detected!  Assume -R? [n]
+Apply anyway? [n]
 Skipping patch.
 1 out of 1 hunk ignored -- saving rejects to file include/mach-o/nlist.h.rej
 patching file include/stuff/llvm.h
-Reversed (or previously applied) patch detected!  Assume -R? [n] 
-Apply anyway? [n] 
+Reversed (or previously applied) patch detected!  Assume -R? [n]
+Apply anyway? [n]
 Skipping patch.
 1 out of 1 hunk ignored -- saving rejects to file include/stuff/llvm.h.rej
 can't find file to patch at input line 103
@@ -350,8 +362,8 @@ The text leading up to this was:
 |--- ../cctools-855/libmacho/arch.c     2014-04-05 00:42:22.000000000 +0200
 |+++ ./libmacho/arch.c  2014-11-02 06:48:07.000000000 +0100
 --------------------------
-File to patch: 
-Skip this patch? [y] 
+File to patch:
+Skip this patch? [y]
 Skipping patch.
 1 out of 1 hunk ignored
 patching file libstuff/checkout.c
@@ -399,8 +411,8 @@ The text leading up to this was:
 |--- ../ld64-236.3/ld64.xcodeproj/project.pbxproj       2014-04-05 00:42:29.000000000 +0200
 |+++ ./ld64.xcodeproj/project.pbxproj   2014-11-04 00:58:03.000000000 +0100
 --------------------------
-File to patch: 
-Skip this patch? [y] 
+File to patch:
+Skip this patch? [y]
 Skipping patch.
 3 out of 3 hunks ignored
 patching file src/abstraction/MachOFileAbstraction.hpp
@@ -525,8 +537,8 @@ The text leading up to this was:
 |--- ../ld64-236.3/unit-tests/include/common.makefile   2014-04-05 00:42:29.000000000 +0200
 |+++ ./unit-tests/include/common.makefile       2014-09-11 00:24:46.000000000 +0200
 --------------------------
-File to patch: 
-Skip this patch? [y] 
+File to patch:
+Skip this patch? [y]
 Skipping patch.
 2 out of 2 hunks ignored
 patching file unit-tests/test-cases/alias-basic/aliases.s
@@ -540,8 +552,8 @@ The text leading up to this was:
 |--- ../ld64-236.3/unit-tests/test-cases/alias-objects/aliases.s        2014-04-05 00:42:29.000000000 +0200
 |+++ ./unit-tests/test-cases/alias-objects/aliases.s    2014-09-11 00:24:46.000000000 +0200
 --------------------------
-File to patch: 
-Skip this patch? [y] 
+File to patch:
+Skip this patch? [y]
 Skipping patch.
 1 out of 1 hunk ignored
 can't find file to patch at input line 3668
@@ -552,8 +564,8 @@ The text leading up to this was:
 |--- ../ld64-236.3/unit-tests/test-cases/alias-objects/Makefile 2014-04-05 00:42:29.000000000 +0200
 |+++ ./unit-tests/test-cases/alias-objects/Makefile     2014-09-11 00:24:46.000000000 +0200
 --------------------------
-File to patch: 
-Skip this patch? [y] 
+File to patch:
+Skip this patch? [y]
 Skipping patch.
 2 out of 2 hunks ignored
 patching file unit-tests/test-cases/alt-entry/foo.c
@@ -596,8 +608,8 @@ The text leading up to this was:
 |--- ../ld64-236.3/unit-tests/test-cases/section-labels/main.c  2014-04-05 00:42:29.000000000 +0200
 |+++ ./unit-tests/test-cases/section-labels/main.c      2014-09-11 00:24:46.000000000 +0200
 --------------------------
-File to patch: 
-Skip this patch? [y] 
+File to patch:
+Skip this patch? [y]
 Skipping patch.
 1 out of 1 hunk ignored
 patching file unit-tests/test-cases/symbol-section-move/main.c
@@ -613,7 +625,7 @@ The text leading up to this was:
 |--- ../ld64-236.3/unit-tests/test-cases/weak_import-undefined/Makefile 2014-04-05 00:42:29.000000000 +0200
 |+++ ./unit-tests/test-cases/weak_import-undefined/Makefile     2014-09-11 00:24:46.000000000 +0200
 --------------------------
-File to patch: 
-Skip this patch? [y] 
+File to patch:
+Skip this patch? [y]
 Skipping patch.
 1 out of 1 hunk ignored

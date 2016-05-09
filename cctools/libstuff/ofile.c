@@ -4204,6 +4204,26 @@ check_linkedit_data_command:
 		}
 		break;
 
+	    case LC_VERSION_MIN_TVOS:
+		if(l.cmdsize < sizeof(struct version_min_command)){
+		    Mach_O_error(ofile, "malformed object (LC_VERSION_MIN_"
+				 " cmdsize too small) in command %u",i);
+		    goto return_bad;
+		}
+		if(vers != NULL){
+		    Mach_O_error(ofile, "malformed object (more than one "
+			"LC_VERSION_MIN_ command)");
+		    goto return_bad;
+		}
+		vers = (struct version_min_command *)lc;
+		if(swapped)
+		    swap_version_min_command(vers, host_byte_sex);
+		if(vers->cmdsize < sizeof(struct version_min_command)){
+		    Mach_O_error(ofile, "malformed object (LC_VERSION_MIN_"
+			" command %u has too small cmdsize field)", i);
+		    goto return_bad;
+		}
+		break;
 
 	    case LC_VERSION_MIN_WATCHOS:
 		if(l.cmdsize < sizeof(struct version_min_command)){

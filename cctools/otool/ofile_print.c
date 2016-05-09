@@ -2293,6 +2293,7 @@ enum bool very_verbose)
 	    case LC_VERSION_MIN_MACOSX:
 	    case LC_VERSION_MIN_IPHONEOS:
 	    case LC_VERSION_MIN_WATCHOS:
+	    case LC_VERSION_MIN_TVOS:
 		memset((char *)&vd, '\0', sizeof(struct version_min_command));
 		size = left < sizeof(struct version_min_command) ?
 		       left : sizeof(struct version_min_command);
@@ -3504,6 +3505,8 @@ struct version_min_command *vd)
 	    printf("      cmd LC_VERSION_MIN_IPHONEOS\n");
 	else if(vd->cmd == LC_VERSION_MIN_WATCHOS)
 	    printf("      cmd LC_VERSION_MIN_WATCHOS\n");
+	else if(vd->cmd == LC_VERSION_MIN_TVOS)
+	    printf("      cmd LC_VERSION_MIN_TVOS\n");
 	else
 	    printf("      cmd %u (?)\n", vd->cmd);
 	printf("  cmdsize %u", vd->cmdsize);
@@ -6043,7 +6046,7 @@ enum bool swapped)
     uint32_t left, *state, i, j;
 
 	left = end - begin;
-	if(left * sizeof(uint32_t) >= count){
+	if(left / sizeof(uint32_t) >= count){
 	    state = allocate(count * sizeof(uint32_t));
 	    memcpy((char *)state, begin, count * sizeof(uint32_t));
 	    begin += count * sizeof(uint32_t);

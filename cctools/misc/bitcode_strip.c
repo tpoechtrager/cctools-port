@@ -23,11 +23,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <libc.h>
 #include "stuff/bool.h"
 #include "stuff/errors.h"
 #include "stuff/breakout.h"
 #include "stuff/allocate.h"
 #include "stuff/rnd.h"
+#include "stuff/execute.h"
 
 /* used by error routines as the name of the program */
 char *progname = NULL;
@@ -35,6 +37,7 @@ char *progname = NULL;
 static enum bool rflag = FALSE; /* remove bitcode segment */
 static enum bool mflag = FALSE; /* remove bitcode but leave a marker segment */
 static enum bool lflag = FALSE; /* leave only bitcode segment */
+static enum bool vflag = FALSE; /* to print internal commands that are run */
 
 /*
  * We shortcut bitcode_strip(1) to do nothing with the -r option when there is
@@ -53,14 +56,17 @@ static void process(
 
 static enum bool check_object(
     struct arch *arch,
+    struct member *member,
     struct object *object);
 
 static void strip_bitcode_segment(
     struct arch *arch,
+    struct member *member,
     struct object *object);
 
 static void leave_just_bitcode_segment(
     struct arch *arch,
+    struct member *member,
     struct object *object);
 
 static void strip_bitcode_from_load_commands(
@@ -73,6 +79,20 @@ static void leave_only_bitcode_load_commands(
 
 static void reset_pointers_for_object_load_commands(
     struct arch *arch,
+    struct object *object);
+
+static void make_ld_process_mh_object(
+    struct arch *arch,
+    struct member *member,
+    struct object *object);
+
+static void make_ld_r_object(
+    struct arch *arch,
+    struct object *object);
+
+static void setup_symbolic_info_for_mh_object(
+    struct arch *arch,
+    struct member *member,
     struct object *object);
 
 /*
@@ -132,6 +152,9 @@ char **envp)
 		}
 		mflag = TRUE;
 	    }
+	    else if(strcmp(argv[i], "-v") == 0){
+		vflag = TRUE;
+	    }
 	    else{
 		if(input != NULL){
 		    error("more than one input file specified (%s and %s)",
@@ -157,13 +180,26 @@ char **envp)
 	process(archs, narchs);
 
 	/*
-	 * We shortcut bitcode_strip(1) to do nothing with the -r option when
-	 * there is no bitcode and the input file is the same as the output
-	 * file.
+	 * We shortcut bitcode_strip(1) with the -r option when there is no
+	 * bitcode.
 	 */
-	if(rflag && some_slice_has_bitcode == FALSE &&
-	   strcmp(input, output) == 0)
+	if(rflag && some_slice_has_bitcode == FALSE){
+	    /* If the input file is the same as the output file do nothing. */
+	    if(strcmp(input, output) == 0)
+		return(EXIT_SUCCESS);
+
+	    /*
+	     * Otherwise cp(1) the input to the output to not mess up the
+	     * code signature
+	     */
+	    reset_execute_list();
+	    add_execute_list("/bin/cp");
+	    add_execute_list(input);
+	    add_execute_list(output);
+	    if(execute_list(vflag) == 0)
+		fatal("internal /bin/cp command failed");
 	    return(EXIT_SUCCESS);
+	}
 
 	writeout(archs, narchs, output, 0777, TRUE, FALSE, FALSE, NULL);
 
@@ -197,28 +233,25 @@ struct arch *archs,
 uint32_t narchs)
 {
     uint32_t i;
-#ifdef ALLOW_ARCHIVES
+
     uint32_t j, offset, size;
-#endif
     struct object *object;
 
 	for(i = 0; i < narchs; i++){
 	    if(archs[i].type == OFILE_ARCHIVE){
-#ifndef ALLOW_ARCHIVES
-		error_arch(archs + i, NULL, "input file must be a linked "
-			   "Mach-O file not an archive: ");
-		return;
-#else /* defined(ALLOW_ARCHIVES) */
 		for(j = 0; j < archs[i].nmembers; j++){
 		    if(archs[i].members[j].type == OFILE_Mach_O){
 			object = archs[i].members[j].object;
-			if(check_object(archs + i, object) == FALSE)
+			if(check_object(archs + i, archs[i].members + j,
+					object) == FALSE)
 			    return;
-			if(rflag || (object->seg_bitcode == NULL &&
-				     object->seg_bitcode64 == NULL))
-			    strip_bitcode_segment(archs + i, object);
+			if(rflag || mflag)
+			    strip_bitcode_segment(archs + i,
+						  archs[i].members + j, object);
 			else
-			    leave_just_bitcode_segment(archs + i, object);
+			    leave_just_bitcode_segment(archs + i,
+						       archs[i].members + j,
+						       object);
 		    }
 		}
 		/*
@@ -230,13 +263,18 @@ uint32_t narchs)
 		    size = 0;
 		    if(archs[i].members[j].member_long_name == TRUE){
 			size = rnd(archs[i].members[j].member_name_size,
-				     sizeof(int32_t));
+				     sizeof(int64_t));
+			size = rnd(archs[i].members[j].member_name_size, 8) +
+			       (rnd(sizeof(struct ar_hdr), 8) -
+				sizeof(struct ar_hdr));
 			archs[i].toc_long_name = TRUE;
 		    }
 		    if(archs[i].members[j].object != NULL){
-			size += archs[i].members[j].object->object_size
-			   - archs[i].members[j].object->input_sym_info_size
-			   + archs[i].members[j].object->output_sym_info_size;
+			size +=
+			   rnd(archs[i].members[j].object->object_size -
+			     archs[i].members[j].object->input_sym_info_size +
+			     archs[i].members[j].object->output_sym_info_size,
+			     8);
 			sprintf(archs[i].members[j].ar_hdr->ar_size, "%-*ld",
 			       (int)sizeof(archs[i].members[j].ar_hdr->ar_size),
 			       (long)(size));
@@ -253,17 +291,15 @@ uint32_t narchs)
 		    offset += sizeof(struct ar_hdr) + size;
 		}
 		archs[i].library_size = offset;
-#endif /* defined(ALLOW_ARCHIVES) */
 	    }
 	    else if(archs[i].type == OFILE_Mach_O){
 		object = archs[i].object;
-		if(check_object(archs +i, object) == FALSE)
+		if(check_object(archs + i, NULL, object) == FALSE)
 		    return;
-		if(rflag || mflag || (object->seg_bitcode == NULL &&
-			              object->seg_bitcode64 == NULL))
-		    strip_bitcode_segment(archs + i, object);
+		if(rflag || mflag)
+		    strip_bitcode_segment(archs + i, NULL, object);
 		else
-		    leave_just_bitcode_segment(archs + i, object);
+		    leave_just_bitcode_segment(archs + i, NULL, object);
 	    }
 	}
 }
@@ -271,15 +307,16 @@ uint32_t narchs)
 /*
  * check_object() checks to make sure the object is one that can processed for
  * stripping the bitcode segment or just leaving only the bitcode segment.
- * This must be a fully linked Mach-O file for use with the dynamic linker.
- * And if built for the Watch OS it must have a bitcode segment.
- * And the bitcode segment must not have any relocation entries or symbols
- * defined it its sections.  And its sections must be of type S_REGULAR.
+ * If not a .o file this must be a fully linked Mach-O file for use with the
+ * dynamic linker.  And the bitcode segment must not have any relocation
+ * entries or symbols defined it its sections.  And its sections must be of
+ * type S_REGULAR.
  */
 static
 enum bool
 check_object(
 struct arch *arch,
+struct member *member,
 struct object *object)
 {
     uint32_t i, mh_ncmds, mh_flags;
@@ -295,19 +332,19 @@ struct object *object)
 
 	sg64 = NULL; /* cctools-port */
 
-
-        if(arch->object->mh != NULL){
-            mh_ncmds = arch->object->mh->ncmds;
+        if(object->mh != NULL){
+	    mh_ncmds = object->mh->ncmds;
 	    mh_flags = object->mh->flags;
 	}
 	else{
-            mh_ncmds = arch->object->mh64->ncmds;
+	    mh_ncmds = object->mh64->ncmds;
 	    mh_flags = object->mh64->flags;
 	}
 
-	if((mh_flags & MH_DYLDLINK) != MH_DYLDLINK)
-	    fatal_arch(arch, NULL, "can't be used on a file not built for use "
-		       "with the dynamic linker: ");
+	if(object->mh_filetype != MH_OBJECT &&
+	   (mh_flags & MH_DYLDLINK) != MH_DYLDLINK)
+	    fatal_arch(arch, member, "can't be used on a file not built for "
+		       "use with the dynamic linker: ");
 
 	/*
 	 * If it has a bitcode segment it can't have any relocation entries.
@@ -329,7 +366,7 @@ struct object *object)
 	if(object->seg_bitcode != NULL || object->seg_bitcode64 != NULL){
 	    section_ordinal = 1;
 	    first_bitcode_section_ordinal = 0;
-	    lc = arch->object->load_commands;
+	    lc = object->load_commands;
 	    for(i = 0; i < mh_ncmds && first_bitcode_section_ordinal == 0; i++){
 		if(lc->cmd == LC_SEGMENT){
 		    sg = (struct segment_command *)lc;
@@ -338,7 +375,7 @@ struct object *object)
 			last_bitcode_section_ordinal = section_ordinal +
 						       sg->nsects;
 		    }
-		    section_ordinal += sg64->nsects;
+		    section_ordinal += sg->nsects;
 		}
 		else if(lc->cmd == LC_SEGMENT_64){
 		    sg64 = (struct segment_command_64 *)lc;
@@ -359,8 +396,8 @@ struct object *object)
 			if((symbols[i].n_type & N_TYPE) == N_SECT &&
 			   symbols[i].n_sect >= first_bitcode_section_ordinal &&
 			   symbols[i].n_sect < last_bitcode_section_ordinal){
-	    		    fatal_arch(arch, NULL, "bitcode segment can't have "
-				"symbols defined it its sections in: ");
+	    		    fatal_arch(arch, member, "bitcode segment can't "
+				"have symbols defined it its sections in: ");
 			}
 		    }
 		}
@@ -372,8 +409,8 @@ struct object *object)
 			   symbols64[i].n_sect >=
 				first_bitcode_section_ordinal &&
 			   symbols64[i].n_sect < last_bitcode_section_ordinal){
-	    		    fatal_arch(arch, NULL, "bitcode segment can't have "
-				"symbols defined it its sections in: ");
+	    		    fatal_arch(arch, member, "bitcode segment can't "
+				"have symbols defined it its sections in: ");
 			}
 		    }
 		}
@@ -389,7 +426,7 @@ struct object *object)
 				   sizeof(struct segment_command));
 	    for(i = 0; i < object->seg_bitcode->nsects; i++){
 		if((s->flags & SECTION_TYPE) != S_REGULAR)
-		    fatal_arch(arch, NULL, "bitcode segment can't have "
+		    fatal_arch(arch, member, "bitcode segment can't have "
 			"sections that are not of type S_REGULAR in: ");
 		s++;
 	    }
@@ -399,7 +436,7 @@ struct object *object)
 				        sizeof(struct segment_command_64));
 	    for(i = 0; i < object->seg_bitcode64->nsects; i++){
 		if((s64->flags & SECTION_TYPE) != S_REGULAR)
-		    fatal_arch(arch, NULL, "bitcode segment can't have "
+		    fatal_arch(arch, member, "bitcode segment can't have "
 			"sections that are not of type S_REGULAR in: ");
 		s64++;
 	    }
@@ -414,8 +451,8 @@ struct object *object)
 #if 0
 	if(lflag == TRUE &&
 	   object->seg_bitcode == NULL && object->seg_bitcode64 == NULL)
-	    fatal_arch(arch, NULL, "-l to leave only bitcode segment can't be "
-		       "used on a file without a __LLVM segment: ");
+	    fatal_arch(arch, member, "-l to leave only bitcode segment can't "
+		       "be used on a file without a __LLVM segment: ");
 #endif
 
 	return(TRUE);
@@ -440,6 +477,7 @@ static
 void
 strip_bitcode_segment(
 struct arch *arch,
+struct member *member,
 struct object *object)
 {
     uint32_t start_offset, offset, end_of_string_table, alignment_padding;
@@ -453,6 +491,17 @@ struct object *object)
     struct section_64 *s64;
 
 	segalign = 0; /* cctools-port */
+
+	/*
+	 * For MH_OBJECT files, .o files, the bitcode info is in two sections
+	 * and requires a static link editor operation to remove or change to
+	 * a marker.  So to do this an ld(1) -r is run with an option to
+	 * process the object file as needed.
+	 */
+	if(object->mh_filetype == MH_OBJECT){
+	    make_ld_process_mh_object(arch, member, object);
+	    return;
+	}
 
 	/*
 	 * If we are removing the bitcode segment and leaving just a marker
@@ -911,6 +960,7 @@ static
 void
 leave_just_bitcode_segment(
 struct arch *arch,
+struct member *member,
 struct object *object)
 {
     uint32_t i, start_offset, offset, sect_offset;
@@ -919,6 +969,16 @@ struct object *object)
     struct segment_command_64 *sg64;
     struct section *s;
     struct section_64 *s64;
+
+	/*
+	 * For MH_OBJECT files, .o files there is no static link editor
+         * operation to just leave the bitcode.  So this is a hard error.
+	 */
+	if(object->mh_filetype == MH_OBJECT) {
+	    fatal_arch(arch, member, "Can't use the -l option on .o files "
+		       "(filetypes of MH_OBJECT) for: ");
+	    return;
+	}
 
 	/*
 	 * To get the right amount of the start of the file copied out by
@@ -942,8 +1002,8 @@ struct object *object)
 	 */
 	if(object->mh != NULL){
 	    start_offset = 0;
-	    lc = arch->object->load_commands;
-	    for(i = 0; i < arch->object->mh->ncmds && start_offset == 0; i++){
+	    lc = object->load_commands;
+	    for(i = 0; i < object->mh->ncmds && start_offset == 0; i++){
 		if(lc->cmd == LC_SEGMENT){
 		    sg = (struct segment_command *)lc;
 		    if(sg->filesize != 0 && sg->fileoff == 0){
@@ -982,8 +1042,8 @@ struct object *object)
 	}
 	else{
 	    start_offset = 0;
-	    lc = arch->object->load_commands;
-	    for(i = 0; i < arch->object->mh64->ncmds && start_offset == 0; i++){
+	    lc = object->load_commands;
+	    for(i = 0; i < object->mh64->ncmds && start_offset == 0; i++){
 		if(lc->cmd == LC_SEGMENT_64){
 		    sg64 = (struct segment_command_64 *)lc;
 		    if(sg64->filesize != 0 && sg64->fileoff == 0){
@@ -1194,13 +1254,13 @@ struct object *object)
 	 * Allocate space for the new load commands and zero it out so any holes
 	 * will be zero bytes.
 	 */
-        if(arch->object->mh != NULL){
-            mh_ncmds = arch->object->mh->ncmds;
-	    mh_sizeofcmds = arch->object->mh->sizeofcmds;
+        if(object->mh != NULL){
+	    mh_ncmds = object->mh->ncmds;
+	    mh_sizeofcmds = object->mh->sizeofcmds;
 	}
 	else{
-            mh_ncmds = arch->object->mh64->ncmds;
-	    mh_sizeofcmds = arch->object->mh64->sizeofcmds;
+	    mh_ncmds = object->mh64->ncmds;
+	    mh_sizeofcmds = object->mh64->sizeofcmds;
 	}
 	new_load_commands = allocate(mh_sizeofcmds);
 	memset(new_load_commands, '\0', mh_sizeofcmds);
@@ -1211,7 +1271,7 @@ struct object *object)
 	 * Unless the -m flag is specified then do copy the bitcode segment
 	 * load command.
 	 */
-	lc1 = arch->object->load_commands;
+	lc1 = object->load_commands;
 	lc2 = new_load_commands;
 	new_ncmds = 0;
 	new_sizeofcmds = 0;
@@ -1248,16 +1308,16 @@ struct object *object)
 	 * Finally copy the updated load commands over the existing load
 	 * commands.
 	 */
-	memcpy(arch->object->load_commands, new_load_commands, new_sizeofcmds);
+	memcpy(object->load_commands, new_load_commands, new_sizeofcmds);
 	if(mh_sizeofcmds > new_sizeofcmds)
-		memset((char *)arch->object->load_commands + new_sizeofcmds,
+		memset((char *)object->load_commands + new_sizeofcmds,
 		       '\0', (mh_sizeofcmds - new_sizeofcmds));
-        if(arch->object->mh != NULL) {
-            arch->object->mh->sizeofcmds = new_sizeofcmds;
-            arch->object->mh->ncmds = new_ncmds;
+        if(object->mh != NULL) {
+            object->mh->sizeofcmds = new_sizeofcmds;
+            object->mh->ncmds = new_ncmds;
         } else {
-            arch->object->mh64->sizeofcmds = new_sizeofcmds;
-            arch->object->mh64->ncmds = new_ncmds;
+            object->mh64->sizeofcmds = new_sizeofcmds;
+            object->mh64->ncmds = new_ncmds;
         }
 	free(new_load_commands);
 
@@ -1297,13 +1357,13 @@ struct object *object)
 	 * Allocate space for the new load commands and zero it out so any holes
 	 * will be zero bytes.
 	 */
-        if(arch->object->mh != NULL){
-            mh_ncmds = arch->object->mh->ncmds;
-	    mh_sizeofcmds = arch->object->mh->sizeofcmds;
+        if(object->mh != NULL){
+	    mh_ncmds = object->mh->ncmds;
+	    mh_sizeofcmds = object->mh->sizeofcmds;
 	}
 	else{
-            mh_ncmds = arch->object->mh64->ncmds;
-	    mh_sizeofcmds = arch->object->mh64->sizeofcmds;
+	    mh_ncmds = object->mh64->ncmds;
+	    mh_sizeofcmds = object->mh64->sizeofcmds;
 	}
 	new_load_commands = allocate(mh_sizeofcmds);
 	memset(new_load_commands, '\0', mh_sizeofcmds);
@@ -1313,7 +1373,7 @@ struct object *object)
 	 * LC_DYLIB_CODE_SIGN_DRS.  For the segment commands other than the
 	 * bitcode segment and linkedit segment zero out the fields.
 	 */
-	lc1 = arch->object->load_commands;
+	lc1 = object->load_commands;
 	lc2 = new_load_commands;
 	new_ncmds = 0;
 	new_sizeofcmds = 0;
@@ -1386,16 +1446,16 @@ struct object *object)
 	 * Finally copy the updated load commands over the existing load
 	 * commands.
 	 */
-	memcpy(arch->object->load_commands, new_load_commands, new_sizeofcmds);
+	memcpy(object->load_commands, new_load_commands, new_sizeofcmds);
 	if(mh_sizeofcmds > new_sizeofcmds)
-		memset((char *)arch->object->load_commands + new_sizeofcmds,
+		memset((char *)object->load_commands + new_sizeofcmds,
 		       '\0', (mh_sizeofcmds - new_sizeofcmds));
-        if(arch->object->mh != NULL) {
-            arch->object->mh->sizeofcmds = new_sizeofcmds;
-            arch->object->mh->ncmds = new_ncmds;
+        if(object->mh != NULL) {
+            object->mh->sizeofcmds = new_sizeofcmds;
+            object->mh->ncmds = new_ncmds;
         } else {
-            arch->object->mh64->sizeofcmds = new_sizeofcmds;
-            arch->object->mh64->ncmds = new_ncmds;
+            object->mh64->sizeofcmds = new_sizeofcmds;
+            object->mh64->ncmds = new_ncmds;
         }
 	free(new_load_commands);
 
@@ -1426,40 +1486,40 @@ struct object *object)
     struct segment_command *sg;
     struct segment_command_64 *sg64;
 
-        if(arch->object->mh != NULL)
-            mh_ncmds = arch->object->mh->ncmds;
+        if(object->mh != NULL)
+            mh_ncmds = object->mh->ncmds;
         else
-            mh_ncmds = arch->object->mh64->ncmds;
+            mh_ncmds = object->mh64->ncmds;
 
 	/* reset the pointers into the load commands */
-	lc = arch->object->load_commands;
+	lc = object->load_commands;
 	for(i = 0; i < mh_ncmds; i++){
 	    switch(lc->cmd){
 	    case LC_SYMTAB:
-		arch->object->st = (struct symtab_command *)lc;
+		object->st = (struct symtab_command *)lc;
 	        break;
 	    case LC_DYSYMTAB:
-		arch->object->dyst = (struct dysymtab_command *)lc;
+		object->dyst = (struct dysymtab_command *)lc;
 		break;
 	    case LC_TWOLEVEL_HINTS:
-		arch->object->hints_cmd = (struct twolevel_hints_command *)lc;
+		object->hints_cmd = (struct twolevel_hints_command *)lc;
 		break;
 	    case LC_PREBIND_CKSUM:
-		arch->object->cs = (struct prebind_cksum_command *)lc;
+		object->cs = (struct prebind_cksum_command *)lc;
 		break;
 	    case LC_SEGMENT:
 		sg = (struct segment_command *)lc;
 		if(strcmp(sg->segname, SEG_LINKEDIT) == 0)
-		    arch->object->seg_linkedit = sg;
+		    object->seg_linkedit = sg;
 		else if(strcmp(sg->segname, "__LLVM") == 0)
-		    arch->object->seg_bitcode = sg;
+		    object->seg_bitcode = sg;
 		break;
 	    case LC_SEGMENT_64:
 		sg64 = (struct segment_command_64 *)lc;
 		if(strcmp(sg64->segname, SEG_LINKEDIT) == 0)
-		    arch->object->seg_linkedit64 = sg64;
+		    object->seg_linkedit64 = sg64;
 		else if(strcmp(sg64->segname, "__LLVM") == 0)
-		    arch->object->seg_bitcode64 = sg64;
+		    object->seg_bitcode64 = sg64;
 		break;
 	    case LC_SEGMENT_SPLIT_INFO:
 		object->split_info_cmd = (struct linkedit_data_command *)lc;
@@ -1488,4 +1548,386 @@ struct object *object)
 	    }
 	    lc = (struct load_command *)((char *)lc + lc->cmdsize);
 	}
+}
+
+/*
+ * For MH_OBJECT files, .o files, the bitcode info is in two sections and
+ * requires a static link editor operation to remove or change to a marker.
+ * So to do this an ld(1) -r is run with an option to process the object file
+ * as needed.
+ */
+static
+void
+make_ld_process_mh_object(
+struct arch *arch,
+struct member *member,
+struct object *object)
+{
+	/*
+	 * We set this so the optimizations of doing nothing or of copying over
+	 * the input to the output does not happen.  See the code at the end
+	 * of main() above.
+	 */
+	if(rflag)
+	    some_slice_has_bitcode = TRUE;
+
+	make_ld_r_object(arch, object);
+
+	setup_symbolic_info_for_mh_object(arch, member, object);
+}
+
+/*
+ * make_ld_r_object() takes the object file contents referenced by the passed
+ * data structures, writes that to a temporary file.  Then runs "ld -r" plus an
+ * option to get the bitcode removed or replaced with a marker creating a second
+ * temporary file.  This is then read in and replaces the object file contents
+ * with that.
+ */
+static
+void
+make_ld_r_object(
+struct arch *arch,
+struct object *object)
+{
+    enum byte_sex host_byte_sex;
+    char *input_file, *output_file;
+    int fd;
+    struct ofile *ld_r_ofile;
+    struct arch *ld_r_archs;
+    uint32_t ld_r_narchs, save_errors;
+
+	host_byte_sex = get_host_byte_sex();
+
+	/*
+	 * Swap the object file back into its bytesex before writing it to the
+	 * temporary file if needed.
+	 */
+	if(object->object_byte_sex != host_byte_sex){
+	    if(object->mh != NULL){
+		if(swap_object_headers(object->mh, object->load_commands) ==
+		   FALSE)
+		    fatal("internal error: swap_object_headers() failed");
+	    }
+	    else{
+		if(swap_object_headers(object->mh64, object->load_commands) ==
+		   FALSE)
+		    fatal("internal error: swap_object_headers() failed");
+	    }
+	}
+
+	/*
+	 * Create an input object file for the ld -r command from the bytes
+	 * of this arch's object file.
+	 */
+	input_file = makestr("/tmp/bitcode_strip.XXXXXX", NULL);
+	input_file = mktemp(input_file);
+
+	if((fd = open(input_file, O_WRONLY|O_CREAT, 0600)) < 0)
+	    system_fatal("can't open temporary file: %s", input_file);
+
+	if(write(fd, object->object_addr, object->object_size) !=
+	        object->object_size)
+	    system_fatal("can't write temporary file: %s", input_file);
+
+	if(close(fd) == -1)
+	    system_fatal("can't close temporary file: %s", input_file);
+
+	/*
+	 * Create a temporary name for the output file of the ld -r
+	 */
+	output_file = makestr("/tmp/bitcode_strip.XXXXXX", NULL);
+	output_file = mktemp(output_file);
+
+	/*
+	 * Create the ld -r command line and execute it.
+	 */
+	reset_execute_list();
+	add_execute_list_with_prefix("ld");
+	add_execute_list("-keep_private_externs");
+	add_execute_list("-r");
+	if(rflag){
+	    add_execute_list("-bitcode_process_mode");
+	    add_execute_list("strip");
+	}
+	else if(mflag){
+	    add_execute_list("-bitcode_process_mode");
+	    add_execute_list("marker");
+	}
+	add_execute_list(input_file);
+	add_execute_list("-o");
+	add_execute_list(output_file);
+	if(execute_list(vflag) == 0)
+	    fatal("internal link edit command failed");
+
+	save_errors = errors;
+	errors = 0;
+	/* breakout the output file of the ld -f for processing */
+	ld_r_ofile = breakout(output_file, &ld_r_archs, &ld_r_narchs, FALSE);
+	if(errors)
+	    goto make_ld_r_object_cleanup;
+
+	/* checkout the file for processing */
+	checkout(ld_r_archs, ld_r_narchs);
+
+	/*
+	 * Make sure the output of the ld -r is an object file with one arch.
+	 */
+	if(ld_r_narchs != 1 ||
+	   ld_r_archs->type != OFILE_Mach_O ||
+	   ld_r_archs->object == NULL ||
+	   ld_r_archs->object->mh_filetype != MH_OBJECT)
+	    fatal("internal link edit command failed to produce a thin Mach-O "
+		  "object file");
+
+	/*
+	 * Copy over the object struct from the ld -r object file onto the
+	 * input object file.
+	 */
+	*object = *ld_r_archs->object;
+
+	/*
+	 * Save the ofile struct for the ld -r output so it can be umapped when
+	 * we are done.  And free up the ld_r_archs now that we are done with
+	 * them.
+	 */
+	object->ld_r_ofile = ld_r_ofile;
+	free_archs(ld_r_archs, ld_r_narchs);
+
+make_ld_r_object_cleanup:
+	errors += save_errors;
+	/*
+	 * Remove the input and output files and clean up.
+	 */
+	if(unlink(input_file) == -1)
+	    system_fatal("can't remove temporary file: %s", input_file);
+	if(unlink(output_file) == -1)
+	    system_fatal("can't remove temporary file: %s", output_file);
+	free(input_file);
+	free(output_file);
+}
+
+/*
+ * setup_symbolic_info_for_mh_object() is called after a .o file has been
+ * modified as needed by an "ld -r" execution.  Here the symbolic info and
+ * sizes are set into the object struct.  So it can be later written out by
+ * the writeout() call.  No processing is done here just setting up the object
+ * struct's input_sym_info_size and output_sym_info_size value and all the
+ * output_* fields and offsets to the symbolic info so it is written out
+ * correctly.
+ */
+static
+void
+setup_symbolic_info_for_mh_object(
+struct arch *arch,
+struct member *member,
+struct object *object)
+{
+    uint32_t offset, start_offset;
+
+	/*
+	 * Determine the starting offset of the symbolic info in the .o file
+         * which can be determined because of the order symbolic info has
+	 * already been confirmed when the by previous call to checkout().
+	 * This this routine only deals with MH_OBJECT filetypes so some info
+	 * should not be present in .o files which is consider an error here.
+	 */
+	offset = UINT_MAX;
+	/* There should be no link edit segment in a .o file. */
+	if(object->seg_linkedit != NULL || object->seg_linkedit64 != NULL)
+	    fatal_arch(arch, member, "malformed MH_OBJECT should not contain a "
+		       "link edit segment");
+	if(object->dyst != NULL && object->dyst->nlocrel != 0)
+	    fatal_arch(arch, member, "malformed MH_OBJECT should not contain "
+		       "local relocation entries in the dynamic symbol table");
+	if(object->func_starts_info_cmd != NULL &&
+	   object->func_starts_info_cmd->datasize != 0 &&
+	   object->func_starts_info_cmd->dataoff < offset)
+	    offset = object->func_starts_info_cmd->dataoff;
+	if(object->data_in_code_cmd != NULL &&
+	   object->data_in_code_cmd->datasize != 0 &&
+	   object->data_in_code_cmd->dataoff < offset)
+	    offset = object->data_in_code_cmd->dataoff;
+	if(object->link_opt_hint_cmd != NULL &&
+	   object->link_opt_hint_cmd->datasize != 0 &&
+	   object->link_opt_hint_cmd->dataoff < offset)
+	    offset = object->link_opt_hint_cmd->dataoff;
+	if(object->st->nsyms != 0 &&
+	   object->st->symoff < offset)
+	    offset = object->st->symoff;
+	if(object->dyst != NULL && object->dyst->nextrel != 0)
+	    fatal_arch(arch, member, "malformed MH_OBJECT should not contain "
+		       "external relocation entries in the dynamic symbol "
+		       "table");
+	if(object->dyst != NULL &&
+	   object->dyst->nindirectsyms != 0 &&
+	   object->dyst->indirectsymoff < offset)
+	    offset = object->dyst->indirectsymoff;
+	if(object->dyst != NULL && object->dyst->ntoc)
+	    fatal_arch(arch, member, "malformed MH_OBJECT should not contain "
+		       "toc entries in the dynamic symbol table");
+	if(object->dyst != NULL && object->dyst->nmodtab != 0)
+	    fatal_arch(arch, member, "malformed MH_OBJECT should not contain "
+		       "module entries in the dynamic symbol table");
+	if(object->dyst != NULL && object->dyst->nextrefsyms != 0)
+	    fatal_arch(arch, member, "malformed MH_OBJECT should not contain "
+		       "external reference entries in the dynamic symbol "
+		       "table");
+	if(object->st->strsize != 0 &&
+	   object->st->stroff < offset)
+	    offset = object->st->stroff;
+	start_offset = offset;
+
+	/*
+	 * Size the input symbolic info and set up all the input symbolic info
+	 * to be the output symbolic info except any code signature data which
+	 * will be removed if the input file contains bitcode of we are leaving
+	 * just bitcode.
+	 *
+	 * Assign the offsets to the symbolic data in the proper order and
+	 * increment the local variable offset by the size of each part if the
+	 * the symbolic data.  The output_sym_info_size is then determined at
+	 * the end as the difference of the local variable offset from the 
+	 * local variable start_offset.
+	 */
+	object->input_sym_info_size = 0;
+	object->output_sym_info_size = 0;
+
+	/* There should be no dyld info in a .o file. */
+	if(object->dyld_info != NULL)
+	    fatal_arch(arch, member, "malformed MH_OBJECT should not contain a "
+		       "dyld info");
+
+	/* Local relocation entries off the dynamic symbol table would next in
+	   the output, but there are not in .o files */
+
+	/* There should be no split info in a .o file. */
+	if(object->split_info_cmd != NULL)
+	    fatal_arch(arch, member, "malformed MH_OBJECT should not contain a "
+		       "split info load command");
+
+	if(object->func_starts_info_cmd != NULL){
+	    object->input_sym_info_size +=
+		object->func_starts_info_cmd->datasize;
+	    object->output_func_start_info_data = object->object_addr +
+		object->func_starts_info_cmd->dataoff;
+	    object->output_func_start_info_data_size = 
+		object->func_starts_info_cmd->datasize;
+	    object->func_starts_info_cmd->dataoff = offset;
+	    offset += object->func_starts_info_cmd->datasize;
+	}
+
+	if(object->data_in_code_cmd != NULL){
+	    object->input_sym_info_size +=
+		object->data_in_code_cmd->datasize;
+	    object->output_data_in_code_info_data = object->object_addr +
+		object->data_in_code_cmd->dataoff;
+	    object->output_data_in_code_info_data_size = 
+		object->data_in_code_cmd->datasize;
+	    object->data_in_code_cmd->dataoff = offset;
+	    offset += object->data_in_code_cmd->datasize;
+	}
+
+	if(object->code_sign_drs_cmd != NULL)
+	    fatal_arch(arch, member, "malformed MH_OBJECT should not contain a "
+		       "code signature load command");
+
+	if(object->link_opt_hint_cmd != NULL){
+	    object->input_sym_info_size +=
+		object->link_opt_hint_cmd->datasize;
+	    object->output_link_opt_hint_info_data = object->object_addr +
+		object->link_opt_hint_cmd->dataoff;
+	    object->output_link_opt_hint_info_data_size = 
+		object->link_opt_hint_cmd->datasize;
+	    object->link_opt_hint_cmd->dataoff = offset;
+	    offset += object->link_opt_hint_cmd->datasize;
+	}
+
+	if(object->st != NULL && object->st->nsyms != 0){
+	    if(object->mh != NULL){
+		object->input_sym_info_size +=
+		    object->st->nsyms * sizeof(struct nlist);
+		object->output_symbols = (struct nlist *)
+		    (object->object_addr + object->st->symoff);
+		if(object->object_byte_sex != get_host_byte_sex())
+		    swap_nlist(object->output_symbols,
+			       object->st->nsyms,
+			       get_host_byte_sex());
+		object->output_symbols64 = NULL;
+	    }
+	    else{
+		object->input_sym_info_size +=
+		    object->st->nsyms * sizeof(struct nlist_64);
+		object->output_symbols64 = (struct nlist_64 *)
+		    (object->object_addr + object->st->symoff);
+		if(object->object_byte_sex != get_host_byte_sex())
+		    swap_nlist_64(object->output_symbols64,
+				  object->st->nsyms,
+				  get_host_byte_sex());
+		object->output_symbols = NULL;
+	    }
+	    object->output_nsymbols = object->st->nsyms;
+	    object->st->symoff = offset;
+	    if(object->mh != NULL)
+		offset += object->st->nsyms * sizeof(struct nlist);
+	    else
+		offset += object->st->nsyms * sizeof(struct nlist_64);
+	}
+	else if(object->st != NULL && object->st->nsyms == 0)
+	    object->st->symoff = 0;
+
+	if(object->hints_cmd != NULL)
+	    fatal_arch(arch, member, "malformed MH_OBJECT should not contain a "
+		       "two level hints load command");
+
+	// Note that this should always be true in objects this program
+	// operates on as it does not need to work on staticly linked images.
+	if(object->dyst != NULL){
+	    object->output_ilocalsym = object->dyst->ilocalsym;
+	    object->output_nlocalsym = object->dyst->nlocalsym;
+	    object->output_iextdefsym = object->dyst->iextdefsym;
+	    object->output_nextdefsym = object->dyst->nextdefsym;
+	    object->output_iundefsym = object->dyst->iundefsym;
+	    object->output_nundefsym = object->dyst->nundefsym;
+
+	    /* External relocation entries off the dynamic symbol table would
+	       next in the output, but there are not in .o files */
+
+	    if(object->dyst->nindirectsyms != 0){
+		object->input_sym_info_size +=
+		    object->dyst->nindirectsyms * sizeof(uint32_t) +
+		    object->input_indirectsym_pad;
+		object->output_indirect_symtab = (uint32_t *)
+		    (object->object_addr + object->dyst->indirectsymoff);
+		object->dyst->indirectsymoff = offset;
+		offset += object->dyst->nindirectsyms * sizeof(uint32_t) +
+		          object->input_indirectsym_pad;
+	    }
+	    else
+		object->dyst->indirectsymoff = 0;
+
+	    /* Toc entries off the dynamic symbol table would
+	       next in the output, but there are not in .o files */
+
+	    /* Module entries off the dynamic symbol table would
+	       next in the output, but there are not in .o files */
+
+	    /* External references off the dynamic symbol table would
+	       next in the output, but there are not in .o files */
+	}
+
+	if(object->st != NULL && object->st->strsize != 0){
+	    object->input_sym_info_size += object->st->strsize;
+	    object->output_strings = object->object_addr + object->st->stroff;
+	    object->output_strings_size = object->st->strsize;
+	    object->st->stroff = offset;
+	    offset += object->st->strsize;
+	}
+	else{
+	    object->st->stroff = 0;
+	}
+
+	/* The code signature would next in the output, but that is is not in
+	   .o files */
+
+	object->output_sym_info_size = offset - start_offset;
 }
