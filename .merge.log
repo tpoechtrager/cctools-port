@@ -1,3 +1,22 @@
+## ld64 253.3 -> ld64 253.9 ##
+
+patching file src/ld/InputFiles.cpp
+patching file src/ld/ld.hpp
+patching file src/ld/Options.cpp
+Hunk #1 NOT MERGED at 194-205.
+patching file src/ld/Options.h
+patching file src/ld/parsers/lto_file.cpp
+Hunk #1 merged at 324-325.
+patching file src/ld/parsers/macho_dylib_file.cpp
+patching file src/ld/parsers/macho_relocatable_file.cpp
+patching file src/ld/parsers/macho_relocatable_file.h
+patching file src/ld/parsers/textstub_dylib_file.cpp
+patching file src/ld/passes/bitcode_bundle.cpp
+patching file src/ld/Resolver.cpp
+patching file src/other/ObjectDump.cpp
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+
 ## cctools 870 -> 877.5 ##
 
 can't find file to patch at input line 4

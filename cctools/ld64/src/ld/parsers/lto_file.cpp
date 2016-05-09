@@ -321,6 +321,8 @@ ld::relocatable::File* Parser::parseMachOFile(const uint8_t* p, size_t len, cons
 	objOpts.subType				= 0;
 	objOpts.minOSVersion			= 0; // ld64-port: https://gist.github.com/tpoechtrager/2efafec8ac996509b9d6
 	objOpts.srcKind				= ld::relocatable::File::kSourceLTO;
+	objOpts.treateBitcodeAsData = false;
+	objOpts.usingBitcode		= options.bitcodeBundle;
 	
 	// mach-o parsing is done in-memory, but need path for debug notes
 	const char* path = "/tmp/lto.o";

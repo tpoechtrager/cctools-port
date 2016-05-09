@@ -317,12 +317,10 @@ ld::File* InputFiles::makeFile(const Options::FileInfo& info, bool indirectDylib
 	objOpts.subType				= _options.subArchitecture();
 	objOpts.platform			= _options.platform();
 	objOpts.minOSVersion		= _options.minOSversion();
-	// workaround for strip -S
-	// when ld -r has single input file, set the srcKind to kSourceSingle so __LLVM segment will be kept
-	if (_options.outputKind() == Options::kObjectFile && _options.getInputFiles().size() == 1)
-		objOpts.srcKind			= ld::relocatable::File::kSourceSingle;
-	else
-		objOpts.srcKind				= ld::relocatable::File::kSourceObj;
+	objOpts.srcKind				= ld::relocatable::File::kSourceObj;
+	objOpts.treateBitcodeAsData	= _options.bitcodeKind() == Options::kBitcodeAsData;
+	objOpts.usingBitcode		= _options.bundleBitcode();
+
 	ld::relocatable::File* objResult = mach_o::relocatable::parse(p, len, info.path, info.modTime, info.ordinal, objOpts);
 	if ( objResult != NULL ) {
 		OSAtomicAdd64(len, &_totalObjectSize);
@@ -380,6 +378,9 @@ ld::File* InputFiles::makeFile(const Options::FileInfo& info, bool indirectDylib
 		archOpts.objOpts.srcKind = ld::relocatable::File::kSourceCompilerArchive;
 	else
 		archOpts.objOpts.srcKind = ld::relocatable::File::kSourceArchive;
+	archOpts.objOpts.treateBitcodeAsData = _options.bitcodeKind() == Options::kBitcodeAsData;
+	archOpts.objOpts.usingBitcode = _options.bundleBitcode();
+
 	ld::archive::File* archiveResult = ::archive::parse(p, len, info.path, info.modTime, info.ordinal, archOpts);
 	if ( archiveResult != NULL ) {
 		OSAtomicAdd64(len, &_totalArchiveSize);

@@ -33,6 +33,7 @@
 #include <unistd.h>
 #include <time.h>
 #include <unordered_map>
+#include <sstream>
 
 #include "llvm-c/lto.h"
 // c header
@@ -109,23 +110,32 @@ public:
     ~BitcodeObfuscator();
 
     void addMustPreserveSymbols(const char* name);
+    void addAsmSymbolsToMustPreserve(lto_module_t module);
     void bitcodeHideSymbols(ld::Bitcode* bc, const char* filePath, const char* outputPath);
     void writeSymbolMap(const char* outputPath);
+    const char* lookupHiddenName(const char* symbol);
 private:
     typedef void (*lto_codegen_func_t) (lto_code_gen_t);
     typedef void (*lto_codegen_output_t) (lto_code_gen_t, const char*);
+    typedef const char* (*lto_codegen_lookup_t) (lto_code_gen_t, const char*);
+    typedef unsigned int (*lto_module_num_symbols) (lto_module_t);
+    typedef const char* (*lto_module_symbol_name) (lto_module_t, unsigned int);
 
     lto_code_gen_t                          _obfuscator;
     lto_codegen_func_t                      _lto_hide_symbols;
     lto_codegen_func_t                      _lto_reset_context;
     lto_codegen_output_t                    _lto_write_reverse_map;
+    lto_codegen_lookup_t                    _lto_lookup_hidden_name;
+    lto_module_num_symbols                  _lto_get_asm_symbol_num;
+    lto_module_symbol_name                  _lto_get_asm_symbol_name;
 };
 
 class FileHandler {
     // generic handler for files in a bundle
 public:
     virtual void populateMustPreserveSymbols(BitcodeObfuscator* _obfuscator)    { }
-    virtual void obfuscateAndWriteToPath(BitcodeObfuscator* _obfuscator, const char* path) { };
+    virtual void obfuscateAndWriteToPath(BitcodeObfuscator* _obfuscator, const char* path);
+    virtual const char* compressionMethod() { return XAR_OPT_VAL_NONE; }    // no compression by default
     xar_file_t getXARFile()                 { return _xar_file; }
 
     FileHandler(char* content, size_t size) :
@@ -181,7 +191,7 @@ public:
 
     ~BitcodeHandler();
 
-    virtual void populateMustPreserveSymbols(BitcodeObfuscator* obfuscator) override { } // Don't need to preserve symbols
+    virtual void populateMustPreserveSymbols(BitcodeObfuscator* obfuscator) override;
     virtual void obfuscateAndWriteToPath(BitcodeObfuscator* obfuscator, const char* path) override;
 };
 
@@ -194,9 +204,21 @@ public:
 
     ~ObjectHandler();
 
-    void populateMustPreserveSymbols(BitcodeObfuscator* obfuscator) override;
-    void obfuscateAndWriteToPath(BitcodeObfuscator* obfuscator, const char* path) override;
+    virtual void populateMustPreserveSymbols(BitcodeObfuscator* obfuscator) override;
 
+};
+
+class SymbolListHandler : public FileHandler {
+public:
+    SymbolListHandler(char* content, size_t size) :
+        FileHandler(content, size)                      { }
+    SymbolListHandler(xar_t parent, xar_file_t xar_file) :
+        FileHandler(parent, xar_file)                   { }
+
+    ~SymbolListHandler();
+
+    virtual void obfuscateAndWriteToPath(BitcodeObfuscator* obfuscator, const char* path) override;
+    virtual const char* compressionMethod() override { return XAR_OPT_VAL_GZIP; }
 };
 
 
@@ -268,8 +290,12 @@ BitcodeObfuscator::BitcodeObfuscator()
     _lto_hide_symbols = (lto_codegen_func_t) dlsym(RTLD_DEFAULT, "lto_codegen_hide_symbols");
     _lto_write_reverse_map = (lto_codegen_output_t) dlsym(RTLD_DEFAULT, "lto_codegen_write_symbol_reverse_map");
     _lto_reset_context = (lto_codegen_func_t) dlsym(RTLD_DEFAULT, "lto_codegen_reset_context");
+    _lto_lookup_hidden_name = (lto_codegen_lookup_t) dlsym(RTLD_DEFAULT, "lto_codegen_lookup_hidden_name");
+    _lto_get_asm_symbol_num = (lto_module_num_symbols) dlsym(RTLD_DEFAULT, "lto_module_get_num_asm_symbols");
+    _lto_get_asm_symbol_name = (lto_module_symbol_name) dlsym(RTLD_DEFAULT, "lto_module_get_asm_symbol_name");
     if ( _lto_hide_symbols == NULL || _lto_write_reverse_map == NULL ||
-        _lto_reset_context == NULL || ::lto_api_version() < 14 )
+        _lto_reset_context == NULL || _lto_lookup_hidden_name == NULL ||
+        _lto_get_asm_symbol_num == NULL || _lto_get_asm_symbol_name == NULL || ::lto_api_version() < 14 )
         throwf("loaded libLTO doesn't support -bitcode_hide_symbols: %s", ::lto_get_version());
     _obfuscator = ::lto_codegen_create_in_local_context();
 #if LTO_API_VERSION >= 14
@@ -309,6 +335,18 @@ void BitcodeObfuscator::writeSymbolMap(const char *outputPath)
     (*_lto_write_reverse_map)(_obfuscator, outputPath);
 }
 
+const char* BitcodeObfuscator::lookupHiddenName(const char *symbol)
+{
+    return (*_lto_lookup_hidden_name)(_obfuscator, symbol);
+}
+
+void BitcodeObfuscator::addAsmSymbolsToMustPreserve(lto_module_t module)
+{
+    for (unsigned int i = 0; i < _lto_get_asm_symbol_num(module); ++ i) {
+        addMustPreserveSymbols(_lto_get_asm_symbol_name(module, i));
+    }
+}
+
 BundleHandler::~BundleHandler()
 {
     // free buffers
@@ -338,6 +376,11 @@ BitcodeHandler::~BitcodeHandler()
 }
 
 ObjectHandler::~ObjectHandler()
+{
+    destroyFile();
+}
+
+SymbolListHandler::~SymbolListHandler()
 {
     destroyFile();
 }
@@ -385,8 +428,10 @@ void BundleHandler::init()
             _handlers.push_back(new ObjectHandler(_xar, f));
         else if ( strcmp(filetype, "Bitcode") == 0 || strcmp(filetype, "LTO") == 0 )
             _handlers.push_back(new BitcodeHandler(_xar, f));
+        else if ( strcmp(filetype, "Exports") == 0 || strcmp(filetype, "OrderFile") == 0)
+            _handlers.push_back(new SymbolListHandler(_xar, f));
         else
-            assert(0 && "Unknown file type");
+            _handlers.push_back(new FileHandler(_xar, f));
     }
     xar_iter_free(iter);
 }
@@ -437,6 +482,17 @@ void BundleHandler::populateMustPreserveSymbols(BitcodeObfuscator* obfuscator)
         handler->populateMustPreserveSymbols(obfuscator);
 }
 
+void BitcodeHandler::populateMustPreserveSymbols(BitcodeObfuscator* obfuscator)
+{
+    initFile();
+
+    // init LTOModule and add asm labels
+    lto_module_t module = lto_module_create_from_memory(_file_buffer, _file_size);
+    obfuscator->addAsmSymbolsToMustPreserve(module);
+    lto_module_dispose(module);
+}
+
+
 void ObjectHandler::populateMustPreserveSymbols(BitcodeObfuscator* obfuscator)
 {
     initFile();
@@ -472,7 +528,13 @@ void BundleHandler::obfuscateAndWriteToPath(BitcodeObfuscator *obfuscator, const
         sprintf(outputPath, "%s/%s", _temp_dir, name);
         handler->obfuscateAndWriteToPath(obfuscator, outputPath);
         BitcodeTempFile* bcOut = new BitcodeTempFile(outputPath, !_options.saveTempFiles());
+        if ( xar_opt_set(x, XAR_OPT_COMPRESSION, handler->compressionMethod()) != 0 )
+            throwf("could not set compression type for exports list");
         xar_file_t bcEntry = xar_add_frombuffer(x, NULL, name, (char*)bcOut->getContent(), bcOut->getSize());
+        if ( bcEntry == NULL )
+            throwf("could not add file to the bundle");
+        if ( xar_opt_set(x, XAR_OPT_COMPRESSION, XAR_OPT_VAL_NONE) != 0 )
+            throwf("could not reset compression type for exports list");
         copyXARProp(f, bcEntry);
         delete bcOut;
     }
@@ -493,7 +555,33 @@ void BitcodeHandler::obfuscateAndWriteToPath(BitcodeObfuscator *obfuscator, cons
     obfuscator->bitcodeHideSymbols(&bc, path, path);
 }
 
-void ObjectHandler::obfuscateAndWriteToPath(BitcodeObfuscator *obfuscator, const char *path)
+void SymbolListHandler::obfuscateAndWriteToPath(BitcodeObfuscator* obfuscator, const char* path)
+{
+    initFile();
+    // Obfuscate exported symbol list.
+    std::string exports_list;
+    for (size_t i = 0, start = 0; i < _file_size; ++i) {
+        if ( _file_buffer[i] == '\n' ) {
+            _file_buffer[i] = '\0';
+            const char* hiddenName = obfuscator->lookupHiddenName(_file_buffer + start);
+            if ( hiddenName == NULL )
+                exports_list += _file_buffer + start;
+            else
+                exports_list += hiddenName;
+            exports_list += "\n";
+            start = i + 1;
+        } else if ( _file_buffer[i] == '*' ) {
+            throwf("illegal export list found. Please rebuild your static library using -exported_symbol[s_list] with the newest Xcode");
+        }
+    }
+    exports_list += "\n";
+    int f = ::open(path, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+    if ( f == -1 || ::write(f, exports_list.data(), exports_list.size()) != (int)exports_list.size() )
+        throwf("failed to write content to temp file: %s", path);
+    ::close(f);
+}
+
+void FileHandler::obfuscateAndWriteToPath(BitcodeObfuscator *obfuscator, const char *path)
 {
     initFile();
     int f = ::open(path, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
@@ -504,12 +592,19 @@ void ObjectHandler::obfuscateAndWriteToPath(BitcodeObfuscator *obfuscator, const
 
 void BitcodeBundle::doPass()
 {
-    if ( _state.embedMarkerOnly ) {
-        assert( _options.outputKind() != Options::kDynamicExecutable &&
-                _options.outputKind() != Options::kStaticExecutable &&
-                "Don't emit marker for executables");
-        BitcodeAtom* marker = new BitcodeAtom();
-        _state.addAtom(*marker);
+    if ( _options.bitcodeKind() == Options::kBitcodeStrip ||
+         _options.bitcodeKind() == Options::kBitcodeAsData )
+        // if emit no bitcode or emit bitcode segment as data, no need to generate bundle.
+        return;
+    else if ( _state.embedMarkerOnly || _options.bitcodeKind() == Options::kBitcodeMarker ) {
+        // if the bitcode is just a marker,
+        // the executable will be created without bitcode section.
+        // Otherwise, create a marker.
+        if( _options.outputKind() != Options::kDynamicExecutable &&
+            _options.outputKind() != Options::kStaticExecutable ) {
+            BitcodeAtom* marker = new BitcodeAtom();
+            _state.addAtom(*marker);
+        }
         return;
     }
 
@@ -545,7 +640,7 @@ void BitcodeBundle::doPass()
                      atom->definition() == ld::Atom::definitionProxy ||
                      atom->symbolTableInclusion() == ld::Atom::symbolTableInAndNeverStrip ||
                      ( _options.allGlobalsAreDeadStripRoots() && atom->scope() == ld::Atom::scopeGlobal ) ||
-                     ( _options.hasExportRestrictList() && _options.shouldExport(atom->name())) )
+                     ( _options.hasExportRestrictList() && _options.shouldExport(atom->name()) ) )
                     obfuscator->addMustPreserveSymbols(atom->name());
             }
         }
@@ -558,6 +653,9 @@ void BitcodeBundle::doPass()
                 BundleHandler* bh = new BundleHandler((char*)bb->getContent(), bb->getSize(), _options);
                 bh->populateMustPreserveSymbols(obfuscator);
                 handlerMap.emplace(std::string(f->path()), bh);
+            } else if ( ld::LLVMBitcode* bitcode = dynamic_cast<ld::LLVMBitcode*>(f->getBitcode()) ) {
+                BitcodeHandler* bitcodeHandler = new BitcodeHandler((char*)bitcode->getContent(), bitcode->getSize());
+                bitcodeHandler->populateMustPreserveSymbols(obfuscator);
             }
         }
         // special symbols supplied by linker
@@ -698,24 +796,120 @@ void BitcodeBundle::doPass()
     }
 
     // Write exports file
+    // A vector of all the exported symbols.
     if ( _options.hasExportMaskList() ) {
+        std::vector<const char*> exportedSymbols;
+        for ( auto &sect : _state.sections ) {
+            for ( auto &atom : sect->atoms ) {
+                // The symbols should be added to the export list is the ones that are:
+                // globalScope, in SymbolTable and should be exported suggested by export file.
+                if ( atom->scope() == ld::Atom::scopeGlobal &&
+                     atom->symbolTableInclusion() == ld::Atom::symbolTableIn &&
+                     _options.shouldExport(atom->name()) )
+                    exportedSymbols.push_back(atom->name());
+            }
+        }
         linkCmd.push_back("-exported_symbols_list");
         linkCmd.push_back("exports.exp");
         const char* exportsPath = "exports.exp";
-        std::vector<const char*> exports = _options.exportsData();
         std::string exps;
-        for (std::vector<const char*>::iterator it = exports.begin();
-             it != exports.end(); ++ it) {
+        for (std::vector<const char*>::iterator it = exportedSymbols.begin();
+             it != exportedSymbols.end(); ++ it) {
             exps += *it;
             exps += "\n";
         }
         // always append an empty line so exps cannot be empty. rdar://problem/22404253
         exps += "\n";
+        if (xar_opt_set(x, XAR_OPT_COMPRESSION, XAR_OPT_VAL_GZIP) != 0)
+            throwf("could not set compression type for exports list");
         xar_file_t exportsFile = xar_add_frombuffer(x, NULL, exportsPath, const_cast<char*>(exps.data()), exps.size());
         if (exportsFile == NULL)
             throwf("could not add exports list to bitcode bundle");
         if (xar_prop_set(exportsFile, "file-type", "Exports") != 0)
             throwf("could not set exports property in bitcode bundle");
+        if (xar_opt_set(x, XAR_OPT_COMPRESSION, XAR_OPT_VAL_NONE) != 0)
+            throwf("could not reset compression type for exports list");
+    } else if ( _options.hasExportRestrictList() ) {
+        // handle unexported list here
+        std::vector<const char*> unexportedSymbols;
+        for ( auto &sect : _state.sections ) {
+            for ( auto &atom : sect->atoms ) {
+                // The unexported symbols should not include anything that is in TranslationUnit scope (static) or
+                // that cannot be in the SymbolTable
+                if ( atom->scope() != ld::Atom::scopeTranslationUnit &&
+                     atom->symbolTableInclusion() == ld::Atom::symbolTableIn &&
+                     !_options.shouldExport(atom->name()) )
+                    unexportedSymbols.push_back(atom->name());
+            }
+        }
+        linkCmd.push_back("-unexported_symbols_list");
+        linkCmd.push_back("unexports.exp");
+        const char* unexportsPath = "unexports.exp";
+        std::string unexps;
+        for (std::vector<const char*>::iterator it = unexportedSymbols.begin();
+             it != unexportedSymbols.end(); ++ it) {
+            // try obfuscate the name for symbols in unexported symbols list. They are likely to be obfsucated.
+            const char* sym_name = NULL;
+            if ( _options.hideSymbols() )
+                sym_name = obfuscator->lookupHiddenName(*it);
+            if ( sym_name )
+                unexps += sym_name;
+            else
+                unexps += *it;
+            unexps += "\n";
+        }
+        unexps += "\n";
+        if (xar_opt_set(x, XAR_OPT_COMPRESSION, XAR_OPT_VAL_GZIP) != 0)
+            throwf("could not set compression type for exports list");
+        xar_file_t unexportsFile = xar_add_frombuffer(x, NULL, unexportsPath, const_cast<char*>(unexps.data()), unexps.size());
+        if (unexportsFile == NULL)
+            throwf("could not add unexports list to bitcode bundle");
+        if (xar_prop_set(unexportsFile, "file-type", "Exports") != 0)
+            throwf("could not set exports property in bitcode bundle");
+        if (xar_opt_set(x, XAR_OPT_COMPRESSION, XAR_OPT_VAL_NONE) != 0)
+            throwf("could not reset compression type for exports list");
+    }
+
+    // Handle order file. We need to obfuscate all the entries in the order file
+    if ( _options.orderedSymbolsCount() > 0 ) {
+        std::string orderFile;
+        for ( auto entry = _options.orderedSymbolsBegin(); entry != _options.orderedSymbolsEnd(); ++ entry ) {
+            std::stringstream line;
+            if ( entry->objectFileName != NULL ) {
+                unsigned index = 0;
+                for ( auto &f : _state.filesWithBitcode ) {
+                    const char* atomFullPath = f->path();
+                    const char* lastSlash = strrchr(atomFullPath, '/');
+                    if ( (lastSlash != NULL && strcmp(&lastSlash[1], entry->objectFileName) == 0) ||
+                         strcmp(atomFullPath, entry->objectFileName) == 0 )
+                        break;
+                    ++ index;
+                }
+                if ( index >= _state.filesWithBitcode.size() )
+                    continue;
+                line << index << ".o:";
+            }
+            const char* sym_name = NULL;
+            if ( _options.hideSymbols() )
+                sym_name = obfuscator->lookupHiddenName(entry->symbolName);
+            if ( sym_name )
+                line << sym_name;
+            else
+                line << entry->symbolName;
+            line << "\n";
+            orderFile += line.str();
+        }
+        if (xar_opt_set(x, XAR_OPT_COMPRESSION, XAR_OPT_VAL_GZIP) != 0)
+            throwf("could not set compression type for order file");
+        xar_file_t ordersFile = xar_add_frombuffer(x, NULL, "file.order", const_cast<char*>(orderFile.data()), orderFile.size());
+        if (ordersFile == NULL)
+            throwf("could not add order file to bitcode bundle");
+        if (xar_prop_set(ordersFile, "file-type", "OrderFile") != 0)
+            throwf("could not set order file property in bitcode bundle");
+        if (xar_opt_set(x, XAR_OPT_COMPRESSION, XAR_OPT_VAL_NONE) != 0)
+            throwf("could not reset compression type for order file");
+        linkCmd.push_back("-order_file");
+        linkCmd.push_back("file.order");
     }
 
     // Create subdoc to write link information
@@ -746,22 +940,23 @@ void BitcodeBundle::doPass()
         throwf("could not add SDK version to bitcode bundle");
 
     // Write dylibs
-    const char* sdkRoot = NULL;
-    if ( !_options.sdkPaths().empty() )
-        sdkRoot = _options.sdkPaths().front();
+    char sdkRoot[PATH_MAX];
+    if ( _options.sdkPaths().empty() || (realpath(_options.sdkPaths().front(), sdkRoot) == NULL) )
+        strcpy(sdkRoot, "/");
     if ( !_state.dylibs.empty() ) {
-        std::vector<const char*> SDKPaths = _options.sdkPaths();
         char dylibPath[PATH_MAX];
         for ( auto &dylib : _state.dylibs ) {
-            // For every dylib/framework, figure out if it is coming from a SDK
-            // if it is coming from some SDK, we parse the path to figure out which SDK
-            // If -syslibroot is pointing to a SDK, it should end with PlatformX.Y.sdk/
-            if (sdkRoot && strncmp(dylib->path(), sdkRoot, strlen(sdkRoot)) == 0) {
-                // dylib/framework from one of the -syslibroot
+            // For every dylib/framework, figure out if it is coming from a SDK.
+            // The dylib/framework from SDK must begin with '/' and user framework must begin with '@'.
+            if (dylib->installPath()[0] == '/') {
+                // Verify the path of the framework is within the SDK.
+                char dylibRealPath[PATH_MAX];
+                if ( realpath(dylib->path(), dylibRealPath) != NULL && strncmp(sdkRoot, dylibRealPath, strlen(sdkRoot)) != 0 )
+                    warning("%s has install name beginning with \"/\" but it is not from the specified SDK", dylib->path());
                 // The path start with a string template
-                strcpy(dylibPath, "{SDKPATH}/");
+                strcpy(dylibPath, "{SDKPATH}");
                 // append the path of dylib/frameowrk in the SDK
-                strcat(dylibPath, dylib->path() + strlen(sdkRoot));
+                strcat(dylibPath, dylib->installPath());
             } else {
                 // Not in any SDKs, then assume it is a user dylib/framework
                 // strip off all the path in the front

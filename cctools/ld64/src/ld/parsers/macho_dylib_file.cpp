@@ -148,7 +148,7 @@ public:
 													Options::Platform platform, uint32_t linkMinOSVersion, bool allowSimToMacOSX,
 													bool addVers,  bool buildingForSimulator,
 													bool logAllFiles, const char* installPath,
-													bool indirectDylib, bool ignoreMismatchPlatform);
+													bool indirectDylib, bool ignoreMismatchPlatform, bool usingBitcode);
 	virtual									~File() {}
 
 	// overrides of ld::File
@@ -239,6 +239,7 @@ private:
 	bool										_installPathOverride;
 	bool										_indirectDylibsProcessed;
 	bool										_appExtensionSafe;
+	bool										_usingBitcode;
 	uint32_t									_minVersionInDylib;
 	uint32_t									_platformInDylib;
 	std::unique_ptr<ld::Bitcode>				_bitcode;
@@ -261,7 +262,7 @@ template <typename A>
 File<A>::File(const uint8_t* fileContent, uint64_t fileLength, const char* pth, time_t mTime, ld::File::Ordinal ord,
 				bool linkingFlatNamespace, bool linkingMainExecutable, bool hoistImplicitPublicDylibs,
 				Options::Platform platform, uint32_t linkMinOSVersion, bool allowSimToMacOSX, bool addVers, bool buildingForSimulator,
-				bool logAllFiles, const char* targetInstallPath, bool indirectDylib, bool ignoreMismatchPlatform)
+				bool logAllFiles, const char* targetInstallPath, bool indirectDylib, bool ignoreMismatchPlatform, bool usingBitcode)
 	: ld::dylib::File(strdup(pth), mTime, ord), 
 	_platform(platform), _linkMinOSVersion(linkMinOSVersion), _allowSimToMacOSXLinking(allowSimToMacOSX), _addVersionLoadCommand(addVers), 
 	_linkingFlat(linkingFlatNamespace), _implicitlyLinkPublicDylibs(hoistImplicitPublicDylibs),
@@ -272,7 +273,7 @@ File<A>::File(const uint8_t* fileContent, uint64_t fileLength, const char* pth, 
 	_noRexports(false), _hasWeakExports(false), 
 	_deadStrippable(false), _hasPublicInstallName(false), 
 	 _providedAtom(false), _explictReExportFound(false), _wrongOS(false), _installPathOverride(false), 
-	_indirectDylibsProcessed(false), _appExtensionSafe(false),
+	_indirectDylibsProcessed(false), _appExtensionSafe(false), _usingBitcode(usingBitcode),
 	_minVersionInDylib(0), _platformInDylib(Options::kPlatformUnknown)
 {
 	const macho_header<P>* header = (const macho_header<P>*)fileContent;
@@ -438,7 +439,11 @@ File<A>::File(const uint8_t* fileContent, uint64_t fileLength, const char* pth, 
 	#if SUPPORT_APPLE_TV
 						case Options::kPlatform_tvOS:
 							// tvOS is a warning temporarily. rdar://problem/21746965
-							if (platform == Options::kPlatform_tvOS)
+							if ( usingBitcode )
+								throwf("building for %s simulator, but linking against dylib built for %s,",
+									   Options::platformName(platform),
+									   Options::platformName(lcPlatform));
+							else
 								warning("URGENT: building for %s simulator, but linking against dylib (%s) built for %s. "
 										"Note: This will be an error in the future.",
 										Options::platformName(platform), path(),
@@ -467,7 +472,11 @@ File<A>::File(const uint8_t* fileContent, uint64_t fileLength, const char* pth, 
 	#if SUPPORT_APPLE_TV
 					case Options::kPlatform_tvOS:
 						// tvOS is a warning temporarily. rdar://problem/21746965
-						if (platform == Options::kPlatform_tvOS)
+						if ( _usingBitcode )
+							throwf("building for %s, but linking against dylib built for %s,",
+								   Options::platformName(platform),
+								   Options::platformName(lcPlatform));
+						else
 							warning("URGENT: building for %s, but linking against dylib (%s) built for %s. "
 									"Note: This will be an error in the future.",
 									Options::platformName(platform), path(),
@@ -1001,7 +1010,8 @@ public:
 																			opts.logAllFiles(),
 																			opts.installPath(),
 																			indirectDylib,
-																			opts.outputKind() == Options::kPreload);
+																			opts.outputKind() == Options::kPreload,
+																			opts.bundleBitcode());
 														}
 
 };

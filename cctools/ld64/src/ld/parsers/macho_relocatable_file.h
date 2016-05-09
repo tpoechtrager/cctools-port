@@ -47,6 +47,8 @@ struct ParserOptions {
 	Options::Platform platform;
 	uint32_t		minOSVersion;
 	ld::relocatable::File::SourceKind	srcKind;
+	bool			treateBitcodeAsData;
+	bool			usingBitcode;
 };
 
 extern ld::relocatable::File* parse(const uint8_t* fileContent, uint64_t fileLength, 

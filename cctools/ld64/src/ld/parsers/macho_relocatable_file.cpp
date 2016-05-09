@@ -108,7 +108,6 @@ public:
 	virtual uint8_t										swiftVersion() const			{ return _swiftVersion; }
 	virtual ld::Bitcode*								getBitcode() const				{ return _bitcode.get(); }
 	virtual SourceKind									sourceKind() const				{ return _srcKind; }
-	virtual void										setSourceKind(SourceKind src)	{ _srcKind = src; }
 	
 	const uint8_t*										fileContent()					{ return _fileContent; }
 private:
@@ -1256,6 +1255,8 @@ private:
 	bool										_verboseOptimizationHints;
 	bool										_armUsesZeroCostExceptions;
 	bool										_ignoreMismatchPlatform;
+	bool										_treateBitcodeAsData;
+	bool										_usingBitcode;
 	unsigned int								_stubsSectionNum;
 	const macho_section<P>*						_stubsMachOSection;
 	std::vector<const char*>					_dtraceProviderInfo;
@@ -1715,8 +1716,11 @@ ld::relocatable::File* Parser<A>::parse(const ParserOptions& opts)
 	// create file object
 	_file = new File<A>(_path, _modTime, _fileContent, _ordinal);
 
-	// set input source
-	_file->setSourceKind(opts.srcKind);
+	// set sourceKind
+	_file->_srcKind = opts.srcKind;
+	// set treatBitcodeAsData
+	_treateBitcodeAsData = opts.treateBitcodeAsData;
+	_usingBitcode = opts.usingBitcode;
 
 	// respond to -t option
 	if ( opts.logAllFiles )
@@ -2109,8 +2113,12 @@ bool Parser<A>::parseLoadCommands(Options::Platform platform, uint32_t linkMinOS
 					break;
 	#if SUPPORT_APPLE_TV
 				case Options::kPlatform_tvOS:
-					// tvOS is a warning temporarily. rdar://problem/21746965
-					if (platform == Options::kPlatform_tvOS)
+					// Error when using bitcocde, warning otherwise.
+					if (_usingBitcode)
+						throwf("building for %s%s, but linking in object file built for %s,",
+							   Options::platformName(platform), (simulator ? " simulator" : ""),
+							   Options::platformName(lcPlatform));
+					else
 						warning("URGENT: building for %s%s, but linking in object file (%s) built for %s. "
 								"Note: This will be an error in the future.",
 								Options::platformName(platform), (simulator ? " simulator" : ""), path(),
@@ -2472,6 +2480,7 @@ void Parser<A>::makeSections()
 			}
 		}
 		if ( strcmp(sect->segname(), "__LLVM") == 0 ) {
+			// Process bitcode segement
 			if ( strncmp(sect->sectname(), "__bitcode", 9) == 0 ) {
 				bitcodeSect = sect;
 			} else if ( strncmp(sect->sectname(), "__cmdline", 9) == 0 ) {
@@ -2483,9 +2492,8 @@ void Parser<A>::makeSections()
 			} else if ( strncmp(sect->sectname(), "__asm", 5) == 0 ) {
 				bitcodeAsm = true;
 			}
-			// If it is not single input for ld -r, don't count the section
-			// otherwise, fall through and add it to the sections.
-			if (_file->sourceKind() != ld::relocatable::File::kSourceSingle)
+			// If treat the bitcode as data, continue to parse as a normal section.
+			if ( !_treateBitcodeAsData )
 				continue;
 		}
 		// ignore empty __OBJC sections

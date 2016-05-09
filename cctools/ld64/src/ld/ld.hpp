@@ -203,7 +203,7 @@ namespace relocatable {
 	{
 	public:
 		enum DebugInfoKind { kDebugInfoNone=0, kDebugInfoStabs=1, kDebugInfoDwarf=2, kDebugInfoStabsUUID=3 };
-		enum SourceKind { kSourceUnknown=0, kSourceObj, kSourceLTO, kSourceArchive, kSourceCompilerArchive, kSourceSingle };
+		enum SourceKind { kSourceUnknown=0, kSourceObj, kSourceLTO, kSourceArchive, kSourceCompilerArchive };
 		struct Stab {
 			const class Atom*	atom;
 			uint8_t				type;
