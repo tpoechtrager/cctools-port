@@ -86,6 +86,7 @@ public:
 	enum CommonsMode { kCommonsIgnoreDylibs, kCommonsOverriddenByDylibs, kCommonsConflictsDylibsError };
 	enum UUIDMode { kUUIDNone, kUUIDRandom, kUUIDContent };
 	enum LocalSymbolHandling { kLocalSymbolsAll, kLocalSymbolsNone, kLocalSymbolsSelectiveInclude, kLocalSymbolsSelectiveExclude };
+	enum BitcodeMode { kBitcodeProcess, kBitcodeAsData, kBitcodeMarker, kBitcodeStrip };
 	enum DebugInfoStripping { kDebugInfoNone, kDebugInfoMinimal, kDebugInfoFull };
 #if SUPPORT_APPLE_TV
 	enum Platform { kPlatformUnknown, kPlatformOSX, kPlatformiOS, kPlatformWatchOS, kPlatform_tvOS };
@@ -412,11 +413,14 @@ public:
 	bool						forceLoadSwiftLibs() const { return fForceLoadSwiftLibs; }
 	bool						bundleBitcode() const { return fBundleBitcode; }
 	bool						hideSymbols() const { return fHideSymbols; }
+	bool						verifyBitcode() const { return fVerifyBitcode; }
 	bool						renameReverseSymbolMap() const { return fReverseMapUUIDRename; }
 	const char*					reverseSymbolMapPath() const { return fReverseMapPath; }
 	std::string					reverseMapTempPath() const { return fReverseMapTempPath; }
 	bool						ltoCodegenOnly() const { return fLTOCodegenOnly; }
 	bool						ignoreAutoLink() const { return fIgnoreAutoLink; }
+	bool						allowDeadDuplicates() const { return fAllowDeadDups; }
+	BitcodeMode					bitcodeKind() const { return fBitcodeKind; }
 	bool						sharedRegionEncodingV2() const { return fSharedRegionEncodingV2; }
 	bool						useDataConstSegment() const { return fUseDataConstSegment; }
 	bool						hasWeakBitTweaks() const;
@@ -709,11 +713,14 @@ private:
 	bool								fUseDataConstSegmentForceOff;
 	bool								fBundleBitcode;
 	bool								fHideSymbols;
+	bool								fVerifyBitcode;
 	bool								fReverseMapUUIDRename;
 	const char*							fReverseMapPath;
 	std::string							fReverseMapTempPath;
 	bool								fLTOCodegenOnly;
 	bool								fIgnoreAutoLink;
+	bool								fAllowDeadDups;
+	BitcodeMode							fBitcodeKind;
 	Platform							fPlatform;
 	DebugInfoStripping					fDebugInfoStripping;
 	const char*							fTraceOutputFile;

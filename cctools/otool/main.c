@@ -767,6 +767,7 @@ void *cookie) /* cookie is not used */
     uint32_t nloh;
     struct dyld_bind_info *dbi;
     uint64_t ndbi;
+    uint64_t big_size;
 
 	sorted_symbols = NULL;
 	nsorted_symbols = 0;
@@ -1038,11 +1039,24 @@ void *cookie) /* cookie is not used */
 	/*
 	 * Load commands.
 	 */
-	if(mh_sizeofcmds + sizeof_mach_header > size){
+	big_size = mh_sizeofcmds;
+	big_size += sizeof_mach_header;
+	if(big_size > size){
+	    /*
+	     * For malformed binaries trim the mh_sizeofcmds to be no bigger
+	     * than the size of the file after the mach_header.  This will
+	     * limit the printing of the unknown load commands so it does not
+	     * appear to be in an infinite loop printing the zero's we created
+	     * with the memset().
+	     */
+	    if(size > sizeof_mach_header)
+		mh_sizeofcmds = size - sizeof_mach_header;
+	    else
+		mh_sizeofcmds = sizeof(struct load_command);
 	    load_commands = allocate(mh_sizeofcmds);
 	    memset(load_commands, '\0', mh_sizeofcmds);
-	    memcpy(load_commands, ofile->load_commands, 
-		   size - sizeof_mach_header);
+	    if(size > sizeof_mach_header)
+		memcpy(load_commands, ofile->load_commands, mh_sizeofcmds);
 	    ofile->load_commands = load_commands;
 	}
 	if(lflag)

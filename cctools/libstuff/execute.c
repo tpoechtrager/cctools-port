@@ -27,6 +27,7 @@
 #include <signal.h>
 #include <sys/wait.h>
 #include <sys/file.h>
+#include <errno.h>
 #include "stuff/errors.h"
 #include "stuff/allocate.h"
 #include "stuff/execute.h"
@@ -71,7 +72,10 @@ int verbose)
 	    return(1); /* can't get here, removes a warning from the compiler */
 	}
 	else{
-	    waitpid = wait(&waitstatus);
+            waitpid = -1;
+	    do{
+	        waitpid = wait(&waitstatus);
+	    } while (waitpid == -1 && errno == EINTR);
 	    if(waitpid == -1)
 		system_fatal("wait on forked process %d failed", forkpid);
 #ifndef __OPENSTEP__

@@ -1,6 +1,6 @@
 # Apple cctools port for Linux, *BSD and Windows (Cygwin) #
 
-Current Version: 877.5 + ld64-253.3.  
+Current Version: 877.8 + ld64-253.9.
 
 ## CREDITS ##
 
@@ -60,4 +60,4 @@ If you get compile errors because of `unistd.h`, then please run
 
 ## TRAVIS CI ##
 
-[![Build Status](https://travis-ci.org/tpoechtrager/cctools-port.svg?branch=870-ld64-253.3-ppc)](https://travis-ci.org/tpoechtrager/cctools-port)
+[![Build Status](https://travis-ci.org/tpoechtrager/cctools-port.svg?branch=877.8-ld64-253.9-ppc)](https://travis-ci.org/tpoechtrager/cctools-port)
