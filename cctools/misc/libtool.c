@@ -197,7 +197,7 @@ struct arch {
 };
 
 struct member {
-    uint32_t offset;	    	    /* current working offset and final offset*/
+    uint64_t offset;	    	    /* current working offset and final offset*/
     struct ar_hdr ar_hdr;	    /* the archive header for this member */
     char null_byte;		    /* space to write '\0' for ar_hdr */
     char *object_addr;		    /* the address of the object file */
@@ -228,7 +228,7 @@ struct member {
     char	  *input_base_name;     /* the base name in the input file */
     uint32_t  input_base_name_size;	/* the size of the base name */
     struct ar_hdr *input_ar_hdr;
-    uint32_t      input_member_offset;  /* if from a thin archive */
+    uint64_t      input_member_offset;  /* if from a thin archive */
 };
 
 static void usage(
@@ -266,11 +266,11 @@ static void create_dynamic_shared_library_cleanup(
 static void make_table_of_contents(
     struct arch *arch,
     char *output);
-#ifdef LTO_SUPPORT /* cctools-port */
+#ifdef LTO_SUPPORT
 static void save_lto_member_toc_info(
     struct member *member,
     void *mod);
-#endif
+#endif /* LTO_SUPPORT */
 static int toc_name_qsort(
     const struct toc *toc1,
     const struct toc *toc2);
@@ -751,6 +751,12 @@ char **envp)
 		else if(strcmp(argv[i], "-segalign") == 0 ||
 		        strcmp(argv[i], "-undefined") == 0 ||
 		        strcmp(argv[i], "-macosx_version_min") == 0 ||
+		        strcmp(argv[i], "-ios_version_min") == 0 ||
+		        strcmp(argv[i], "-ios_simulator_version_min") == 0 ||
+		        strcmp(argv[i], "-watchos_version_min") == 0 ||
+		        strcmp(argv[i], "-watchos_simulator_version_min") == 0 ||
+		        strcmp(argv[i], "-tvos_version_min") == 0 ||
+		        strcmp(argv[i], "-tvos_simulator_version_min") == 0 ||
 		        strcmp(argv[i], "-multiply_defined") == 0 ||
 		        strcmp(argv[i], "-multiply_defined_unused") == 0 ||
 		        strcmp(argv[i], "-umbrella") == 0 ||
@@ -1376,7 +1382,9 @@ void)
 				/* No fat members in a fat file */
 				if(ofiles[i].mh != NULL ||
 				   ofiles[i].mh64 != NULL ||
+#ifdef LTO_SUPPORT
 				   ofiles[i].lto != NULL ||
+#endif /* LTO_SUPPORT */
 				   cmd_flags.ranlib == TRUE)
 				    add_member(ofiles + i);
 				else{
@@ -1526,7 +1534,7 @@ void)
 			for(k = 0; k < archs[j].nmembers; k++){
 			    if(archs[j].members[k].mh == NULL &&
 #ifdef LTO_SUPPORT
-			       archs[j].members[k].lto_contents == TRUE &&
+			       archs[j].members[k].lto_contents == FALSE &&
 #endif /* LTO_SUPPORT */
 			       archs[j].members[k].mh64 == NULL){
 				error("library member: %s(%.*s) is not an "
@@ -2274,8 +2282,8 @@ create_library(
 char *output,
 struct ofile *ofile)
 {
-    uint32_t i, j, k, pad, *time_offsets;
-    uint64_t library_size, offset;
+    uint32_t i, j, k, pad;
+    uint64_t library_size, offset, *time_offsets;
     enum byte_sex target_byte_sex;
     char *library, *p, *flush_start;
     kern_return_t r;
@@ -2434,7 +2442,7 @@ struct ofile *ofile)
 	     * contents archive header's ar_date fields.  In this case we just
 	     * have one since this is a thin file (non-fat) file.
 	     */
-	    time_offsets = allocate(1 * sizeof(uint32_t));
+	    time_offsets = allocate(1 * sizeof(uint64_t));
 	    /*
 	     * Calculate the offset to the archive header's time field for the
 	     * table of contents.
@@ -2599,7 +2607,7 @@ fail_to_update_toc_in_place:
 	 * The time_offsets array records the offsets to the table of conternts
 	 * archive header's ar_date fields.
 	 */
-	time_offsets = allocate(narchs * sizeof(uint32_t));
+	time_offsets = allocate(narchs * sizeof(uint64_t));
 
 	/*
 	 * Now put each arch in the buffer.
@@ -3841,13 +3849,13 @@ char *output)
 	       (int)sizeof(arch->toc_ar_hdr.ar_fmag));
 }
 
+#ifdef LTO_SUPPORT
 /*
  * save_lto_member_toc_info() saves away the table of contents info for a
  * member that has lto_content.  This allows the lto module to be disposed of
  * after reading to keep only on in memory at a time.  As these turn out to
  * use a lot of memory.
  */
-#ifdef LTO_SUPPORT /* cctools-port */
 static
 void
 save_lto_member_toc_info(

@@ -2754,7 +2754,7 @@ print_insn_coprocessor (bfd_vma pc, struct disassemble_info *info, int32_t given
 
 			/* Is ``imm'' a negative number?  */
 			if (imm & 0x40)
-			  imm |= (-1 << 7);
+			  imm |= /* (-1 << 7) */ 0xfffffff8;
 
 			func (stream, "%d", imm);
 		      }
@@ -5630,7 +5630,7 @@ enum bool pool)
 static
 uint32_t
 print_data_in_code(
-char *sect,
+unsigned char *sect,
 uint32_t sect_left,
 uint32_t dice_left,
 uint16_t kind)
@@ -5880,7 +5880,8 @@ uint32_t ninsts)
             for(i = 0; i < ndices; i++){
                 if(offset >= dices[i].offset &&
 		   offset < dices[i].offset + dices[i].length){
-		   bytes_consumed = print_data_in_code(sect, left,
+		   bytes_consumed = print_data_in_code((unsigned char *)sect,
+				     left,
 				     dices[i].offset + dices[i].length - offset,
                                      dices[i].kind);
 		   if ((dices[i].kind == DICE_KIND_JUMP_TABLE8) && 

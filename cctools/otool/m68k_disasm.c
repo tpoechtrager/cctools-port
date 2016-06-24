@@ -209,9 +209,9 @@ char *strings,
 uint32_t strings_size,
 uint32_t *indirect_symbols,
 uint32_t nindirect_symbols,
+struct load_command *load_commands,
 uint32_t ncmds,
 uint32_t sizeofcmds,
-struct load_command *load_commands,
 enum bool verbose)
 {
     enum byte_sex host_byte_sex;

@@ -356,6 +356,11 @@ struct object *object)
 		   object->seg_bitcode->filesize != offset)
 		    fatal_arch(arch, member, "the __LLVM segment not directly "
 			       "before the "  SEG_LINKEDIT " segment in: ");
+		if(object->seg_bitcode->vmaddr +
+		   object->seg_bitcode->vmsize != object->seg_linkedit->vmaddr)
+		    fatal_arch(arch, member, "the __LLVM segment's vmaddr plus "
+			       "vmsize not directly before the vmaddr of the "
+			       SEG_LINKEDIT " segment in: ");
 	    }
 	}
 	else{
@@ -379,6 +384,12 @@ struct object *object)
 		   object->seg_bitcode64->filesize != offset)
 		    fatal_arch(arch, member, "the __LLVM segment not directly "
 			       "before the "  SEG_LINKEDIT " segment in: ");
+		if(object->seg_bitcode64->vmaddr +
+		   object->seg_bitcode64->vmsize !=
+						object->seg_linkedit64->vmaddr)
+		    fatal_arch(arch, member, "the __LLVM segment's vmaddr plus "
+			       "vmsize not directly before the vmaddr of the "
+			       SEG_LINKEDIT " segment in: ");
 	    }
 	}
 	if(object->dyld_info != NULL){

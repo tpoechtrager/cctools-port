@@ -722,8 +722,14 @@ fits_in_signed_long (num)
 #if !defined(BFD64)
   return 1;
 #else
+/* (((offsetT) -1 << 31) */
+#define OffsetT_minus1_Leftshift31 ((offsetT)0xffffffff80000000LL)
+/*
   return (!(((offsetT) -1 << 31) & num)
 	  || (((offsetT) -1 << 31) & num) == ((offsetT) -1 << 31));
+*/
+  return (!(OffsetT_minus1_Leftshift31 & num)
+          || (OffsetT_minus1_Leftshift31 & num) ==  OffsetT_minus1_Leftshift31);
 #endif
 }				/* fits_in_signed_long() */
 static INLINE int

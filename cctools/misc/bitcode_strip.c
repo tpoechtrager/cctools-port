@@ -236,6 +236,8 @@ uint32_t narchs)
 
     uint32_t j, offset, size;
     struct object *object;
+    struct ar_hdr h;
+    char size_buf[sizeof(h.ar_size) + 1];
 
 	for(i = 0; i < narchs; i++){
 	    if(archs[i].type == OFILE_ARCHIVE){
@@ -245,7 +247,10 @@ uint32_t narchs)
 			if(check_object(archs + i, archs[i].members + j,
 					object) == FALSE)
 			    return;
-			if(rflag || mflag)
+			if(rflag || mflag ||
+			   (object->mh_filetype != MH_OBJECT &&
+			    object->seg_bitcode == NULL &&
+			    object->seg_bitcode64 == NULL))
 			    strip_bitcode_segment(archs + i,
 						  archs[i].members + j, object);
 			else
@@ -275,15 +280,15 @@ uint32_t narchs)
 			     archs[i].members[j].object->input_sym_info_size +
 			     archs[i].members[j].object->output_sym_info_size,
 			     8);
-			sprintf(archs[i].members[j].ar_hdr->ar_size, "%-*ld",
-			       (int)sizeof(archs[i].members[j].ar_hdr->ar_size),
-			       (long)(size));
+			sprintf(size_buf, "%-*ld",
+			   (int)sizeof(archs[i].members[j].ar_hdr->ar_size),
+			   (long)(size));
 			/*
 			 * This has to be done by hand because sprintf puts a
 			 * null at the end of the buffer.
 			 */
-			memcpy(archs[i].members[j].ar_hdr->ar_fmag, ARFMAG,
-			      (int)sizeof(archs[i].members[j].ar_hdr->ar_fmag));
+			memcpy(archs[i].members[j].ar_hdr->ar_size, size_buf,
+			   (int)sizeof(archs[i].members[j].ar_hdr->ar_size));
 		    }
 		    else{
 			size += archs[i].members[j].unknown_size;
@@ -296,7 +301,10 @@ uint32_t narchs)
 		object = archs[i].object;
 		if(check_object(archs + i, NULL, object) == FALSE)
 		    return;
-		if(rflag || mflag)
+		if(rflag || mflag ||
+		   (object->mh_filetype != MH_OBJECT &&
+		    object->seg_bitcode == NULL &&
+		    object->seg_bitcode64 == NULL))
 		    strip_bitcode_segment(archs + i, NULL, object);
 		else
 		    leave_just_bitcode_segment(archs + i, NULL, object);
@@ -576,6 +584,15 @@ struct object *object)
 		object->seg_linkedit->fileoff += object->seg_bitcode->filesize;
 		start_offset += object->seg_bitcode->filesize;
 	    }
+	    /*
+	     * When removing the bitcode segment move the vmaddr of the
+	     * LINKEDIT down to be contiguous with the previous segment.
+	     * Since it was previously checked in checkout() that the bitcode
+	     * segment is directly before the LINKEDIT segment we just assign
+	     * the vmaddr of the bitcode segment to the LINKEDIT segment
+	     */
+	    if(has_bitcode && rflag)
+		object->seg_linkedit->vmaddr = object->seg_bitcode->vmaddr;
 	}
 	else{
 	    if(object->seg_bitcode64 != NULL){
@@ -624,6 +641,15 @@ struct object *object)
 		    object->seg_bitcode64->filesize;
 		start_offset += object->seg_bitcode64->filesize;
 	    }
+	    /*
+	     * When removing the bitcode segment move the vmaddr of the
+	     * LINKEDIT down to be contiguous with the previous segment.
+	     * Since it was previously checked in checkout() that the bitcode
+	     * segment is directly before the LINKEDIT segment we just assign
+	     * the vmaddr of the bitcode segment to the LINKEDIT segment
+	     */
+	    if(has_bitcode && rflag)
+		object->seg_linkedit64->vmaddr = object->seg_bitcode64->vmaddr;
 	}
 	if(has_bitcode)
 	    some_slice_has_bitcode = TRUE;

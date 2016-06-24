@@ -239,6 +239,8 @@ struct arch *archs,
 uint32_t narchs)
 {
     uint32_t i, j, offset, size;
+    struct ar_hdr h;
+    char size_buf[sizeof(h.ar_size) + 1];
 
 	for(i = 0; i < narchs; i++){
 	    /*
@@ -268,38 +270,18 @@ uint32_t narchs)
 			archs[i].toc_long_name = TRUE;
 		    }
 		    if(archs[i].members[j].object != NULL){
-			char tmp[32]; /* cctools-port */
-			int len;      /* cctools-port */
 			size += archs[i].members[j].object->object_size
 			   - archs[i].members[j].object->input_sym_info_size
 			   + archs[i].members[j].object->output_sym_info_size;
-#if 0
-			/*
-			 * cctools-port: This causes a crash with
-			 * -D_FORTIFY_SOURCE enabled ('\0' "overflows" the
-			 * buffer).
-			 */
-			sprintf(archs[i].members[j].ar_hdr->ar_size, "%-*ld",
-			       (int)sizeof(archs[i].members[j].ar_hdr->ar_size),
-			       (long)(size));
-#endif
-			/* cctools-port start */
-			len = sprintf(tmp, "%-*ld",
-			       (int)sizeof(archs[i].members[j].ar_hdr->ar_size),
-			       (long)(size));
-			if(len !=
-			  (int)sizeof(archs[i].members[j].ar_hdr->ar_size)){
-			    fprintf(stderr, "corrupted object file\n");
-			    abort();
-			}
-			memcpy(&archs[i].members[j].ar_hdr->ar_size, tmp, len);
-			/* cctools-port end */
+			sprintf(size_buf, "%-*ld",
+			   (int)sizeof(archs[i].members[j].ar_hdr->ar_size),
+			   (long)(size));
 			/*
 			 * This has to be done by hand because sprintf puts a
 			 * null at the end of the buffer.
 			 */
-			memcpy(archs[i].members[j].ar_hdr->ar_fmag, ARFMAG,
-			      (int)sizeof(archs[i].members[j].ar_hdr->ar_fmag));
+			memcpy(archs[i].members[j].ar_hdr->ar_size, size_buf,
+			   (int)sizeof(archs[i].members[j].ar_hdr->ar_size));
 		    }
 		    else{
 			size += archs[i].members[j].unknown_size;
@@ -643,16 +625,13 @@ struct object *object)
 	    object->output_code_sig_data = NULL;
 	    align_delta = object->code_sig_cmd->dataoff - linkedit_end;
 
-	    if(object->output_sym_info_size != 0)
-	        object->output_sym_info_size = rnd(object->output_sym_info_size,
-						   16);
-	    else
-		object->output_sym_info_size = align_delta;
+	    object->output_sym_info_size = align_delta +
+					   object->output_sym_info_size;
 	    object->output_sym_info_size += object->code_sig_cmd->datasize;
 
 	    if(object->seg_linkedit != NULL){
-		object->seg_linkedit->filesize =
-		    rnd(object->seg_linkedit->filesize, 16) +
+		object->seg_linkedit->filesize +=
+		    align_delta +
 		    object->code_sig_cmd->datasize;
 		if(object->seg_linkedit->filesize >
 		   object->seg_linkedit->vmsize)
@@ -661,8 +640,8 @@ struct object *object)
 			      get_segalign_from_flag(&arch_signs[i].arch_flag));
 	    }
 	    else if(object->seg_linkedit64 != NULL){
-		object->seg_linkedit64->filesize =
-		    rnd(object->seg_linkedit64->filesize, 16) +
+		object->seg_linkedit64->filesize +=
+		    align_delta +
 		    object->code_sig_cmd->datasize;
 		if(object->seg_linkedit64->filesize >
 		   object->seg_linkedit64->vmsize)

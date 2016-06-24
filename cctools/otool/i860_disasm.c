@@ -505,6 +505,8 @@ enum bool verbose)
 	if(rp != NULL){
 	    if(rp->r_extern &&
 	       rp->r_symbolnum < nsymbols){
+		if(symbols[rp->r_symbolnum].n_un.n_strx > strings_size)
+		    return(FALSE);
 		if(value != 0)
 		    printf("%s+0x%x", strings +
 			   symbols[rp->r_symbolnum].n_un.n_strx,

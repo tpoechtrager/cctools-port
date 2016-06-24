@@ -373,6 +373,7 @@ struct info {
     uint64_t ndbi;
     enum bool verbose;
     enum bool Vflag;
+    uint32_t depth;
 };
 
 struct section_info_64 {
@@ -539,6 +540,7 @@ enum bool Vflag)
 	if(s == NULL)
 	    s = get_section_64(info.sections, info.nsections,
 				"__DATA_CONST", "__objc_classlist");
+	info.depth = 0;
 	walk_pointer_list("class", s, &info, print_class_t);
 
 	s = get_section_64(info.sections, info.nsections,
@@ -985,7 +987,11 @@ struct info *info)
 	printf("\n");
 	print_class_ro_t((c.data + n_value) & ~0x7, info, &is_meta_class);
 
-	if(is_meta_class == FALSE){
+	if(is_meta_class == FALSE &&
+           c.isa + isa_n_value != p &&
+	   c.isa + isa_n_value != 0 &&
+	   info->depth < 100){
+	    info->depth++;
 	    printf("Meta Class\n");
 	    print_class_t(c.isa + isa_n_value, info);
 	}
@@ -1216,7 +1222,7 @@ char *indent)
 		return;
 	    memset(&m, '\0', sizeof(struct method_t));
 	    if(left < sizeof(struct method_t)){
-		memcpy(&ml, r, left);
+		memcpy(&m, r, left);
 		printf("%s   (method_t entends past the end of the "
 		       "section)\n", indent);
 	    }

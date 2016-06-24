@@ -49,15 +49,16 @@ struct segment_command_64 **segs64,
 uint32_t nsegs64)
 {
 	if(segs != NULL){
-	    if(segIndex > nsegs)
+	    if(segIndex >= nsegs)
 		return(0); /* throw "segment index out of range"; */
 	    return(segs[segIndex]->vmaddr);
 	}
-	else {
-	    if(segIndex > nsegs64)
+	else if(segs64 != NULL){
+	    if(segIndex >= nsegs64)
 		return(0); /* throw "segment index out of range"; */
 	    return(segs64[segIndex]->vmaddr);
 	}
+	return(0);
 }
 
 const char *
@@ -69,15 +70,16 @@ struct segment_command_64 **segs64,
 uint32_t nsegs64)
 {
 	if(segs != NULL){
-	    if(segIndex > nsegs)
+	    if(segIndex >= nsegs)
 		return("??"); /* throw "segment index out of range"; */
 	    return(segs[segIndex]->segname);
 	}
-	else{
-	    if(segIndex > nsegs64)
+	else if(segs64 != NULL){
+	    if(segIndex >= nsegs64)
 		return("??"); /* throw "segment index out of range"; */
 	    return(segs64[segIndex]->segname);
 	}
+	return("??");
 }
 
 const char *
@@ -94,7 +96,7 @@ uint32_t nsegs64)
     uint32_t i;
 
 	if(segs != NULL){
-	    if(segIndex > nsegs)
+	    if(segIndex >= nsegs)
 		return("??"); /* throw "segment index out of range"; */
 	    
 	    s = (struct section *)((char *)segs[segIndex] + 
@@ -105,8 +107,8 @@ uint32_t nsegs64)
 		s++;
 	    }
 	}
-	else{
-	    if(segIndex > nsegs64)
+	else if(segs64 != NULL){
+	    if(segIndex >= nsegs64)
 		return("??"); /* throw "segment index out of range"; */
 	    
 	    s64 = (struct section_64 *)((char *)segs64[segIndex] + 

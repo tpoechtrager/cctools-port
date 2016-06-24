@@ -750,9 +750,18 @@ const char **ReferenceName)
 
 LLVMDisasmContextRef
 create_arm64_llvm_disassembler(
-void)
+cpu_subtype_t cpusubtype)
 {
     LLVMDisasmContextRef dc;
+    char *mcpu_default;
+
+	mcpu_default = mcpu;
+	switch(cpusubtype){
+	case CPU_SUBTYPE_ARM64_ALL:
+	    if(*mcpu_default == '\0')
+		mcpu_default = "cyclone";
+	    break;
+	}
 
 	dc = 
 #ifdef STATIC_LLVM
@@ -760,7 +769,7 @@ void)
 #else
 	llvm_create_disasm
 #endif
-	    ("arm64-apple-darwin10", mcpu, &dis_info, 1, GetOpInfo,
+	    ("arm64-apple-darwin10", mcpu_default, &dis_info, 1, GetOpInfo,
 	     SymbolLookUp);
 	return(dc);
 }

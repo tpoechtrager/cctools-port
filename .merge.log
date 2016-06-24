@@ -1,3 +1,100 @@
+## cctools 877.8 -> 886 ##
+
+patching file ./as/i386.c
+patching file ./include/stuff/ofile.h
+patching file ./libstuff/checkout.c
+patching file ./libstuff/ofile.c
+can't find file to patch at input line 290
+Perhaps you used the wrong -p or --strip option?
+The text leading up to this was:
+--------------------------
+|diff -Naur ../cctools-877.8/Makefile ./Makefile
+|--- ../cctools-877.8/Makefile  2016-01-03 10:19:07.000000000 +0100
+|+++ ./Makefile 2016-05-02 04:22:30.000000000 +0200
+--------------------------
+File to patch:
+Skip this patch? [y]
+Skipping patch.
+23 out of 23 hunks ignored
+The next patch would create the file ./man/llvm-otool.1,
+which already exists!  Assume -R? [n]
+Apply anyway? [n]
+Skipping patch.
+1 out of 1 hunk ignored
+patching file ./man/Makefile
+patching file ./man/nm.1
+The next patch would create the file ./man/nm-classic.1,
+which already exists!  Assume -R? [n]
+Apply anyway? [n]
+Skipping patch.
+1 out of 1 hunk ignored
+The next patch would create the file ./man/otool-classic.1,
+which already exists!  Assume -R? [n]
+Apply anyway? [n]
+Skipping patch.
+1 out of 1 hunk ignored
+The next patch would create the file ./man/size-classic.1,
+which already exists!  Assume -R? [n]
+Apply anyway? [n]
+Skipping patch.
+1 out of 1 hunk ignored
+patching file ./misc/bitcode_strip.c
+patching file ./misc/codesign_allocate.c
+Hunk #2 NOT MERGED at 288-307, merged at 312-313.
+patching file ./misc/indr.c
+Hunk #2 NOT MERGED at 567-586, merged at 591-592.
+patching file ./misc/inout.c
+Hunk #2 NOT MERGED at 159-178, merged at 183-184.
+patching file ./misc/install_name_tool.c
+patching file ./misc/libtool.c
+Hunk #3 NOT MERGED at 271-275,279-283.
+Hunk #11 already applied at 3901.
+can't find file to patch at input line 1311
+Perhaps you used the wrong -p or --strip option?
+The text leading up to this was:
+--------------------------
+|diff -Naur ../cctools-877.8/misc/Makefile ./misc/Makefile
+|--- ../cctools-877.8/misc/Makefile     2015-03-10 01:33:19.000000000 +0100
+|+++ ./misc/Makefile    2016-01-20 02:39:22.000000000 +0100
+--------------------------
+File to patch:
+Skip this patch? [y]
+Skipping patch.
+2 out of 2 hunks ignored
+patching file ./misc/nm.c
+Hunk #7 merged at 524-529.
+patching file ./misc/seg_hack.c
+Hunk #2 NOT MERGED at 219-238, merged at 243-244.
+patching file ./misc/strip.c
+Hunk #2 NOT MERGED at 911-930, merged at 935-936.
+patching file ./otool/arm64_disasm.c
+patching file ./otool/arm64_disasm.h
+patching file ./otool/arm_disasm.c
+patching file ./otool/dyld_bind_info.c
+patching file ./otool/i386_disasm.c
+patching file ./otool/i860_disasm.c
+patching file ./otool/m68k_disasm.c
+patching file ./otool/m88k_disasm.c
+patching file ./otool/main.c
+can't find file to patch at input line 2490
+Perhaps you used the wrong -p or --strip option?
+The text leading up to this was:
+--------------------------
+|diff -Naur ../cctools-877.8/otool/Makefile ./otool/Makefile
+|--- ../cctools-877.8/otool/Makefile    2015-03-10 01:33:19.000000000 +0100
+|+++ ./otool/Makefile   2016-01-20 02:39:22.000000000 +0100
+--------------------------
+File to patch:
+Skip this patch? [y]
+Skipping patch.
+3 out of 3 hunks ignored
+patching file ./otool/ofile_print.c
+patching file ./otool/ofile_print.h
+patching file ./otool/print_bitcode.c
+Hunk #1 merged at 53-56,62-71,78-80.
+patching file ./otool/print_objc2_64bit.c
+patching file ./otool/sparc_disasm.c
+
 # ld64 253.9 -> ld64 264.3.102 ##
 
 patching file ./doc/man/man1/ld.1

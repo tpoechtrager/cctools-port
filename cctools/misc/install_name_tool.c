@@ -661,6 +661,11 @@ uint32_t *header_size)
     struct rpath_command *rpath1, *rpath2;
     enum bool delete;
 
+	for(i = 0; i < nrpaths; i++)
+	    rpaths[i].found = FALSE;
+	for(i = 0; i < ndelete_rpaths; i++)
+	    delete_rpaths[i].found = FALSE;
+
 	/*
 	 * Make a pass through the load commands and figure out what the new
 	 * size of the the commands needs to be and how much room there is for

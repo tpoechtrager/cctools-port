@@ -4754,7 +4754,7 @@ void *TagBuf)
 	     */
 	    if(relocs[i].r_pcrel == 1)
 		op_info->Value -= Pc + Offset + Width;
-	    if(symbols != NULL)
+	    if(symbols != NULL && relocs[i].r_symbolnum < info->nsymbols)
 		n_strx = symbols[relocs[i].r_symbolnum].n_un.n_strx;
 	    else
 		return(0);
@@ -4861,7 +4861,10 @@ enum bool *cfstring)
 		if(swapped)
 		    swap_segment_command_64(&sg64, host_byte_sex);
 		p = (char *)lc + sizeof(struct segment_command_64);
-		for(j = 0 ; j < sg64.nsects ; j++){
+		for(j = 0 ; j < sg64.nsects &&
+			    j * sizeof(struct section_64) +
+			    sizeof(struct segment_command_64) < sizeofcmds ;
+                    j++){
 		    memcpy((char *)&s64, p, sizeof(struct section_64));
 		    p += sizeof(struct section_64);
 		    if(swapped)
@@ -4969,7 +4972,10 @@ const uint64_t object_size)
 		if(swapped)
 		    swap_segment_command_64(&sg64, host_byte_sex);
 		p = (char *)lc + sizeof(struct segment_command_64);
-		for(j = 0 ; j < sg64.nsects ; j++){
+		for(j = 0 ; j < sg64.nsects &&
+			    j * sizeof(struct section_64) +
+			    sizeof(struct segment_command_64) < sizeofcmds ;
+                    j++){
 		    memcpy((char *)&s64, p, sizeof(struct section_64));
 		    p += sizeof(struct section_64);
 		    if(swapped)

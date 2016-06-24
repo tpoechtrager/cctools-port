@@ -1035,77 +1035,7 @@ enum bool print_offset)
 	    mode = strtoul(mode_buf, &endp, 8);
 	    if(*endp != '\0')
 		printf("(mode: \"%s\" contains non-octal chars) ", mode_buf);
-	    switch(mode & S_IFMT){
-	    case S_IFDIR:
-		printf("d");
-		break;
-	    case S_IFCHR:
-		printf("c");
-		break;
-	    case S_IFBLK:
-		printf("b");
-		break;
-	    case S_IFREG:
-		printf("-");
-		break;
-	    case S_IFLNK:
-		printf("l");
-		break;
-	    case S_IFSOCK:
-		printf("s");
-		break;
-	    default:
-		printf("?");
-		break;
-	    }
-
-	    /* owner permissions */
-	    if(mode & S_IREAD)
-		printf("r");
-	    else
-		printf("-");
-	    if(mode & S_IWRITE)
-		printf("w");
-	    else
-		printf("-");
-	    if(mode & S_ISUID)
-		printf("s");
-	    else if(mode & S_IEXEC)
-		printf("x");
-	    else
-		printf("-");
-
-	    /* group permissions */
-	    if(mode & (S_IREAD >> 3))
-		printf("r");
-	    else
-		printf("-");
-	    if(mode & (S_IWRITE >> 3))
-		printf("w");
-	    else
-		printf("-");
-	    if(mode & S_ISGID)
-		printf("s");
-	    else if(mode & (S_IEXEC >> 3))
-		printf("x");
-	    else
-		printf("-");
-
-	    /* other permissions */
-	    if(mode & (S_IREAD >> 6))
-		printf("r");
-	    else
-		printf("-");
-	    if(mode & (S_IWRITE >> 6))
-		printf("w");
-	    else
-		printf("-");
-	    if(mode & S_ISVTX)
-		printf("t");
-	    else if(mode & (S_IEXEC >> 6))
-		printf("x");
-	    else
-		printf("-");
+	    print_mode_verbose(mode);
 	}
 	else
 	    /* printf("0%03o ", mode & 0777); */
@@ -1141,6 +1071,83 @@ enum bool print_offset)
 	    printf("\n");
 	else
 	    printf(" (ar_fmag not ARFMAG)\n");
+}
+
+void
+print_mode_verbose(
+uint32_t mode)
+{
+	switch(mode & S_IFMT){
+	case S_IFDIR:
+	    printf("d");
+	    break;
+	case S_IFCHR:
+	    printf("c");
+	    break;
+	case S_IFBLK:
+	    printf("b");
+	    break;
+	case S_IFREG:
+	    printf("-");
+	    break;
+	case S_IFLNK:
+	    printf("l");
+	    break;
+	case S_IFSOCK:
+	    printf("s");
+	    break;
+	default:
+	    printf("?");
+	    break;
+	}
+
+	/* owner permissions */
+	if(mode & S_IREAD)
+	    printf("r");
+	else
+	    printf("-");
+	if(mode & S_IWRITE)
+	    printf("w");
+	else
+	    printf("-");
+	if(mode & S_ISUID)
+	    printf("s");
+	else if(mode & S_IEXEC)
+	    printf("x");
+	else
+	    printf("-");
+
+	/* group permissions */
+	if(mode & (S_IREAD >> 3))
+	    printf("r");
+	else
+	    printf("-");
+	if(mode & (S_IWRITE >> 3))
+	    printf("w");
+	else
+	    printf("-");
+	if(mode & S_ISGID)
+	    printf("s");
+	else if(mode & (S_IEXEC >> 3))
+	    printf("x");
+	else
+	    printf("-");
+
+	/* other permissions */
+	if(mode & (S_IREAD >> 6))
+	    printf("r");
+	else
+	    printf("-");
+	if(mode & (S_IWRITE >> 6))
+	    printf("w");
+	else
+	    printf("-");
+	if(mode & S_ISVTX)
+	    printf("t");
+	else if(mode & (S_IEXEC >> 6))
+	    printf("x");
+	else
+	    printf("-");
 }
 
 /*
@@ -1307,6 +1314,217 @@ enum bool verbose)
 	}
 
 	free(ranlibs);
+}
+
+/*
+ * print_sysv_library_toc prints the table of contents of a System V format 
+ * archive library.
+ */
+void
+print_sysv_library_toc(
+struct ar_hdr *toc_ar_hdr,
+char *toc_name,
+uint32_t toc_name_size,
+char *toc_addr,
+uint32_t toc_size,
+enum byte_sex toc_byte_sex,
+char *library_name,
+char *library_addr,
+uint64_t library_size,
+char *arch_name,
+enum bool verbose)
+{
+    enum byte_sex host_byte_sex;
+    uint32_t i, j, num_entries, *memoffrefs, sym_names_size, max_sym_name_len,
+	     member_name_offset;
+    uint64_t toc_offset, big_size;
+    char *sym_names, *sym_name;
+    struct ar_hdr *ar_hdr;
+    int n;
+    char buf[20];
+
+    struct ar_hdr *strtab_ar_hdr;
+    char *ar_strtab;
+    uint32_t ar_strtab_size, library_size_after_toc;
+
+	host_byte_sex = get_host_byte_sex();
+	toc_offset = 0;
+
+	/*
+	 * The first thing in the toc is a 32-bit big endian value of the
+	 * count of the number of symbol table entries that follow it.
+	 */
+	if(toc_offset + sizeof(uint32_t) > toc_size){
+	    error_with_arch(arch_name, "truncated table of contents in: "
+		"%s(%.*s) (number of symbol table entries extends past the end "
+		"of the table of contents member)", library_name,
+		(int)toc_name_size, toc_name);
+	    return;
+	}
+	memcpy((char *)&num_entries, toc_addr + toc_offset, sizeof(uint32_t));
+	if(host_byte_sex != BIG_ENDIAN_BYTE_SEX)
+	    num_entries = SWAP_INT(num_entries);
+	toc_offset += sizeof(uint32_t);
+
+	/*
+	 * Next in the toc is num_entries of 32-bit big endian values which
+	 * are offsets to the members that define a symbol.
+	 */
+	big_size = num_entries * sizeof(uint32_t);
+	big_size += toc_offset;
+	if(big_size > toc_size){
+	    error_with_arch(arch_name, "truncated table of contents in: "
+		"%s(%.*s) (member offset referernces extends past the end of "
+		"the table of contents member)", library_name,
+		(int)toc_name_size, toc_name);
+	    return;
+	}
+	memoffrefs = allocate(num_entries * sizeof(uint32_t));
+	memcpy((char *)memoffrefs, toc_addr + toc_offset,
+	       num_entries * sizeof(uint32_t));
+	if(host_byte_sex != BIG_ENDIAN_BYTE_SEX){
+	    for(i = 0; i < num_entries; i++)
+		memoffrefs[i] = SWAP_INT(memoffrefs[i]);
+	}
+	toc_offset += num_entries * sizeof(uint32_t);
+
+	/*
+	 * Lastly in the toc are a list of null terminated strings in the same
+	 * order as the member offset references above.
+	 */
+	sym_names = toc_addr + toc_offset;
+	sym_names_size = toc_size - toc_offset;
+
+	/*
+	 * Long archive member names are stored in the archive member contents
+	 * of the archive member after the table of contents in an archive
+	 * member with the name "//".  And referred to by the ar_name with
+	 * the format "/offset" where the "offset" is a decimal offset into the
+	 * archive member string names.
+	 */
+	library_size_after_toc = library_size -
+	    (((char *)toc_ar_hdr + sizeof(struct ar_hdr) + toc_size) -
+	    library_addr);
+	ar_strtab = NULL;
+	ar_strtab_size = 0;
+	if(library_size_after_toc >= sizeof(struct ar_hdr)){
+	    strtab_ar_hdr = (struct ar_hdr *)
+		((char *)toc_ar_hdr + sizeof(struct ar_hdr) + toc_size);
+	    if(strncmp(strtab_ar_hdr->ar_name, "// ", sizeof("// ")-1) == 0){
+		ar_strtab_size = strtoul(strtab_ar_hdr->ar_size, NULL, 10);
+		if(ar_strtab_size >
+		   library_size_after_toc - sizeof(struct ar_hdr))
+		    ar_strtab_size = library_size_after_toc -
+				     sizeof(struct ar_hdr);
+		ar_strtab = (char *)strtab_ar_hdr + sizeof(struct ar_hdr);
+	    }
+	}
+
+	printf("Table of contents from: %s(%.*s)", library_name,
+	       (int)toc_name_size, toc_name);
+	if(arch_name != NULL)
+	    printf(" (for architecture %s)\n", arch_name);
+	else
+	    printf("\n");
+	printf("number of entries: %u\n", num_entries);
+	if(verbose){
+	    printf("size of strings: %u\n", sym_names_size);
+	}
+	if(verbose)
+	    printf("object           symbol name\n");
+	else
+	    printf("object offset  string index\n");
+
+	/*
+	 * Loop through the table of contents entries.  Starting with the first
+	 * symbol name through a count of num_entries.
+	 */
+	sym_name = sym_names;
+	max_sym_name_len = sym_names_size;
+	for(i = 0; i < num_entries; i++){
+	    if(max_sym_name_len == 0){
+		error_with_arch(arch_name, "truncated table of contents in: "
+		    "%s(%.*s) (string table extends past the end of the table "
+		    "of contents member)", library_name, (int)toc_name_size,
+		    toc_name);
+		return;
+	    }
+	    if(verbose){
+		/*
+		 * Print the archive member name for the member offset that
+		 * is an offset from the start of the library to the archive
+		 * header for that member.  Member names end in with a '/'
+		 * character which we don't print.
+		 */
+		if(memoffrefs[i] + sizeof(struct ar_hdr) <= library_size){
+		    ar_hdr = (struct ar_hdr *)(library_addr + memoffrefs[i]);
+		    /*
+		     * If the name starts with a '/' a decimal number follows
+		     * it that is the offset into the member name string table.
+		     */
+		    if(ar_hdr->ar_name[0] == '/'){
+			member_name_offset = strtoul(ar_hdr->ar_name + 1,
+						     NULL, 10);
+			if(member_name_offset < ar_strtab_size){
+			    for(n = member_name_offset;
+				n < ar_strtab_size; n++){
+				if(ar_strtab[n] != '/')
+				    printf("%c", ar_strtab[n]);
+				else
+				    break;
+			    }
+			    if(n < ar_strtab_size){
+				if((n - member_name_offset) <= 16)
+				    printf("%.*s", 17 - (n -member_name_offset),
+					   "                ");
+				else
+				    printf(" ");
+			    }
+			    else
+				printf(" ");
+			}
+			else{
+			    printf("bad member name offset %u ",
+				   member_name_offset);
+			}
+		    }
+		    else{
+			for(n = 0; n < sizeof(ar_hdr->ar_name); n++){
+			    if(ar_hdr->ar_name[n] != '/')
+				printf("%c", ar_hdr->ar_name[n]);
+			    else
+				break;
+			}
+			printf("%.*s", 17 - n, "                ");
+		    }
+		}
+		else{
+		    n = sprintf(buf, "?(%u) ", memoffrefs[i]);
+		    printf("%s%.*s", buf, 17 - n, "              ");
+		}
+	    }
+	    else{
+		printf("%-14u ", memoffrefs[i]);
+	    }
+
+	    if(verbose){
+		printf("%.*s\n", max_sym_name_len, sym_name);
+	    }
+	    else{
+		printf("%ld\n", sym_name - sym_names);
+	    }
+
+	    /*
+	     * Adjust the maximum symbol name length left after this symbol
+	     * name.
+	     */
+	    for(j = 0; sym_name[j] != '\0' && max_sym_name_len != 0; j++)
+	       max_sym_name_len--;
+	    if(max_sym_name_len != 0 && sym_name[j] == '\0'){
+		max_sym_name_len--;
+		sym_name = sym_name + j + 1;
+	    }
+	}
 }
 
 /*
@@ -2032,7 +2250,7 @@ enum bool very_verbose)
 		memcpy((char *)&fl, (char *)lc, size);
 		if(swapped)
 		    swap_fvmlib_command(&fl, host_byte_sex);
-		print_fvmlib_command(&fl, lc);
+		print_fvmlib_command(&fl, lc, left);
 		break;
 
 	    case LC_ID_DYLIB:
@@ -2047,7 +2265,7 @@ enum bool very_verbose)
 		memcpy((char *)&dl, (char *)lc, size);
 		if(swapped)
 		    swap_dylib_command(&dl, host_byte_sex);
-		print_dylib_command(&dl, lc);
+		print_dylib_command(&dl, lc, left);
 		break;
 
 	    case LC_SUB_FRAMEWORK:
@@ -2057,7 +2275,7 @@ enum bool very_verbose)
 		memcpy((char *)&sub, (char *)lc, size);
 		if(swapped)
 		    swap_sub_framework_command(&sub, host_byte_sex);
-		print_sub_framework_command(&sub, lc);
+		print_sub_framework_command(&sub, lc, left);
 		break;
 
 	    case LC_SUB_UMBRELLA:
@@ -2067,7 +2285,7 @@ enum bool very_verbose)
 		memcpy((char *)&usub, (char *)lc, size);
 		if(swapped)
 		    swap_sub_umbrella_command(&usub, host_byte_sex);
-		print_sub_umbrella_command(&usub, lc);
+		print_sub_umbrella_command(&usub, lc, left);
 		break;
 
 	    case LC_SUB_LIBRARY:
@@ -2077,7 +2295,7 @@ enum bool very_verbose)
 		memcpy((char *)&lsub, (char *)lc, size);
 		if(swapped)
 		    swap_sub_library_command(&lsub, host_byte_sex);
-		print_sub_library_command(&lsub, lc);
+		print_sub_library_command(&lsub, lc, left);
 		break;
 
 	    case LC_SUB_CLIENT:
@@ -2087,7 +2305,7 @@ enum bool very_verbose)
 		memcpy((char *)&csub, (char *)lc, size);
 		if(swapped)
 		    swap_sub_client_command(&csub, host_byte_sex);
-		print_sub_client_command(&csub, lc);
+		print_sub_client_command(&csub, lc, left);
 		break;
 
 	    case LC_PREBOUND_DYLIB:
@@ -2098,7 +2316,7 @@ enum bool very_verbose)
 		memcpy((char *)&pbdylib, (char *)lc, size);
 		if(swapped)
 		    swap_prebound_dylib_command(&pbdylib, host_byte_sex);
-		print_prebound_dylib_command(&pbdylib, lc, very_verbose);
+		print_prebound_dylib_command(&pbdylib, lc, left, very_verbose);
 		break;
 
 	    case LC_ID_DYLINKER:
@@ -2110,7 +2328,7 @@ enum bool very_verbose)
 		memcpy((char *)&dyld, (char *)lc, size);
 		if(swapped)
 		    swap_dylinker_command(&dyld, host_byte_sex);
-		print_dylinker_command(&dyld, lc);
+		print_dylinker_command(&dyld, lc, left);
 		break;
 
 	    case LC_FVMFILE:
@@ -2120,7 +2338,7 @@ enum bool very_verbose)
 		memcpy((char *)&ff, (char *)lc, size);
 		if(swapped)
 		    swap_fvmfile_command(&ff, host_byte_sex);
-		print_fvmfile_command(&ff, lc);
+		print_fvmfile_command(&ff, lc, left);
 		break;
 
 	    case LC_UNIXTHREAD:
@@ -2155,6 +2373,8 @@ enum bool very_verbose)
 		    end = (char *)lc + l.cmdsize;
 		else
 		    end = (char *)lc + left;
+		if((end - (char *)load_commands) > sizeofcmds)
+		    end = (char *)load_commands + sizeofcmds;
 
 		p = ((char *)lc) + sizeof(struct ident_command);
 		while(begin < end){
@@ -2275,7 +2495,7 @@ enum bool very_verbose)
 		memcpy((char *)&lo, (char *)lc, size);
 		if(swapped)
 		    swap_linker_option_command(&lo, host_byte_sex);
-		print_linker_option_command(&lo, lc);
+		print_linker_option_command(&lo, lc, left);
 		break;
 
 	    case LC_DYLD_INFO:
@@ -2405,7 +2625,8 @@ enum bool verbose)
 		memcpy((char *)&fl, (char *)lc, size);
 		if(swapped)
 		    swap_fvmlib_command(&fl, host_byte_sex);
-		if(fl.fvmlib.name.offset < fl.cmdsize){
+		if(fl.fvmlib.name.offset < fl.cmdsize &&
+		   fl.fvmlib.name.offset < left){
 		    p = (char *)lc + fl.fvmlib.name.offset;
 		    printf("\t%s (minor version %u)\n", p,
 			   fl.fvmlib.minor_version);
@@ -2431,7 +2652,8 @@ enum bool verbose)
 		memcpy((char *)&dl, (char *)lc, size);
 		if(swapped)
 		    swap_dylib_command(&dl, host_byte_sex);
-		if(dl.dylib.name.offset < dl.cmdsize){
+		if(dl.dylib.name.offset < dl.cmdsize &&
+		   dl.dylib.name.offset < left){
 		    p = (char *)lc + dl.dylib.name.offset;
 		    if(just_id == TRUE)
 			printf("%s\n", p);
@@ -3004,7 +3226,8 @@ uint32_t object_size)
 void
 print_fvmlib_command(
 struct fvmlib_command *fl,
-struct load_command *lc)
+struct load_command *lc,
+uint32_t left)
 {
     char *p;
 
@@ -3017,7 +3240,8 @@ struct load_command *lc)
 	    printf(" Incorrect size\n");
 	else
 	    printf("\n");
-	if(fl->fvmlib.name.offset < fl->cmdsize){
+	if(fl->fvmlib.name.offset < fl->cmdsize &&
+	   fl->fvmlib.name.offset < left){
 	    p = (char *)lc + fl->fvmlib.name.offset;
 	    printf("          name %s (offset %u)\n",
 		   p, fl->fvmlib.name.offset);
@@ -3038,7 +3262,8 @@ struct load_command *lc)
 void
 print_dylib_command(
 struct dylib_command *dl,
-struct load_command *lc)
+struct load_command *lc,
+uint32_t left)
 {
     char *p;
     time_t t;
@@ -3062,10 +3287,11 @@ struct load_command *lc)
 	    printf(" Incorrect size\n");
 	else
 	    printf("\n");
-	if(dl->dylib.name.offset < dl->cmdsize){
+	if(dl->dylib.name.offset < dl->cmdsize &&
+           dl->dylib.name.offset < left){
 	    p = (char *)lc + dl->dylib.name.offset;
-	    printf("         name %s (offset %u)\n",
-		   p, dl->dylib.name.offset);
+	    printf("         name %.*s (offset %u)\n",
+		   left, p, dl->dylib.name.offset);
 	}
 	else{
 	    printf("         name ?(bad offset %u)\n",
@@ -3099,7 +3325,8 @@ struct load_command *lc)
 void
 print_sub_framework_command(
 struct sub_framework_command *sub,
-struct load_command *lc)
+struct load_command *lc,
+uint32_t left)
 {
     char *p;
 
@@ -3109,7 +3336,8 @@ struct load_command *lc)
 	    printf(" Incorrect size\n");
 	else
 	    printf("\n");
-	if(sub->umbrella.offset < sub->cmdsize){
+	if(sub->umbrella.offset < sub->cmdsize &&
+	   sub->umbrella.offset < left){
 	    p = (char *)lc + sub->umbrella.offset;
 	    printf("     umbrella %s (offset %u)\n",
 		   p, sub->umbrella.offset);
@@ -3127,7 +3355,8 @@ struct load_command *lc)
 void
 print_sub_umbrella_command(
 struct sub_umbrella_command *usub,
-struct load_command *lc)
+struct load_command *lc,
+uint32_t left)
 {
     char *p;
 
@@ -3137,7 +3366,8 @@ struct load_command *lc)
 	    printf(" Incorrect size\n");
 	else
 	    printf("\n");
-	if(usub->sub_umbrella.offset < usub->cmdsize){
+	if(usub->sub_umbrella.offset < usub->cmdsize &&
+	   usub->sub_umbrella.offset < left){
 	    p = (char *)lc + usub->sub_umbrella.offset;
 	    printf(" sub_umbrella %s (offset %u)\n",
 		   p, usub->sub_umbrella.offset);
@@ -3155,7 +3385,8 @@ struct load_command *lc)
 void
 print_sub_library_command(
 struct sub_library_command *lsub,
-struct load_command *lc)
+struct load_command *lc,
+uint32_t left)
 {
     char *p;
 
@@ -3165,7 +3396,8 @@ struct load_command *lc)
 	    printf(" Incorrect size\n");
 	else
 	    printf("\n");
-	if(lsub->sub_library.offset < lsub->cmdsize){
+	if(lsub->sub_library.offset < lsub->cmdsize &&
+	   lsub->sub_library.offset < left){
 	    p = (char *)lc + lsub->sub_library.offset;
 	    printf("  sub_library %s (offset %u)\n",
 		   p, lsub->sub_library.offset);
@@ -3183,7 +3415,8 @@ struct load_command *lc)
 void
 print_sub_client_command(
 struct sub_client_command *csub,
-struct load_command *lc)
+struct load_command *lc,
+uint32_t left)
 {
     char *p;
 
@@ -3193,7 +3426,8 @@ struct load_command *lc)
 	    printf(" Incorrect size\n");
 	else
 	    printf("\n");
-	if(csub->client.offset < csub->cmdsize){
+	if(csub->client.offset < csub->cmdsize &&
+	   csub->client.offset < left){
 	    p = (char *)lc + csub->client.offset;
 	    printf("       client %s (offset %u)\n",
 		   p, csub->client.offset);
@@ -3212,6 +3446,7 @@ void
 print_prebound_dylib_command(
 struct prebound_dylib_command *pbdylib,
 struct load_command *lc,
+uint32_t left,
 enum bool verbose)
 {
     char *p;
@@ -3223,7 +3458,8 @@ enum bool verbose)
 	    printf(" Incorrect size\n");
 	else
 	    printf("\n");
-	if(pbdylib->name.offset < pbdylib->cmdsize){
+	if(pbdylib->name.offset < pbdylib->cmdsize &&
+           pbdylib->name.offset < left){
 	    p = (char *)lc + pbdylib->name.offset;
 	    printf("           name %s (offset %u)\n",
 		   p, pbdylib->name.offset);
@@ -3234,12 +3470,14 @@ enum bool verbose)
 	}
 	printf("       nmodules %u\n", pbdylib->nmodules);
 
-	if(pbdylib->linked_modules.offset < pbdylib->cmdsize){
+	if(pbdylib->linked_modules.offset < pbdylib->cmdsize &&
+	   pbdylib->linked_modules.offset < left){
 	    p = (char *)lc + pbdylib->linked_modules.offset;
 	    if(verbose == TRUE){
 		printf(" linked_modules (offset %u)\n",
 			pbdylib->linked_modules.offset);
-		for(i = 0; i < pbdylib->nmodules; i++){
+		for(i = 0; i < pbdylib->nmodules &&
+			   pbdylib->linked_modules.offset + i/8 < left; i++){
 		    if(((p[i/8] >> (i%8)) & 1) == 1)
 			printf("%u\n", i);
 		}
@@ -3271,7 +3509,8 @@ enum bool verbose)
 void
 print_dylinker_command(
 struct dylinker_command *dyld,
-struct load_command *lc)
+struct load_command *lc,
+uint32_t left)
 {
     char *p;
 
@@ -3288,7 +3527,8 @@ struct load_command *lc)
 	    printf(" Incorrect size\n");
 	else
 	    printf("\n");
-	if(dyld->name.offset < dyld->cmdsize){
+	if(dyld->name.offset < dyld->cmdsize &&
+	   dyld->name.offset < left){
 	    p = (char *)lc + dyld->name.offset;
 	    printf("         name %s (offset %u)\n", p, dyld->name.offset);
 	}
@@ -3304,7 +3544,8 @@ struct load_command *lc)
 void
 print_fvmfile_command(
 struct fvmfile_command *ff,
-struct load_command *lc)
+struct load_command *lc,
+uint32_t left)
 {
     char *p;
 
@@ -3314,7 +3555,8 @@ struct load_command *lc)
 	    printf(" Incorrect size\n");
 	else
 	    printf("\n");
-	if(ff->name.offset < ff->cmdsize){
+	if(ff->name.offset < ff->cmdsize &&
+	   ff->name.offset < left){
 	    p = (char *)lc + ff->name.offset;
 	    printf("          name %s (offset %u)\n", p, ff->name.offset);
 	}
@@ -3688,7 +3930,8 @@ uint32_t object_size)
 void
 print_linker_option_command(
 struct linker_option_command *lo,
-struct load_command *lc)
+struct load_command *lc,
+uint32_t cmdleft)
 {
     int left, len, i;
     char *string;
@@ -3702,6 +3945,8 @@ struct load_command *lc)
 	printf("   count %u\n", lo->count);
 	string = (char *)lc + sizeof(struct linker_option_command);
 	left = lo->cmdsize - sizeof(struct linker_option_command);
+	if(left > cmdleft)
+	    left = cmdleft;
 	i = 0;
 	while(left > 0){
 	    while(*string == '\0' && left > 0){
@@ -6140,8 +6385,12 @@ enum bool verbose)
 		if(big_size > sg.cmdsize){
 		    printf("number of sections in load command %u extends past "
 			   "end of load command\n", i);
-		    sg.nsects = (sg.cmdsize - sizeof(struct segment_command)) /
-				sizeof(struct section);
+		    if(sg.cmdsize > sizeof(struct segment_command))
+			sg.nsects = (sg.cmdsize -
+				     sizeof(struct segment_command)) /
+				    sizeof(struct section);
+		    else
+			sg.nsects = 0;
 		}
 		nsects += sg.nsects;
 		sect_rel = reallocate(sect_rel,
@@ -6181,9 +6430,12 @@ enum bool verbose)
 		if(big_size > sg64.cmdsize){
 		    printf("number of sections in load command %u extends past "
 			   "end of load command\n", i);
-		    sg64.nsects = (sg64.cmdsize -
-				   sizeof(struct segment_command_64)) /
-				  sizeof(struct section_64);
+		    if(sg64.cmdsize > sizeof(struct segment_command_64))
+			sg64.nsects = (sg64.cmdsize -
+				       sizeof(struct segment_command_64)) /
+				      sizeof(struct section_64);
+		    else
+			sg64.nsects = 0;
 		}
 		nsects += sg64.nsects;
 		sect_rel = reallocate(sect_rel,
@@ -6660,11 +6912,17 @@ enum bool verbose)
 				   (unsigned int)reloc.r_symbolnum);
 			else{
 			    printf("%d ", reloc.r_symbolnum);
-			    if(reloc.r_symbolnum > nsects + 1)
+			    if(reloc.r_symbolnum > nsects ||
+			       sect_rel == NULL)
 				printf("(?,?)\n");
 			    else{
 				if(reloc.r_symbolnum == R_ABS)
 				    printf("R_ABS\n");
+			        else if(*sect_rel[reloc.r_symbolnum-1].
+						segname == '\0' ||
+			                *sect_rel[reloc.r_symbolnum-1].
+						sectname == '\0')
+				    printf("(?,?)\n");
 				else
 				    printf("(%.16s,%.16s)\n",
 				    sect_rel[reloc.r_symbolnum-1].segname,
@@ -6844,7 +7102,7 @@ enum bool verbose)
 			printf("%-16s ", strings +
 			       mods[tocs[i].module_index].module_name);
 		}
-		else{
+		else if(mods64 != NULL){
 		    if(mods64[tocs[i].module_index].module_name > strings_size)
 			printf("%-16u (string index past the end of string "
 			       "table) ", tocs[i].module_index);
@@ -6856,7 +7114,7 @@ enum bool verbose)
 		if(tocs[i].symbol_index > nsymbols)
 		    printf("%u (past the end of the symbol table)\n",
 			   tocs[i].symbol_index);
-		else{
+		else if(symbols != NULL || symbols64 != NULL){
 		    if(symbols != NULL){
 			n_strx = symbols[tocs[i].symbol_index].n_un.n_strx;
 			n_type = symbols[tocs[i].symbol_index].n_type;
@@ -7053,7 +7311,7 @@ enum bool verbose)
 			if(refs[j].isym > nsymbols)
 			    printf("\t%u (past the end of the symbol table) ",
 				   refs[j].isym);
-			else{
+			else if(symbols != NULL || symbols64 != NULL){
 			    if(symbols != NULL)
 				n_strx = symbols[refs[j].isym].n_un.n_strx;
 			    else
@@ -7437,7 +7695,8 @@ enum bool verbose)
 		memcpy((char *)&dl, (char *)lc, size);
 		if(swapped)
 		    swap_dylib_command(&dl, host_byte_sex);
-		if(dl.dylib.name.offset < dl.cmdsize){
+		if(dl.dylib.name.offset < dl.cmdsize &&
+                   dl.dylib.name.offset < left){
 		    p = (char *)lc + dl.dylib.name.offset;
 		    short_name = guess_short_name(p, &is_framework,
 						  &has_suffix);
@@ -8579,7 +8838,10 @@ const uint32_t strings_size)
 		if(swapped)
 		    swap_segment_command(&sg, host_byte_sex);
 		p = (char *)lc + sizeof(struct segment_command);
-		for(j = 0 ; j < sg.nsects ; j++){
+		for(j = 0 ; j < sg.nsects &&
+			    j * sizeof(struct section) +
+			    sizeof(struct segment_command) < sizeofcmds ;
+                    j++){
 		    memcpy((char *)&s, p, sizeof(struct section));
 		    p += sizeof(struct section);
 		    if(swapped)
@@ -8616,7 +8878,10 @@ const uint32_t strings_size)
 		if(swapped)
 		    swap_segment_command_64(&sg64, host_byte_sex);
 		p = (char *)lc + sizeof(struct segment_command_64);
-		for(j = 0 ; j < sg64.nsects ; j++){
+		for(j = 0 ; j < sg64.nsects &&
+			    j * sizeof(struct section_64) +
+			    sizeof(struct segment_command_64) < sizeofcmds ;
+                    j++){
 		    memcpy((char *)&s64, p, sizeof(struct section_64));
 		    p += sizeof(struct section_64);
 		    if(swapped)
