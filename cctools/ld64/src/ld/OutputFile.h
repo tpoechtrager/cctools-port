@@ -147,6 +147,7 @@ public:
 		uint8_t			targetSectionIndex;
 		uint8_t			referenceKind;
 	};
+	static void					dumpAtomsBySection(ld::Internal& state, bool);
 
 private:
 	void						writeAtoms(ld::Internal& state, uint8_t* wholeBuffer);
@@ -237,7 +238,6 @@ private:
 																							
 	uint64_t					sectionOffsetOf(const ld::Internal& state, const ld::Fixup* fixup);
 	uint64_t					tlvTemplateOffsetOf(const ld::Internal& state, const ld::Fixup* fixup);
-	void						dumpAtomsBySection(ld::Internal& state, bool);
 	void						synthesizeDebugNotes(ld::Internal& state);
 	const char*					assureFullPath(const char* path);
 	void						noteTextReloc(const ld::Atom* atom, const ld::Atom* target);

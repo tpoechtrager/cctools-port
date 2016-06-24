@@ -97,7 +97,8 @@ private:
 	void						checkDylibClientRestrictions(ld::dylib::File*);
 	void						createOpaqueFileSections();
 	bool						libraryAlreadyLoaded(const char* path);
-	
+	bool						frameworkAlreadyLoaded(const char* path, const char* frameworkName);
+
 	// for pipelined linking
     void						waitForInputFiles();
 	static void					waitForInputFiles(InputFiles *inputFiles);
@@ -144,9 +145,9 @@ private:
         LibraryInfo(ld::dylib::File* dylib) : _lib(dylib), _isDylib(true) {};
         LibraryInfo(ld::archive::File* dylib) : _lib(dylib), _isDylib(false) {};
 
-        bool isDylib() { return _isDylib; }
-        ld::dylib::File *dylib() { return (ld::dylib::File*)_lib; }
-        ld::archive::File *archive() { return (ld::archive::File*)_lib; }
+        bool isDylib() const { return _isDylib; }
+        ld::dylib::File *dylib() const { return (ld::dylib::File*)_lib; }
+        ld::archive::File *archive() const { return (ld::archive::File*)_lib; }
     };
     std::vector<LibraryInfo>  _searchLibraries;
 };

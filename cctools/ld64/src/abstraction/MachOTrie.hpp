@@ -351,6 +351,8 @@ static inline void processExportNode(const uint8_t* const start, const uint8_t* 
 		}
 		output.push_back(e);
 	}
+	if ( children > end )
+		throw "malformed trie, terminalSize extends beyond trie data";
 	const uint8_t childrenCount = *children++;
 	const uint8_t* s = children;
 	for (uint8_t i=0; i < childrenCount; ++i) {
@@ -383,7 +385,7 @@ inline void parseTrie(const uint8_t* start, const uint8_t* end, std::vector<Entr
 	output.reserve(entries.size());
 	for (std::vector<EntryWithOffset>::iterator it=entries.begin(); it != entries.end(); ++it)
 		output.push_back(it->entry);
-	delete[] cummulativeString; // ld64-port: delete -> delete[]
+	delete [] cummulativeString;
 }
 
 

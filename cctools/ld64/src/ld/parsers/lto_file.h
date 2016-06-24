@@ -37,7 +37,7 @@ extern const char* archName(const uint8_t* fileContent, uint64_t fileLength);
 
 extern bool isObjectFile(const uint8_t* fileContent, uint64_t fileLength, cpu_type_t architecture, cpu_subtype_t subarch);
 
-extern ld::relocatable::File* parse(const uint8_t* fileContent, uint64_t fileLength, 
+extern ld::relocatable::File* parse(const uint8_t* fileContent, uint64_t fileLength,
 									const char* path, time_t modTime, ld::File::Ordinal ordinal,
 									cpu_type_t architecture, cpu_subtype_t subarch, bool logAllFiles,
 									bool verboseOptimizationHints);
@@ -62,6 +62,7 @@ struct OptimizeOptions {
 	bool								simulator;
 	bool								ignoreMismatchPlatform;
 	bool								bitcodeBundle;
+	uint8_t								maxDefaultCommonAlignment;
 	cpu_type_t							arch;
 	const char*							mcpu;
 	Options::Platform					platform;

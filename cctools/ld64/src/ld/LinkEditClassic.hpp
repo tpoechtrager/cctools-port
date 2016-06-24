@@ -2002,7 +2002,6 @@ private:
 	uint32_t									symIndexOfLazyPointerAtom(const ld::Atom*);
 	uint32_t									symIndexOfNonLazyPointerAtom(const ld::Atom*);
 	uint32_t									symbolIndex(const ld::Atom*);
-	bool										kextBundlesDontHaveIndirectSymbolTable();
 
 
 	std::vector<uint32_t>						_entries;
@@ -2034,9 +2033,11 @@ uint32_t IndirectSymbolTableAtom<A>::symIndexOfStubAtom(const ld::Atom* stubAtom
 {
 	for (ld::Fixup::iterator fit = stubAtom->fixupsBegin(); fit != stubAtom->fixupsEnd(); ++fit) {
 		if ( fit->binding == ld::Fixup::bindingDirectlyBound ) {
-			assert((fit->u.target->contentType() == ld::Atom::typeLazyPointer) 
-					|| (fit->u.target->contentType() == ld::Atom::typeLazyDylibPointer));
-			return symIndexOfLazyPointerAtom(fit->u.target);
+			ld::Atom::ContentType type = fit->u.target->contentType();
+			if (( type == ld::Atom::typeLazyPointer) || (type == ld::Atom::typeLazyDylibPointer) )
+				return symIndexOfLazyPointerAtom(fit->u.target);
+			if ( type == ld::Atom::typeNonLazyPointer )
+				return symIndexOfNonLazyPointerAtom(fit->u.target);
 		}
 	}
 	throw "internal error: stub missing fixup to lazy pointer";
@@ -2153,20 +2154,14 @@ void IndirectSymbolTableAtom<A>::encodeNonLazyPointerSection(ld::Internal::Final
 }
 
 template <typename A>
-bool IndirectSymbolTableAtom<A>::kextBundlesDontHaveIndirectSymbolTable()
-{
-	return true;	
-}
-
-template <typename A>
 void IndirectSymbolTableAtom<A>::encode()
 {
 	// static executables should not have an indirect symbol table, unless PIE
 	if ( (this->_options.outputKind() == Options::kStaticExecutable) && !_options.positionIndependentExecutable() ) 
 		return;
 
-	// x86_64 kext bundles should not have an indirect symbol table
-	if ( (this->_options.outputKind() == Options::kKextBundle) && kextBundlesDontHaveIndirectSymbolTable() ) 
+	// x86_64 kext bundles should not have an indirect symbol table unless using stubs
+	if ( (this->_options.outputKind() == Options::kKextBundle) && !this->_options.kextsUseStubs() )
 		return;
 
 	// slidable static executables (-static -pie) should not have an indirect symbol table

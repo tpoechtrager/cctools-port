@@ -10,7 +10,8 @@ noinst_HEADERS =  \
 	objc.h  \
 	order.h  \
 	tlvp.h \
-	bitcode_bundle.h
+	bitcode_bundle.h \
+	code_dedup.h
 
 
 libPasses_la_CXXFLAGS = \
@@ -38,5 +39,6 @@ libPasses_la_SOURCES =  \
 	order.cpp  \
 	tlvp.cpp \
 	stubs/stubs.cpp \
-	bitcode_bundle.cpp
+	bitcode_bundle.cpp \
+	code_dedup.cpp
 

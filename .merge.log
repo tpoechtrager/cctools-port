@@ -1,3 +1,117 @@
+# ld64 253.9 -> ld64 264.3.102 ##
+
+patching file ./doc/man/man1/ld.1
+can't find file to patch at input line 49
+Perhaps you used the wrong -p or --strip option?
+The text leading up to this was:
+--------------------------
+|diff -Naur ../ld64-253.9/ld64.xcodeproj/project.pbxproj ./ld64.xcodeproj/project.pbxproj
+|--- ../ld64-253.9/ld64.xcodeproj/project.pbxproj       2015-05-20 08:11:58.000000000 +0200
+|+++ ./ld64.xcodeproj/project.pbxproj   2016-01-27 22:57:12.000000000 +0100
+--------------------------
+File to patch:
+Skip this patch? [y]
+Skipping patch.
+55 out of 55 hunks ignored
+patching file ./src/abstraction/MachOTrie.hpp
+Hunk #2 NOT MERGED at 388-392.
+patching file ./src/ld/InputFiles.cpp
+Hunk #2 NOT MERGED at 340-345.
+patching file ./src/ld/InputFiles.h
+patching file ./src/ld/ld.cpp
+patching file ./src/ld/ld.hpp
+patching file ./src/ld/LinkEditClassic.hpp
+patching file ./src/ld/Options.cpp
+Hunk #2 merged at 196-197,203-204.
+Hunk #15 merged at 2970-2973,2981-2984,2989-2992,2996-2999,3005-3008,3013-3016.
+patching file ./src/ld/Options.h
+patching file ./src/ld/OutputFile.cpp
+patching file ./src/ld/OutputFile.h
+patching file ./src/ld/parsers/generic_dylib_file.hpp
+patching file ./src/ld/parsers/lto_file.cpp
+patching file ./src/ld/parsers/lto_file.h
+patching file ./src/ld/parsers/macho_dylib_file.cpp
+Hunk #1 NOT MERGED at 37-42, merged at 48, merged at 55, merged at 145, merged at 148-149, merged at 151.
+patching file ./src/ld/parsers/macho_dylib_file.h
+patching file ./src/ld/parsers/macho_relocatable_file.cpp
+Hunk #13 merged at 4516,4518.
+patching file ./src/ld/parsers/macho_relocatable_file.h
+patching file ./src/ld/parsers/textstub_dylib_file.cpp
+Hunk #1 merged at 37.
+Hunk #2 NOT MERGED at 71-75.
+Hunk #9 merged at 514,521,526, NOT MERGED at 529-533,536,542.
+patching file ./src/ld/passes/bitcode_bundle.cpp
+patching file ./src/ld/passes/branch_island.cpp
+patching file ./src/ld/passes/branch_shim.cpp
+patching file ./src/ld/passes/code_dedup.cpp
+patching file ./src/ld/passes/code_dedup.h
+patching file ./src/ld/passes/compact_unwind.cpp
+patching file ./src/ld/passes/objc.cpp
+patching file ./src/ld/passes/stubs/stubs.cpp
+patching file ./src/ld/Resolver.cpp
+patching file ./src/ld/SymbolTable.cpp
+patching file ./src/ld/SymbolTable.h
+patching file ./src/other/machochecker.cpp
+Hunk #19 NOT MERGED at 602-606.
+Hunk #20 NOT MERGED at 623-627.
+patching file ./src/other/unwinddump.cpp
+can't find file to patch at input line 6845
+Perhaps you used the wrong -p or --strip option?
+The text leading up to this was:
+--------------------------
+|diff -Naur ../ld64-253.9/unit-tests/run-all-unit-tests ./unit-tests/run-all-unit-tests
+|--- ../ld64-253.9/unit-tests/run-all-unit-tests        2013-03-08 00:10:19.000000000 +0100
+|+++ ./unit-tests/run-all-unit-tests    2015-11-11 01:07:39.000000000 +0100
+--------------------------
+File to patch:
+Skip this patch? [y]
+Skipping patch.
+1 out of 1 hunk ignored
+patching file ./unit-tests/test-cases/linker-optimization-hints/AdrpLdrGotLdrField.s
+can't find file to patch at input line 6914
+Perhaps you used the wrong -p or --strip option?
+The text leading up to this was:
+--------------------------
+|diff -Naur ../ld64-253.9/unit-tests/test-cases/linker-optimization-hints/Makefile ./unit-tests/test-cases/linker-optimization-hints/Makefile
+|--- ../ld64-253.9/unit-tests/test-cases/linker-optimization-hints/Makefile     2014-01-27 22:34:25.000000000 +0100
+|+++ ./unit-tests/test-cases/linker-optimization-hints/Makefile 2015-11-11 01:07:39.000000000 +0100
+--------------------------
+File to patch:
+Skip this patch? [y]
+Skipping patch.
+5 out of 5 hunks ignored
+patching file ./unit-tests/test-cases/linker_options-library-chain/bar.c
+patching file ./unit-tests/test-cases/linker_options-library-chain/foo.c
+patching file ./unit-tests/test-cases/linker_options-library-chain/main.c
+patching file ./unit-tests/test-cases/linker_options-library-chain/Makefile
+patching file ./unit-tests/test-cases/linker_options-library-chain/subbar.c
+can't find file to patch at input line 7433
+Perhaps you used the wrong -p or --strip option?
+The text leading up to this was:
+--------------------------
+|diff -Naur ../ld64-253.9/unit-tests/test-cases/objc-category-optimize/Makefile ./unit-tests/test-cases/objc-category-optimize/Makefile
+|--- ../ld64-253.9/unit-tests/test-cases/objc-category-optimize/Makefile        2013-10-19 03:10:28.000000000 +0200
+|+++ ./unit-tests/test-cases/objc-category-optimize/Makefile    2015-11-11 01:07:39.000000000 +0100
+--------------------------
+File to patch:
+Skip this patch? [y]
+Skipping patch.
+1 out of 1 hunk ignored
+can't find file to patch at input line 7460
+Perhaps you used the wrong -p or --strip option?
+The text leading up to this was:
+--------------------------
+|diff -Naur ../ld64-253.9/unit-tests/test-cases/objc-category-optimize-load/Makefile ./unit-tests/test-cases/objc-category-optimize-load/Makefile
+|--- ../ld64-253.9/unit-tests/test-cases/objc-category-optimize-load/Makefile   2013-10-19 03:10:28.000000000 +0200
+|+++ ./unit-tests/test-cases/objc-category-optimize-load/Makefile       2015-11-11 01:07:39.000000000 +0100
+--------------------------
+File to patch:
+Skip this patch? [y]
+Skipping patch.
+1 out of 1 hunk ignored
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+
 ## cctools 877.5 -> 877.8 ##
 
 patching file include/mach-o/loader.h

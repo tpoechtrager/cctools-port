@@ -630,11 +630,10 @@ unsigned int UnwindInfoAtom<A>::makeCompressedSecondLevelPage(const std::vector<
 	// keep adding entries to page until:
 	//  1) encoding table plus entry table plus header exceed page size
 	//  2) the file offset delta from the first to last function > 24 bits
-	//  3) custom encoding index reachs 255
+	//  3) custom encoding index reaches 255
 	//  4) run out of uniqueInfos to encode
 	std::map<compact_unwind_encoding_t, unsigned int> pageSpecificEncodings;
 	uint32_t space4 =  (pageSize - sizeof(unwind_info_compressed_second_level_page_header))/sizeof(uint32_t);
-	std::vector<uint8_t> encodingIndexes;
 	int index = endIndex-1;
 	int entryCount = 0;
 	uint64_t lastEntryAddress = uniqueInfos[index].funcTentAddress;
@@ -646,6 +645,7 @@ unsigned int UnwindInfoAtom<A>::makeCompressedSecondLevelPage(const std::vector<
 		std::map<compact_unwind_encoding_t, unsigned int>::const_iterator pos = commonEncodings.find(info.encoding);
 		if ( pos != commonEncodings.end() ) {
 			encodingIndex = pos->second;
+			if (_s_log) fprintf(stderr, "makeCompressedSecondLevelPage(): funcIndex=%d, re-use commonEncodings[%d]=0x%08X\n", index, encodingIndex, info.encoding);
 		}
 		else {
 			// no commmon entry, so add one on this page
@@ -657,12 +657,13 @@ unsigned int UnwindInfoAtom<A>::makeCompressedSecondLevelPage(const std::vector<
 			std::map<compact_unwind_encoding_t, unsigned int>::iterator ppos = pageSpecificEncodings.find(encoding);
 			if ( ppos != pageSpecificEncodings.end() ) {
 				encodingIndex = pos->second;
+				if (_s_log) fprintf(stderr, "makeCompressedSecondLevelPage(): funcIndex=%d, re-use pageSpecificEncodings[%d]=0x%08X\n", index, encodingIndex, encoding);
 			}
 			else {
 				encodingIndex = commonEncodings.size() + pageSpecificEncodings.size();
 				if ( encodingIndex <= 255 ) {
 					pageSpecificEncodings[encoding] = encodingIndex;
-					if (_s_log) fprintf(stderr, "makeCompressedSecondLevelPage(): pageSpecificEncodings[%d]=0x%08X\n", encodingIndex, encoding); 
+					if (_s_log) fprintf(stderr, "makeCompressedSecondLevelPage(): funcIndex=%d, pageSpecificEncodings[%d]=0x%08X\n", index, encodingIndex, encoding);
 				}
 				else {
 					canDo = false; // case 3)
@@ -671,8 +672,6 @@ unsigned int UnwindInfoAtom<A>::makeCompressedSecondLevelPage(const std::vector<
 				}
 			}
 		}
-		if ( canDo ) 
-			encodingIndexes.push_back(encodingIndex);
 		// compute function offset
 		uint32_t funcOffsetWithInPage = lastEntryAddress - info.funcTentAddress;
 		if ( funcOffsetWithInPage > 0x00FFFF00 ) {
@@ -680,16 +679,16 @@ unsigned int UnwindInfoAtom<A>::makeCompressedSecondLevelPage(const std::vector<
 			canDo = false; // case 2)
 			if (_s_log) fprintf(stderr, "can't use compressed page with %u entries because function offset too big\n", entryCount);
 		}
-		else {
-			++entryCount;
-		}
 		// check room for entry
-		if ( (pageSpecificEncodings.size()+entryCount) >= space4 ) {
+		if ( (pageSpecificEncodings.size()+entryCount) > space4 ) {
 			canDo = false; // case 1)
 			--entryCount;
 			if (_s_log) fprintf(stderr, "end of compressed page with %u entries because full\n", entryCount);
 		}
 		//if (_s_log) fprintf(stderr, "space4=%d, pageSpecificEncodings.size()=%ld, entryCount=%d\n", space4, pageSpecificEncodings.size(), entryCount);
+		if ( canDo ) {
+			++entryCount;
+		}
 	}
 	
 	// check for cases where it would be better to use a regular (non-compressed) page
@@ -725,6 +724,7 @@ unsigned int UnwindInfoAtom<A>::makeCompressedSecondLevelPage(const std::vector<
 		uint8_t encodingIndex;
 		if ( encodingMeansUseDwarf(info.encoding) ) {
 			// dwarf entries are always in page specific encodings
+			assert(pageSpecificEncodings.find(info.encoding+i) != pageSpecificEncodings.end());
 			encodingIndex = pageSpecificEncodings[info.encoding+i];
 		}
 		else {
@@ -760,16 +760,22 @@ unsigned int UnwindInfoAtom<A>::makeCompressedSecondLevelPage(const std::vector<
 
 
 
-
-
-static uint64_t calculateEHFrameSize(const ld::Internal& state)
+static uint64_t calculateEHFrameSize(ld::Internal& state)
 {
+	bool allCIEs = true;
 	uint64_t size = 0;
-	for (std::vector<ld::Internal::FinalSection*>::const_iterator sit=state.sections.begin(); sit != state.sections.end(); ++sit) {
-		ld::Internal::FinalSection* sect = *sit;
+	for (ld::Internal::FinalSection* sect : state.sections) {
 		if ( sect->type() == ld::Section::typeCFI ) {
-			for (std::vector<const ld::Atom*>::iterator ait=sect->atoms.begin(); ait != sect->atoms.end(); ++ait) {
-				size += (*ait)->size();
+			for (const ld::Atom* atom : sect->atoms) {
+				size += atom->size();
+				if ( strcmp(atom->name(), "CIE") != 0 )
+					allCIEs = false;
+			}
+			if ( allCIEs ) {
+				// <rdar://problem/21427393> Linker generates eh_frame data even when there's only an unused CIEs in it
+				sect->atoms.clear();
+				state.sections.erase(std::remove(state.sections.begin(), state.sections.end(), sect), state.sections.end());
+				return 0;
 			}
 		}
 	}

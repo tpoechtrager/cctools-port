@@ -1,6 +1,6 @@
 # Apple cctools port for Linux, *BSD and Windows (Cygwin) #
 
-Current Version: 877.8 + ld64-253.9.  
+Current Version: 877.8 + ld64-264.3.102.  
 Originally ported by [cjacker](http://ios-toolchain-based-on-clang-for-linux.googlecode.com).
 
 ## SUPPORTED HOSTS ##

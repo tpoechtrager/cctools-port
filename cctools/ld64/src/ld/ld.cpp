@@ -82,6 +82,7 @@
 #include "passes/objc.h"
 #include "passes/dylibs.h"
 #include "passes/bitcode_bundle.h"
+#include "passes/code_dedup.h"
 
 #include "parsers/archive_file.h"
 #include "parsers/macho_relocatable_file.h"
@@ -958,6 +959,7 @@ uint64_t InternalState::assignFileOffsets()
 	lastSegName = "";
 	ld::Internal::FinalSection* overlappingFixedSection = NULL;
 	ld::Internal::FinalSection* overlappingFlowSection = NULL;
+	ld::Internal::FinalSection* prevSect = NULL;
 	if ( log ) fprintf(stderr, "Regular layout segments:\n");
 	for (std::vector<ld::Internal::FinalSection*>::iterator it = sections.begin(); it != sections.end(); ++it) {
 		ld::Internal::FinalSection* sect = *it;
@@ -987,7 +989,16 @@ uint64_t InternalState::assignFileOffsets()
 		// update section info
 		sect->address = address;
 		sect->alignmentPaddingBytes = (address - unalignedAddress);
-		
+
+		// <rdar://problem/21994854> if first section is more aligned than segment, move segment start up to match
+		if ( (prevSect != NULL) && (prevSect->type() == ld::Section::typeFirstSection) && (strcmp(prevSect->segmentName(), sect->segmentName()) == 0) ) {
+			assert(prevSect->size == 0);
+			if ( prevSect->address != sect->address ) {
+				prevSect->alignmentPaddingBytes += (sect->address - prevSect->address);
+				prevSect->address = sect->address;
+			}
+		}
+
 		// sanity check size
 		if ( ((address + sect->size) > _options.maxAddress()) && (_options.outputKind() != Options::kObjectFile) 
 															  && (_options.outputKind() != Options::kStaticExecutable) )
@@ -1023,6 +1034,7 @@ uint64_t InternalState::assignFileOffsets()
 		// update running totals
 		if ( !sect->isSectionHidden() || hiddenSectionsOccupyAddressSpace )
 			address += sect->size;
+		prevSect = sect;
 	}
 	if ( overlappingFixedSection != NULL ) {
 		fprintf(stderr, "Section layout:\n");
@@ -1215,7 +1227,8 @@ int main(int argc, const char* argv[])
 		ld::passes::dylibs::doPass(options, state);	// must be after stubs and GOT passes
 		ld::passes::order::doPass(options, state);
 		state.markAtomsOrdered();
-		ld::passes::branch_shim::doPass(options, state);	// must be after stubs 
+		ld::passes::dedup::doPass(options, state);
+		ld::passes::branch_shim::doPass(options, state);	// must be after stubs
 		ld::passes::branch_island::doPass(options, state);	// must be after stubs and order pass
 		ld::passes::dtrace::doPass(options, state);
 		ld::passes::compact_unwind::doPass(options, state);  // must be after order pass

@@ -389,7 +389,7 @@ static uint64_t maxDistanceBetweenIslands(const Options& opts, bool seenThumbBra
 //
 
 
-static void makeIslandsForSection(const Options& opts, ld::Internal& state, ld::Internal::FinalSection* textSection)
+static void makeIslandsForSection(const Options& opts, ld::Internal& state, ld::Internal::FinalSection* textSection, unsigned stubCount)
 {
 	// assign section offsets to each atom in __text section, watch for thumb branches, and find total size
 	bool hasThumbBranches = false;
@@ -448,7 +448,7 @@ static void makeIslandsForSection(const Options& opts, ld::Internal& state, ld::
 		(const_cast<ld::Atom*>(atom))->setSectionOffset(offset);
 		offset += atom->size();
 	}
-	uint64_t totalTextSize = offset;
+	uint64_t totalTextSize = offset + stubCount*16;
 	if ( (totalTextSize < textSizeWhenMightNeedBranchIslands(opts, hasThumbBranches)) && !haveCrossSectionBranches )
 		return;
 	if (_s_log) fprintf(stderr, "ld: section %s size=%llu, might need branch islands\n", textSection->sectionName(), totalTextSize);
@@ -723,11 +723,19 @@ void doPass(const Options& opts, ld::Internal& state)
 		buildAddressMap(opts, state);
 	}
 	
+	// scan sections for number of stubs
+	unsigned stubCount = 0;
+	for (std::vector<ld::Internal::FinalSection*>::iterator sit=state.sections.begin(); sit != state.sections.end(); ++sit) {
+		ld::Internal::FinalSection* sect = *sit;
+		if ( sect->type() == ld::Section::typeStub )
+			stubCount = sect->atoms.size();
+	}
+
 	// scan sections and add island to each code section
 	for (std::vector<ld::Internal::FinalSection*>::iterator sit=state.sections.begin(); sit != state.sections.end(); ++sit) {
 		ld::Internal::FinalSection* sect = *sit;
 		if ( sect->type() == ld::Section::typeCode ) 
-			makeIslandsForSection(opts, state, sect);
+			makeIslandsForSection(opts, state, sect, stubCount);
 	}
 }
 

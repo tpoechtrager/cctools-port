@@ -162,7 +162,7 @@ Options::Options(int argc, const char* argv[])
 	  fUsingLazyDylibLinking(false), fEncryptable(true), fEncryptableForceOn(false), fEncryptableForceOff(false),
 	  fOrderData(true), fMarkDeadStrippableDylib(false),
 	  fMakeCompressedDyldInfo(true), fMakeCompressedDyldInfoForceOff(false), fNoEHLabels(false),
-	  fAllowCpuSubtypeMismatches(false), fUseSimplifiedDylibReExports(false),
+	  fAllowCpuSubtypeMismatches(false), fEnforceDylibSubtypesMatch(false), fUseSimplifiedDylibReExports(false),
 	  fObjCABIVersion2Override(false), fObjCABIVersion1Override(false), fCanUseUpwardDylib(false),
 	  fFullyLoadArchives(false), fLoadAllObjcObjectsFromArchives(false), fFlatNamespace(false),
 	  fLinkingMainExecutable(false), fForFinalLinkedImage(false), fForStatic(false),
@@ -192,12 +192,14 @@ Options::Options(int argc, const char* argv[])
 	  fSharedRegionEncodingV2(false), fUseDataConstSegment(false),
 	  fUseDataConstSegmentForceOn(false), fUseDataConstSegmentForceOff(false),
 	  fBundleBitcode(false), fHideSymbols(false), fVerifyBitcode(false),
-	  fReverseMapUUIDRename(false), fReverseMapPath(NULL), fLTOCodegenOnly(false),
+	  fReverseMapUUIDRename(false), fDeDupe(true), fVerboseDeDupe(false),
+	  fReverseMapPath(NULL), fLTOCodegenOnly(false),
 	  fIgnoreAutoLink(false), fAllowDeadDups(false), fBitcodeKind(kBitcodeProcess),
 	  fPlatform(kPlatformUnknown), fDebugInfoStripping(kDebugInfoMinimal), fTraceOutputFile(NULL),
 	  fMacVersionMin(ld::macVersionUnset), fIOSVersionMin(ld::iOSVersionUnset), fWatchOSVersionMin(ld::wOSVersionUnset), // ld64-port: added fWatchOSVersionMin(ld::wOSVersionUnset) - https://gist.github.com/tpoechtrager/6537a058dfb4d587fff4
 	  fSaveTempFiles(false), fSnapshotRequested(false), fPipelineFifo(NULL),
-	  fDependencyInfoPath(NULL), fDependencyFileDescriptor(-1)
+	  fDependencyInfoPath(NULL), fDependencyFileDescriptor(-1), fMaxDefaultCommonAlign(0), fFilePreference(kModTime),
+	  fForceTextBasedStub(false)
 {
 	this->checkForClassic(argc, argv);
 	this->parsePreCommandLineEnvironmentSettings();
@@ -717,9 +719,8 @@ Options::FileInfo Options::findLibrary(const char* rootName, bool dylibsOnly) co
 						 it != fLibrarySearchPaths.end();
 						 it++) {
 						const char* dir = *it;
-						if ( checkForFile("%s/lib%s.tbd", dir, rootName, result) )
-							return result;
-						if ( checkForFile("%s/lib%s.dylib", dir, rootName, result) )
+						auto path = std::string(dir) + "/lib" + rootName + ".dylib";
+						if ( findFile(path, {".tbd"}, result) )
 							return result;
 					}
 					for (std::vector<const char*>::const_iterator it = fLibrarySearchPaths.begin();
@@ -748,9 +749,8 @@ Options::FileInfo Options::findLibrary(const char* rootName, bool dylibsOnly) co
 					 it != fLibrarySearchPaths.end();
 					 it++) {
 					const char* dir = *it;
-					if ( lookForDylibs && checkForFile("%s/lib%s.tbd", dir, rootName, result) )
-						return result;
-					if ( lookForDylibs && checkForFile("%s/lib%s.dylib", dir, rootName, result) )
+					auto path = std::string(dir) + "/lib" + rootName + ".dylib";
+					if ( lookForDylibs && findFile(path, {".tbd"}, result) )
 						return result;
 					if ( lookForDylibs && checkForFile("%s/lib%s.so", dir, rootName, result) )
 						return result;
@@ -790,15 +790,8 @@ Options::FileInfo Options::findFramework(const char* rootName, const char* suffi
 				possiblePath = std::string(realPath).append(suffix);
 		}
         FileInfo result;
-		bool found = result.checkFileExists(*this, (possiblePath + ".tbd").c_str());
-		if ( !found )
-			found = result.checkFileExists(*this, possiblePath.c_str());
-		if ( fTraceDylibSearching )
-			printf("[Logging for XBS]%sfound framework: '%s'\n",
-				   (found ? " " : " not "), possiblePath.c_str());
-		if ( found ) {
+		if ( findFile(possiblePath, {".tbd"}, result) )
 			return result;
-		}
 	}
 	// try without suffix
 	if ( suffix != NULL )
@@ -807,41 +800,88 @@ Options::FileInfo Options::findFramework(const char* rootName, const char* suffi
 		throwf("framework not found %s", rootName);
 }
 
+static std::string replace_extension(const std::string &path, const std::string &ext)
+{
+	auto result = path;
+	auto lastSlashIdx = result.find_last_of('/');
+	auto lastDotIdx = result.find_last_of('.');
+	if (lastDotIdx != std::string::npos && lastDotIdx > lastSlashIdx)
+		result.erase(lastDotIdx, std::string::npos);
+	if ( ext.size() > 0 && ext[0] == '.' )
+		result.append(ext);
+	else
+		result.append('.' + ext);
+	return result;
+}
+
+bool Options::findFile(const std::string &path, const std::vector<std::string> &tbdExtensions, FileInfo& result) const
+{
+	FileInfo tbdInfo;
+	for ( const auto &ext : tbdExtensions ) {
+		auto newPath = replace_extension(path, ext);
+		bool found = tbdInfo.checkFileExists(*this, newPath.c_str());
+		if ( fTraceDylibSearching )
+			printf("[Logging for XBS]%sfound library: '%s'\n", (found ? " " : " not "), newPath.c_str());
+		if ( found ) {
+			if ( (fFilePreference == kTextBasedStub) || fForceTextBasedStub ) {
+				result = tbdInfo;
+				return true;
+			} else {
+				break;
+			}
+		}
+	}
+
+	FileInfo dylibInfo;
+	{
+		bool found = dylibInfo.checkFileExists(*this, path.c_str());
+		if ( fTraceDylibSearching )
+			printf("[Logging for XBS]%sfound library: '%s'\n", (found ? " " : " not "), path.c_str());
+		if ( found &&  (fFilePreference == kMachO) ) {
+			result = dylibInfo;
+			return true;
+		}
+	}
+
+	if ( !dylibInfo.missing() && tbdInfo.missing() ) {
+		result = dylibInfo;
+		return true;
+	}
+	else if ( dylibInfo.missing() && !tbdInfo.missing() ) {
+		result = tbdInfo;
+		return true;
+	}
+	else if ( !dylibInfo.missing() && !tbdInfo.missing() ) {
+		if ( dylibInfo.modTime == tbdInfo.modTime ) {
+			result = tbdInfo;
+			return true;
+		}
+		else {
+			// <rdar://problem/24459693> Disable false warning about out-of-sync .tbd files.
+			//warning("text-based stub file %s and library file %s are out of sync. Falling back to library file for linking.", tbdInfo.path, dylibInfo.path);
+			result = dylibInfo;
+			return true;
+		}
+	}
+
+	return false;
+}
+
 Options::FileInfo Options::findFile(const std::string &path) const
 {
 	FileInfo result;
 
 	// if absolute path and not a .o file, then use SDK prefix
 	if ( (path[0] == '/') && (strcmp(&path[path.size()-2], ".o") != 0) ) {
-		auto tbdFile = path;
-		auto lastSlashIdx = tbdFile.find_last_of('/');
-		auto lastDotIdx = tbdFile.find_last_of('.');
-		if (lastDotIdx != std::string::npos && lastDotIdx > lastSlashIdx)
-			tbdFile.erase(lastDotIdx, std::string::npos);
-		tbdFile.append(".tbd");
-
 		for (const auto* sdkPathDir : fSDKPaths) {
-			auto possiblePath = std::string(sdkPathDir) + tbdFile;
-			if ( result.checkFileExists(*this, possiblePath.c_str()) )
-				return result;
-			possiblePath = std::string(sdkPathDir) + path;
-			if ( result.checkFileExists(*this, possiblePath.c_str()) )
+			auto possiblePath = std::string(sdkPathDir) + path;
+			if ( findFile(possiblePath, {".tbd"}, result) )
 				return result;
 		}
 	}
 	// try raw path
-	{
-		std::string file = path;
-		auto lastDotIdx = file.find_last_of('.');
-		if (lastDotIdx != std::string::npos)
-			file.erase(lastDotIdx, std::string::npos);
-		if ( result.checkFileExists(*this, file.append(".tbd").c_str()) )
-			return result;
-	}
-	if ( result.checkFileExists(*this, path.c_str()) ) {
+	if ( findFile(path, {".tbd"}, result) )
 		return result;
-	}
-
 
 	// try @executable_path substitution
 	if ( (path.find("@executable_path/") == 0) && (fExecutablePath != nullptr) ) {
@@ -853,16 +893,8 @@ Options::FileInfo Options::findFile(const std::string &path) const
 		else
 			strcpy(newPath, &path[17]);
 
-		std::string file = newPath;
-		auto lastDotIdx = file.find_last_of('.');
-		if (lastDotIdx != std::string::npos)
-			file.erase(lastDotIdx, std::string::npos);
-		if ( result.checkFileExists(*this, file.append(".tbd").c_str()) ) {
+		if ( findFile(newPath, {".tbd"}, result) )
 			return result;
-		}
-		if ( result.checkFileExists(*this, newPath) ) {
-			return result;
-		}
 	}
 
 	// not found
@@ -898,9 +930,7 @@ Options::FileInfo Options::findFileUsingPaths(const std::string &path) const
 		auto leafPath = path.substr(beginPos);
 		for (const auto* dir : fFrameworkSearchPaths) {
 			auto possiblePath = dir + leafPath;
-			if ( checkForFile("%s.%s", possiblePath.c_str(), "tbd", result) )
-				return result;
-			if ( checkForFile("%s", possiblePath.c_str(), "", result) )
+			if ( findFile(possiblePath, {".tbd"}, result) )
 				return result;
 		}
 	} else {
@@ -912,9 +942,8 @@ Options::FileInfo Options::findFileUsingPaths(const std::string &path) const
 		if ( !embeddedDylib ) {
 			for (const auto* dir : fLibrarySearchPaths) {
 				//fprintf(stderr,"Finding Library: %s/%s\n", dir, leafName);
-				if ( checkForFile("%s/%s", dir, std::string(leafName).append(".tbd").c_str(), result) )
-					return result;
-				if ( checkForFile("%s/%s", dir, leafName.c_str(), result) )
+				std::string possiblePath = dir + std::string("/") + leafName;
+				if ( findFile(possiblePath, {".tbd"}, result) )
 					return result;
 			}
 		}
@@ -1400,58 +1429,32 @@ Options::Treatment Options::parseTreatment(const char* treatment)
 
 void Options::setMacOSXVersionMin(const char* version)
 {
-	if ( version == NULL )
-		throw "-macosx_version_min argument missing";
-
-	if ( (strncmp(version, "10.", 3) == 0) && isdigit(version[3]) ) {
-		unsigned int minorVersion = 0;
-		for (int i=3; isdigit(version[i]); ++i) {
-			minorVersion = minorVersion*10 + (version[i] - '0');
-		}
-		if ( minorVersion > 255 ) {
-			warning("Mac OS X minor version > 255 in '%s'", version);
-			minorVersion = 255;
-		}
-		fMacVersionMin = (ld::MacVersionMin)(0x000A0000 | (minorVersion << 8));
-		fPlatform = kPlatformOSX;
+	uint32_t value;
+	if ( !parsePackedVersion32(version, value) ) {
+		throwf("-macosx_version_min value malformed: '%s'", version);
 	}
-	else {
-		warning("unknown option to -macosx_version_min, not 10.x");
-	}
+	fMacVersionMin = (ld::MacVersionMin)value;
+	fPlatform = kPlatformOSX;
 }
 
 void Options::setIOSVersionMin(const char* version)
 {
-	if ( version == NULL )
-		throw "-ios_version_min argument missing";
-	if ( ! isdigit(version[0]) )
-		throw "-ios_version_min argument is not a number";
-	if ( version[1] != '.' )
-		throw "-ios_version_min argument is missing period as second character";
-	if ( ! isdigit(version[2]) )
-		throw "-ios_version_min argument is not a number";
-
-	unsigned int majorVersion = version[0] - '0';
-	unsigned int minorVersion = version[2] - '0';
-	fIOSVersionMin = (ld::IOSVersionMin)((majorVersion << 16) | (minorVersion << 8));
+	uint32_t value;
+	if ( !parsePackedVersion32(version, value) ) {
+		throwf("-ios_version_min value malformed: '%s'", version);
+	}
+	fIOSVersionMin = (ld::IOSVersionMin)value;
 	fPlatform = kPlatformiOS;
 }
 
 
 void Options::setWatchOSVersionMin(const char* version)
 {
-	if ( version == NULL )
-		throw "-watchos_version_min argument missing";
-	if ( ! isdigit(version[0]) )
-		throw "-watchos_version_min argument is not a number";
-	if ( version[1] != '.' )
-		throw "-watchos_version_min argument is missing period as second character";
-	if ( ! isdigit(version[2]) )
-		throw "-watchos_version_min argument is not a number";
-
-	unsigned int majorVersion = version[0] - '0';
-	unsigned int minorVersion = version[2] - '0';
-	fWatchOSVersionMin = (ld::WatchOSVersionMin)((majorVersion << 16) | (minorVersion << 8));
+	uint32_t value;
+	if ( !parsePackedVersion32(version, value) ) {
+		throwf("-watchos_version_min value malformed: '%s'", version);
+	}
+	fWatchOSVersionMin = (ld::WatchOSVersionMin)value;
 	fPlatform = kPlatformWatchOS;
 }
 
@@ -2030,6 +2033,73 @@ std::string Options::getVersionString64(uint64_t ver) const
 	std::stringstream versionString;
 	versionString << a << "." << b << "." << c << "." << d << "." << e;
 	return versionString.str();
+}
+
+// Convert X.Y[.Z] to 32-bit value xxxxyyzz
+bool Options::parsePackedVersion32(const std::string& versionStr, uint32_t &result)
+{
+	result = 0;
+
+	if ( versionStr.empty() )
+		return false;
+
+	size_t pos = versionStr.find('.');
+	if ( pos == std::string::npos )
+		return false;
+
+	std::string majorStr = versionStr.substr(0, pos);
+	std::string rest = versionStr.substr(pos+1);
+
+	try {
+		size_t majorEnd;
+		int majorValue = std::stoi(majorStr, &majorEnd);
+		if ( majorEnd != majorStr.size() )
+			return false;
+		if ( majorValue < 0 )
+			return false;
+		if ( majorValue > 65535 )
+			return false;
+
+		std::string minorStr;
+		std::string microStr;
+		pos = rest.find('.');
+		if ( pos == std::string::npos ) {
+			minorStr = rest;
+		}
+		else {
+			minorStr = rest.substr(0, pos);
+			microStr = rest.substr(pos+1);
+		}
+
+		size_t minorEnd;
+		int minorValue = std::stoi(minorStr, &minorEnd);
+		if ( minorEnd != minorStr.size() )
+			return false;
+		if ( minorValue < 0 )
+			return false;
+		if ( minorValue > 255 )
+			return false;
+
+		int microValue = 0;
+		if ( !microStr.empty() ) {
+			size_t microEnd;
+			microValue = std::stoi(microStr, &microEnd);
+			if ( microEnd != microStr.size() )
+				return false;
+			if ( microValue < 0 )
+				return false;
+			if ( microValue > 255 )
+				return false;
+		}
+
+		result = (majorValue << 16) | (minorValue << 8) | microValue;
+
+		return true;
+	}
+	catch (...) {
+		// std::stoi() throws exception on malformed input
+		return false;
+	}
 }
 
 std::string Options::getSDKVersionStr() const
@@ -2702,7 +2772,10 @@ void Options::parse(int argc, const char* argv[])
 					throw "-segprot missing segName max-prot init-prot";
 				seg.max = parseProtection(argv[++i]);
 				seg.init = parseProtection(argv[++i]);
-				fCustomSegmentProtections.push_back(seg);
+				if ( strcmp(seg.name, "__LINKEDIT") == 0 )
+					warning("-segprot cannot be used to modify __LINKEDIT protections");
+				else
+					fCustomSegmentProtections.push_back(seg);
 				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-pagezero_size") == 0 ) {
@@ -2728,9 +2801,6 @@ void Options::parse(int argc, const char* argv[])
 				 if ( size == NULL )
 					throw "-stack_size missing <address>";
 				fStackSize = parseAddress(size);
-				uint64_t temp = fStackSize & (-4096); // page align
-				if ( (fStackSize != temp)  )
-					warning("-stack_size not page aligned, rounding down");
 			}
 			else if ( strcmp(arg, "-allow_stack_execute") == 0 ) {
 				fExecutableStack = true;
@@ -2773,6 +2843,8 @@ void Options::parse(int argc, const char* argv[])
 			// Use this flag to set default behavior for deployement targets.
 			else if ( strcmp(arg, "-macosx_version_min") == 0 ) {
 				const char* macVers = argv[++i];
+				if ( macVers == NULL )
+					throw "-macosx_version_min missing version argument";
 				const char* envMacVers = getenv("MACOSX_DEPLOYMENT_TARGET");
 				const char* enviPhoneVers = getenv("IPHONEOS_DEPLOYMENT_TARGET");
 				if ( (envMacVers != NULL) && (enviPhoneVers != NULL) ) {
@@ -2795,30 +2867,48 @@ void Options::parse(int argc, const char* argv[])
 				}
 			}
 			else if ( (strcmp(arg, "-ios_version_min") == 0) || (strcmp(arg, "-iphoneos_version_min") == 0) ) {
-				setIOSVersionMin(argv[++i]); 
+				const char* vers = argv[++i];
+				if ( vers == NULL )
+					throw "-ios_version_min missing version argument";
+				setIOSVersionMin(vers);
 			}
 			else if ( (strcmp(arg, "-aspen_version_min") == 0) ) { // ld64-port
         // for backward compatibility with llvm-gcc.
         ++i;
 			}
 			else if ( strcmp(arg, "-ios_simulator_version_min") == 0 ) {
-				setIOSVersionMin(argv[++i]);
+				const char* vers = argv[++i];
+				if ( vers == NULL )
+					throw "-ios_simulator_version_min missing version argument";
+				setIOSVersionMin(vers);
 				fTargetIOSSimulator = true;
 			}
 			else if ( strcmp(arg, "-watchos_version_min") == 0 ) {
-				setWatchOSVersionMin(argv[++i]);
+				const char* vers = argv[++i];
+				if ( vers == NULL )
+					throw "-watchos_version_min missing version argument";
+				setWatchOSVersionMin(vers);
 			}
 			else if ( strcmp(arg, "-watchos_simulator_version_min") == 0 ) {
-				setWatchOSVersionMin(argv[++i]);
+				const char* vers = argv[++i];
+				if ( vers == NULL )
+					throw "-watchos_simulator_version_min missing version argument";
+				setWatchOSVersionMin(vers);
 				fTargetIOSSimulator = true;
 			}
 	#if SUPPORT_APPLE_TV
 			else if ( strcmp(arg, "-tvos_version_min") == 0 ) {
-				setIOSVersionMin(argv[++i]);
+				const char* vers = argv[++i];
+				if ( vers == NULL )
+					throw "-tvos_version_min missing version argument";
+				setIOSVersionMin(vers);
 				fPlatform = kPlatform_tvOS;
 			}
 			else if ( strcmp(arg, "-tvos_simulator_version_min") == 0 ) {
-				setIOSVersionMin(argv[++i]);
+				const char* vers = argv[++i];
+				if ( vers == NULL )
+					throw "-tvos_simulator_version_min missing version argument";
+				setIOSVersionMin(vers);
 				fPlatform = kPlatform_tvOS;
 				fTargetIOSSimulator = true;
 			}
@@ -3638,6 +3728,43 @@ void Options::parse(int argc, const char* argv[])
 				fUseDataConstSegmentForceOff = true;
 				cannotBeUsedWithBitcode(arg);
 			}
+			else if ( strcmp(arg, "-no_deduplicate") == 0 ) {
+				fDeDupe = false;
+			}
+			else if ( strcmp(arg, "-verbose_deduplicate") == 0 ) {
+				fVerboseDeDupe = true;
+			}
+			else if ( strcmp(arg, "-max_default_common_align") == 0 ) {
+				const char* alignStr = argv[++i];
+				if ( alignStr == NULL )
+					throw "-max_default_common_align missing <align-value>";
+				// argument is a hexadecimal number
+				char* endptr;
+				unsigned long value = strtoul(alignStr, &endptr, 16);
+				if ( *endptr != '\0')
+					throw "argument for -max_default_common_align is not a hexadecimal number";
+				if ( value > 0x8000 )
+					throw "argument for -max_default_common_align must be less than or equal to 0x8000";
+				if ( value == 0 ) {
+					warning("zero is not a valid -max_default_common_align");
+					value = 1;
+				}
+				// alignment is power of 2 
+				uint8_t alignment = (uint8_t)__builtin_ctz(value);
+				if ( (unsigned long)(1 << alignment) != value ) {
+					warning("alignment for -max_default_common_align is not a power of two, using 0x%X", 1 << alignment);
+				}
+				fMaxDefaultCommonAlign = alignment;
+			}
+			else if ( strcmp(arg, "-prefer-mod-time-check") == 0 ) {
+				fFilePreference = kModTime;
+			}
+			else if ( strcmp(arg, "-prefer-text-based-stub-file") == 0 ) {
+				fFilePreference = kTextBasedStub;
+			}
+			else if ( strcmp(arg, "-prefer-macho-file") == 0 ) {
+				fFilePreference = kMachO;
+			}
 			// put this last so that it does not interfer with other options starting with 'i'
 			else if ( strncmp(arg, "-i", 2) == 0 ) {
 				const char* colon = strchr(arg, ':');
@@ -3712,16 +3839,7 @@ void Options::buildSearchPaths(int argc, const char* argv[])
 			}
 			if ( libSearchDir[0] == '\0' ) 
 				throw "-L must be immediately followed by a directory path (no space)";
-			struct stat statbuf;
-			if ( stat(libSearchDir, &statbuf) == 0 ) {
-				if ( statbuf.st_mode & S_IFDIR )
-					libraryPaths.push_back(libSearchDir);
-				else
-					warning("path '%s' following -L not a directory", libSearchDir);
-			}
-			else {
-				warning("directory not found for option '-L%s'", libSearchDir);
-			}
+			libraryPaths.push_back(libSearchDir);
 		}
 		else if ( (argv[i][0] == '-') && (argv[i][1] == 'F') ) {
 			const char* frameworkSearchDir = &argv[i][2];
@@ -3735,16 +3853,7 @@ void Options::buildSearchPaths(int argc, const char* argv[])
 			}
 			if ( frameworkSearchDir[0] == '\0' ) 
 				throw "-F must be immediately followed by a directory path (no space)";
-			struct stat statbuf;
-			if ( stat(frameworkSearchDir, &statbuf) == 0 ) {
-				if ( statbuf.st_mode & S_IFDIR )
-					frameworkPaths.push_back(frameworkSearchDir);
-				else
-					warning("path '%s' following -F not a directory", frameworkSearchDir);
-			}
-			else {
-				warning("directory not found for option '-F%s'", frameworkSearchDir);
-			}
+			frameworkPaths.push_back(frameworkSearchDir);
 		}
 		else if ( strcmp(argv[i], "-Z") == 0 )
 			addStandardLibraryDirectories = false;
@@ -3836,8 +3945,13 @@ void Options::buildSearchPaths(int argc, const char* argv[])
 				strcat(newPath, libDir);
 				struct stat statBuffer;
 				if ( stat(newPath, &statBuffer) == 0 ) {
-					fLibrarySearchPaths.push_back(strdup(newPath));
-					sdkOverride = true;
+					if ( (statBuffer.st_mode & S_IFDIR) == 0 ) {
+						warning("-syslibroot and -L combined path '%s' is not a directory", newPath);
+					}
+					else {
+						fLibrarySearchPaths.push_back(strdup(newPath));
+						sdkOverride = true;
+					}
 				}
 			}
 		}
@@ -3847,10 +3961,20 @@ void Options::buildSearchPaths(int argc, const char* argv[])
 				// if one SDK is specified and a standard library path is not in the SDK, don't use it
 			}
 			else {
-				fLibrarySearchPaths.push_back(libDir);
+				struct stat statBuffer;
+				if ( stat(libDir, &statBuffer) == 0 ) {
+					if ( (statBuffer.st_mode & S_IFDIR) == 0 )
+						warning("-L path '%s' is not a directory", libDir);
+					else
+						fLibrarySearchPaths.push_back(libDir);
+				}
+				else if ( !addStandardLibraryDirectories || (strcmp(libDir, "/usr/local/lib") != 0) ) {
+					warning("directory not found for option '-L%s'", libDir);
+				}
 			}
 		}
 	}
+
 
 	// now merge sdk and framework paths to make real search paths
 	fFrameworkSearchPaths.reserve(frameworkPaths.size()*(fSDKPaths.size()+1));
@@ -3875,8 +3999,13 @@ void Options::buildSearchPaths(int argc, const char* argv[])
 				strcat(newPath, frameworkDir);
 				struct stat statBuffer;
 				if ( stat(newPath, &statBuffer) == 0 ) {
-					fFrameworkSearchPaths.push_back(strdup(newPath));
-					sdkOverride = true;
+					if ( (statBuffer.st_mode & S_IFDIR) == 0 ) {
+						warning("-syslibroot and -F combined path '%s' is not a directory", newPath);
+					}
+					else {
+						fFrameworkSearchPaths.push_back(strdup(newPath));
+						sdkOverride = true;
+					}
 				}
 			}
 		}
@@ -3886,7 +4015,16 @@ void Options::buildSearchPaths(int argc, const char* argv[])
 				// if one SDK is specified and a standard library path is not in the SDK, don't use it
 			}
 			else {
-				fFrameworkSearchPaths.push_back(frameworkDir);
+				struct stat statBuffer;
+				if ( stat(frameworkDir, &statBuffer) == 0 ) {
+					if ( (statBuffer.st_mode & S_IFDIR) == 0 )
+						warning("-F path '%s' is not a directory", frameworkDir);
+					else
+						fFrameworkSearchPaths.push_back(frameworkDir);
+				}
+				else if ( !addStandardLibraryDirectories || (strcmp(frameworkDir, "/Library/Frameworks/") != 0) ) {
+					warning("directory not found for option '-F%s'", frameworkDir);
+				}
 			}
 		}
 	}
@@ -3948,6 +4086,9 @@ void Options::parsePreCommandLineEnvironmentSettings()
 	if (getenv("LD_ALLOW_CPU_SUBTYPE_MISMATCHES") != NULL)
 		fAllowCpuSubtypeMismatches = true;
 	
+	if (getenv("LD_DYLIB_CPU_SUBTYPES_MUST_MATCH") != NULL)
+		fEnforceDylibSubtypesMatch = true;
+	
 	sWarningsSideFilePath = getenv("LD_WARN_FILE");
 	
 	const char* customDyldPath = getenv("LD_DYLD_PATH");
@@ -3966,6 +4107,10 @@ void Options::parsePreCommandLineEnvironmentSettings()
     if (pipeFdString != NULL) {
 		fPipelineFifo = pipeFdString;
     }
+
+	// Workaround for rdar://problem/24301175
+	if ((getenv("RC_XBS") != NULL) && !(getenv("RC_BUILDIT") != NULL))
+		fForceTextBasedStub = true;
 }
 
 
@@ -4537,10 +4682,13 @@ void Options::reconfigureDefaults()
 	// only ARM and x86_64 enforces that cpu-sub-types must match
 	switch ( fArchitecture ) {
 		case CPU_TYPE_ARM:
+			break;
 		case CPU_TYPE_X86_64:
+			fEnforceDylibSubtypesMatch = false;
 			break;
 		case CPU_TYPE_I386:
 		case CPU_TYPE_ARM64:
+			fEnforceDylibSubtypesMatch = false;
 			fAllowCpuSubtypeMismatches = true;
 			break;
 	}
@@ -4635,6 +4783,12 @@ void Options::reconfigureDefaults()
 		fTLVSupport = true;
 	}
 	else if ( (fArchitecture == CPU_TYPE_ARM) && min_iOS(ld::iOS_9_0) ) {
+		fTLVSupport = true;
+	}
+	else if ( fTargetIOSSimulator && (fArchitecture == CPU_TYPE_X86_64) && min_iOS(ld::iOS_8_0) ) {
+		fTLVSupport = true;
+	}
+	else if ( fTargetIOSSimulator && (fArchitecture == CPU_TYPE_I386) && min_iOS(ld::iOS_9_0) ) {
 		fTLVSupport = true;
 	}
 
@@ -4891,6 +5045,13 @@ void Options::reconfigureDefaults()
 		}
 	}
 
+	// <rdar://problem/20503811> Reduce the default alignment of structures/arrays to save memory in embedded systems
+	if ( fMaxDefaultCommonAlign == 0 ) {
+		if ( fOutputKind == Options::kPreload )
+			fMaxDefaultCommonAlign = 8;
+		else
+			fMaxDefaultCommonAlign = 15;
+	}
 }
 
 void Options::checkIllegalOptionCombinations()
@@ -4898,8 +5059,23 @@ void Options::checkIllegalOptionCombinations()
 	// check -undefined setting
 	switch ( fUndefinedTreatment ) {
 		case kUndefinedError:
-		case kUndefinedDynamicLookup:
 			// always legal
+			break;
+		case kUndefinedDynamicLookup:
+			switch (fPlatform) {
+				case kPlatformOSX:
+					break;
+				case kPlatformiOS:
+				case kPlatformWatchOS:
+		#if SUPPORT_APPLE_TV
+				case kPlatform_tvOS:
+		#endif
+					if ( fOutputKind != kKextBundle )
+						warning("-undefined dynamic_lookup is deprecated on %s", platformName(fPlatform));
+					break;
+				default:
+					break;
+			}
 			break;
 		case kUndefinedWarning:
 		case kUndefinedSuppress:
@@ -4918,7 +5094,11 @@ void Options::checkIllegalOptionCombinations()
 			const char* lastSlash = strrchr(info.path, '/');
 			if ( lastSlash == NULL )
 				lastSlash = info.path - 1;
-			if ( strcmp(&lastSlash[1], subUmbrella) == 0 ) {
+			std::string path(&lastSlash[1]);
+			auto idx = path.find(".tbd", path.size() - 4);
+			if (idx != std::string::npos)
+				path.erase(idx);
+			if ( path == subUmbrella ) {
 				info.options.fReExport = true;
 				found = true;
                 fLinkSnapshot.recordSubUmbrella(info.path);
@@ -4953,8 +5133,23 @@ void Options::checkIllegalOptionCombinations()
 	}
 
 	// sync reader options
-	if ( fNameSpace != kTwoLevelNameSpace )
+	if ( fNameSpace != kTwoLevelNameSpace ) {
 		fFlatNamespace = true;
+		switch (fPlatform) {
+			case kPlatformOSX:
+				break;
+			case kPlatformiOS:
+			case kPlatformWatchOS:
+	#if SUPPORT_APPLE_TV
+			case Options::kPlatform_tvOS:
+	#endif
+				warning("-flat_namespace is deprecated on %s", platformName(fPlatform));
+				break;
+			default:
+				break;
+		}
+	}
+
 
 	// check -stack_addr
 	if ( fStackAddr != 0 ) {
@@ -4978,37 +5173,54 @@ void Options::checkIllegalOptionCombinations()
 	if ( fStackSize != 0 ) {
 		switch (fArchitecture) {
 			case CPU_TYPE_I386:
-				if ( fStackSize > 0xFFFFFFFF )
-					throw "-stack_size must be < 4G for 32-bit processes";
-				if ( fStackAddr == 0 ) {
-					fStackAddr = 0xC0000000;
+				if ( fPlatform == kPlatformOSX ) {
+					if ( fStackSize > 0xFFFFFFFF )
+						throw "-stack_size must be < 4GB for 32-bit processes";
+					if ( fStackAddr == 0 )
+						fStackAddr = 0xC0000000;
+					if ( (fStackAddr > 0xB0000000) && ((fStackAddr-fStackSize) < 0xB0000000)  )
+						warning("custom stack placement overlaps and will disable shared region");
 				}
-				if ( (fStackAddr > 0xB0000000) && ((fStackAddr-fStackSize) < 0xB0000000)  )
-					warning("custom stack placement overlaps and will disable shared region");
+				else {
+					if ( fStackSize > 0x1F000000 )
+						throw "-stack_size must be < 496MB";
+					if ( fStackAddr == 0 )
+						fStackAddr = 0xC0000000;
+				}
 				break;
             case CPU_TYPE_ARM:
-				if ( fStackSize > 0x2F000000 )
-					throw "-stack_size must be < 752MB";
+				if ( fStackSize > 0x1F000000 )
+					throw "-stack_size must be < 496MB";
 				if ( fStackAddr == 0 )
-					fStackAddr = 0x2F000000;
-                if ( fStackAddr > 0x30000000)
-                    throw "-stack_addr must be < 0x30000000 for arm";
+					fStackAddr = 0x1F000000;
+                if ( fStackAddr > 0x20000000)
+                    throw "-stack_addr must be < 0x20000000 for arm";
 				break;
 			case CPU_TYPE_X86_64:
-				if ( fStackAddr == 0 ) {
-					fStackAddr = 0x00007FFF5C000000LL;
+				if ( fPlatform == kPlatformOSX ) {
+					if ( fStackSize > 0x10000000000 )
+						throw "-stack_size must be <= 1TB";
+					if ( fStackAddr == 0 ) {
+						fStackAddr = 0x00007FFF5C000000LL;
+					}
+				}
+				else {
+					if ( fStackSize > 0x20000000 )
+						throw "-stack_size must be <= 512MB";
+					if ( fStackAddr == 0 ) {
+						fStackAddr = 0x120000000;
 				}
 				break;
 			case CPU_TYPE_ARM64:
 				if ( fStackSize > 0x20000000 )
-					throw "-stack_size must be < 512MB";
-				if ( fStackAddr == 0 ) {
+					throw "-stack_size must be <= 512MB";
+				if ( fStackAddr == 0 )
 					fStackAddr = 0x120000000;
 				}
 				break;
 		}
-		if ( (fStackSize & -4096) != fStackSize )
-			throw "-stack_size must be multiples of 4K";
+		if ( (fStackSize & (-fSegmentAlignment)) != fStackSize )
+			throwf("-stack_size must be multiple of segment alignment (%lldKB)", fSegmentAlignment/1024);
 		switch ( fOutputKind ) {
 			case Options::kDynamicExecutable:
 			case Options::kStaticExecutable:
@@ -5335,15 +5547,6 @@ void Options::checkIllegalOptionCombinations()
 	if ( !fSegmentOrder.empty() && (fOutputKind != Options::kPreload) )
 		throw "-segment_order can only used used with -preload output";
 
-	if ( fBitcodeKind != kBitcodeProcess &&
-		 fOutputKind != Options::kObjectFile ) {
-		throw "-bitcode_process_mode can only be used together with -r";
-	}
-	// auto fix up the process type for strip -S.
-	// when there is only one input and output type is object file, downgrade kBitcodeProcess to kBitcodeAsData.
-	if ( fOutputKind == Options::kObjectFile && fInputFiles.size() == 1 && fBitcodeKind == Options::kBitcodeProcess )
-		fBitcodeKind = Options::kBitcodeAsData;
-
 	// warn about bitcode option combinations
 	if ( !fBundleBitcode ) {
 		if ( fVerifyBitcode )
@@ -5354,9 +5557,17 @@ void Options::checkIllegalOptionCombinations()
 	if ( fReverseMapPath != NULL && !fHideSymbols ) {
 		throw "-bitcode_symbol_map can only be used with -bitcode_hide_symbols";
 	}
+	if ( fBitcodeKind != kBitcodeProcess &&
+		 fOutputKind != Options::kObjectFile ) {
+		throw "-bitcode_process_mode can only be used together with -r";
+	}
+	// auto fix up the process type for strip -S.
+	// when there is only one input and output type is object file, downgrade kBitcodeProcess to kBitcodeAsData.
+	if ( fOutputKind == Options::kObjectFile && fInputFiles.size() == 1 && fBitcodeKind == Options::kBitcodeProcess )
+		fBitcodeKind = Options::kBitcodeAsData;
 
 	// <rdar://problem/17598404> warn if building an embedded iOS dylib for pre-iOS 8
-	// <rdar://problem/18935714> How can we suppress "ld: warning: embedded dylibs/frameworks only run on iOS 8 or later” when building XCTest?
+	// <rdar://problem/18935714> How can we suppress "ld: warning: embedded dylibs/frameworks only run on iOS 8 or later" when building XCTest?
 	if ( (fOutputKind == Options::kDynamicLibrary) && (fIOSVersionMin != ld::iOSVersionUnset) && (fDylibInstallName != NULL) ) {
 		if ( !min_iOS(ld::iOS_8_0) && (fDylibInstallName[0] == '@') && !fEncryptableForceOff )
 			warning("embedded dylibs/frameworks only run on iOS 8 or later");

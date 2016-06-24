@@ -240,7 +240,7 @@ const char* UnwindPrinter<A>::functionName(pint_t addr, uint32_t* offset)
 	for (uint32_t i=0; i < fSymbolCount; ++i) {
 		uint8_t type = fSymbols[i].n_type();
 		if ( ((type & N_STAB) == 0) && ((type & N_TYPE) == N_SECT) ) {
-			uint32_t value = fSymbols[i].n_value();
+			pint_t value = fSymbols[i].n_value();
 			if ( value == addr ) {
 				const char* r = &fStrings[fSymbols[i].n_strx()];
 				return r;

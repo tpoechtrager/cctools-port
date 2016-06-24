@@ -755,6 +755,21 @@ bool OptimizeCategories<A>::hasProperties(ld::Internal& state, const std::vector
 }
 
 
+static const ld::Atom* fixClassAliases(const ld::Atom* classAtom)
+{
+	if ( (classAtom->size() != 0) || (classAtom->definition() == ld::Atom::definitionProxy) )
+		return classAtom;
+
+	for (ld::Fixup::iterator fit=classAtom->fixupsBegin(); fit != classAtom->fixupsEnd(); ++fit) {
+		if ( fit->kind == ld::Fixup::kindNoneFollowOn ) {
+			assert(fit->offsetInAtom == 0);
+			assert(fit->binding == ld::Fixup::bindingDirectlyBound);
+			return fit->u.target;
+		}
+	}
+
+	return classAtom;
+}
 
 //
 // Helper for std::remove_if
@@ -841,7 +856,7 @@ void OptimizeCategories<A>::doit(const Options& opts, ld::Internal& state)
 				// ignore categories also in __objc_nlcatlist
 				if ( nlcatListAtoms.count(categoryAtom) != 0 )
 					continue;
-				const ld::Atom* categoryOnClassAtom = Category<A>::getClass(state, categoryAtom, hasAddend); 
+				const ld::Atom* categoryOnClassAtom = fixClassAliases(Category<A>::getClass(state, categoryAtom, hasAddend));
 				assert(categoryOnClassAtom != NULL);
 				// only look at classes defined in this image
 				if ( categoryOnClassAtom->definition() != ld::Atom::definitionProxy ) {

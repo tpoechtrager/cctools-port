@@ -362,6 +362,11 @@ void Resolver::doFile(const ld::File& file)
 			for (relocatable::File::LinkerOptionsList::const_iterator it=lo->begin(); it != lo->end(); ++it) {
 				this->doLinkerOption(*it, file.path());
 			}
+			// <rdar://problem/23053404> process any additional linker-options introduced by this new archive member being loaded
+			if ( _completedInitialObjectFiles ) {
+				_inputFiles.addLinkerOptionLibraries(_internal, *this);
+				_inputFiles.createIndirectDylibs();
+			}
 		}
 		// Resolve bitcode section in the object file
 		if ( _options.bundleBitcode() ) {
@@ -618,7 +623,7 @@ void Resolver::doFile(const ld::File& file)
 				break;
 		}
 		if ( _options.checkDylibsAreAppExtensionSafe() && !dylibFile->appExtensionSafe() ) {
-			warning("linking against dylib not safe for use in application extensions: %s", file.path());
+			warning("linking against a dylib which is not safe for use in application extensions: %s", file.path());
 		}
 		const char* depInstallName = dylibFile->installPath();
 		// <rdar://problem/17229513> embedded frameworks are only supported on iOS 8 and later
@@ -944,6 +949,10 @@ void Resolver::resolveUndefines()
 		}
 	}
 	
+	// After resolving all the undefs within the linkageUnit, record all the remaining undefs and all the proxies.
+	if (_options.bundleBitcode() && _options.hideSymbols())
+		_symbolTable.mustPreserveForBitcode(_internal.allUndefProxies);
+
 }
 
 
@@ -1706,6 +1715,7 @@ void Resolver::linkTimeOptimize()
 	optOpt.simulator					= _options.targetIOSSimulator();
 	optOpt.ignoreMismatchPlatform		= ((_options.outputKind() == Options::kPreload) || (_options.outputKind() == Options::kStaticExecutable));
 	optOpt.bitcodeBundle				= _options.bundleBitcode();
+	optOpt.maxDefaultCommonAlignment	= _options.maxDefaultCommonAlign();
 	optOpt.arch							= _options.architecture();
 	optOpt.mcpu							= _options.mcpuLTO();
 	optOpt.platform						= _options.platform();

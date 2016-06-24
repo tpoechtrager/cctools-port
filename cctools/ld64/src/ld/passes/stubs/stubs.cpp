@@ -135,8 +135,12 @@ const ld::Atom* Pass::stubableFixup(const ld::Fixup* fixup, ld::Internal& state)
 					if ( (target->definition() == ld::Atom::definitionRegular) 
 						&& (target->combine() == ld::Atom::combineByName) 
 						&& ((target->symbolTableInclusion() == ld::Atom::symbolTableIn) 
-						 || (target->symbolTableInclusion() == ld::Atom::symbolTableInAndNeverStrip)) )
+						 || (target->symbolTableInclusion() == ld::Atom::symbolTableInAndNeverStrip)) ) {
+						// don't make stubs for auto-hide symbols
+						if ( target->autoHide() && (!_options.hasExportMaskList() || !_options.shouldExport(target->name())) )
+							return NULL;
 						return target;
+					}
 					// create stub if target is interposable
 					if ( _options.interposable(target->name()) ) 
 						return target;
@@ -174,8 +178,10 @@ ld::Atom* Pass::makeStub(const ld::Atom& target, bool weakImport)
 	if ( (dylib != NULL) && dylib->willBeLazyLoadedDylib() ) 
 		forLazyDylib = true;
 	bool stubToResolver = (target.contentType() == ld::Atom::typeResolver);
+#if SUPPORT_ARCH_arm_any || SUPPORT_ARCH_arm64
 	bool usingDataConst =  _options.useDataConstSegment();
-	
+#endif
+
 	if ( usingCompressedLINKEDIT() && !forLazyDylib ) {
 		if ( _internal->compressedFastBinderProxy == NULL )
 			throwf("symbol dyld_stub_binder not found (normally in libSystem.dylib).  Needed to perform lazy binding to function %s", target.name());

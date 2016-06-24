@@ -320,6 +320,7 @@ ld::File* InputFiles::makeFile(const Options::FileInfo& info, bool indirectDylib
 	objOpts.srcKind				= ld::relocatable::File::kSourceObj;
 	objOpts.treateBitcodeAsData	= _options.bitcodeKind() == Options::kBitcodeAsData;
 	objOpts.usingBitcode		= _options.bundleBitcode();
+	objOpts.maxDefaultCommonAlignment = _options.maxDefaultCommonAlign();
 
 	ld::relocatable::File* objResult = mach_o::relocatable::parse(p, len, info.path, info.modTime, info.ordinal, objOpts);
 	if ( objResult != NULL ) {
@@ -337,7 +338,7 @@ ld::File* InputFiles::makeFile(const Options::FileInfo& info, bool indirectDylib
 		return objResult;
 	}
 #endif /* LTO_SUPPORT */
-	
+
 	// see if it is a dynamic library (or text-based dynamic library)
 	ld::dylib::File* dylibResult;
 	bool dylibsNotAllowed = false;
@@ -608,12 +609,37 @@ void InputFiles::markExplicitlyLinkedDylibs()
 	}
 }
 
-bool InputFiles::libraryAlreadyLoaded(const char* path) 
+bool InputFiles::frameworkAlreadyLoaded(const char* path, const char* frameworkName)
 {
-	for (std::vector<ld::File*>::const_iterator it = _inputFiles.begin(); it != _inputFiles.end(); ++it) {
-		if ( strcmp(path, (*it)->path()) == 0 )
+	for (ld::File* file : _inputFiles) {
+		if ( strcmp(path, file->path()) == 0 )
 			return true;
 	}
+	for (ld::dylib::File* dylibx : _allDylibs) {
+		const char* fname = dylibx->frameworkName();
+		if ( fname == NULL )
+			continue;
+		if ( strcmp(frameworkName, fname) == 0 )
+			return true;
+	}
+	return false;
+}
+
+bool InputFiles::libraryAlreadyLoaded(const char* path)
+{
+	for (ld::File* file : _inputFiles) {
+		if ( strcmp(path, file->path()) == 0 )
+			return true;
+	}
+	for (ld::dylib::File* dylib : _allDylibs) {
+		if ( strcmp(path, dylib->path()) == 0 )
+			return true;
+	}
+	for (const LibraryInfo& libInfo : _searchLibraries) {
+		if ( strcmp(path, libInfo.archive()->path()) == 0 )
+			return true;
+	}
+
 	return false;
 }
 
@@ -626,8 +652,10 @@ void InputFiles::addLinkerOptionLibraries(ld::Internal& state, ld::File::AtomHan
 	// process frameworks specified in .o linker options
 	for (CStringSet::const_iterator it = state.linkerOptionFrameworks.begin(); it != state.linkerOptionFrameworks.end(); ++it) {
 		const char* frameworkName = *it;
+		if ( state.linkerOptionFrameworksProcessed.count(frameworkName) )
+			continue;
 		Options::FileInfo info = _options.findFramework(frameworkName);
-		if ( ! this->libraryAlreadyLoaded(info.path) ) {
+		if ( ! this->frameworkAlreadyLoaded(info.path, frameworkName) ) {
 			info.ordinal = _linkerOptionOrdinal.nextLinkerOptionOrdinal();
 			try {
 				ld::File* reader = this->makeFile(info, true);
@@ -647,10 +675,13 @@ void InputFiles::addLinkerOptionLibraries(ld::Internal& state, ld::File::AtomHan
 				warning("Auto-Linking supplied '%s', %s", info.path, msg);
 			}
 		}
+		state.linkerOptionFrameworksProcessed.insert(frameworkName);
 	}
 	// process libraries specified in .o linker options
 	for (CStringSet::const_iterator it = state.linkerOptionLibraries.begin(); it != state.linkerOptionLibraries.end(); ++it) {
 		const char* libName = *it;
+		if ( state.linkerOptionLibrariesProcessed.count(libName) )
+			continue;
 		Options::FileInfo info = _options.findLibrary(libName);
 		if ( ! this->libraryAlreadyLoaded(info.path) ) {
 			info.ordinal = _linkerOptionOrdinal.nextLinkerOptionOrdinal();
@@ -682,6 +713,7 @@ void InputFiles::addLinkerOptionLibraries(ld::Internal& state, ld::File::AtomHan
 				warning("Auto-Linking supplied '%s', %s", info.path, msg);
 			}
 		}
+		state.linkerOptionLibrariesProcessed.insert(libName);
 	}
 }
 
@@ -1454,7 +1486,7 @@ void InputFiles::dylibs(ld::Internal& state)
 	//fprintf(stderr, "all dylibs:\n");
 	//for(std::vector<ld::dylib::File*>::iterator it=state.dylibs.begin(); it != state.dylibs.end(); ++it) {
 	//	const ld::dylib::File* dylib = *it;
-	//	fprintf(stderr, "    %p %s\n", dylib, dylib->path());
+	//	fprintf(stderr, "    %p impl=%d %s\n", dylib, dylib->implicitlyLinked(), dylib->path());
 	//}
 	
 	// and -bundle_loader

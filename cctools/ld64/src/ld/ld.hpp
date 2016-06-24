@@ -247,12 +247,13 @@ namespace dylib {
 		};
 			
 											File(const char* pth, time_t modTime, Ordinal ord)
-												: ld::File(pth, modTime, ord, Dylib), _dylibInstallPath(NULL),
+												: ld::File(pth, modTime, ord, Dylib), _dylibInstallPath(NULL), _frameworkName(NULL),
 												_dylibTimeStamp(0), _dylibCurrentVersion(0), _dylibCompatibilityVersion(0),
 												_explicitlyLinked(false), _implicitlyLinked(false),
 												_lazyLoadedDylib(false), _forcedWeakLinked(false), _reExported(false),
 												_upward(false), _dead(false) { }
 				const char*					installPath() const			{ return _dylibInstallPath; }
+				const char*					frameworkName() const		{ return _frameworkName; }
 				uint32_t					timestamp() const			{ return _dylibTimeStamp; }
 				uint32_t					currentVersion() const		{ return _dylibCurrentVersion; }
 				uint32_t					compatibilityVersion() const{ return _dylibCompatibilityVersion; }
@@ -286,13 +287,9 @@ namespace dylib {
 		virtual bool						installPathVersionSpecific() const { return false; }
 		virtual bool						appExtensionSafe() const = 0;
 
-	protected:
-		struct ReExportChain { ReExportChain* prev; const File* file; };
-		virtual std::pair<bool, bool>		hasWeakDefinitionImpl(const char* name) const = 0;
-		virtual bool						containsOrReExports(const char* name, bool& weakDef, bool& tlv, uint64_t& defAddress) const = 0;
-		virtual void						assertNoReExportCycles(ReExportChain*) const = 0;
-
+	public:
 		const char*							_dylibInstallPath;
+		const char*							_frameworkName;
 		uint32_t							_dylibTimeStamp;
 		uint32_t							_dylibCurrentVersion;
 		uint32_t							_dylibCompatibilityVersion;
@@ -447,7 +444,7 @@ struct Fixup
 					// data-in-code markers
 					kindDataInCodeStartData, kindDataInCodeStartJT8, kindDataInCodeStartJT16, 
 					kindDataInCodeStartJT32, kindDataInCodeStartJTA32, kindDataInCodeEnd,
-					// linker optimzation hints
+					// linker optimization hints
 					kindLinkerOptimizationHint,
 					// pointer store combinations
 					kindStoreTargetAddressLittleEndian32,	// kindSetTargetAddress + kindStoreLittleEndian32
@@ -896,8 +893,11 @@ public:
 	AtomToSection								atomToSection;		
 	CStringSet									linkerOptionLibraries;
 	CStringSet									linkerOptionFrameworks;
+	CStringSet									linkerOptionLibrariesProcessed;
+	CStringSet									linkerOptionFrameworksProcessed;
 	std::vector<const ld::Atom*>				indirectBindingTable;
 	std::vector<const ld::relocatable::File*>	filesWithBitcode;
+	std::unordered_set<const char*>				allUndefProxies;
 	const ld::dylib::File*						bundleLoader;
 	const Atom*									entryPoint;
 	const Atom*									classicBindingHelper;

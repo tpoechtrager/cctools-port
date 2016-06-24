@@ -362,7 +362,7 @@ The argument
 .Ar size
 is a hexadecimal number with an optional leading 0x. The 
 .Ar size
-should be an even multiple of 4KB, that is the last three hexadecimal digits should be zero.
+should be a multiple of the architecture's page size (4KB or 16KB).
 .It Fl allow_stack_execute 
 Marks executable so that all stacks in the task will be given stack execution privilege. This includes pthread stacks.
 .It Fl export_dynamic
@@ -541,10 +541,21 @@ Otherwise, the reverse map will be written to a file at
 .Bl -tag
 .It Fl v
 Prints the version of the linker.
+.It Fl no_deduplicate
+Don't run deduplication pass in linker
+.It Fl verbose_deduplicate
+Prints names of functions that are eliminated by deduplication and total code savings size.
 .It Fl dirty_data_list Ar filename
 Specifies a file containing the names of data symbols likely to be dirtied.
 If the linker is creating a __DATA_DIRTY segment, those symbols will be moved
 to that segment.
+.It Fl max_default_common_align Ar value
+Any common symbols (aka tentative definitions, or uninitialized (zeroed) variables) that have no explicit alignment
+are normally aligned to their next power of two size (e.g. a 240 byte array is 256 aligned).
+This option lets you reduce the max alignment.  For instance, a value of 0x40 would reduce
+the alignment for a 240 byte array to 64 bytes (instead of 256). The value specified must be a hexadecimal power of two
+If -max_default_common_align is not used, the default alignment is already
+limited to 0x8 (2^3) bytes for -preload and 0x8000 (2^15) for all other output types.
 .It Fl move_to_rw_segment Ar segment_name Ar filename
 Moves data symbols to another segment.  The command line option specifies the
 target segment name and a path to a file containing a list of symbols to move.
@@ -760,6 +771,10 @@ option is used, the temporary file will be stored at the specified path and rema
 is complete.  Without the option, the linker picks a path and deletes the object file before the linker 
 tool completes, thus tools such as the debugger or dsymutil will not be able to access the DWARF debug
 info in the temporary object file.
+.It Fl lto_library Ar path
+When performing Link Time Optimization (LTO), the linker normally loads libLTO.dylib relative to the linker
+binary (../lib/libLTO.dylib). This option allows the user to specify the path to a specific libLTO.dylib
+to load instead.
 .It Fl page_align_data_atoms
 During development, this option can be used to space out all global variables so each is on a separate page. 
 This is useful when analyzing dirty and resident pages.  The information can then be used to create an 

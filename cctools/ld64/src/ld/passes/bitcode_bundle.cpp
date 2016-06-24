@@ -284,6 +284,9 @@ BitcodeTempFile::~BitcodeTempFile()
 
 BitcodeObfuscator::BitcodeObfuscator()
 {
+#if LTO_API_VERSION < 11
+    throwf("compile-time libLTO (%d) didn't support -bitcode_hide_symbols", LTO_API_VERSION);
+#else
     // check if apple internal libLTO is used
     if ( ::lto_get_version() == NULL )
         throwf("libLTO is not loaded");
@@ -298,10 +301,12 @@ BitcodeObfuscator::BitcodeObfuscator()
         _lto_get_asm_symbol_num == NULL || _lto_get_asm_symbol_name == NULL || ::lto_api_version() < 14 )
         throwf("loaded libLTO doesn't support -bitcode_hide_symbols: %s", ::lto_get_version());
     _obfuscator = ::lto_codegen_create_in_local_context();
-#if LTO_API_VERSION >= 14
+  #if LTO_API_VERSION >= 14
     lto_codegen_set_should_internalize(_obfuscator, false);
+  #endif
 #endif
 }
+
 
 BitcodeObfuscator::~BitcodeObfuscator()
 {
@@ -318,7 +323,8 @@ void BitcodeObfuscator::bitcodeHideSymbols(ld::Bitcode* bc, const char* filePath
 #if LTO_API_VERSION >= 13 && LTO_APPLE_INTERNAL
     lto_module_t module = ::lto_module_create_in_codegen_context(bc->getContent(), bc->getSize(), filePath, _obfuscator);
     if ( module == NULL )
-        throwf("object contains invalid bitcode: %s", filePath);
+        throwf("could not reparse object file %s in bitcode bundle: '%s', using libLTO version '%s'",
+               filePath, ::lto_get_error_message(), ::lto_get_version());
     ::lto_codegen_set_module(_obfuscator, module);
     (*_lto_hide_symbols)(_obfuscator);
 #if LTO_API_VERSION >= 15
@@ -413,6 +419,8 @@ void BundleHandler::init()
 
     // read the xar file
     _xar = xar_open(oldXARPath.c_str(), READ);
+    if ( _xar == NULL )
+        throwf("malformed bundle format");
 
     // Init the vector of handler
     xar_iter_t iter = xar_iter_new();
@@ -447,8 +455,10 @@ void BundleHandler::copyXARProp(xar_file_t src, xar_file_t dst)
         const char* key = xar_prop_first(src, p);
         for (int x = 0; x < i; x++)
             key = xar_prop_next(p);
-        if ( !key )
+        if ( !key ) {
+            xar_iter_free(p);
             break;
+        }
         const char* val = NULL;
         xar_prop_get(src, key, &val);
         if ( // Info from bitcode files
@@ -487,7 +497,14 @@ void BitcodeHandler::populateMustPreserveSymbols(BitcodeObfuscator* obfuscator)
     initFile();
 
     // init LTOModule and add asm labels
+#if LTO_API_VERSION < 11
     lto_module_t module = lto_module_create_from_memory(_file_buffer, _file_size);
+#else
+    lto_module_t module = lto_module_create_in_local_context(_file_buffer, _file_size, "bitcode bundle temp file");
+#endif
+    if ( module == NULL )
+        throwf("could not reparse object file in bitcode bundle: '%s', using libLTO version '%s'",
+               ::lto_get_error_message(), ::lto_get_version());
     obfuscator->addAsmSymbolsToMustPreserve(module);
     lto_module_dispose(module);
 }
@@ -633,14 +650,16 @@ void BitcodeBundle::doPass()
         // 3. symbols must not be stripped
         // 4. all the globals if the globals are dead_strip root (ex. dylibs)
         // 5. there is an exported symbol list suggests the symbol should be exported
-        // 6. the special symbols supplied by linker
+        // 6. weak external symbols (not auto-hide)
+        // 7. the special symbols supplied by linker
         for ( auto &sect : _state.sections ) {
             for ( auto &atom : sect->atoms ) {
                 if ( atom == _state.entryPoint ||
                      atom->definition() == ld::Atom::definitionProxy ||
                      atom->symbolTableInclusion() == ld::Atom::symbolTableInAndNeverStrip ||
                      ( _options.allGlobalsAreDeadStripRoots() && atom->scope() == ld::Atom::scopeGlobal ) ||
-                     ( _options.hasExportRestrictList() && _options.shouldExport(atom->name()) ) )
+                     ( _options.hasExportRestrictList() && _options.shouldExport(atom->name()) ) ||
+                     ( atom->combine() == ld::Atom::combineByName && atom->scope() == ld::Atom::scopeGlobal && !atom->autoHide() ) )
                     obfuscator->addMustPreserveSymbols(atom->name());
             }
         }
@@ -666,6 +685,11 @@ void BitcodeBundle::doPass()
         obfuscator->addMustPreserveSymbols("__mh_dylinker_header");
         obfuscator->addMustPreserveSymbols("__mh_object_header");
         obfuscator->addMustPreserveSymbols("__mh_preload_header");
+
+        // add all the Proxy Atom linker ever created and all the undefs that are possibily dead-stripped.
+        for (auto sym : _state.allUndefProxies)
+            obfuscator->addMustPreserveSymbols(sym);
+        _state.allUndefProxies.clear();
     }
 
     // Open XAR output

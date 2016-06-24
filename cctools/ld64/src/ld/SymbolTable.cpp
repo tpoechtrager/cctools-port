@@ -580,6 +580,18 @@ void SymbolTable::tentativeDefs(std::vector<const char*>& tents)
 }
 
 
+void SymbolTable::mustPreserveForBitcode(std::unordered_set<const char*>& syms)
+{
+	// return all names in _byNameTable that have no associated atom
+	for (const auto &entry: _byNameTable) {
+		const char* name = entry.first;
+		const ld::Atom* atom = _indirectBindingTable[entry.second];
+		if ( (atom == NULL) || (atom->definition() == ld::Atom::definitionProxy) )
+			syms.insert(name);
+	}
+}
+
+
 bool SymbolTable::hasName(const char* name)			
 { 
 	NameToSlot::iterator pos = _byNameTable.find(name);
