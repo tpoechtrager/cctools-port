@@ -13,13 +13,13 @@ AC_DEFUN([CHECK_LLVM],
     if test "x$enable_lto_support" = "xyes"; then
         if test "x$LLVM_CONFIG" = "xno"; then
             AC_PATH_PROGS(LLVM_CONFIG,
-                [llvm-config                                    \
-                llvm-config-3.8 llvm-config-3.7 llvm-config-3.6 \
-                llvm-config-3.5 llvm-config-3.4 llvm-config-3.3 \
-                llvm-config-3.2 llvm-config-3.1                 \
-                llvm-config38 llvm-config37 llvm-config36       \
-                llvm-config35 llvm-config34 llvm-config33       \
-                llvm-config32 llvm-config31],
+                [llvm-config                                              \
+                 llvm-config-3.9 llvm-config-3.8 llvm-config-3.7          \
+                 llvm-config-3.6 llvm-config-3.5 llvm-config-3.4          \
+                 llvm-config-3.3 llvm-config-3.2 llvm-config-3.1          \
+                 llvm-config39 llvm-config38 llvm-config37 llvm-config36  \
+                 llvm-config35 llvm-config34 llvm-config33 llvm-config32  \
+                 llvm-config31],
             no)
         fi
 
