@@ -84,46 +84,46 @@ struct cstring_order_line {
     unsigned long output_offset;
 };
 
-extern void cstring_merge(
+__private_extern__ void cstring_merge(
     struct cstring_data *data,
     struct merged_section *ms,
     struct section *s,
     struct section_map *section_map,
     enum bool redo_live);
 
-extern void cstring_order(
+__private_extern__ void cstring_order(
     struct cstring_data *data,
     struct merged_section *ms);
 
-extern void cstring_reset_live(
+__private_extern__ void cstring_reset_live(
     struct cstring_data *data,
     struct merged_section *ms);
 
-extern void get_cstring_from_sectorder(
+__private_extern__ void get_cstring_from_sectorder(
     struct merged_section *ms,
     unsigned long *index,
     char *buffer,
     unsigned long line_number,
     unsigned long char_pos);
 
-extern unsigned long lookup_cstring(
+__private_extern__ unsigned long lookup_cstring(
     char *cstring,
     struct cstring_data *data,
     struct merged_section *ms);
 
-extern void cstring_output(
+__private_extern__ void cstring_output(
     struct cstring_data *data,
     struct merged_section *ms);
 
-extern void cstring_free(
+__private_extern__ void cstring_free(
     struct cstring_data *data);
 
 #ifdef DEBUG
-extern void print_cstring_data(
+__private_extern__ void print_cstring_data(
     struct cstring_data *data,
     char *indent);
 
-extern void cstring_data_stats(
+__private_extern__ void cstring_data_stats(
     struct cstring_data *data,
     struct merged_section *ms);
 #endif /* DEBUG */

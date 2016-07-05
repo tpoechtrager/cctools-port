@@ -1,3 +1,7 @@
+#if defined(__clang__) && !defined(__OBJC_RUNTIME_INTERNAL__)
+#pragma clang system_header
+#endif
+
 /**
  * This file includes all of the hooks that can be used to alter the behaviour
  * of the runtime.  
@@ -72,3 +76,30 @@ extern struct objc_slot* (*_objc_selector_type_mismatch)(Class cls,
  * This hook must be set for weak references to work with automatic reference counting.
  */
 OBJC_HOOK id (*_objc_weak_load)(id object);
+
+/**
+ * Type for a tracing hook.  These are registered to be called before and after
+ * each message send.  The parameters are the receiver and selector for the
+ * message, the method to be called, a flag indicating the direction, and the
+ * return value.  The flag is 0 when the message is being sent and 1 when it
+ * returns, the return value is only defined for word-sized scalar returns.
+ *
+ * If the hook returns (IMP)0, when invoked in the sending direction, then it
+ * will not be invoked on return.  This is significantly faster.
+ *
+ * If the hook returns (IMP)1, when invoked in the sending direction, then it
+ * will be invoked again on return.  The return value is ignored on the second
+ * call.
+ *
+ * If it returns any other value, then the result will be called instead of the
+ * correct IMP.  This allows all messages with a given selector to be
+ * interposed.  
+ */
+typedef IMP (*objc_tracing_hook)(id, SEL, IMP, int, void*);
+
+/**
+ * Registers a tracing hook for a specified selector.  
+ */
+int objc_registerTracingHook(SEL, objc_tracing_hook);
+
+

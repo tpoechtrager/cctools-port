@@ -192,6 +192,10 @@
 	#define N_SYMBOL_RESOLVER 0x100
 #endif
 
+#ifndef N_AST
+	#define N_AST 0x32
+#endif
+
 #ifndef LC_FUNCTION_STARTS
 	#define	LC_FUNCTION_STARTS 	0x26
 #endif
@@ -229,7 +233,13 @@
   };
 #endif
 
+#ifndef MH_APP_EXTENSION_SAFE
+	#define MH_APP_EXTENSION_SAFE 0x02000000
+#endif
 
+#ifndef N_ALT_ENTRY
+	#define N_ALT_ENTRY 0x0200
+#endif
 
 #ifndef CPU_SUBTYPE_ARM_V7F
   #define CPU_SUBTYPE_ARM_V7F    ((cpu_subtype_t) 10)
@@ -244,13 +254,16 @@
 
 
 // hack until arm64 headers are worked out
-#undef CPU_TYPE_ARM64
-#undef CPU_SUBTYPE_ARM64_ALL
-#undef CPU_SUBTYPE_ARM64_V8
+#ifndef CPU_TYPE_ARM64
+	#define CPU_TYPE_ARM64			(CPU_TYPE_ARM | CPU_ARCH_ABI64)
+#endif
+#ifndef CPU_SUBTYPE_ARM64_ALL
+	#define CPU_SUBTYPE_ARM64_ALL	0
+#endif
+#ifndef CPU_SUBTYPE_ARM64_V8
+	#define CPU_SUBTYPE_ARM64_V8    1
+#endif
 
-#define CPU_TYPE_ARM64			(CPU_TYPE_ARM | CPU_ARCH_ABI64)
-#define CPU_SUBTYPE_ARM64_ALL	0
-#define CPU_SUBTYPE_ARM64_V8    1
 
 #define ARM64_RELOC_UNSIGNED            0 // for pointers
 #define ARM64_RELOC_SUBTRACTOR          1 // must be followed by a ARM64_RELOC_UNSIGNED
@@ -364,6 +377,9 @@
 
 #define UNWIND_ARM64_DWARF_SECTION_OFFSET               0x00FFFFFF
 
+#define UNW_ARM_D31 287
+
+
 #ifndef LC_SOURCE_VERSION
 	#define LC_SOURCE_VERSION 0x2A
 	struct source_version_command {
@@ -410,10 +426,17 @@
 	#define LOH_ARM64_ADRP_LDR_GOT			8
 #endif
 
+#ifndef LC_VERSION_MIN_TVOS
+	#define LC_VERSION_MIN_TVOS			0x2F
+#endif
+
+#ifndef LC_VERSION_MIN_WATCHOS
+	#define LC_VERSION_MIN_WATCHOS		0x30
+#endif
+
 #ifndef EXPORT_SYMBOL_FLAGS_KIND_ABSOLUTE
 	#define EXPORT_SYMBOL_FLAGS_KIND_ABSOLUTE			0x02
 #endif
-
 
 #ifndef CPU_SUBTYPE_ARM_V8
 	#define CPU_SUBTYPE_ARM_V8		((cpu_subtype_t) 13) 
@@ -434,6 +457,61 @@
 #ifndef CPU_SUBTYPE_X86_64_H
 	#define CPU_SUBTYPE_X86_64_H	((cpu_subtype_t) 8) 
 #endif	
+
+#define UNWIND_ARM_MODE_MASK                          0x0F000000
+#define UNWIND_ARM_MODE_FRAME                         0x01000000
+#define UNWIND_ARM_MODE_FRAME_D                       0x02000000
+#define UNWIND_ARM_MODE_DWARF                         0x04000000
+ 
+#define  UNWIND_ARM_FRAME_STACK_ADJUST_MASK           0x00C00000
+
+#define UNWIND_ARM_FRAME_FIRST_PUSH_R4                0x00000001
+#define UNWIND_ARM_FRAME_FIRST_PUSH_R5                0x00000002
+#define UNWIND_ARM_FRAME_FIRST_PUSH_R6                0x00000004
+  
+#define UNWIND_ARM_FRAME_SECOND_PUSH_R8               0x00000008
+#define UNWIND_ARM_FRAME_SECOND_PUSH_R9               0x00000010
+#define UNWIND_ARM_FRAME_SECOND_PUSH_R10              0x00000020
+#define UNWIND_ARM_FRAME_SECOND_PUSH_R11              0x00000040
+#define UNWIND_ARM_FRAME_SECOND_PUSH_R12              0x00000080
+ 
+#define UNWIND_ARM_FRAME_D_REG_COUNT_MASK             0x00000F00
+ 
+#define UNWIND_ARM_DWARF_SECTION_OFFSET               0x00FFFFFF
+
+
+// ( <opcode> (delta-uleb128)+ <zero> )+ <zero>
+#define DYLD_CACHE_ADJ_V1_POINTER_32		0x01
+#define DYLD_CACHE_ADJ_V1_POINTER_64		0x02
+#define DYLD_CACHE_ADJ_V1_ADRP				0x03
+#define DYLD_CACHE_ADJ_V1_ARM_THUMB_MOVT	0x10 // thru 0x1F
+#define DYLD_CACHE_ADJ_V1_ARM_MOVT			0x20 // thru 0x2F
+
+
+// Whole		 :== <new-marker> <count> FromToSection+
+// FromToSection :== <from-sect-index> <to-sect-index> <count> ToOffset+
+// ToOffset		 :== <to-sect-offset-delta> <count> FromOffset+
+// FromOffset	 :== <kind> <count> <from-sect-offset-delta>
+#define DYLD_CACHE_ADJ_V2_FORMAT				0x7F
+
+#define DYLD_CACHE_ADJ_V2_POINTER_32			0x01
+#define DYLD_CACHE_ADJ_V2_POINTER_64			0x02
+#define DYLD_CACHE_ADJ_V2_DELTA_32			    0x03
+#define DYLD_CACHE_ADJ_V2_DELTA_64			    0x04
+#define DYLD_CACHE_ADJ_V2_ARM64_ADRP			0x05
+#define DYLD_CACHE_ADJ_V2_ARM64_OFF12			0x06
+#define DYLD_CACHE_ADJ_V2_ARM64_BR26			0x07
+#define DYLD_CACHE_ADJ_V2_ARM_MOVW_MOVT			0x08
+#define DYLD_CACHE_ADJ_V2_ARM_BR24				0x09
+#define DYLD_CACHE_ADJ_V2_THUMB_MOVW_MOVT		0x0A
+#define DYLD_CACHE_ADJ_V2_THUMB_BR22			0x0B
+#define DYLD_CACHE_ADJ_V2_IMAGE_OFF_32			0x0C
+
+
+
+// kind target-address fixup-addr [adj] 
+
+
 
 struct ArchInfo {
 	const char*			archName;
@@ -500,10 +578,10 @@ static const ArchInfo archInfoArray[] = {
 	#define SUPPORT_ARCH_arm_any 1
 #endif
 #if SUPPORT_ARCH_arm64
-	{ "arm64", CPU_TYPE_ARM64,   CPU_SUBTYPE_ARM64_ALL,  "arm64-",    "",   false,  false },
+	{ "arm64", CPU_TYPE_ARM64,   CPU_SUBTYPE_ARM64_ALL,  "arm64-",  "aarch64-",  false,  false },
 #endif
 #if SUPPORT_ARCH_arm64v8
-	{ "arm64v8", CPU_TYPE_ARM64, CPU_SUBTYPE_ARM64_V8,   "arm64v8-",  "",   true,  false },
+	{ "arm64v8", CPU_TYPE_ARM64, CPU_SUBTYPE_ARM64_V8,   "arm64v8-",  "aarch64-",   true,  false },
 #endif
 	{ NULL, 0, 0, NULL, NULL, false, false }
 };

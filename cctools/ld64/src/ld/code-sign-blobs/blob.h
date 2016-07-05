@@ -45,13 +45,8 @@
 #include "endian.h"
 #include "memutils.h"
 #include <errno.h>
-#include <stdio.h>
-#include <string.h>
-#include <unistd.h>
-
-namespace std {
-    typedef ::FILE FILE;
-}
+#include <cstdio>
+#include <cstring> // ld64-port
 
 namespace Security {
 

@@ -53,6 +53,7 @@ Snapshot::~Snapshot()
     // Lots of things leak under the assumption the linker is about to exit.
 }
 
+#if __has_extension(blocks) // ld64-port
 
 void Snapshot::setSnapshotPath(const char *path) 
 {
@@ -536,3 +537,35 @@ void Snapshot::recordAssertionMessage(const char *fmt, ...)
         }    
     }
 }
+
+#else
+
+
+void Snapshot::setSnapshotPath(const char *path) { }
+
+void Snapshot::setSnapshotMode(SnapshotMode mode)
+{
+  if (mode != SNAPSHOT_DISABLED) {
+      throwf("creating linker snapshots not supported in gcc built ld64");
+  }
+}
+
+void Snapshot::setSnapshotName(const char *path) { }
+void Snapshot::buildPath(char *buf, const char *subdir, const char *file) { }
+void Snapshot::buildUniquePath(char *buf, const char *subdir, const char *file) { }
+void Snapshot::copyFileToSnapshot(const char *sourcePath, const char *subdir, char *path) { }
+void Snapshot::createSnapshot() { }
+void Snapshot::writeCommandLine(StringVector &args, const char *filename, bool includeCWD) { }
+void Snapshot::recordRawArgs(int argc, const char *argv[]) { }
+void Snapshot::addSnapshotLinkArg(int argIndex, int argCount, int fileArg) { }
+void Snapshot::recordArch(const char *arch) { }
+void Snapshot::recordObjectFile(const char *path)  { }
+void Snapshot::addFrameworkArg(const char *framework) { }
+void Snapshot::addDylibArg(const char *dylib) { }
+void Snapshot::recordDylibSymbol(ld::dylib::File* dylibFile, const char *name) { }
+void Snapshot::recordArchive(const char *archiveFile) { }
+void Snapshot::recordSubUmbrella(const char *frameworkPath) { }
+void Snapshot::recordSubLibrary(const char *dylibPath) { }
+void Snapshot::recordAssertionMessage(const char *fmt, ...) { }
+
+#endif // __has_extension(blocks)

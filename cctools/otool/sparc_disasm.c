@@ -633,7 +633,7 @@ enum bool verbose)
 #undef	reg
 
 #define	freg(n)		printf("%%%s", freg_names[n])
-#define	fregx(n)	printf("%%%s", freg_names[((n) & ~1) | (((n) & 1) << 5)])
+#define	fregx(n)	printf("%%%s", reg_names[((n) & ~1) | (((n) & 1) << 5)])
     case 'e':
       freg (insn.rs1);
       break;

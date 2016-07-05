@@ -143,6 +143,8 @@ uint32_t narchs)
     struct object *object;
     struct load_command *lc;
     struct segment_command *sg;
+    struct ar_hdr h;
+    char size_buf[sizeof(h.ar_size) + 1];
 
 	for(i = 0; i < narchs; i++){
 	    if(archs[i].type == OFILE_ARCHIVE){
@@ -202,15 +204,15 @@ uint32_t narchs)
 			size += archs[i].members[j].object->object_size
 			   - archs[i].members[j].object->input_sym_info_size
 			   + archs[i].members[j].object->output_sym_info_size;
-			sprintf(archs[i].members[j].ar_hdr->ar_size, "%-*ld",
-			       (int)sizeof(archs[i].members[j].ar_hdr->ar_size),
-			       (long)(size));
+			sprintf(size_buf, "%-*ld",
+			   (int)sizeof(archs[i].members[j].ar_hdr->ar_size),
+			   (long)(size));
 			/*
 			 * This has to be done by hand because sprintf puts a
 			 * null at the end of the buffer.
 			 */
-			memcpy(archs[i].members[j].ar_hdr->ar_fmag, ARFMAG,
-			      (int)sizeof(archs[i].members[j].ar_hdr->ar_fmag));
+			memcpy(archs[i].members[j].ar_hdr->ar_size, size_buf,
+			   (int)sizeof(archs[i].members[j].ar_hdr->ar_size));
 		    }
 		    else{
 			size += archs[i].members[j].unknown_size;

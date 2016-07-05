@@ -70,8 +70,10 @@
 */
 
 typedef _STRUCT_PPC_THREAD_STATE	ppc_thread_state_t;
+/* cctools-port: commented */
 //#if !defined(_POSIX_C_SOURCE) || defined(_DARWIN_C_SOURCE)
 typedef _STRUCT_PPC_THREAD_STATE64	ppc_thread_state64_t;
+/* cctools-port: commented */
 //#endif /* (_POSIX_C_SOURCE && !_DARWIN_C_SOURCE) */
 typedef _STRUCT_PPC_FLOAT_STATE		ppc_float_state_t;
 typedef _STRUCT_PPC_VECTOR_STATE	ppc_vector_state_t;

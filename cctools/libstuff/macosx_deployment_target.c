@@ -112,11 +112,15 @@ use_default:
 	/*
 	 * The default value is the version of the running OS.
 	 */
+#ifdef __APPLE__
 	osversion_name[0] = CTL_KERN;
 	osversion_name[1] = KERN_OSRELEASE;
 	osversion_len = sizeof(osversion) - 1;
 	if(sysctl(osversion_name, 2, osversion, &osversion_len, NULL, 0) == -1)
 	    system_error("sysctl for kern.osversion failed");
+#else
+	memcpy(osversion, "10.5", 5); /* cctools-port: claim we are on 10.5 */
+#endif
 
 	/*
 	 * Now parse this out.  It is expected to be of the form "x.y.z" where

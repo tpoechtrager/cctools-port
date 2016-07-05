@@ -12,9 +12,7 @@
 
 #include "strlcat.h"
 #include "strlcpy.h"
-extern "C" {
 #include "helper.h"
-}
 
 #ifdef __GLIBCXX__
 #include <algorithm>
@@ -39,12 +37,22 @@ extern "C" {
 #define SUPPORT_ARCH_x86_64 1
 #define SUPPORT_ARCH_x86_64h 1
 
-#define ALL_SUPPORTED_ARCHS  "armv4t armv5 armv6 armv7 armv7f armv7k armv7s armv6m armv7m armv7em armv8 arm64 arm64v8 i386 x86_64 x86_64h"
+#define SUPPORT_APPLE_TV 1
 
-#define HW_NCPU      3
-#define CTL_HW      6
+#define ALL_SUPPORTED_ARCHS  "armv4t armv5 armv6 armv7 armv7f armv7k armv7s armv6m armv7m armv7em armv8 arm64 arm64v8 i386 x86_64 x86_64h (tvOS)"
 
-#undef ARG_MAX
-#define ARG_MAX       131072
+#define BITCODE_XAR_VERSION "1.0"
+
+#ifndef HW_NCPU
+#define HW_NCPU 3
+#endif
+
+#ifndef CTL_HW
+#define CTL_HW  6
+#endif
+
+#ifndef ARG_MAX
+#define ARG_MAX 31072
+#endif
 
 #endif

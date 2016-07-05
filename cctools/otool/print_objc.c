@@ -30,8 +30,10 @@
  */
 #include "stdio.h"
 #include "string.h"
+#include "stdint.h"            /* cctools-port: intptr_t */
 #include "mach-o/loader.h"
-#include "objc/runtime.h"
+#include "objc/runtime.h"      /* cctools-port:
+				  objc/objc-runtime.h -> objc/runtime.h */
 #include "stuff/allocate.h"
 #include "stuff/bytesex.h"
 #include "stuff/symbol.h"
@@ -636,7 +638,8 @@ print_objc_class:
 			printf("\n");
 		    printf("\t\t      isa 0x%08x", objc_class.isa);
 
-		    if(verbose && objc_getMetaClass(objc_class.name)){
+		    /* cctools-port: added (const char*)(intptr_t) */
+		    if(verbose && objc_getMetaClass((const char*)(intptr_t)objc_class.name)){
 			p = get_pointer(objc_class.isa, &left, objc_sections,
 					nobjc_sections, &cstring_section);
 			if(p != NULL)
@@ -675,9 +678,11 @@ print_objc_class:
 		    printf("\t\t     info 0x%08x",
 			   (unsigned int)objc_class.info);
 		    if(verbose){
-			if(objc_getClass(objc_class.name))
+			/* cctools-port: added (const char*)(intptr_t) */
+			if(objc_getClass((const char*)(intptr_t)objc_class.name))
 			    printf(" CLS_CLASS\n");
-			else if(objc_getMetaClass(objc_class.name))
+			/* cctools-port: added (const char*)(intptr_t) */
+			else if(objc_getMetaClass((const char*)(intptr_t)objc_class.name))
 			    printf(" CLS_META\n");
 			else
 			    printf("\n");
@@ -767,7 +772,8 @@ print_objc_class:
 			host_byte_sex, swapped, verbose) == FALSE)
 			printf(" (not in an " SEG_OBJC " section)\n");
 
-		    if(objc_getClass(objc_class.name)){
+		    /* cctools-port: added (const char*)(intptr_t) */
+		    if(objc_getClass((const char*)(intptr_t)objc_class.name)){
 			printf("\tMeta Class");
 			if(get_objc_class((uint32_t)objc_class.isa,
 			     &objc_class, &trunc, objc_sections, nobjc_sections,

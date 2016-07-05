@@ -20,13 +20,13 @@
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
-#include <stdio.h>
-#include <stdlib.h>
+#import <stdio.h>
+#import <stdlib.h>
 
-#include "stuff/ofile.h"
-#include "stuff/errors.h"
-#include "stuff/bytesex.h"
-#include "stuff/allocate.h"
+#import "stuff/ofile.h"
+#import "stuff/errors.h"
+#import "stuff/bytesex.h"
+#import "stuff/allocate.h"
 
 /* name of the program for error messages (argv[0]) */
 __private_extern__ char *progname = NULL;

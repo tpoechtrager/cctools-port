@@ -86,6 +86,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <libc.h>
+#include <dlfcn.h>
 #include <mach-o/loader.h>
 #include <mach-o/nlist.h>
 #include <mach-o/stab.h>
@@ -96,7 +98,9 @@
 #include "stuff/guess_short_name.h"
 #ifdef LTO_SUPPORT
 #include "stuff/lto.h"
+#include <xar/xar.h>
 #endif /* LTO_SUPPORT */
+#include <mach-o/dyld.h>
 
 /* used by error routines as the name of the program */
 char *progname = NULL;
@@ -128,6 +132,9 @@ struct cmd_flags {
     enum bool A;	/* pathname or library name of an object on each line */
     enum bool P;	/* portable output format */
     char *format;	/* the -t format */
+#ifdef LTO_SUPPORT
+    enum bool L;	/* print the symbols from (__LLVM,__bundle) section */
+#endif /* LTO_SUPPORT */
 };
 /* These need to be static because of the qsort compare function */
 static struct cmd_flags cmd_flags = { 0 };
@@ -173,6 +180,12 @@ static void nm(
     void *cookie);
 #ifdef LTO_SUPPORT
 static void nm_lto(
+    struct ofile *ofile,
+    char *arch_name,
+    struct cmd_flags *cmd_flags);
+static void nm_llvm_bundle(
+    char *llvm_bundle_pointer,
+    uint64_t llvm_bundle_size,
     struct ofile *ofile,
     char *arch_name,
     struct cmd_flags *cmd_flags);
@@ -414,6 +427,11 @@ char **envp)
 			case 'P':
 			    cmd_flags.P = TRUE;
 			    break;
+#ifdef LTO_SUPPORT
+			case 'L':
+			    cmd_flags.L = TRUE;
+			    break;
+#endif /* LTO_SUPPORT */
 			default:
 			    error("invalid argument -%c", argv[i][j]);
 			    usage();
@@ -463,7 +481,11 @@ void
 usage(
 void)
 {
-	fprintf(stderr, "Usage: %s [-agnopruUmxjlfAP[s segname sectname] [-] "
+	fprintf(stderr, "Usage: %s [-agnopruUmxjlfAP"
+#ifdef LTO_SUPPORT
+		"L"
+#endif /* LTO_SUPPORT */
+		"[s segname sectname] [-] "
 		"[-t format] [[-arch <arch_flag>] ...] [file ...]\n", progname);
 	exit(EXIT_FAILURE);
 }
@@ -498,6 +520,14 @@ void *cookie)
 
     char *short_name, *has_suffix;
     enum bool is_framework;
+#ifdef LTO_SUPPORT
+    char *llvm_bundle_pointer;
+    uint64_t llvm_bundle_size;
+    enum bool llvm_bundle_found;
+	llvm_bundle_found = FALSE;
+#endif /* LTO_SUPPORT */
+
+    memset(&process_flags, '\0', sizeof(process_flags)); /* cctools-port */
 
 	cmd_flags = (struct cmd_flags *)cookie;
 
@@ -556,10 +586,6 @@ void *cookie)
 	    }
 	    lc = (struct load_command *)((char *)lc + lc->cmdsize);
 	}
-	if(st == NULL || st->nsyms == 0){
-	    warning("no name list");
-	    return;
-	}
 	if(process_flags.nsects > 0){
 	    if(ofile->mh != NULL){
 		process_flags.sections = (struct section **)
@@ -590,6 +616,33 @@ void *cookie)
 			else if(strcmp((s + j)->sectname, SECT_BSS) == 0 &&
 				strcmp((s + j)->segname, SEG_DATA) == 0)
 			    process_flags.bss_nsect = k + 1;
+#ifdef LTO_SUPPORT
+			else if(strcmp((s + j)->sectname, "__bundle") == 0 &&
+				strcmp((s + j)->segname, "__LLVM") == 0){
+			    if(((st == NULL || st->nsyms == 0) ||
+				cmd_flags->L) &&
+                               (((s + j)->flags & SECTION_TYPE) != S_ZEROFILL)){
+				if((s + j)->offset > ofile->object_size){
+				    Mach_O_error(ofile, "section offset for "
+					     "section (__LLVM,__bundle) is "
+					     "past end of file");
+				}
+				else if((s + j)->size > ofile->object_size ||
+				        (s + j)->offset + (s + j)->size >
+							ofile->object_size){
+				    Mach_O_error(ofile, "section "
+					     "(__LLVM,__bundle) extends past "
+					     "end of file");
+				}
+				else{
+				    llvm_bundle_pointer = ofile->object_addr +
+							  (s + j)->offset;
+				    llvm_bundle_size = (s + j)->size;
+				    llvm_bundle_found = TRUE;
+				}
+			    }
+			}
+#endif /* LTO_SUPPORT */
 			if(cmd_flags->segname != NULL){
 			    if(strncmp((s + j)->sectname, cmd_flags->sectname,
 				       sizeof(s->sectname)) == 0 &&
@@ -617,6 +670,33 @@ void *cookie)
 			else if(strcmp((s64 + j)->sectname, SECT_BSS) == 0 &&
 				strcmp((s64 + j)->segname, SEG_DATA) == 0)
 			    process_flags.bss_nsect = k + 1;
+#ifdef LTO_SUPPORT
+			else if(strcmp((s64 + j)->sectname, "__bundle") == 0 &&
+				strcmp((s64 + j)->segname, "__LLVM") == 0)
+			    if(((st == NULL || st->nsyms == 0) ||
+				cmd_flags->L) &&
+                               (((s64 + j)->flags & SECTION_TYPE)
+							      != S_ZEROFILL)){
+				if((s64 + j)->offset > ofile->object_size){
+				    Mach_O_error(ofile, "section offset for "
+					     "section (__LLVM,__bundle) is "
+					     "past end of file");
+				}
+				else if((s64 + j)->size > ofile->object_size ||
+				        (s64 + j)->offset + (s64 + j)->size >
+							ofile->object_size){
+				    Mach_O_error(ofile, "section "
+					     "(__LLVM,__bundle) extends past "
+					     "end of file");
+				}
+				else{
+				    llvm_bundle_pointer = ofile->object_addr +
+							  (s64 + j)->offset;
+				    llvm_bundle_size = (s64 + j)->size;
+				    llvm_bundle_found = TRUE;
+				}
+			    }
+#endif /* LTO_SUPPORT */
 			if(cmd_flags->segname != NULL){
 			    if(strncmp((s64 + j)->sectname, cmd_flags->sectname,
 				       sizeof(s64->sectname)) == 0 &&
@@ -634,6 +714,23 @@ void *cookie)
 		      ((char *)lc + lc->cmdsize);
 	    }
 	}
+	if(st == NULL || st->nsyms == 0){
+#ifdef LTO_SUPPORT
+	    if(llvm_bundle_found == TRUE)
+		nm_llvm_bundle(llvm_bundle_pointer, llvm_bundle_size,
+			       ofile, arch_name, cmd_flags);
+	    else
+#endif /* LTO_SUPPORT */
+		warning("no name list");
+	    return;
+	}
+#ifdef LTO_SUPPORT
+	else if(cmd_flags->L && llvm_bundle_found == TRUE){
+	    nm_llvm_bundle(llvm_bundle_pointer, llvm_bundle_size,
+			   ofile, arch_name, cmd_flags);
+	    return;
+	}
+#endif /* LTO_SUPPORT */
 	if((mh_flags & MH_TWOLEVEL) == MH_TWOLEVEL &&
 	   process_flags.nlibs > 0){
 	    process_flags.lib_names = (char **)
@@ -850,6 +947,298 @@ struct cmd_flags *cmd_flags)
 
 	free(symbols);
 }
+
+/*
+ * These are pointers to the xar API's so that libxar.dylib can be loaded
+ * dynamically with dlopen() and then the symbols for these API's can be
+ * looked up via dlsym() and if things are mising the the code does nothing
+ * and does not fail.
+ */
+static enum bool tried_to_load_libxar = FALSE;
+static void *xar_handle = NULL;
+static xar_t (*ptr_xar_open)(const char *file, int32_t flags) = NULL;
+static void (*ptr_xar_serialize)(xar_t x, const char *file) = NULL;
+static int (*ptr_xar_close)(xar_t x) = NULL;
+static xar_file_t (*ptr_xar_file_first)(xar_t x, xar_iter_t i) = NULL;
+static xar_file_t (*ptr_xar_file_next)(xar_iter_t i) = NULL;
+static void (*ptr_xar_iter_free)(xar_iter_t i) = NULL;
+static xar_iter_t (*ptr_xar_iter_new)(void) = NULL;
+static const char * (*ptr_xar_prop_first)(xar_file_t f, xar_iter_t i) = NULL;
+static int32_t (*ptr_xar_prop_get)(xar_file_t f, const char *key,
+				   const char **value) = NULL;
+static const char * (*ptr_xar_prop_next)(xar_iter_t i) = NULL;
+static void (*ptr_xar_prop_unset)(xar_file_t f, const char *key) = NULL;
+static int32_t (*ptr_xar_extract_tobuffersz)(xar_t x, xar_file_t f,
+                char **buffer, size_t *size) = NULL;
+
+/*
+ * nm_llvm_bundle() is called by nm() to process the contents of the
+ * (__LLVM,__bundle) which is a xar file.  And also called recursively when one
+ * of the xar files members contents is a possible xar file.  It expects to
+ * find a xar file with bitcode file members (or a nested xar file).
+ */
+static
+void
+nm_llvm_bundle(
+char *llvm_bundle_pointer,
+uint64_t llvm_bundle_size,
+struct ofile *ofile,
+char *arch_name,
+struct cmd_flags *cmd_flags)
+{
+    uint32_t r, bufsize;
+    char *p, *prefix, *xar_path, buf[MAXPATHLEN], resolved_name[PATH_MAX];
+    char xar_filename[] = "/tmp/temp.XXXXXX";
+    int xar_fd;
+    xar_t xar;
+    xar_iter_t i;
+    xar_file_t f;
+
+	/*
+	 * Note this check is also preformed before we are called recursively,
+	 * so if it fails we know it was from the top level and called directly
+	 * for the contents of a Mach-O file with the (__LLVM,__bundle)
+	 * contents.
+	 */
+	if(llvm_bundle_size < sizeof(struct xar_header)){
+	    Mach_O_error(ofile, "size of (__LLVM,__bundle) section too "
+			 "small (smaller than size of struct xar_header)");
+	    return;
+	}
+
+	if(tried_to_load_libxar == FALSE){
+	    tried_to_load_libxar = TRUE;
+	    /*
+	     * Construct the prefix to this executable assuming it is in a bin
+	     * directory relative to a lib directory of the matching xar library
+	     * and first try to load that.  If not then fall back to trying
+	     * "/usr/lib/libxar.dylib". 
+	     */
+	    bufsize = MAXPATHLEN;
+	    p = buf;
+	    r = _NSGetExecutablePath(p, &bufsize);
+	    if(r == -1){
+		p = allocate(bufsize);
+		_NSGetExecutablePath(p, &bufsize);
+	    }
+	    prefix = realpath(p, resolved_name);
+	    p = rindex(prefix, '/');
+	    if(p != NULL)
+		p[1] = '\0';
+	    xar_path = makestr(prefix, "../lib/libxar.dylib", NULL);
+
+	    xar_handle = dlopen(xar_path, RTLD_NOW);
+	    if(xar_handle == NULL){
+		free(xar_path);
+		xar_path = NULL;
+		xar_handle = dlopen("/usr/lib/libxar.dylib", RTLD_NOW);
+	    }
+	    if(xar_handle == NULL)
+		return;
+
+	    ptr_xar_open = dlsym(xar_handle, "xar_open");
+	    ptr_xar_serialize = dlsym(xar_handle, "xar_serialize");
+	    ptr_xar_close = dlsym(xar_handle, "xar_close");
+	    ptr_xar_file_first = dlsym(xar_handle, "xar_file_first");
+	    ptr_xar_file_next = dlsym(xar_handle, "xar_file_next");
+	    ptr_xar_iter_free = dlsym(xar_handle, "xar_iter_free");
+	    ptr_xar_iter_new = dlsym(xar_handle, "xar_iter_new");
+	    ptr_xar_prop_first = dlsym(xar_handle, "xar_prop_first");
+	    ptr_xar_prop_get = dlsym(xar_handle, "xar_prop_get");
+	    ptr_xar_prop_next = dlsym(xar_handle, "xar_prop_next");
+	    ptr_xar_prop_unset = dlsym(xar_handle, "xar_prop_unset");
+	    ptr_xar_extract_tobuffersz =
+				dlsym(xar_handle, "xar_extract_tobuffersz");
+	    if(ptr_xar_open == NULL ||
+	       ptr_xar_serialize == NULL ||
+	       ptr_xar_close == NULL ||
+	       ptr_xar_file_first == NULL ||
+	       ptr_xar_file_next == NULL ||
+	       ptr_xar_iter_free == NULL ||
+	       ptr_xar_iter_new == NULL ||
+	       ptr_xar_prop_first == NULL ||
+	       ptr_xar_prop_get == NULL ||
+	       ptr_xar_prop_next == NULL ||
+	       ptr_xar_prop_unset == NULL ||
+	       ptr_xar_extract_tobuffersz == NULL)
+		return;
+	}
+	if(xar_handle == NULL)
+	    return;
+
+	xar_fd = mkstemp(xar_filename);
+	if(write(xar_fd, llvm_bundle_pointer, llvm_bundle_size) !=
+	        llvm_bundle_size){
+	    if(ofile->xar_member_name != NULL)
+		system_error("Can't write (__LLVM,__bundle) section contents "
+		    "to temporary file: %s\n", xar_filename);
+	    else
+		system_error("Can't write (__LLVM,__bundle) xar file %s "
+		    "contents to temporary file: %s\n", ofile->xar_member_name,
+		    xar_filename);
+	    close(xar_fd);
+	    return;
+	}
+	close(xar_fd);
+	xar = ptr_xar_open(xar_filename, READ);
+	if(!xar){
+	    system_error("Can't create temporary xar archive %s\n",
+			 xar_filename);
+	    unlink(xar_filename);
+	    return;
+	}
+
+	i = ptr_xar_iter_new();
+	if(!i){
+	    error("Can't obtain an xar iterator for xar archive %s\n",
+		  xar_filename);
+	    ptr_xar_close(xar);
+	    unlink(xar_filename);
+	    return;
+	}
+
+	/*
+	 * Go through the xar's files.
+	 */
+	for(f = ptr_xar_file_first(xar, i); f; f = ptr_xar_file_next(i)){
+	    const char *key;
+	    xar_iter_t p;
+	    const char *xar_member_name, *xar_member_type,
+		       *xar_member_size_string;
+	    size_t xar_member_size;
+uint32_t nprops, maxprops;
+        
+	    p = ptr_xar_iter_new();
+	    if(!p){
+		error("Can't obtain an xar iterator for xar archive %s\n",
+		      xar_filename);
+		ptr_xar_close(xar);
+		unlink(xar_filename);
+		return;
+	    }
+	    xar_member_name = NULL;
+	    xar_member_type = NULL;
+	    xar_member_size_string = NULL;
+
+	    /*
+	     * See comment below about keys with multiple values, why knowing
+	     * the maximum number of "props" is needed.
+	     */
+	    maxprops = 0;
+	    for(key = ptr_xar_prop_first(f, p); key; key = ptr_xar_prop_next(p))
+    	        maxprops++;
+
+	    nprops = 0;
+	    for(key = ptr_xar_prop_first(f, p);
+		key;
+		key = ptr_xar_prop_next(p)){
+		nprops++;
+
+		const char *val = NULL; 
+		ptr_xar_prop_get(f, key, &val);
+#if 0
+		printf("key: %s, value: %s\n", key, val);
+#endif
+		if(strcmp(key, "name") == 0)
+		    xar_member_name = val;
+		if(strcmp(key, "type") == 0)
+		    xar_member_type = val;
+		if(strcmp(key, "data/size") == 0)
+		    xar_member_size_string = val;
+
+		/*
+		 * These specific keys used for bitcode files may have multiple
+		 * values.  But the xar_prop_get() API will always get the first
+		 * value even though xar_prop_next() will advance to the next
+		 * key.  The workaround used to get the next value for the
+		 * same key is to delete the "prop" with xar_prop_unset(), but
+		 * care has to be taken not to delete the last "prop" or then
+		 * xar_prop_next() will crash.  There are also specific keys
+		 * used for linker subdoc that have multiple values but since
+		 * this is looping on file "props" they are not listed here.
+		 */ 
+		if((strcmp(key, "file-type") == 0 ||
+		    strcmp(key, "clang/cmd") == 0 ||
+		    strcmp(key, "swift-cmd") == 0) &&
+		    nprops != maxprops)
+		    ptr_xar_prop_unset(f, key);
+	    }
+ 	    /*
+	     * If we found a file with a name, date/size and type properties
+	     * and with the type being "file" see if that is a bitcode file.
+	     */
+	    if(xar_member_name != NULL &&
+	       xar_member_type != NULL &&
+		   strcmp(xar_member_type, "file") == 0 &&
+	       xar_member_size_string != NULL){
+		/*
+		 * Extract the file into a buffer.
+		 */
+		char *endptr;
+		xar_member_size = strtoul(xar_member_size_string, &endptr, 10);
+		if(*endptr == '\0' && xar_member_size != 0){
+		    char *buffer;
+		    buffer = allocate(xar_member_size);
+		    if(ptr_xar_extract_tobuffersz(xar, f, &buffer,
+					          &xar_member_size) == 0){
+#if 0
+			printf("xar member: %s extracted\n", xar_member_name);
+#endif
+			/*
+			 * Set the ofile->xar_member_name we want to see
+			 * printed in the header, which nm_lto() will caused
+			 * to be printed.
+			 */
+			const char *old_xar_member_name;
+			/*
+			 * If ofile->xar_member_name is already set this is
+			 * nested. So save the old name and create the nested
+			 * name.
+			 */
+			if(ofile->xar_member_name != NULL){
+			    old_xar_member_name = ofile->xar_member_name;
+			    ofile->xar_member_name =
+				makestr("[", ofile->xar_member_name, "]",
+					xar_member_name, NULL);
+			}
+			else {
+			    old_xar_member_name = NULL;
+			    ofile->xar_member_name = xar_member_name;
+			}
+			/*
+			 * Now see if this is bitcode, and if so finally call
+			 * nm_lto() to get its symbols printed.
+			 */
+			if(is_llvm_bitcode(ofile, buffer, xar_member_size)){
+			    nm_lto(ofile, arch_name, cmd_flags);
+			    lto_free(ofile->lto);
+			    ofile->lto = NULL;
+			    ofile->lto_cputype = 0;
+			    ofile->lto_cpusubtype = 0;
+			}
+			else{
+			    /* See if this is could be a xar file (nested). */
+			    if(xar_member_size >= sizeof(struct xar_header)){
+#if 0
+				printf("could be a xar file: %s\n",
+				       ofile->xar_member_name);
+#endif
+				nm_llvm_bundle(buffer, xar_member_size,
+					       ofile, arch_name, cmd_flags);
+			    }
+			}
+			if(old_xar_member_name != NULL)
+			    free((void *)ofile->xar_member_name);
+			ofile->xar_member_name = old_xar_member_name;
+		    }
+		    free(buffer);
+		}
+	    }
+	    ptr_xar_iter_free(p);
+	}
+	ptr_xar_close(xar);
+	unlink(xar_filename);
+}
 #endif /* LTO_SUPPORT */
 
 /* print header if needed */
@@ -862,6 +1251,7 @@ struct cmd_flags *cmd_flags)
 {
 	if((ofile->member_ar_hdr != NULL ||
 	    ofile->dylib_module_name != NULL ||
+	    ofile->xar_member_name != NULL ||
 	    cmd_flags->nfiles > 1 ||
 	    arch_name != NULL) &&
 	    (cmd_flags->o == FALSE && cmd_flags->A == FALSE)){
@@ -871,6 +1261,9 @@ struct cmd_flags *cmd_flags)
 	    else if(ofile->member_ar_hdr != NULL){
 		printf("\n%s(%.*s)", ofile->file_name,
 		       (int)ofile->member_name_size, ofile->member_name);
+	    }
+	    else if(ofile->xar_member_name != NULL){
+		printf("\n%s[%s]", ofile->file_name, ofile->xar_member_name);
 	    }
 	    else
 		printf("\n%s", ofile->file_name);
@@ -1106,8 +1499,6 @@ struct process_flags *process_flags)
 		symbol->nl.n_value == 0) ||
 	       symbol->nl.n_type == (N_PBUD | N_EXT))
 		return(FALSE);
-	    else
-		return(TRUE);
 	}
 	if(cmd_flags->g == TRUE && (symbol->nl.n_type & N_EXT) == 0)
 	    return(FALSE);
@@ -1183,11 +1574,11 @@ char *arch_name)
 			printf(" (null)");
 		}
 		else if((uint32_t)symbols[i].nl.n_un.n_strx > strsize){
-		    printf(i_xfmt, symbols[i].nl.n_un.n_strx);
+		    printf("%08x", symbols[i].nl.n_un.n_strx);
 		    printf(" (bad string index)");
 		}
 		else{
-		    printf(i_xfmt, symbols[i].nl.n_un.n_strx);
+		    printf("%08x", symbols[i].nl.n_un.n_strx);
 		    printf(" %s", symbols[i].nl.n_un.n_strx + strings);
 		}
 		if((symbols[i].nl.n_type & N_STAB) == 0 &&
@@ -1366,6 +1757,11 @@ char *arch_name)
 	       (symbols[i].nl.n_desc & N_SYMBOL_RESOLVER) == N_SYMBOL_RESOLVER)
 		    printf("[symbol resolver] ");
 
+	    if(ofile->mh_filetype == MH_OBJECT &&
+	       ((symbols[i].nl.n_type & N_TYPE) != N_UNDF) &&
+	       (symbols[i].nl.n_desc & N_ALT_ENTRY) == N_ALT_ENTRY)
+		    printf("[alt entry] ");
+
 	    if((symbols[i].nl.n_desc & N_ARM_THUMB_DEF) == N_ARM_THUMB_DEF)
 		    printf("[Thumb] ");
 
@@ -1448,11 +1844,11 @@ struct value_diff *value_diffs)
 			printf(" (null)");
 		}
 		else if((uint32_t)symbols[i].nl.n_un.n_strx > strsize){
-		    printf(i_xfmt, symbols[i].nl.n_un.n_strx);
+		    printf("%08x", symbols[i].nl.n_un.n_strx);
 		    printf(" (bad string index)");
 		}
 		else{
-		    printf(i_xfmt, symbols[i].nl.n_un.n_strx);
+		    printf("%08x", symbols[i].nl.n_un.n_strx);
 		    printf(" %s", symbols[i].nl.n_un.n_strx + strings);
 		}
 		if((symbols[i].nl.n_type & N_STAB) == 0 &&
@@ -1669,6 +2065,7 @@ static const struct stabnames stabnames[] = {
     { N_STSYM, "STSYM" },
     { N_LCSYM, "LCSYM" },
     { N_BNSYM, "BNSYM" },
+    { N_AST,   "AST" },
     { N_OPT,   "OPT" },
     { N_RSYM,  "RSYM" },
     { N_SLINE, "SLINE" },

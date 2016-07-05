@@ -25,9 +25,9 @@ namespace GNUstep
       MDNode *AlreadyCachedFlag;
       unsigned IMPCacheFlagKind;
       Pass *Owner;
-      LLVMPointerType *PtrTy;
-      LLVMPointerType *IdTy;
-      LLVMIntegerType *IntTy;
+      LLVMPointerTy *PtrTy;
+      LLVMPointerTy *IdTy;
+      LLVMIntegerTy *IntTy;
     public:
       IMPCacher(LLVMContext &C, Pass *owner);
       void CacheLookup(Instruction *lookup, Value *slot, Value *version, bool

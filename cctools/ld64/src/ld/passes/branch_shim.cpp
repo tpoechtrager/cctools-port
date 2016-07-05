@@ -266,7 +266,7 @@ static void extractTarget(ld::Fixup::iterator fixup, ld::Internal& state, const 
 
 
 //
-// The tail-call optimzation may result in a function ending in a jump (b) 
+// The tail-call optimization may result in a function ending in a jump (b) 
 // to another functions.  At compile time the compiler does not know 
 // if the target of the jump will be in the same mode (arm vs thumb).
 // The arm/thumb instruction set has a way to change modes in a bl(x)
@@ -328,6 +328,7 @@ void doPass(const Options& opts, ld::Internal& state)
 									}
 									shims.push_back(shim);
 									thumbToAtomMap[target] = shim;
+									state.atomToSection[shim] = sect;
 								}
 								else {
 									shim = pos->second;
@@ -361,6 +362,7 @@ void doPass(const Options& opts, ld::Internal& state)
 										shim = new ARMtoThumbShimAtom(target, *sect);
 									shims.push_back(shim);
 									atomToThumbMap[target] = shim;
+									state.atomToSection[shim] = sect;
 								}
 								else {
 									shim = pos->second;

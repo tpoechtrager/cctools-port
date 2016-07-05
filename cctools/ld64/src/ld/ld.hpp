@@ -32,12 +32,18 @@
 #include <assert.h>
 #include "configure.h"
 
+#include <set>
+#include <map>
 #include <vector>
+#include <string>
 #include <unordered_set>
 
-#include "configure.h"
+#include "configure.h" // ld64-port
 
 namespace ld {
+
+// Forward declaration for bitcode support
+class Bitcode;
 
 //
 // ld::File 
@@ -147,10 +153,14 @@ public:
 	virtual bool						forEachAtom(AtomHandler&) const = 0;
 	virtual bool						justInTimeforEachAtom(const char* name, AtomHandler&) const = 0;
 	virtual ObjcConstraint				objCConstraint() const			{ return objcConstraintNone; }
+	virtual uint8_t						swiftVersion() const			{ return 0; }
 	virtual uint32_t					cpuSubType() const		{ return 0; }
 	virtual uint32_t					subFileCount() const	{ return 1; }
+	virtual uint32_t					minOSVersion() const	{ return 0; }
+	virtual uint32_t					platformLoadCommand() const		{ return 0; }
     bool								fileExists() const     { return _modTime != 0; }
 	Type								type() const { return _type; }
+	virtual Bitcode*					getBitcode() const		{ return NULL; }
 private:
 	const char*							_path;
 	time_t								_modTime;
@@ -167,9 +177,11 @@ enum MacVersionMin { macVersionUnset=0, mac10_4=0x000A0400, mac10_5=0x000A0500,
 						mac10_9=0x000A0900, mac10_Future=0x10000000 };
 enum IOSVersionMin { iOSVersionUnset=0, iOS_2_0=0x00020000, iOS_3_1=0x00030100, 
 						iOS_4_2=0x00040200, iOS_4_3=0x00040300, iOS_5_0=0x00050000,
-						iOS_6_0=0x00060000, iOS_7_0=0x00070000,  
-						iOS_Future=0x10000000};
- 
+						iOS_6_0=0x00060000, iOS_7_0=0x00070000, iOS_8_0=0x00080000,
+						iOS_9_0=0x00090000, iOS_Future=0x10000000};
+enum WatchOSVersionMin  { wOSVersionUnset=0, wOS_1_0=0x00010000, wOS_2_0=0x00020000 };
+
+
 namespace relocatable {
 	//
 	// ld::relocatable::File 
@@ -191,6 +203,7 @@ namespace relocatable {
 	{
 	public:
 		enum DebugInfoKind { kDebugInfoNone=0, kDebugInfoStabs=1, kDebugInfoDwarf=2, kDebugInfoStabsUUID=3 };
+		enum SourceKind { kSourceUnknown=0, kSourceObj, kSourceLTO, kSourceArchive, kSourceCompilerArchive };
 		struct Stab {
 			const class Atom*	atom;
 			uint8_t				type;
@@ -211,6 +224,7 @@ namespace relocatable {
 		virtual bool						canScatterAtoms() const = 0;
 		virtual bool						hasLongBranchStubs()		{ return false; }
 		virtual LinkerOptionsList*			linkerOptions() const = 0;
+		virtual SourceKind					sourceKind() const { return kSourceUnknown; }
 	};
 } // namespace relocatable
 
@@ -233,12 +247,13 @@ namespace dylib {
 		};
 			
 											File(const char* pth, time_t modTime, Ordinal ord)
-												: ld::File(pth, modTime, ord, Dylib), _dylibInstallPath(NULL),
+												: ld::File(pth, modTime, ord, Dylib), _dylibInstallPath(NULL), _frameworkName(NULL),
 												_dylibTimeStamp(0), _dylibCurrentVersion(0), _dylibCompatibilityVersion(0),
 												_explicitlyLinked(false), _implicitlyLinked(false),
 												_lazyLoadedDylib(false), _forcedWeakLinked(false), _reExported(false),
 												_upward(false), _dead(false) { }
 				const char*					installPath() const			{ return _dylibInstallPath; }
+				const char*					frameworkName() const		{ return _frameworkName; }
 				uint32_t					timestamp() const			{ return _dylibTimeStamp; }
 				uint32_t					currentVersion() const		{ return _dylibCurrentVersion; }
 				uint32_t					compatibilityVersion() const{ return _dylibCompatibilityVersion; }
@@ -269,10 +284,12 @@ namespace dylib {
 		virtual bool						hasWeakDefinition(const char* name) const = 0;
 		virtual bool						hasPublicInstallName() const = 0;
 		virtual bool						allSymbolsAreWeakImported() const = 0;
-		virtual const void*					codeSignatureDR() const = 0;
 		virtual bool						installPathVersionSpecific() const { return false; }
-	protected:
+		virtual bool						appExtensionSafe() const = 0;
+
+	public:
 		const char*							_dylibInstallPath;
+		const char*							_frameworkName;
 		uint32_t							_dylibTimeStamp;
 		uint32_t							_dylibCurrentVersion;
 		uint32_t							_dylibCompatibilityVersion;
@@ -311,14 +328,14 @@ class Section
 {
 public:
 	enum Type { typeUnclassified, typeCode, typePageZero, typeImportProxies, typeLinkEdit, typeMachHeader, typeStack,
-				typeLiteral4, typeLiteral8, typeLiteral16, typeConstants, typeTempLTO, 
+				typeLiteral4, typeLiteral8, typeLiteral16, typeConstants, typeTempLTO, typeTempAlias,
 				typeCString, typeNonStdCString, typeCStringPointer, typeUTF16Strings, typeCFString, typeObjC1Classes,
 				typeCFI, typeLSDA, typeDtraceDOF, typeUnwindInfo, typeObjCClassRefs, typeObjC2CategoryList,
 				typeZeroFill, typeTentativeDefs, typeLazyPointer, typeStub, typeNonLazyPointer, typeDyldInfo, 
 				typeLazyDylibPointer, typeStubHelper, typeInitializerPointers, typeTerminatorPointers,
 				typeStubClose, typeLazyPointerClose, typeAbsoluteSymbols, 
 				typeTLVDefs, typeTLVZeroFill, typeTLVInitialValues, typeTLVInitializerPointers, typeTLVPointers,
-				typeFirstSection, typeLastSection, typeDebug };
+				typeFirstSection, typeLastSection, typeDebug, typeSectCreate };
 
 
 					Section(const char* sgName, const char* sctName,
@@ -427,7 +444,7 @@ struct Fixup
 					// data-in-code markers
 					kindDataInCodeStartData, kindDataInCodeStartJT8, kindDataInCodeStartJT16, 
 					kindDataInCodeStartJT32, kindDataInCodeStartJTA32, kindDataInCodeEnd,
-					// linker optimzation hints
+					// linker optimization hints
 					kindLinkerOptimizationHint,
 					// pointer store combinations
 					kindStoreTargetAddressLittleEndian32,	// kindSetTargetAddress + kindStoreLittleEndian32
@@ -527,7 +544,6 @@ struct Fixup
 		contentAddendOnly(false), contentDetlaToAddendOnly(false), contentIgnoresAddend(false) 
 			{ u.addend = addend; }
 			
-#if SUPPORT_ARCH_arm64
 	Fixup(Kind k, uint32_t lohKind, uint32_t off1, uint32_t off2) :
 		offsetInAtom(off1), kind(k), clusterSize(k1of1),  
 		weakImport(false), binding(Fixup::bindingNone), contentAddendOnly(false), 
@@ -541,7 +557,6 @@ struct Fixup
 			extra.info.delta2 = (off2 - off1) >> 2;
 			u.addend = extra.addend; 
 		}
-#endif			
 			
 
 	bool firstInCluster() const { 
@@ -572,7 +587,6 @@ struct Fixup
 		return false;
 	}
 	
-#if SUPPORT_ARCH_arm64
 	union LOH_arm64 {
 		uint64_t	addend;
 		struct {
@@ -584,7 +598,6 @@ struct Fixup
 						delta4 : 14;	
 		} info;
 	};
-#endif
 	
 };
 
@@ -644,7 +657,7 @@ public:
 					typeSectionEnd, typeBranchIsland, typeLazyPointer, typeStub, typeNonLazyPointer, 
 					typeLazyDylibPointer, typeStubHelper, typeInitializerPointers, typeTerminatorPointers,
 					typeLTOtemporary, typeResolver,
-					typeTLV, typeTLVZeroFill, typeTLVInitialValue, typeTLVInitializerPointers };
+					typeTLV, typeTLVZeroFill, typeTLVInitialValue, typeTLVInitializerPointers, typeTLVPointer };
 
 	enum SymbolTableInclusion { symbolTableNotIn, symbolTableNotInFinalLinkedImages, symbolTableIn,
 								symbolTableInAndNeverStrip, symbolTableInAsAbsolute, 
@@ -679,7 +692,8 @@ public:
 													_contentType(ct), _symbolTableInclusion(i),
 													_scope(s), _mode(modeSectionOffset), 
 													_overridesADylibsWeakDef(false), _coalescedAway(false),
-													_live(false), _machoSection(0), _weakImportState(weakImportUnset)
+													_live(false), _dontDeadStripIfRefLive(false),
+													_machoSection(0), _weakImportState(weakImportUnset)
 													 {
 													#ifndef NDEBUG
 														switch ( _combine ) {
@@ -703,6 +717,7 @@ public:
 	ContentType								contentType() const			{ return _contentType; }
 	SymbolTableInclusion					symbolTableInclusion() const{ return _symbolTableInclusion; }
 	bool									dontDeadStrip() const		{ return _dontDeadStrip; }
+	bool									dontDeadStripIfReferencesLive() const { return _dontDeadStripIfRefLive; }
 	bool									isThumb() const				{ return _thumb; }
 	bool									isAlias() const				{ return _alias; }
 	Alignment								alignment() const			{ return Alignment(_alignmentPowerOf2, _alignmentModulus); }
@@ -722,6 +737,7 @@ public:
 	void									setCoalescedAway()			{ _coalescedAway = true; }
 	void									setWeakImportState(bool w)	{ assert(_definition == definitionProxy); _weakImportState = ( w ? weakImportTrue : weakImportFalse); }
 	void									setAutoHide()				{ _autoHide = true; }
+	void									setDontDeadStripIfReferencesLive() { _dontDeadStripIfRefLive = true; }
 	void									setLive()					{ _live = true; }
 	void									setLive(bool value)			{ _live = value; }
 	void									setMachoSection(unsigned x) { assert(x != 0); assert(x < 256); _machoSection = x; }
@@ -756,9 +772,6 @@ public:
 	virtual LineInfo::iterator				beginLineInfo() const { return NULL; }
 	virtual LineInfo::iterator				endLineInfo() const { return NULL; }
 											
-protected:
-	enum AddressMode { modeSectionOffset, modeFinalAddress };
-
 											void setAttributesFromAtom(const Atom& a) { 
 													_section = a._section; 
 													_alignmentModulus = a._alignmentModulus;
@@ -777,6 +790,9 @@ protected:
 													_weakImportState = a._weakImportState;
 												}
 
+protected:
+	enum AddressMode { modeSectionOffset, modeFinalAddress };
+
 	const Section *						_section;
 	uint64_t							_address;
 	uint16_t							_alignmentModulus;
@@ -794,6 +810,7 @@ protected:
 	bool								_overridesADylibsWeakDef : 1;
 	bool								_coalescedAway : 1;
 	bool								_live : 1;
+	bool								_dontDeadStripIfRefLive : 1;
 	unsigned							_machoSection : 8;
 	WeakImportState						_weakImportState : 2;
 };
@@ -824,6 +841,7 @@ struct CStringEquals
 
 typedef	std::unordered_set<const char*, ld::CStringHash, ld::CStringEquals>  CStringSet;
 
+
 class Internal
 {
 public:
@@ -848,6 +866,8 @@ public:
 		bool							hasExternalRelocs;
 	};
 	
+	typedef std::map<const ld::Atom*, FinalSection*>	AtomToSection;		
+
 	virtual uint64_t					assignFileOffsets() = 0;
 	virtual void						setSectionSizesAndAlignments() = 0;
 	virtual ld::Internal::FinalSection*	addAtom(const Atom&) = 0;
@@ -858,19 +878,26 @@ public:
 											lazyBindingHelper(NULL), compressedFastBinderProxy(NULL),
 											objcObjectConstraint(ld::File::objcConstraintNone), 
 											objcDylibConstraint(ld::File::objcConstraintNone), 
-											cpuSubType(0), 
+											swiftVersion(0), cpuSubType(0), minOSVersion(0),
+											objectFileFoundWithNoVersion(false),
 											allObjectFilesScatterable(true), 
 											someObjectFileHasDwarf(false), usingHugeSections(false),
 											hasThreadLocalVariableDefinitions(false),
 											hasWeakExternalSymbols(false),
-											someObjectHasOptimizationHints(false) { }
-										
+											someObjectHasOptimizationHints(false),
+											dropAllBitcode(false), embedMarkerOnly(false)	{ }
+
 	std::vector<FinalSection*>					sections;
 	std::vector<ld::dylib::File*>				dylibs;
 	std::vector<ld::relocatable::File::Stab>	stabs;
+	AtomToSection								atomToSection;		
 	CStringSet									linkerOptionLibraries;
 	CStringSet									linkerOptionFrameworks;
+	CStringSet									linkerOptionLibrariesProcessed;
+	CStringSet									linkerOptionFrameworksProcessed;
 	std::vector<const ld::Atom*>				indirectBindingTable;
+	std::vector<const ld::relocatable::File*>	filesWithBitcode;
+	std::unordered_set<const char*>				allUndefProxies;
 	const ld::dylib::File*						bundleLoader;
 	const Atom*									entryPoint;
 	const Atom*									classicBindingHelper;
@@ -878,18 +905,21 @@ public:
 	const Atom*									compressedFastBinderProxy;
 	ld::File::ObjcConstraint					objcObjectConstraint;
 	ld::File::ObjcConstraint					objcDylibConstraint;
+	uint8_t										swiftVersion;
 	uint32_t									cpuSubType;
+	uint32_t									minOSVersion;
+	uint32_t									derivedPlatformLoadCommand;
+	bool										objectFileFoundWithNoVersion;
 	bool										allObjectFilesScatterable;
 	bool										someObjectFileHasDwarf;
 	bool										usingHugeSections;
 	bool										hasThreadLocalVariableDefinitions;
 	bool										hasWeakExternalSymbols;
 	bool										someObjectHasOptimizationHints;
+	bool										dropAllBitcode;
+	bool										embedMarkerOnly;
+	std::string									ltoBitcodePath;
 };
-
-
-
-
 
 
 

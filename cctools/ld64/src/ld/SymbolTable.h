@@ -120,6 +120,7 @@ public:
 	unsigned int		updateCount()						{ return _indirectBindingTable.size(); }
 	void				undefines(std::vector<const char*>& undefines);
 	void				tentativeDefs(std::vector<const char*>& undefines);
+	void				mustPreserveForBitcode(std::unordered_set<const char*>& syms);
 	void				removeDeadAtoms();
 	bool				hasName(const char* name);
 	bool				hasExternalTentativeDefinitions()	{ return _hasExternalTentativeDefinitions; }
@@ -155,6 +156,7 @@ private:
 	CStringToSlot					_cstringTable;
 	NameToMap						_nonStdCStringSectionToMap;
 	ReferencesToSlot				_nonLazyPointerTable;
+	ReferencesToSlot				_threadPointerTable;
 	ReferencesToSlot				_cfStringTable;
 	ReferencesToSlot				_objc2ClassRefTable;
 	ReferencesToSlot				_pointerToCStringTable;

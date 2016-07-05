@@ -31,9 +31,10 @@
 //#include <security_utilities/utilities.h>
 #include <sys/types.h>
 #include <stdlib.h>
+#include <stddef.h> // ld64-port
 #include <algorithm>
 
-#ifdef __GLIBCXX__
+#ifdef __GLIBCXX__ // ld64-port
 using namespace __gnu_cxx;
 #endif
 
@@ -49,13 +50,15 @@ namespace LowLevelMemoryUtilities {
 //
 static const size_t systemAlignment = 4;
 
-#ifndef __GXX_EXPERIMENTAL_CXX0X__
+
 //
 // Get the local alignment for a type, as used by the acting compiler.
 //
-template <class T>
-inline size_t alignof() { struct { char c; T t; } s; return sizeof(s) - sizeof(T); }
-#endif
+template <typename T>
+unsigned long myalignof() {
+	struct { char c; T t; } s;
+	return sizeof(s) - sizeof(T);
+}
 
 
 //

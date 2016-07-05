@@ -28,7 +28,7 @@
  * Global types, variables and routines declared in the file dylibs.c.
  */
 
-extern enum bool has_dynamic_linker_command;
+__private_extern__ enum bool has_dynamic_linker_command;
 
 #ifndef RLD
 
@@ -46,16 +46,16 @@ struct merged_dylib {
     struct merged_dylib *next;	/* The next in the list, NULL otherwise */
 };
 /* the pointer to the head of the dynamicly linked shared library commands */
-extern struct merged_dylib *merged_dylibs;
+__private_extern__ struct merged_dylib *merged_dylibs;
 
 /* the pointer to the head of the dynamicly linked shared library segments */
-extern struct merged_segment *dylib_segments;
+__private_extern__ struct merged_segment *dylib_segments;
 
-extern void create_dylib_id_command(
+__private_extern__ void create_dylib_id_command(
     void);
-extern void merge_dylibs(
+__private_extern__ void merge_dylibs(
     enum bool force_weak);
-extern void add_dylib_segment(
+__private_extern__ void add_dylib_segment(
     struct segment_command *sg,
     char *dylib_name,
     enum bool split_dylib);
@@ -68,9 +68,9 @@ struct merged_dylinker {
 	*definition_object;	/*  command was found in */
 };
 /* the pointer to the merged the dynamic linker command if any */
-extern struct merged_dylinker *merged_dylinker;
+__private_extern__ struct merged_dylinker *merged_dylinker;
 
-extern void create_dylinker_id_command(
+__private_extern__ void create_dylinker_id_command(
     void);
 
 struct merged_sub_frameworks {
@@ -79,9 +79,9 @@ struct merged_sub_frameworks {
 	*sub;			/* The load command for the output file */
 };
 /* the pointer to the merged sub_framework command if any */
-extern struct merged_sub_frameworks *merged_sub_framework;
+__private_extern__ struct merged_sub_frameworks *merged_sub_framework;
 
-extern void create_sub_framework_command(
+__private_extern__ void create_sub_framework_command(
     void);
 
 struct merged_sub_umbrella {
@@ -89,9 +89,9 @@ struct merged_sub_umbrella {
 	*sub;			/* The load command for the output file */
 };
 /* the pointer to the merged sub_umbrella commands if any */
-extern struct merged_sub_umbrella *merged_sub_umbrellas;
+__private_extern__ struct merged_sub_umbrella *merged_sub_umbrellas;
 
-extern unsigned long create_sub_umbrella_commands(
+__private_extern__ unsigned long create_sub_umbrella_commands(
     void);
 
 struct merged_sub_library {
@@ -99,9 +99,9 @@ struct merged_sub_library {
 	*sub;			/* The load command for the output file */
 };
 /* the pointer to the merged sub_library commands if any */
-extern struct merged_sub_library *merged_sub_librarys;
+__private_extern__ struct merged_sub_library *merged_sub_librarys;
 
-extern unsigned long create_sub_library_commands(
+__private_extern__ unsigned long create_sub_library_commands(
     void);
 
 struct merged_sub_client {
@@ -109,9 +109,9 @@ struct merged_sub_client {
 	*sub;			/* The load command for the output file */
 };
 /* the pointer to the merged sub_client commands if any */
-extern struct merged_sub_client *merged_sub_clients;
+__private_extern__ struct merged_sub_client *merged_sub_clients;
 
-extern unsigned long create_sub_client_commands(
+__private_extern__ unsigned long create_sub_client_commands(
     void);
 
 #endif /* !defined(RLD) */

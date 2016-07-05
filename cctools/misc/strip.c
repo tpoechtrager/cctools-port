@@ -762,6 +762,8 @@ enum bool all_archs)
     struct arch_flag host_arch_flag;
     enum bool arch_process, any_processing, *arch_flag_processed, family;
     const struct arch_flag *family_arch_flag;
+    struct ar_hdr h;
+    char size_buf[sizeof(h.ar_size) + 1];
 
 	/*
 	 * Using the specified arch_flags process specified objects for those
@@ -894,15 +896,15 @@ enum bool all_archs)
 			     archs[i].members[j].object->input_sym_info_size +
 			     archs[i].members[j].object->output_sym_info_size, 
 			     8);
-			sprintf(archs[i].members[j].ar_hdr->ar_size, "%-*ld",
-			       (int)sizeof(archs[i].members[j].ar_hdr->ar_size),
-			       (long)(size));
+			sprintf(size_buf, "%-*ld",
+			   (int)sizeof(archs[i].members[j].ar_hdr->ar_size),
+			   (long)(size));
 			/*
 			 * This has to be done by hand because sprintf puts a
 			 * null at the end of the buffer.
 			 */
-			memcpy(archs[i].members[j].ar_hdr->ar_fmag, ARFMAG,
-			      (int)sizeof(archs[i].members[j].ar_hdr->ar_fmag));
+			memcpy(archs[i].members[j].ar_hdr->ar_size, size_buf,
+			   (int)sizeof(archs[i].members[j].ar_hdr->ar_size));
 		    }
 		    else{
 			size += archs[i].members[j].unknown_size;
@@ -1078,20 +1080,23 @@ struct object *object)
 			    for(j = 0; j < sg->nsects; j++){
 				/*
 				 * For section types with indirect tables we
-				 * do not zero out the section size in a stub
-				 * library.  As the section size is needed to
-				 * know now many indirect table entries the
-				 * section has.  This is a bit odd but programs
-				 * dealing with MH_DYLIB_STUB filetypes special
-				 * case this.
+				 * change the type to S_REGULAR and clear the
+				 * reserved1 and reserved2 fields so not to
+				 * confuse tools that would be trying to look
+				 * at the indirect table since it is now removed
+				 * when creating a stub library.
 				 */ 
 				section_type = s[j].flags & SECTION_TYPE;
-				if(section_type != S_SYMBOL_STUBS &&
-				   section_type != S_LAZY_SYMBOL_POINTERS &&
-				   section_type != S_LAZY_DYLIB_SYMBOL_POINTERS &&
-				   section_type != S_NON_LAZY_SYMBOL_POINTERS){
-				    s[j].size = 0;
+				if(section_type == S_SYMBOL_STUBS ||
+				   section_type == S_LAZY_SYMBOL_POINTERS ||
+				   section_type ==
+						S_LAZY_DYLIB_SYMBOL_POINTERS ||
+				   section_type == S_NON_LAZY_SYMBOL_POINTERS){
+				    s[j].flags = S_REGULAR;
+				    s[j].reserved1 = 0;
+				    s[j].reserved2 = 0;
 				}
+				s[j].size    = 0;
 				s[j].addr    = 0;
 				s[j].offset  = 0;
 				s[j].reloff  = 0;
@@ -1114,20 +1119,23 @@ struct object *object)
 			    for(j = 0; j < sg64->nsects; j++){
 				/*
 				 * For section types with indirect tables we
-				 * do not zero out the section size in a stub
-				 * library.  As the section size is needed to
-				 * know now many indirect table entries the
-				 * section has.  This is a bit odd but programs
-				 * dealing with MH_DYLIB_STUB filetypes special
-				 * case this.
+				 * change the type to S_REGULAR and clear the
+				 * reserved1 and reserved2 fields so not to
+				 * confuse tools that would be trying to look
+				 * at the indirect table since it is now removed
+				 * when creating a stub library.
 				 */ 
 				section_type = s64[j].flags & SECTION_TYPE;
-				if(section_type != S_SYMBOL_STUBS &&
-				   section_type != S_LAZY_SYMBOL_POINTERS &&
-				   section_type != S_LAZY_DYLIB_SYMBOL_POINTERS &&
-				   section_type != S_NON_LAZY_SYMBOL_POINTERS){
-				    s64[j].size = 0;
+				if(section_type == S_SYMBOL_STUBS ||
+				   section_type == S_LAZY_SYMBOL_POINTERS ||
+				   section_type ==
+						S_LAZY_DYLIB_SYMBOL_POINTERS ||
+				   section_type == S_NON_LAZY_SYMBOL_POINTERS){
+				    s64[j].flags = S_REGULAR;
+				    s64[j].reserved1 = 0;
+				    s64[j].reserved2 = 0;
 				}
+				s64[j].size    = 0;
 				s64[j].addr    = 0;
 				s64[j].offset  = 0;
 				s64[j].reloff  = 0;
@@ -1250,7 +1258,7 @@ struct object *object)
 	     *
 	     * Also the parts that make up input_sym_info_size must be added up
 	     * in the same way.  And must be done here as the input file may
-	     * have been changed to and "ld -r" file and may not be the
+	     * have been changed to an "ld -r" file and may not be the
 	     * the original input file.
 	     */
 	    object->output_sym_info_size = 0;
@@ -1285,6 +1293,23 @@ struct object *object)
 		else if (object->dyld_info->rebase_size != 0)
 		    dyld_info_end = object->dyld_info->rebase_off
 			+ object->dyld_info->rebase_size;
+#ifndef NMEDIT
+		/*
+		 * When stripping out the section contents to create a
+		 * dynamic library stub we only keep the dyld export data.
+		 */
+		if(cflag){
+		    if(object->dyld_info->export_off != 0){
+			dyld_info_start = object->dyld_info->export_off;
+			dyld_info_end = object->dyld_info->export_off
+			    + object->dyld_info->export_size;
+		    }
+		    else{
+			dyld_info_start = 0;
+			dyld_info_end = 0;
+		    }
+		}
+#endif /* !(NMEDIT) */
 		object->output_dyld_info = object->object_addr +dyld_info_start; 
 		object->output_dyld_info_size = dyld_info_end - dyld_info_start;
 		object->output_sym_info_size += object->output_dyld_info_size;
@@ -1303,6 +1328,23 @@ struct object *object)
 					    + object->dyld_info->weak_bind_size
 					    + object->dyld_info->lazy_bind_size
 					    + object->dyld_info->export_size;
+#ifndef NMEDIT
+		/*
+		 * When stripping out the section contents to create a
+		 * dynamic library stub we only keep the dyld export data,
+		 * so zero the offsets and sizes of the other dyld data items.
+		 */
+		if(cflag){
+		    object->dyld_info->rebase_off = 0;
+		    object->dyld_info->rebase_size = 0;
+		    object->dyld_info->bind_off = 0;
+		    object->dyld_info->bind_size = 0;
+		    object->dyld_info->weak_bind_off = 0;
+		    object->dyld_info->weak_bind_size = 0;
+		    object->dyld_info->lazy_bind_off = 0;
+		    object->dyld_info->lazy_bind_size = 0;
+		}
+#endif /* !(NMEDIT) */
 	    }
 
 	    if(object->dyst != NULL){
@@ -1323,34 +1365,62 @@ struct object *object)
 	    }
 
 	    if(object->split_info_cmd != NULL){
-		object->output_split_info_data = object->object_addr +
-		    object->split_info_cmd->dataoff;
-		object->output_split_info_data_size = 
-		    object->split_info_cmd->datasize;
+#ifndef NMEDIT
+		/*
+		 * When stripping out the section contents to create a
+		 * dynamic library stub we also remove the split info data.
+		 */
+		if(!cflag)
+#endif /* !(NMEDIT) */
+		{
+		    object->output_split_info_data = object->object_addr +
+			object->split_info_cmd->dataoff;
+		    object->output_split_info_data_size = 
+			object->split_info_cmd->datasize;
+		    object->output_sym_info_size +=
+			object->split_info_cmd->datasize;
+		}
 		object->input_sym_info_size += object->split_info_cmd->datasize;
-		object->output_sym_info_size +=
-		    object->split_info_cmd->datasize;
 	    }
 
 	    if(object->func_starts_info_cmd != NULL){
-		object->output_func_start_info_data = object->object_addr +
-		    object->func_starts_info_cmd->dataoff;
-		object->output_func_start_info_data_size = 
-		    object->func_starts_info_cmd->datasize;
+#ifndef NMEDIT
+		/*
+		 * When stripping out the section contents to create a
+		 * dynamic library stub we also remove the function starts info.
+		 */
+		if(!cflag)
+#endif /* !(NMEDIT) */
+		{
+		    object->output_func_start_info_data = object->object_addr +
+			object->func_starts_info_cmd->dataoff;
+		    object->output_func_start_info_data_size = 
+			object->func_starts_info_cmd->datasize;
+		    object->output_sym_info_size +=
+			object->func_starts_info_cmd->datasize;
+		}
 		object->input_sym_info_size +=
-		    object->func_starts_info_cmd->datasize;
-		object->output_sym_info_size +=
 		    object->func_starts_info_cmd->datasize;
 	    }
 
 	    if(object->data_in_code_cmd != NULL){
-		object->output_data_in_code_info_data = object->object_addr +
-		    object->data_in_code_cmd->dataoff;
-		object->output_data_in_code_info_data_size = 
-		    object->data_in_code_cmd->datasize;
+#ifndef NMEDIT
+		/*
+		 * When stripping out the section contents to create a
+		 * dynamic library stub we also remove the data in code info.
+		 */
+		if(!cflag)
+#endif /* !(NMEDIT) */
+		{
+		    object->output_data_in_code_info_data =
+			object->object_addr +
+			object->data_in_code_cmd->dataoff;
+		    object->output_data_in_code_info_data_size = 
+			object->data_in_code_cmd->datasize;
+		    object->output_sym_info_size +=
+			object->data_in_code_cmd->datasize;
+		}
 		object->input_sym_info_size +=
-		    object->data_in_code_cmd->datasize;
-		object->output_sym_info_size +=
 		    object->data_in_code_cmd->datasize;
 	    }
 
@@ -1418,9 +1488,19 @@ struct object *object)
 	    }
 
 	    if(object->dyst != NULL){
-		object->output_sym_info_size +=
-		    object->dyst->nindirectsyms * sizeof(uint32_t) +
-		    object->input_indirectsym_pad;
+#ifndef NMEDIT
+		/*
+		 * When stripping out the section contents to create a
+		 * dynamic library stub the indirect symbol table also gets
+		 * stripped.
+		 */
+		if(!cflag) 
+#endif /* !(NMEDIT) */
+		{
+		    object->output_sym_info_size +=
+			object->dyst->nindirectsyms * sizeof(uint32_t) +
+			object->input_indirectsym_pad;
+		}
 		if(object->mh != NULL){
 		    object->input_sym_info_size +=
 			object->dyst->nindirectsyms * sizeof(uint32_t);
@@ -1503,10 +1583,23 @@ struct object *object)
 		object->dyst->iundefsym = new_nlocalsym + new_nextdefsym;
 		object->dyst->nundefsym = new_nundefsym;
 		if(object->dyst->nindirectsyms != 0){
-		    object->output_indirect_symtab = indirectsyms;
-		    if(object->object_byte_sex != host_byte_sex)
-			swap_indirect_symbols(indirectsyms, nindirectsyms,
-					      object->object_byte_sex);
+#ifndef NMEDIT
+		    /*
+		     * When stripping out the section contents to create a
+		     * dynamic library stub the indirect symbol table also gets
+		     * stripped.
+		     */
+		    if(cflag){
+			object->dyst->nindirectsyms = 0;
+		    }
+		    else
+#endif /* !(NMEDIT) */
+		    {
+			object->output_indirect_symtab = indirectsyms;
+			if(object->object_byte_sex != host_byte_sex)
+			    swap_indirect_symbols(indirectsyms, nindirectsyms,
+						  object->object_byte_sex);
+		    }
 		}
 
 		/*
@@ -1604,18 +1697,60 @@ struct object *object)
 		    object->dyst->locreloff = 0;
 
 		if(object->split_info_cmd != NULL){
-		    object->split_info_cmd->dataoff = offset;
-		    offset += object->split_info_cmd->datasize;
+#ifndef NMEDIT
+		    /*
+		     * When stripping out the section contents to create a
+		     * dynamic library stub the split info data gets
+		     * stripped.
+		     */
+		    if(cflag){
+			object->split_info_cmd->dataoff = 0;
+			object->split_info_cmd->datasize = 0;
+		    }
+		    else
+#endif /* defined(NMEDIT) */
+		    {
+			object->split_info_cmd->dataoff = offset;
+			offset += object->split_info_cmd->datasize;
+		    }
 		}
 
 		if(object->func_starts_info_cmd != NULL){
-		    object->func_starts_info_cmd->dataoff = offset;
-		    offset += object->func_starts_info_cmd->datasize;
+#ifndef NMEDIT
+		    /*
+		     * When stripping out the section contents to create a
+		     * dynamic library stub the function starts info gets
+		     * stripped.
+		     */
+		    if(cflag){
+			object->func_starts_info_cmd->dataoff = 0;
+			object->func_starts_info_cmd->datasize = 0;
+		    }
+		    else
+#endif /* defined(NMEDIT) */
+		    {
+			object->func_starts_info_cmd->dataoff = offset;
+			offset += object->func_starts_info_cmd->datasize;
+		    }
 		}
 
 		if(object->data_in_code_cmd != NULL){
-		    object->data_in_code_cmd->dataoff = offset;
-		    offset += object->data_in_code_cmd->datasize;
+#ifndef NMEDIT
+		    /*
+		     * When stripping out the section contents to create a
+		     * dynamic library stub the data in code info gets
+		     * stripped.
+		     */
+		    if(cflag){
+			object->data_in_code_cmd->dataoff = 0;
+			object->data_in_code_cmd->datasize = 0;
+		    }
+		    else
+#endif /* defined(NMEDIT) */
+		    {
+			object->data_in_code_cmd->dataoff = offset;
+			offset += object->data_in_code_cmd->datasize;
+		    }
 		}
 
 		if(object->code_sign_drs_cmd != NULL){
@@ -1675,9 +1810,23 @@ struct object *object)
 		    object->dyst->extreloff = 0;
 
 		if(object->dyst->nindirectsyms != 0){
-		    object->dyst->indirectsymoff = offset;
-		    offset += object->dyst->nindirectsyms * sizeof(uint32_t) +
-			      object->input_indirectsym_pad;
+#ifndef NMEDIT
+		    /*
+		     * When stripping out the section contents to create a
+		     * dynamic library stub the indirect symbol table also gets
+		     * stripped.
+		     */
+		    if(cflag){
+			object->dyst->indirectsymoff = 0;
+		    }
+		    else
+#endif /* defined(NMEDIT) */
+		    {
+			object->dyst->indirectsymoff = offset;
+			offset += object->dyst->nindirectsyms *
+				  sizeof(uint32_t) +
+				  object->input_indirectsym_pad;
+		    }
 		}
 		else
 		    object->dyst->indirectsymoff = 0;;

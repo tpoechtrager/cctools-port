@@ -35,5 +35,6 @@ extern uint32_t arm64_disassemble(
     enum bool verbose,
     LLVMDisasmContextRef dc);
 
-extern LLVMDisasmContextRef create_arm64_llvm_disassembler(void);
+extern LLVMDisasmContextRef create_arm64_llvm_disassembler(
+    cpu_subtype_t cpusubtype);
 extern void delete_arm64_llvm_disassembler(LLVMDisasmContextRef dc);

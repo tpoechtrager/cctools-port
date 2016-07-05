@@ -5,17 +5,17 @@ noinst_HEADERS =  \
 	lto_file.h  \
 	macho_dylib_file.h  \
 	macho_relocatable_file.h  \
-	opaque_section_file.h 
+	opaque_section_file.h \
+	textstub_dylib_file.hpp
 
 libParsers_la_LIBADD =  \
-	$(top_srcdir)/ld64/src/3rd/libhelper.la
+	 $(top_builddir)/ld64/src/3rd/libhelper.la
 
 libParsers_la_CXXFLAGS =  \
-	-fblocks \
 	-D__DARWIN_UNIX03 \
 	$(WARNINGS) \
 	$(LTO_DEF) \
-	$(ENDIAN_FLAGS) \
+	$(ENDIAN_FLAG) \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/include/foreign \
 	-I$(top_srcdir)/ld64/src/abstraction \
@@ -28,4 +28,5 @@ libParsers_la_SOURCES =  \
 	lto_file.cpp  \
 	macho_dylib_file.cpp  \
 	macho_relocatable_file.cpp  \
-	opaque_section_file.cpp
+	opaque_section_file.cpp \
+	textstub_dylib_file.cpp

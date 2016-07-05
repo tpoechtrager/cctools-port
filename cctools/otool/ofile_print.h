@@ -28,13 +28,13 @@
  *
  * @APPLE_LICENSE_HEADER_END@
  */
-#include <ar.h>
-#include <mach-o/fat.h>
-#include <mach-o/loader.h>
-#include <mach-o/nlist.h>
-#include <mach-o/reloc.h>
-#include <stuff/bytesex.h>
-#include <stuff/bool.h>
+#import <ar.h>
+#import <mach-o/fat.h>
+#import <mach-o/loader.h>
+#import <mach-o/nlist.h>
+#import <mach-o/reloc.h>
+#import <stuff/bytesex.h>
+#import <stuff/bool.h>
 #include "stuff/symbol.h"
 
 extern void print_fat_headers(
@@ -51,7 +51,23 @@ extern void print_ar_hdr(
     enum bool verbose,
     enum bool print_offset);
 
+extern void print_mode_verbose(
+    uint32_t mode);
+
 extern void print_library_toc(
+    struct ar_hdr *toc_ar_hdr,
+    char *toc_name,
+    uint32_t toc_name_size,
+    char *toc_addr,
+    uint32_t toc_size,
+    enum byte_sex toc_byte_sex,
+    char *library_name,
+    char *library_addr,
+    uint64_t library_size,
+    char *arch_name,
+    enum bool verbose);
+
+extern void print_sysv_library_toc(
     struct ar_hdr *toc_ar_hdr,
     char *toc_name,
     uint32_t toc_name_size,
@@ -242,40 +258,49 @@ extern void print_symseg_command(
 
 extern void print_fvmlib_command(
     struct fvmlib_command *fl,
-    struct load_command *lc);
+    struct load_command *lc,
+    uint32_t left);
 
 extern void print_dylib_command(
     struct dylib_command *dl,
-    struct load_command *lc);
+    struct load_command *lc,
+    uint32_t left);
 
 extern void print_sub_framework_command(
     struct sub_framework_command *sub,
-    struct load_command *lc);
+    struct load_command *lc,
+    uint32_t left);
 
 extern void print_sub_umbrella_command(
     struct sub_umbrella_command *usub,
-    struct load_command *lc);
+    struct load_command *lc,
+    uint32_t left);
 
 extern void print_sub_library_command(
     struct sub_library_command *lsub,
-    struct load_command *lc);
+    struct load_command *lc,
+    uint32_t left);
 
 extern void print_sub_client_command(
     struct sub_client_command *csub,
-    struct load_command *lc);
+    struct load_command *lc,
+    uint32_t left);
 
 extern void print_prebound_dylib_command(
     struct prebound_dylib_command *pbdylib,
     struct load_command *lc,
+    uint32_t left,
     enum bool verbose);
 
 extern void print_dylinker_command(
     struct dylinker_command *dyld,
-    struct load_command *lc);
+    struct load_command *lc,
+    uint32_t left);
 
 extern void print_fvmfile_command(
     struct fvmfile_command *ff,
-    struct load_command *lc);
+    struct load_command *lc,
+    uint32_t left);
 
 extern void print_routines_command(
     struct routines_command *rc);
@@ -320,7 +345,8 @@ extern void print_encryption_info_command_64(
 
 extern void print_linker_option_command(
     struct linker_option_command *lo,
-    struct load_command *lc);
+    struct load_command *lc,
+    uint32_t cmdleft);
 
 extern void print_dyld_info_info_command(
     struct dyld_info_command *dc,
@@ -340,23 +366,26 @@ extern void print_cstring_section(
     enum bool print_addresses);
 
 extern void print_literal4_section(
+    cpu_type_t cputype,
     char *sect,
     uint32_t sect_size,
-    uint32_t sect_addr,
+    uint64_t sect_addr,
     enum byte_sex literal_byte_sex,
     enum bool print_addresses);
 
 extern void print_literal8_section(
+    cpu_type_t cputype,
     char *sect,
     uint32_t sect_size,
-    uint32_t sect_addr,
+    uint64_t sect_addr,
     enum byte_sex literal_byte_sex,
     enum bool print_addresses);
 
 extern void print_literal16_section(
+    cpu_type_t cputype,
     char *sect,
     uint32_t sect_size,
-    uint32_t sect_addr,
+    uint64_t sect_addr,
     enum byte_sex literal_byte_sex,
     enum bool print_addresses);
 
@@ -548,6 +577,14 @@ extern void print_objc_runtime_setup_section(
     uint32_t object_size,
     enum bool verbose);
 
+extern void print_bitcode_section(
+    char *sect,
+    uint64_t sect_size,
+    enum bool verbose,
+    enum bool print_xar_header,
+    enum bool print_xar_file_headers,
+    const char *xar_member_name);
+
 extern char *get_objc2_64bit_cfstring_name(
     uint64_t p,
     struct load_command *load_commands,
@@ -555,16 +592,41 @@ extern char *get_objc2_64bit_cfstring_name(
     uint32_t sizeofcmds,
     enum byte_sex object_byte_sex,
     char *object_addr,
-    uint32_t object_size);
+    uint32_t object_size,
+    struct nlist_64 *symbols64,
+    uint32_t nsymbols,
+    char *strings,
+    uint32_t strings_size,
+    cpu_type_t cputype);
 
 extern char *get_objc2_64bit_class_name(
     uint64_t p,
+    uint64_t address_of_p,
     struct load_command *load_commands,
     uint32_t ncmds,
     uint32_t sizeofcmds,
     enum byte_sex object_byte_sex,
     char *object_addr,
-    uint32_t object_size);
+    uint32_t object_size,
+    struct nlist_64 *symbols64,
+    uint32_t nsymbols, 
+    char *strings,          
+    uint32_t strings_size,  
+    cpu_type_t cputype);
+
+extern uint64_t get_objc2_64bit_selref(
+    uint64_t address_of_p,
+    struct load_command *load_commands,
+    uint32_t ncmds,
+    uint32_t sizeofcmds,
+    enum byte_sex object_byte_sex,
+    char *object_addr,
+    uint32_t object_size,
+    struct nlist_64 *symbols64,
+    uint32_t nsymbols,
+    char *strings,
+    uint32_t strings_size,
+    cpu_type_t cputype);
 
 extern void print_coff_reloc_section(
     struct load_command *load_commands,

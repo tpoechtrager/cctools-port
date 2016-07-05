@@ -53,6 +53,7 @@
 #include "Options.h"
 
 #include "ld.hpp"
+#include "Bitcode.hpp"
 #include "InputFiles.h"
 #include "SymbolTable.h"
 #include "Resolver.h"
@@ -282,6 +283,8 @@ void Resolver::initializeState()
 		_internal.objcObjectConstraint = ld::File::objcConstraintGC;
 	
 	_internal.cpuSubType = _options.subArchitecture();
+	_internal.minOSVersion = _options.minOSversion();
+	_internal.derivedPlatformLoadCommand = 0;
 	
 	// In -r mode, look for -linker_option additions
 	if ( _options.outputKind() == Options::kObjectFile ) {
@@ -330,6 +333,23 @@ void Resolver::doLinkerOption(const std::vector<const char*>& linkerOption, cons
 	}
 }
 
+static void userReadableSwiftVersion(uint8_t value, char versionString[64])
+{
+	switch (value) {
+		case 1:
+			strcpy(versionString, "1.0");
+			break;
+		case 2:
+			strcpy(versionString, "1.1");
+			break;
+		case 3:
+			strcpy(versionString, "2.0");
+			break;
+		default:
+			sprintf(versionString, "unknown ABI version 0x%02X", value);
+	}
+}
+
 void Resolver::doFile(const ld::File& file)
 {
 	const ld::relocatable::File* objFile = dynamic_cast<const ld::relocatable::File*>(&file);
@@ -338,12 +358,61 @@ void Resolver::doFile(const ld::File& file)
 	if ( objFile != NULL ) {
 		// if file has linker options, process them
 		ld::relocatable::File::LinkerOptionsList* lo = objFile->linkerOptions();
-		if ( lo != NULL ) {
+		if ( lo != NULL && !_options.ignoreAutoLink() ) {
 			for (relocatable::File::LinkerOptionsList::const_iterator it=lo->begin(); it != lo->end(); ++it) {
 				this->doLinkerOption(*it, file.path());
 			}
+			// <rdar://problem/23053404> process any additional linker-options introduced by this new archive member being loaded
+			if ( _completedInitialObjectFiles ) {
+				_inputFiles.addLinkerOptionLibraries(_internal, *this);
+				_inputFiles.createIndirectDylibs();
+			}
 		}
-		
+		// Resolve bitcode section in the object file
+		if ( _options.bundleBitcode() ) {
+			if ( objFile->getBitcode() == NULL ) {
+				// No bitcode section, figure out if the object file comes from LTO/compiler static library
+				if (objFile->sourceKind() != ld::relocatable::File::kSourceLTO &&
+					objFile->sourceKind() != ld::relocatable::File::kSourceCompilerArchive ) {
+					switch ( _options.platform() ) {
+					case Options::kPlatformOSX:
+					case Options::kPlatformUnknown:
+						warning("all bitcode will be dropped because '%s' was built without bitcode. "
+								"You must rebuild it with bitcode enabled (Xcode setting ENABLE_BITCODE), obtain an updated library from the vendor, or disable bitcode for this target. ", file.path());
+						_internal.filesWithBitcode.clear();
+						_internal.dropAllBitcode = true;
+						break;
+					case Options::kPlatformiOS:
+						throwf("'%s' does not contain bitcode. "
+							   "You must rebuild it with bitcode enabled (Xcode setting ENABLE_BITCODE), obtain an updated library from the vendor, or disable bitcode for this target.", file.path());
+						break;
+					case Options::kPlatformWatchOS:
+#if SUPPORT_APPLE_TV
+					case Options::kPlatform_tvOS:
+#endif
+						throwf("'%s' does not contain bitcode. "
+								"You must rebuild it with bitcode enabled (Xcode setting ENABLE_BITCODE) or obtain an updated library from the vendor", file.path());
+						break;
+					}
+				}
+			} else {
+				// contains bitcode, check if it is just a marker
+				if ( objFile->getBitcode()->isMarker() ) {
+					// if -bitcode_verify_bundle is used, check if all the object files participate in the linking have full bitcode embedded.
+					// error on any marker encountered.
+					if ( _options.verifyBitcode() )
+						throwf("bitcode bundle could not be generated because '%s' was built without full bitcode. "
+							   "All object files and libraries for bitcode must be generated from Xcode Archive or Install build",
+							   objFile->path());
+					// update the internal state that marker is encountered.
+					_internal.embedMarkerOnly = true;
+					_internal.filesWithBitcode.clear();
+					_internal.dropAllBitcode = true;
+				} else if ( !_internal.dropAllBitcode )
+					_internal.filesWithBitcode.push_back(objFile);
+			}
+		}
+
 		// update which form of ObjC is being used
 		switch ( file.objCConstraint() ) {
 			case ld::File::objcConstraintNone:
@@ -383,6 +452,27 @@ void Resolver::doFile(const ld::File& file)
 				break;
 		}
 	
+		// verify all files use same version of Swift language
+		if ( file.swiftVersion() != 0 ) {
+			if ( _internal.swiftVersion == 0 ) {
+				_internal.swiftVersion = file.swiftVersion();
+			}
+			else if ( file.swiftVersion() != _internal.swiftVersion ) {
+				char fileVersion[64];
+				char otherVersion[64];
+				userReadableSwiftVersion(file.swiftVersion(), fileVersion);
+				userReadableSwiftVersion(_internal.swiftVersion, otherVersion);
+				if ( file.swiftVersion() > _internal.swiftVersion ) {
+					throwf("%s compiled with newer version of Swift language (%s) than previous files (%s)", 
+						   file.path(), fileVersion, otherVersion);
+				}
+				else {
+					throwf("%s compiled with older version of Swift language (%s) than previous files (%s)", 
+					       file.path(), fileVersion, otherVersion);
+				}
+			}
+		}
+		
 		// in -r mode, if any .o files have dwarf then add UUID to output .o file
 		if ( objFile->debugInfo() == ld::relocatable::File::kDebugInfoDwarf )
 			_internal.someObjectFileHasDwarf = true;
@@ -391,6 +481,18 @@ void Resolver::doFile(const ld::File& file)
 		if ( ! objFile->canScatterAtoms() )
 			_internal.allObjectFilesScatterable = false;
 	
+		// update minOSVersion off all .o files
+		uint32_t objMinOS = objFile->minOSVersion();
+		if ( !objMinOS )
+			_internal.objectFileFoundWithNoVersion = true;
+
+		uint32_t objPlatformLC = objFile->platformLoadCommand();
+		if ( (objPlatformLC != 0) && (_internal.derivedPlatformLoadCommand == 0) && (_options.outputKind() == Options::kObjectFile) )
+			_internal.derivedPlatformLoadCommand = objPlatformLC;
+
+		if ( (_options.outputKind() == Options::kObjectFile) && (objMinOS > _internal.minOSVersion) )
+			_internal.minOSVersion = objMinOS;
+
 		// update cpu-sub-type
 		cpu_subtype_t nextObjectSubType = file.cpuSubType();
 		switch ( _options.architecture() ) {
@@ -432,6 +534,57 @@ void Resolver::doFile(const ld::File& file)
 		}
 	}
 	if ( dylibFile != NULL ) {
+		// Check dylib for bitcode, if the library install path is relative path or @rpath, it has to contain bitcode
+		if ( _options.bundleBitcode() ) {
+			bool isSystemFramework = ( dylibFile->installPath() != NULL ) && ( dylibFile->installPath()[0] == '/' );
+			if ( dylibFile->getBitcode() == NULL && !isSystemFramework ) {
+				// Check if the dylib is from toolchain by checking the path
+				char tcLibPath[PATH_MAX];
+				char ldPath[PATH_MAX];
+				char tempPath[PATH_MAX];
+				uint32_t bufSize = PATH_MAX;
+				// toolchain library path should pointed to *.xctoolchain/usr/lib
+				if ( _NSGetExecutablePath(ldPath, &bufSize) != -1 ) {
+					if ( realpath(ldPath, tempPath) != NULL ) {
+						char* lastSlash = strrchr(tempPath, '/');
+						if ( lastSlash != NULL )
+							strcpy(lastSlash, "/../lib");
+					}
+				}
+				// Compare toolchain library path to the dylib path
+				if ( realpath(tempPath, tcLibPath) == NULL ||
+					 realpath(dylibFile->path(), tempPath) == NULL ||
+					 strncmp(tcLibPath, tempPath, strlen(tcLibPath)) != 0 ) {
+					switch ( _options.platform() ) {
+					case Options::kPlatformOSX:
+					case Options::kPlatformUnknown:
+						warning("all bitcode will be dropped because '%s' was built without bitcode. "
+								"You must rebuild it with bitcode enabled (Xcode setting ENABLE_BITCODE), obtain an updated library from the vendor, or disable bitcode for this target.", file.path());
+						_internal.filesWithBitcode.clear();
+						_internal.dropAllBitcode = true;
+						break;
+					case Options::kPlatformiOS:
+						throwf("'%s' does not contain bitcode. "
+							   "You must rebuild it with bitcode enabled (Xcode setting ENABLE_BITCODE), obtain an updated library from the vendor, or disable bitcode for this target.", file.path());
+						break;
+					case Options::kPlatformWatchOS:
+#if SUPPORT_APPLE_TV
+					case Options::kPlatform_tvOS:
+#endif
+						throwf("'%s' does not contain bitcode. "
+								"You must rebuild it with bitcode enabled (Xcode setting ENABLE_BITCODE) or obtain an updated library from the vendor", file.path());
+						break;
+					}
+				}
+			}
+			// Error on bitcode marker in non-system frameworks if -bitcode_verify is used
+			if ( _options.verifyBitcode() && !isSystemFramework &&
+				 dylibFile->getBitcode() != NULL && dylibFile->getBitcode()->isMarker() )
+				throwf("bitcode bundle could not be generated because '%s' was built without full bitcode. "
+					   "All frameworks and dylibs for bitcode must be generated from Xcode Archive or Install build",
+					   dylibFile->path());
+		}
+
 		// update which form of ObjC dylibs are being linked
 		switch ( dylibFile->objCConstraint() ) {
 			case ld::File::objcConstraintNone:
@@ -468,6 +621,28 @@ void Resolver::doFile(const ld::File& file)
 					_internal.objcDylibConstraint = ld::File::objcConstraintRetainReleaseForSimulator;
 				}
 				break;
+		}
+		if ( _options.checkDylibsAreAppExtensionSafe() && !dylibFile->appExtensionSafe() ) {
+			warning("linking against a dylib which is not safe for use in application extensions: %s", file.path());
+		}
+		const char* depInstallName = dylibFile->installPath();
+		// <rdar://problem/17229513> embedded frameworks are only supported on iOS 8 and later
+		if ( (depInstallName != NULL) && (depInstallName[0] != '/') ) {
+			if ( (_options.iOSVersionMin() != iOSVersionUnset) && (_options.iOSVersionMin() < iOS_8_0) ) {
+				// <rdar://problem/17598404> only warn about linking against embedded dylib if it is built for iOS 8 or later
+				if ( dylibFile->minOSVersion() >= iOS_8_0 )
+					throwf("embedded dylibs/frameworks are only supported on iOS 8.0 and later (%s)", depInstallName);
+			}
+		}
+		if ( _options.sharedRegionEligible() ) {
+			assert(depInstallName != NULL);
+			if ( depInstallName[0] == '@' ) {
+				warning("invalid -install_name (%s) in dependent dylib (%s). Dylibs/frameworks which might go in dyld shared cache "
+						"cannot link with dylib that uses @rpath, @loader_path, etc.", depInstallName, dylibFile->path());
+			} else if ( (strncmp(depInstallName, "/usr/lib/", 9) != 0) && (strncmp(depInstallName, "/System/Library/", 16) != 0) ) {
+				warning("invalid -install_name (%s) in dependent dylib (%s). Dylibs/frameworks which might go in dyld shared cache "
+						"cannot link with dylibs that won't be in the shared cache", depInstallName, dylibFile->path());
+			}
 		}
 	}
 
@@ -548,7 +723,7 @@ void Resolver::doAtom(const ld::Atom& atom)
 
 	// tell symbol table about non-static atoms
 	if ( atom.scope() != ld::Atom::scopeTranslationUnit ) {
-		_symbolTable.add(atom, _options.deadCodeStrip() && _completedInitialObjectFiles);
+		_symbolTable.add(atom, _options.deadCodeStrip() && (_completedInitialObjectFiles || _options.allowDeadDuplicates()));
 		
 		// add symbol aliases defined on the command line
 		if ( _options.haveCmdLineAliases() ) {
@@ -569,11 +744,17 @@ void Resolver::doAtom(const ld::Atom& atom)
 	// remember if any atoms are proxies that require LTO
 	if ( atom.contentType() == ld::Atom::typeLTOtemporary )
 		_haveLLVMObjs = true;
-		
+	
+	// remember if any atoms are aliases
+	if ( atom.section().type() == ld::Section::typeTempAlias )
+		_haveAliases = true;
+	
 	if ( _options.deadCodeStrip() ) {
 		// add to set of dead-strip-roots, all symbols that the compiler marks as don't strip
 		if ( atom.dontDeadStrip() )
 			_deadStripRoots.insert(&atom);
+		else if ( atom.dontDeadStripIfReferencesLive() )
+			_dontDeadStripIfReferencesLive.push_back(&atom);
 			
 		if ( atom.scope() == ld::Atom::scopeGlobal ) {
 			// <rdar://problem/5524973> -exported_symbols_list that has wildcards and -dead_strip
@@ -726,7 +907,7 @@ void Resolver::resolveUndefines()
 		}
 	}
 	
-	// Use linker options to resolve an remaining undefined symbols
+	// Use linker options to resolve any remaining undefined symbols
 	if ( !_internal.linkerOptionLibraries.empty() || !_internal.linkerOptionFrameworks.empty() ) {
 		std::vector<const char*> undefineNames;
 		_symbolTable.undefines(undefineNames);
@@ -768,6 +949,10 @@ void Resolver::resolveUndefines()
 		}
 	}
 	
+	// After resolving all the undefs within the linkageUnit, record all the remaining undefs and all the proxies.
+	if (_options.bundleBitcode() && _options.hideSymbols())
+		_symbolTable.mustPreserveForBitcode(_internal.allUndefProxies);
+
 }
 
 
@@ -826,6 +1011,8 @@ void Resolver::markLive(const ld::Atom& atom, WhyLiveBackChain* previous)
 			case ld::Fixup::kindStoreTargetAddressARM64Page21:
 			case ld::Fixup::kindStoreTargetAddressARM64GOTLoadPage21:
 			case ld::Fixup::kindStoreTargetAddressARM64GOTLeaPage21:
+			case ld::Fixup::kindStoreTargetAddressARM64TLVPLoadPage21:
+			case ld::Fixup::kindStoreTargetAddressARM64TLVPLoadNowLeaPage21:
 #endif
 				if ( fit->binding == ld::Fixup::bindingByContentBound ) {
 					// normally this was done in convertReferencesToIndirect()
@@ -956,6 +1143,38 @@ void Resolver::deadStripOptimize(bool force)
 		rootChain.previous = NULL;
 		rootChain.referer = *it;
 		this->markLive(**it, &rootChain);
+	}
+	
+	// special case atoms that need to be live if they reference something live
+	if ( ! _dontDeadStripIfReferencesLive.empty() ) {
+		for (std::vector<const ld::Atom*>::iterator it=_dontDeadStripIfReferencesLive.begin(); it != _dontDeadStripIfReferencesLive.end(); ++it) {
+			const Atom* liveIfRefLiveAtom = *it;
+			//fprintf(stderr, "live-if-live atom: %s\n", liveIfRefLiveAtom->name());
+			if ( liveIfRefLiveAtom->live() )
+				continue;
+			bool hasLiveRef = false;
+			for (ld::Fixup::iterator fit=liveIfRefLiveAtom->fixupsBegin(); fit != liveIfRefLiveAtom->fixupsEnd(); ++fit) {
+				const Atom* target = NULL;
+				switch ( fit->binding ) {
+					case ld::Fixup::bindingDirectlyBound:
+						target = fit->u.target;
+						break;
+					case ld::Fixup::bindingsIndirectlyBound:
+						target = _internal.indirectBindingTable[fit->u.bindingIndex];
+						break;
+					default:
+						break;
+				}
+				if ( (target != NULL) && target->live() ) 
+					hasLiveRef = true;
+			}
+			if ( hasLiveRef ) {
+				WhyLiveBackChain rootChain;
+				rootChain.previous = NULL;
+				rootChain.referer = liveIfRefLiveAtom;
+				this->markLive(*liveIfRefLiveAtom, &rootChain);
+			}
+		}
 	}
 	
 	// now remove all non-live atoms from _atoms
@@ -1417,7 +1636,38 @@ void Resolver::fillInEntryPoint()
 	_internal.entryPoint = this->entryPoint(true);
 }
 
-
+void Resolver::syncAliases()
+{
+	if ( !_haveAliases || (_options.outputKind() == Options::kObjectFile) )
+		return;
+	
+	// Set attributes of alias to match its found target
+	for (std::vector<const ld::Atom*>::iterator it = _atoms.begin(); it != _atoms.end(); ++it) {
+		const ld::Atom* atom = *it;
+		if ( atom->section().type() == ld::Section::typeTempAlias ) {
+			assert(atom->fixupsBegin() != atom->fixupsEnd());
+			for (ld::Fixup::iterator fit = atom->fixupsBegin(); fit != atom->fixupsEnd(); ++fit) {
+				const ld::Atom* target;
+				ld::Atom::Scope scope;
+				assert(fit->kind == ld::Fixup::kindNoneFollowOn);
+				switch ( fit->binding ) {
+					case ld::Fixup::bindingByNameUnbound:
+						break;
+					case ld::Fixup::bindingsIndirectlyBound:
+						target = _internal.indirectBindingTable[fit->u.bindingIndex];
+						assert(target != NULL);
+						scope = atom->scope();
+						(const_cast<Atom*>(atom))->setAttributesFromAtom(*target);
+						// alias has same attributes as target, except for scope
+						(const_cast<Atom*>(atom))->setScope(scope);
+						break;
+					default:
+						assert(0 && "internal error: unexpected alias binding");
+				}
+			}
+		}
+	}
+}
 
 void Resolver::removeCoalescedAwayAtoms()
 {
@@ -1451,6 +1701,7 @@ void Resolver::linkTimeOptimize()
 	optOpt.preserveAllGlobals			= _options.allGlobalsAreDeadStripRoots() || _options.hasExportRestrictList();
 	optOpt.verbose						= _options.verbose();
 	optOpt.saveTemps					= _options.saveTempFiles();
+	optOpt.ltoCodegenOnly					= _options.ltoCodegenOnly();
 	optOpt.pie							= _options.positionIndependentExecutable();
 	optOpt.mainExecutable				= _options.linkingMainExecutable();;
 	optOpt.staticExecutable 			= (_options.outputKind() == Options::kStaticExecutable);
@@ -1459,9 +1710,17 @@ void Resolver::linkTimeOptimize()
 	optOpt.linkerDeadStripping			= _options.deadCodeStrip();
 	optOpt.needsUnwindInfoSection		= _options.needsUnwindInfoSection();
 	optOpt.keepDwarfUnwind				= _options.keepDwarfUnwind();
+	optOpt.verboseOptimizationHints     = _options.verboseOptimizationHints();
+	optOpt.armUsesZeroCostExceptions    = _options.armUsesZeroCostExceptions();
+	optOpt.simulator					= _options.targetIOSSimulator();
+	optOpt.ignoreMismatchPlatform		= ((_options.outputKind() == Options::kPreload) || (_options.outputKind() == Options::kStaticExecutable));
+	optOpt.bitcodeBundle				= _options.bundleBitcode();
+	optOpt.maxDefaultCommonAlignment	= _options.maxDefaultCommonAlign();
 	optOpt.arch							= _options.architecture();
 	optOpt.mcpu							= _options.mcpuLTO();
+	optOpt.platform						= _options.platform();
 	optOpt.llvmOptions					= &_options.llvmOptions();
+	optOpt.initialUndefines				= &_options.initialUndefines();
 	
 	std::vector<const ld::Atom*>		newAtoms;
 	std::vector<const char*>			additionalUndefines; 
@@ -1488,7 +1747,7 @@ void Resolver::linkTimeOptimize()
 	}
 	
 	// <rdar://problem/14609792> add any auto-link libraries requested by LTO output to dylibs to search
-	_inputFiles.addLinkerOptionLibraries(_internal);
+	_inputFiles.addLinkerOptionLibraries(_internal, *this);
 	_inputFiles.createIndirectDylibs();
 
 	// resolve new undefines (e.g calls to _malloc and _memcpy that llvm compiler conjures up)
@@ -1535,7 +1794,7 @@ void Resolver::linkTimeOptimize()
 		this->checkDylibSymbolCollisions();
 	}
 #else
-    throw "";
+    throwf("no builtin LTO support"); // ld64-port
 #endif /* LTO_SUPPORT */
 }
 
@@ -1591,6 +1850,7 @@ void Resolver::resolve()
 	this->deadStripOptimize();
 	this->checkUndefines();
 	this->checkDylibSymbolCollisions();
+	this->syncAliases();
 	this->removeCoalescedAwayAtoms();
 	this->fillInEntryPoint();
 	this->linkTimeOptimize();

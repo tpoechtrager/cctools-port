@@ -474,6 +474,9 @@ enum bool verbose)
 	if(s == NULL)
 	    s = get_section_32(info.sections, info.nsections,
 				"__DATA", "__objc_classlist");
+	if(s == NULL)
+	    s = get_section_32(info.sections, info.nsections,
+				"__DATA_CONST", "__objc_classlist");
 	walk_pointer_list("class", s, &info, print_class_t);
 
 	s = get_section_32(info.sections, info.nsections,
@@ -481,6 +484,9 @@ enum bool verbose)
 	if(s == NULL)
 	    s = get_section_32(info.sections, info.nsections,
 				"__DATA", "__objc_classrefs");
+	if(s == NULL)
+	    s = get_section_32(info.sections, info.nsections,
+				"__DATA_CONST", "__objc_classrefs");
 	walk_pointer_list("class refs", s, &info, NULL);
 
 	s = get_section_32(info.sections, info.nsections,
@@ -488,6 +494,9 @@ enum bool verbose)
 	if(s == NULL)
 	    s = get_section_32(info.sections, info.nsections,
 				"__DATA", "__objc_superrefs");
+	if(s == NULL)
+	    s = get_section_32(info.sections, info.nsections,
+				"__DATA_CONST", "__objc_superrefs");
 	walk_pointer_list("super refs", s, &info, NULL);
 
 	s = get_section_32(info.sections, info.nsections,
@@ -495,6 +504,9 @@ enum bool verbose)
 	if(s == NULL)
 	    s = get_section_32(info.sections, info.nsections,
 				"__DATA", "__objc_catlist");
+	if(s == NULL)
+	    s = get_section_32(info.sections, info.nsections,
+				"__DATA_CONST", "__objc_catlist");
 	walk_pointer_list("category", s, &info, print_category_t);
 
 	s = get_section_32(info.sections, info.nsections,
@@ -502,6 +514,9 @@ enum bool verbose)
 	if(s == NULL)
 	    s = get_section_32(info.sections, info.nsections,
 				"__DATA", "__objc_protolist");
+	if(s == NULL)
+	    s = get_section_32(info.sections, info.nsections,
+				"__DATA_CONST", "__objc_protolist");
 	walk_pointer_list("protocol", s, &info, NULL);
 
 	s = get_section_32(info.sections, info.nsections,
@@ -509,6 +524,9 @@ enum bool verbose)
 	if(s == NULL)
 	    s = get_section_32(info.sections, info.nsections,
 				"__DATA", "__objc_msgrefs");
+	if(s == NULL)
+	    s = get_section_32(info.sections, info.nsections,
+				"__DATA_CONST", "__objc_msgrefs");
 	print_message_refs(s, &info);
 
 	s = get_section_32(info.sections, info.nsections,
@@ -516,6 +534,9 @@ enum bool verbose)
 	if(s == NULL)
 	    s = get_section_32(info.sections, info.nsections,
 				"__DATA", "__objc_imageinfo");
+	if(s == NULL)
+	    s = get_section_32(info.sections, info.nsections,
+				"__DATA_CONST", "__objc_imageinfo");
 	print_image_info(s, &info);
 }
 
@@ -622,8 +643,15 @@ struct info *info)
 	    printf(" %s\n", name);
 	else
 	    printf("\n");
-	printf("          data 0x%x (struct class_ro_t *)\n", c.data);
-	print_class_ro_t(c.data, info, &is_meta_class);
+	printf("          data 0x%x (struct class_ro_t *)", c.data);
+	/*
+	 * This is a Swift class if some of the low bits of the pointer
+	 * are set.
+	 */
+	if(c.data & 0x3)
+	    printf(" Swift class");
+	printf("\n");
+	print_class_ro_t(c.data & ~0x3, info, &is_meta_class);
 
 	if(! is_meta_class)
 	    {
@@ -1026,7 +1054,7 @@ struct info *info)
 		printf(" %.*s\n", (int)left, name);
 	    else
 		printf("\n");
-	    printf("\t\t\tattributes x%x", op.attributes);
+	    printf("\t\t\tattributes 0x%x", op.attributes);
 	    name = get_pointer_32(op.attributes, NULL, &left, NULL,
 				  info->sections, info->nsections);
 	    if(name != NULL)
@@ -1146,7 +1174,7 @@ print_image_info(
 struct section_info_32 *s,
 struct info *info)
 {
-    uint32_t left, offset;
+    uint32_t left, offset, swift_version;
     uint32_t p;
     struct objc_image_info o;
     void *r;
@@ -1175,6 +1203,15 @@ struct info *info)
 	    printf(" OBJC_IMAGE_IS_REPLACEMENT");
 	if(o.flags & OBJC_IMAGE_SUPPORTS_GC)
 	    printf(" OBJC_IMAGE_SUPPORTS_GC");
+	swift_version = (o.flags >> 8) & 0xff;
+	if(swift_version != 0){
+	    if(swift_version == 1)
+		printf(" Swift 1.0");
+	    else if(swift_version == 2)
+		printf(" Swift 1.1");
+	    else
+		printf(" unknown future Swift version (%d)", swift_version);
+	}
 	printf("\n");
 }
 

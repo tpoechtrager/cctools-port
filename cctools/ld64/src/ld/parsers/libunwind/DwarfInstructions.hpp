@@ -51,6 +51,7 @@
 
 #define CFI_INVALID_ADDRESS ((pint_t)(-1))
 
+
 namespace libunwind {
 
 ///
@@ -164,6 +165,14 @@ private:
 	static compact_unwind_encoding_t encodeToUseDwarf(const Registers_arm64&);
 	static compact_unwind_encoding_t createCompactEncodingFromProlog(A& addressSpace, pint_t funcAddr,
 												const Registers_arm64&, const typename CFI_Parser<A>::PrologInfo& prolog,
+												char warningBuffer[1024]);
+	
+  // arm specific variants
+	static bool   isReturnAddressRegister(int regNum, const Registers_arm&);
+	static pint_t getCFA(A& addressSpace, const typename CFI_Parser<A>::PrologInfo& prolog, const Registers_arm&);
+	static compact_unwind_encoding_t encodeToUseDwarf(const Registers_arm&);
+	static compact_unwind_encoding_t createCompactEncodingFromProlog(A& addressSpace, pint_t funcAddr,
+												const Registers_arm&, const typename CFI_Parser<A>::PrologInfo& prolog,
 												char warningBuffer[1024]);
 	
 };
@@ -1959,6 +1968,30 @@ compact_unwind_encoding_t DwarfInstructions<A,R>::createCompactEncodingFromProlo
 
   return encoding;
 }
+
+
+
+
+//
+//	arm specific functions
+//
+
+template <typename A, typename R>
+compact_unwind_encoding_t DwarfInstructions<A,R>::encodeToUseDwarf(const Registers_arm&) 
+{
+	return UNWIND_ARM_MODE_DWARF;
+}
+
+
+template <typename A, typename R>
+compact_unwind_encoding_t DwarfInstructions<A,R>::createCompactEncodingFromProlog(A& addressSpace, pint_t funcAddr,
+												const Registers_arm& r, const typename CFI_Parser<A>::PrologInfo& prolog,
+												char warningBuffer[1024])
+{
+	warningBuffer[0] = '\0';
+	return UNWIND_ARM_MODE_DWARF;
+}
+
 
 } // namespace libunwind
 

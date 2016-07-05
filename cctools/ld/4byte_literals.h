@@ -77,39 +77,39 @@ struct literal4_order_line {
     unsigned long output_offset;
 };
 
-extern void literal4_merge(
+__private_extern__ void literal4_merge(
     struct literal4_data *data,
     struct merged_section *ms,
     struct section *s,
     struct section_map *section_map,
     enum bool redo_live);
 
-extern void literal4_order(
+__private_extern__ void literal4_order(
     struct literal4_data *data,
     struct merged_section *ms);
 
-extern void literal4_reset_live(
+__private_extern__ void literal4_reset_live(
     struct literal4_data *data,
     struct merged_section *ms);
 
-extern unsigned long lookup_literal4(
+__private_extern__ unsigned long lookup_literal4(
     struct literal4 literal4,
     struct literal4_data *data,
     struct merged_section *ms);
 
-extern void literal4_output(
+__private_extern__ void literal4_output(
     struct literal4_data *data,
     struct merged_section *ms);
 
-extern void literal4_free(
+__private_extern__ void literal4_free(
     struct literal4_data *data);
 
 #ifdef DEBUG
-extern void print_literal4_data(
+__private_extern__ void print_literal4_data(
     struct literal4_data *data,
     char *indent);
 
-extern void literal4_data_stats(
+__private_extern__ void literal4_data_stats(
     struct literal4_data *data,
     struct merged_section *ms);
 #endif /* DEBUG */

@@ -851,6 +851,20 @@ sparc_ip (str)
  		  /* plug absolutes directly into opcode */
 
 		  switch(the_insn.reloc) {
+		  case SPARC_RELOC_13:
+		    if (the_insn.exp.X_seg == SEG_BIG)
+		      opcode |= (*(int *) generic_bignum) & 0x1fff;
+		    else
+		      opcode |= the_insn.exp.X_add_number & 0x1fff;
+		    the_insn.reloc = SPARC_RELOC_NONE;
+		    break;
+		  case SPARC_RELOC_22:
+		    if (the_insn.exp.X_seg == SEG_BIG)
+		      opcode |= (*(int *) generic_bignum) & 0x3fffff;
+		    else
+		      opcode |= the_insn.exp.X_add_number & 0x3fffff;
+		    the_insn.reloc = SPARC_RELOC_NONE;
+		    break;
 		  case SPARC_RELOC_HI22:
 		    /* extract upper 22 bits from constant */
 		    opcode |= (the_insn.exp.X_add_number >> 10) & 0x3fffff;

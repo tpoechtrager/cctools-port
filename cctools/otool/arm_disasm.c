@@ -838,6 +838,8 @@ const char **ReferenceName)
 		    *ReferenceType =
 			LLVMDisassembler_ReferenceType_DeMangled_Name;
 		}
+		else
+		    *ReferenceType = LLVMDisassembler_ReferenceType_InOut_None;
 	    }
 	    else
 		*ReferenceType = LLVMDisassembler_ReferenceType_InOut_None;
@@ -2752,7 +2754,7 @@ print_insn_coprocessor (bfd_vma pc, struct disassemble_info *info, int32_t given
 
 			/* Is ``imm'' a negative number?  */
 			if (imm & 0x40)
-			  imm |= (-1 << 7);
+			  imm |= /* (-1 << 7) */ 0xfffffff8;
 
 			func (stream, "%d", imm);
 		      }
@@ -5055,7 +5057,7 @@ print_insn (bfd_vma pc, struct disassemble_info *info, bfd_boolean little)
 	given = (b[3]) | (b[2] << 8) | (b[1] << 16) | (b[0] << 24);
 
       /* Print the raw data, too. */
-      if(!Xflag && !gflag)
+      if(!Xflag && !gflag && !no_show_raw_insn)
         {
           if(qflag)
 	    info->fprintf_func (info->stream, "\t");
@@ -5097,7 +5099,7 @@ print_insn (bfd_vma pc, struct disassemble_info *info, bfd_boolean little)
 		given = (b[1]) | (b[0] << 8) | (given << 16);
 
 	      /* Print the raw data, too. */
-	      if(!Xflag && !gflag)
+	      if(!Xflag && !gflag && !no_show_raw_insn)
 		{
 		  if(qflag)
 		    info->fprintf_func (info->stream, "\t");
@@ -5113,7 +5115,7 @@ print_insn (bfd_vma pc, struct disassemble_info *info, bfd_boolean little)
 	    }
 	  else {
 	    /* Print the raw data, too. */
-	    if(!Xflag && !gflag)
+	    if(!Xflag && !gflag && !no_show_raw_insn)
 	      {
 		if(qflag)
 		  info->fprintf_func (info->stream, "\t");
@@ -5397,7 +5399,7 @@ enum bool pool)
 	    if(reloc_found && r_length == 2 &&
 	       (r_type == ARM_RELOC_SECTDIFF ||
 		r_type == ARM_RELOC_LOCAL_SECTDIFF)){
-		if(!Xflag){
+		if(!Xflag && !no_show_raw_insn){
 		    if(qflag)
 			fprintf(stream, "\t");
 		    fprintf(stream, "%08x\t", value);
@@ -5628,7 +5630,7 @@ enum bool pool)
 static
 uint32_t
 print_data_in_code(
-char *sect,
+unsigned char *sect,
 uint32_t sect_left,
 uint32_t dice_left,
 uint16_t kind)
@@ -5646,34 +5648,43 @@ uint16_t kind)
 			sect[2] << 16 |
 			sect[1] << 8 |
 			sect[0];
-		printf("\t%08x\t.long %u\t@ ", value, value);
+		if(!Xflag && !gflag && !no_show_raw_insn)
+		    printf("\t%08x", value);
+		printf("\t.long %u\t@ ", value);
 		size = 4;
 	    }
 	    else if(left >= 2){
 		value = sect[1] << 8 |
 			sect[0];
-		printf("\t    %04x\t.short %u\t@ ", value, value);
+		if(!Xflag && !gflag && !no_show_raw_insn)
+		    printf("\t    %04x", value);
+		printf("\t.short %u\t@ ", value);
 		size = 2;
 	    }
 	    else {
 		value = sect[0];
-		printf("\t      %02x\t.byte %u\t@ ",value & 0xff, value & 0xff);
+		if(!Xflag && !gflag && !no_show_raw_insn)
+		    printf("\t      %02x", value & 0xff);
+		printf("\t.byte %u\t@ ", value & 0xff);
 		size = 1;
 	    }
 	    if(kind == DICE_KIND_DATA)
-		printf("KIND_DATA \n");
+		printf("KIND_DATA\n");
 	    else
 		printf("kind = %u\n", kind);
 	    return(size);
 	case DICE_KIND_JUMP_TABLE8:
 	    value = sect[0];
-	    printf("\t      %02x\t.byte %3u\t@ KIND_JUMP_TABLE8\n",value,value);
+            if(!Xflag && !gflag && !no_show_raw_insn)
+		printf("\t      %02x", value);
+	    printf("\t.byte %3u\t@ KIND_JUMP_TABLE8\n", value);
 	    return(1);
 	case DICE_KIND_JUMP_TABLE16:
 	    value = sect[1] << 8 |
 		    sect[0];
-	    printf("\t    %04x\t.short %5u\t@ KIND_JUMP_TABLE16\n",
-		   value & 0xffff, value & 0xffff );
+            if(!Xflag && !gflag && !no_show_raw_insn)
+		printf("\t    %04x", value & 0xffff);
+	    printf("\t.short %5u\t@ KIND_JUMP_TABLE16\n", value & 0xffff);
 	    return(2);
 	case DICE_KIND_JUMP_TABLE32:
 	case DICE_KIND_ABS_JUMP_TABLE32:
@@ -5681,7 +5692,9 @@ uint16_t kind)
 		    sect[2] << 16 |
 		    sect[1] << 8 |
 		    sect[0];
-	    printf("\t%08x\t.long %u\t@ ", value, value);
+            if(!Xflag && !gflag && !no_show_raw_insn)
+		printf("\t%08x", value);
+	    printf("\t.long %u\t@ ", value);
 	    if(kind == DICE_KIND_JUMP_TABLE32)
 		printf("KIND_JUMP_TABLE32\n");
 	    else
@@ -5867,7 +5880,8 @@ uint32_t ninsts)
             for(i = 0; i < ndices; i++){
                 if(offset >= dices[i].offset &&
 		   offset < dices[i].offset + dices[i].length){
-		   bytes_consumed = print_data_in_code(sect, left,
+		   bytes_consumed = print_data_in_code((unsigned char *)sect,
+				     left,
 				     dices[i].offset + dices[i].length - offset,
                                      dices[i].kind);
 		   if ((dices[i].kind == DICE_KIND_JUMP_TABLE8) && 

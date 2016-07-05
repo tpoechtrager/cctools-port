@@ -20,9 +20,9 @@ along with GAS; see the file COPYING.  If not, write to
 the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
 
 #include "as.h"
-#include "struc-symbol.h"
-#include "bignum.h"
-#include "flonum.h"
+#import "struc-symbol.h"
+#import "bignum.h"
+#import "flonum.h"
 
 enum {
   /* FROM expr.h line 46 */

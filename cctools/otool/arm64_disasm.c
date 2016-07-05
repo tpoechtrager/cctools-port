@@ -455,10 +455,11 @@ struct disassemble_info *info)
 	if(classref == TRUE){
 	    *reference_type =
 		LLVMDisassembler_ReferenceType_Out_Objc_Class_Ref;
-	    name = get_objc2_64bit_class_name(pointer_value,
+	    name = get_objc2_64bit_class_name(pointer_value, value,
 			info->load_commands, info->ncmds, info->sizeofcmds,
 			info->object_byte_sex, info->object_addr,
-			info->object_size);
+			info->object_size, info->symbols, info->nsymbols,
+			info->strings, info->strings_size, CPU_TYPE_ARM64);
 	    if(name != NULL)
 		info->class_name = name;
 	    else
@@ -472,7 +473,8 @@ struct disassemble_info *info)
 	    name = get_objc2_64bit_cfstring_name(value,
 			info->load_commands, info->ncmds, info->sizeofcmds,
 			info->object_byte_sex, info->object_addr,
-			info->object_size);
+			info->object_size, info->symbols, info->nsymbols,
+			info->strings, info->strings_size, CPU_TYPE_ARM64);
 	    if(name == NULL)
 	        name = "bad cfstring ref";
 	    return(name);
@@ -631,6 +633,10 @@ const char **ReferenceName)
 		    *ReferenceType =
 			LLVMDisassembler_ReferenceType_DeMangled_Name;
 		}
+		else{
+		    *ReferenceName = NULL;
+		    *ReferenceType = LLVMDisassembler_ReferenceType_InOut_None;
+		}
 	    }
 	    else{
 		*ReferenceName = NULL;
@@ -744,9 +750,18 @@ const char **ReferenceName)
 
 LLVMDisasmContextRef
 create_arm64_llvm_disassembler(
-void)
+cpu_subtype_t cpusubtype)
 {
     LLVMDisasmContextRef dc;
+    char *mcpu_default;
+
+	mcpu_default = mcpu;
+	switch(cpusubtype){
+	case CPU_SUBTYPE_ARM64_ALL:
+	    if(*mcpu_default == '\0')
+		mcpu_default = "cyclone";
+	    break;
+	}
 
 	dc = 
 #ifdef STATIC_LLVM
@@ -754,7 +769,7 @@ void)
 #else
 	llvm_create_disasm
 #endif
-	    ("arm64-apple-darwin10", mcpu, &dis_info, 1, GetOpInfo,
+	    ("arm64-apple-darwin10", mcpu_default, &dis_info, 1, GetOpInfo,
 	     SymbolLookUp);
 	return(dc);
 }
@@ -827,9 +842,8 @@ LLVMDisasmContextRef dc)
 	if(swapped)
 	    opcode = SWAP_INT(opcode);
 
-	if(!Xflag && jflag)
+	if(!Xflag && jflag && !no_show_raw_insn)
 	    printf("\t%08x", opcode);
-	printf("\t");
 
 	dis_info.verbose = verbose;
 	dis_info.relocs = relocs;
@@ -858,6 +872,7 @@ LLVMDisasmContextRef dc)
 	dis_info.left = left;
 	dis_info.addr = addr;
 	dis_info.sect_addr = sect_addr;
+	dis_info.method = NULL;
 	dis_info.demangled_name = NULL;
 
 	dst[4095] = '\0';

@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include "objc/runtime.h"
+#include "objc/hooks.h"
 #include "sarray2.h"
 #include "selector.h"
 #include "class.h"
@@ -11,14 +12,22 @@
 #include "slot_pool.h"
 #include "dtable.h"
 #include "visibility.h"
+#include "errno.h"
 
 PRIVATE dtable_t uninstalled_dtable;
+#if defined(WITH_TRACING) && defined (__x86_64)
+PRIVATE dtable_t tracing_dtable;
+#endif
+#ifndef ENOTSUP
+#	define ENOTSUP -1
+#endif
 
 /** Head of the list of temporary dtables.  Protected by initialize_lock. */
 PRIVATE InitializingDtable *temporary_dtables;
 /** Lock used to protect the temporary dtables list. */
 PRIVATE mutex_t initialize_lock;
-/** The size of the largest dtable, rounded up to the nearest power of two. */
+/** The size of the largest dtable.  This is a sparse array shift value, so is
+ * 2^x in increments of 8. */
 static uint32_t dtable_depth = 8;
 
 struct objc_slot* objc_get_slot(Class cls, SEL selector);
@@ -357,6 +366,82 @@ PRIVATE void init_dispatch_tables ()
 {
 	INIT_LOCK(initialize_lock);
 	uninstalled_dtable = SparseArrayNewWithDepth(dtable_depth);
+#if defined(WITH_TRACING) && defined (__x86_64)
+	tracing_dtable = SparseArrayNewWithDepth(dtable_depth);
+#endif
+}
+
+#if defined(WITH_TRACING) && defined (__x86_64)
+static int init;
+
+static void free_thread_stack(void* x)
+{
+	free(*(void**)x);
+}
+static pthread_key_t thread_stack_key;
+static void alloc_thread_stack(void)
+{
+	pthread_key_create(&thread_stack_key, free_thread_stack);
+	init = 1;
+}
+
+PRIVATE void* pushTraceReturnStack(void)
+{
+	static pthread_once_t once_control = PTHREAD_ONCE_INIT;
+	if (!init)
+	{
+		pthread_once(&once_control, alloc_thread_stack);
+	}
+	void **stack = pthread_getspecific(thread_stack_key);
+	if (stack == 0)
+	{
+		stack = malloc(4096*sizeof(void*));
+	}
+	pthread_setspecific(thread_stack_key, stack + 5);
+	return stack;
+}
+
+PRIVATE void* popTraceReturnStack(void)
+{
+	void **stack = pthread_getspecific(thread_stack_key);
+	stack -= 5;
+	pthread_setspecific(thread_stack_key, stack);
+	return stack;
+}
+#endif
+
+int objc_registerTracingHook(SEL aSel, objc_tracing_hook aHook)
+{
+#if defined(WITH_TRACING) && defined (__x86_64)
+	// If this is an untyped selector, register it for every typed variant
+	if (sel_getType_np(aSel) == 0)
+	{
+		SEL buffer[16];
+		SEL *overflow = 0;
+		int count = sel_copyTypedSelectors_np(sel_getName(aSel), buffer, 16);
+		if (count > 16)
+		{
+			overflow = calloc(count, sizeof(SEL));
+			sel_copyTypedSelectors_np(sel_getName(aSel), buffer, 16);
+			for (int i=0 ; i<count ; i++)
+			{
+				SparseArrayInsert(tracing_dtable, overflow[i]->index, aHook);
+			}
+			free(overflow);
+		}
+		else
+		{
+			for (int i=0 ; i<count ; i++)
+			{
+				SparseArrayInsert(tracing_dtable, buffer[i]->index, aHook);
+			}
+		}
+	}
+	SparseArrayInsert(tracing_dtable, aSel->index, aHook);
+	return 0;
+#else
+	return ENOTSUP;
+#endif
 }
 
 static BOOL installMethodInDtable(Class class,
@@ -555,11 +640,16 @@ PRIVATE void objc_resize_dtables(uint32_t newSize)
 
 	LOCK_RUNTIME_FOR_SCOPE();
 
-	dtable_depth <<= 1;
+	if (1<<dtable_depth > newSize) { return; }
+
+	dtable_depth += 8;
 
 	uint32_t oldMask = uninstalled_dtable->mask;
 
-	SparseArrayExpandingArray(uninstalled_dtable);
+	SparseArrayExpandingArray(uninstalled_dtable, dtable_depth);
+#if defined(WITH_TRACING) && defined (__x86_64)
+	tracing_dtable = SparseArrayExpandingArray(tracing_dtable, dtable_depth);
+#endif
 	// Resize all existing dtables
 	void *e = NULL;
 	struct objc_class *next;
@@ -569,7 +659,8 @@ PRIVATE void objc_resize_dtables(uint32_t newSize)
 			NULL != next->dtable &&
 			((SparseArray*)next->dtable)->mask == oldMask)
 		{
-			SparseArrayExpandingArray((void*)next->dtable);
+			SparseArrayExpandingArray((void*)next->dtable, dtable_depth);
+			SparseArrayExpandingArray((void*)next->isa->dtable, dtable_depth);
 		}
 	}
 }
@@ -666,14 +757,11 @@ PRIVATE void objc_send_initialize(id object)
 		objc_send_initialize((id)class->super_class);
 	}
 
-	LOCK(&initialize_lock);
-
 	// Superclass +initialize might possibly send a message to this class, in
 	// which case this method would be called again.  See NSObject and
 	// NSAutoreleasePool +initialize interaction in GNUstep.
 	if (objc_test_class_flag(class, objc_class_flag_initialized))
 	{
-		UNLOCK(&initialize_lock);
 		// We know that initialization has started because the flag is set.
 		// Check that it's finished by grabbing the class lock.  This will be
 		// released once the class has been fully initialized
@@ -683,7 +771,21 @@ PRIVATE void objc_send_initialize(id object)
 		return;
 	}
 
+	// Lock the runtime while we're creating dtables and before we acquire any
+	// other locks.  This prevents a lock-order reversal when 
+	// dtable_for_class is called from something holding the runtime lock while
+	// we're still holding the initialize lock.  We should ensure that we never
+	// acquire the runtime lock after acquiring the initialize lock.
+	LOCK_RUNTIME();
 	LOCK_OBJECT_FOR_SCOPE((id)meta);
+	LOCK(&initialize_lock);
+	if (objc_test_class_flag(class, objc_class_flag_initialized))
+	{
+		UNLOCK(&initialize_lock);
+		UNLOCK_RUNTIME();
+		return;
+	}
+	BOOL skipMeta = objc_test_class_flag(meta, objc_class_flag_initialized);
 
 	// Set the initialized flag on both this class and its metaclass, to make
 	// sure that +initialize is only ever sent once.
@@ -691,7 +793,15 @@ PRIVATE void objc_send_initialize(id object)
 	objc_set_class_flag(meta, objc_class_flag_initialized);
 
 	dtable_t class_dtable = create_dtable_for_class(class, uninstalled_dtable);
-	dtable_t dtable = create_dtable_for_class(meta, class_dtable);
+	dtable_t dtable = skipMeta ? 0 : create_dtable_for_class(meta, class_dtable);
+	// Now we've finished doing things that may acquire the runtime lock, so we
+	// can hold onto the initialise lock to make anything doing
+	// dtable_for_class block until we've finished updating temporary dtable
+	// lists.
+	// If another thread holds the runtime lock, it can now proceed until it
+	// gets into a dtable_for_class call, and then block there waiting for us
+	// to finish setting up the temporary dtable.
+	UNLOCK_RUNTIME();
 
 	static SEL initializeSel = 0;
 	if (0 == initializeSel)
@@ -699,14 +809,17 @@ PRIVATE void objc_send_initialize(id object)
 		initializeSel = sel_registerName("initialize");
 	}
 
-	struct objc_slot *initializeSlot = 
-		objc_dtable_lookup(dtable, initializeSel->index);
+	struct objc_slot *initializeSlot = skipMeta ? 0 :
+			objc_dtable_lookup(dtable, initializeSel->index);
 
 	// If there's no initialize method, then don't bother installing and
 	// removing the initialize dtable, just install both dtables correctly now
 	if (0 == initializeSlot)
 	{
-		meta->dtable = dtable;
+		if (!skipMeta)
+		{
+			meta->dtable = dtable;
+		}
 		class->dtable = class_dtable;
 		checkARCAccessors(class);
 		UNLOCK(&initialize_lock);
@@ -723,7 +836,12 @@ PRIVATE void objc_send_initialize(id object)
 	__attribute__((cleanup(remove_dtable)))
 	InitializingDtable meta_buffer = { meta, dtable, &buffer };
 	temporary_dtables = &meta_buffer;
+	// We now release the initialize lock.  We'll reacquire it later when we do
+	// the cleanup, but at this point we allow other threads to get the
+	// temporary dtable and call +initialize in other threads.
 	UNLOCK(&initialize_lock);
+	// We still hold the class lock at this point.  dtable_for_class will block
+	// there after acquiring the temporary dtable.
 
 	checkARCAccessors(class);
 
@@ -732,3 +850,4 @@ PRIVATE void objc_send_initialize(id object)
 	// because we will clean it up after this function.
 	initializeSlot->method((id)class, initializeSel);
 }
+

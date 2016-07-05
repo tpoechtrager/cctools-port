@@ -16,8 +16,10 @@
 pthread_key_t ARCThreadKey;
 #endif
 
-extern void _NSConcreteMallocBlock;
-extern void _NSConcreteGlobalBlock;
+// cctools-port void -> char []
+extern char _NSConcreteMallocBlock[];
+extern char _NSConcreteStackBlock[];
+extern char _NSConcreteGlobalBlock[];
 
 @interface NSAutoreleasePool
 + (Class)class;
@@ -133,13 +135,12 @@ static void emptyPool(struct arc_tls *tls, id *stop)
 
 static void cleanupPools(struct arc_tls* tls)
 {
-	struct arc_autorelease_pool *pool = tls->pool;
 	if (tls->returnRetained)
 	{
 		release(tls->returnRetained);
 		tls->returnRetained = nil;
 	}
-	while(NULL != pool)
+	if (NULL != tls->pool)
 	{
 		emptyPool(tls, NULL);
 		assert(NULL == tls->pool);
@@ -167,14 +168,21 @@ static inline id retain(id obj)
 {
 	if (isSmallObject(obj)) { return obj; }
 	Class cls = obj->isa;
-	if ((Class)&_NSConcreteMallocBlock == cls)
+	if ((Class)&_NSConcreteMallocBlock == cls ||
+	    (Class)&_NSConcreteStackBlock == cls)
 	{
 		return Block_copy(obj);
 	}
 	if (objc_test_class_flag(cls, objc_class_flag_fast_arc))
 	{
 		intptr_t *refCount = ((intptr_t*)obj) - 1;
-		__sync_add_and_fetch(refCount, 1);
+		// Note: this should be an atomic read, so that a sufficiently clever
+		// compiler doesn't notice that there's no happens-before relationship
+		// here.
+		if (*refCount >= 0)
+		{
+			__sync_add_and_fetch(refCount, 1);
+		}
 		return obj;
 	}
 	return [obj retain];
@@ -184,10 +192,22 @@ static inline void release(id obj)
 {
 	if (isSmallObject(obj)) { return; }
 	Class cls = obj->isa;
+	if (cls == (Class)&_NSConcreteMallocBlock)     // cctools-port: added (Class)
+	{
+		_Block_release(obj);
+		return;
+	}
+	if ((cls == (Class)&_NSConcreteStackBlock) ||  // cctools-port: added (Class)
+	    (cls == (Class)&_NSConcreteGlobalBlock))   // cctools-port: added (Class)
+	{
+		return;
+	}
 	if (objc_test_class_flag(cls, objc_class_flag_fast_arc))
 	{
 		intptr_t *refCount = ((intptr_t*)obj) - 1;
-		if (__sync_sub_and_fetch(refCount, 1) < 0)
+		// We allow refcounts to run into the negative, but should only
+		// deallocate once.
+		if (__sync_sub_and_fetch(refCount, 1) == -1)
 		{
 			objc_delete_weak_refs(obj);
 			[obj dealloc];
@@ -208,15 +228,18 @@ static inline void initAutorelease(void)
 		}
 		else
 		{
-			[AutoreleasePool class];
-			useARCAutoreleasePool = class_respondsToSelector(AutoreleasePool,
-			                                                 SELECTOR(_ARCCompatibleAutoreleasePool));
-			NewAutoreleasePool = class_getMethodImplementation(object_getClass(AutoreleasePool),
-			                                                   SELECTOR(new));
-			DeleteAutoreleasePool = class_getMethodImplementation(AutoreleasePool,
-			                                                      SELECTOR(release));
-			AutoreleaseAdd = class_getMethodImplementation(object_getClass(AutoreleasePool),
-			                                               SELECTOR(addObject:));
+			useARCAutoreleasePool = (0 != class_getInstanceMethod(AutoreleasePool,
+			                                                      SELECTOR(_ARCCompatibleAutoreleasePool)));
+			if (!useARCAutoreleasePool)
+			{
+				[AutoreleasePool class];
+				NewAutoreleasePool = class_getMethodImplementation(object_getClass(AutoreleasePool),
+				                                                   SELECTOR(new));
+				DeleteAutoreleasePool = class_getMethodImplementation(AutoreleasePool,
+				                                                      SELECTOR(release));
+				AutoreleaseAdd = class_getMethodImplementation(object_getClass(AutoreleasePool),
+				                                               SELECTOR(addObject:));
+			}
 		}
 	}
 }
@@ -477,7 +500,6 @@ const static WeakRef NullWeakRef;
 #define MAP_TABLE_COMPARE_FUNCTION weak_ref_compare
 #define MAP_TABLE_HASH_KEY ptr_hash
 #define MAP_TABLE_HASH_VALUE weak_ref_hash
-#define MAP_TABLE_HASH_VALUE weak_ref_hash
 #define MAP_TABLE_VALUE_TYPE struct objc_weak_ref
 #define MAP_TABLE_VALUE_NULL weak_ref_is_null
 #define MAP_TABLE_VALUE_PLACEHOLDER NullWeakRef
@@ -504,6 +526,11 @@ void* block_load_weak(void *block);
 id objc_storeWeak(id *addr, id obj)
 {
 	id old = *addr;
+	intptr_t *refCount = ((intptr_t*)obj) - 1;
+	if (obj && *refCount < 0)
+	{
+		obj = nil;
+	}
 	LOCK_FOR_SCOPE(&weakRefLock);
 	if (nil != old)
 	{
@@ -519,7 +546,7 @@ id objc_storeWeak(id *addr, id obj)
 					break;
 				}
 			}
-			oldRef = oldRef->next;
+			oldRef = (oldRef == NULL) ? NULL : oldRef->next;
 		}
 	}
 	if (nil == obj)
@@ -528,7 +555,7 @@ id objc_storeWeak(id *addr, id obj)
 		return nil;
 	}
 	Class cls = classForObject(obj);
-	if (&_NSConcreteGlobalBlock == cls)
+	if ((Class)&_NSConcreteGlobalBlock == cls) // cctools-port: added (Class)
 	{
 		// If this is a global block, it's never deallocated, so secretly make
 		// this a strong reference
@@ -537,7 +564,7 @@ id objc_storeWeak(id *addr, id obj)
 		*addr = obj;
 		return obj;
 	}
-	if (&_NSConcreteMallocBlock == cls)
+	if ((Class)&_NSConcreteMallocBlock == cls) // cctools-port: added (Class)
 	{
 		obj = block_load_weak(obj);
 	}
@@ -606,10 +633,6 @@ static void zeroRefs(WeakRef *ref, BOOL shouldFree)
 	{
 		free(ref);
 	}
-	else
-	{
-		memset(ref, 0, sizeof(WeakRef));
-	}
 }
 
 void objc_delete_weak_refs(id obj)
@@ -619,6 +642,7 @@ void objc_delete_weak_refs(id obj)
 	if (0 != oldRef)
 	{
 		zeroRefs(oldRef, NO);
+		weak_ref_remove(weakRefs, obj);
 	}
 }
 
@@ -628,7 +652,7 @@ id objc_loadWeakRetained(id* addr)
 	id obj = *addr;
 	if (nil == obj) { return nil; }
 	Class cls = classForObject(obj);
-	if (&_NSConcreteMallocBlock == cls)
+	if ((Class)&_NSConcreteMallocBlock == cls) // cctools-port: added (Class)
 	{
 		obj = block_load_weak(obj);
 	}

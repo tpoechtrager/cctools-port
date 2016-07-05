@@ -40,6 +40,11 @@
 #include <mach/i386/thread_status.h>
 #include <mach/hppa/thread_status.h>
 #include <mach/sparc/thread_status.h>
+/* cctools-port: need to undef these to avoid warnings */
+#undef MACHINE_THREAD_STATE
+#undef MACHINE_THREAD_STATE_COUNT
+#undef THREAD_STATE_NONE
+#undef VALID_THREAD_STATE_FLAVOR
 #include <mach/arm/thread_status.h>
 #include "stuff/bool.h"
 #include "stuff/bytesex.h"
@@ -1166,6 +1171,26 @@ check_dylinker_command:
 		}
 		break;
 
+	    case LC_VERSION_MIN_TVOS:
+		vc = (struct version_min_command *)lc;
+		if(vc->cmdsize != sizeof(struct version_min_command)){
+		    error("in swap_object_headers(): malformed load commands "
+			  "(LC_VERSION_MIN_ command %lu has incorrect "
+			  "cmdsize", i);
+		    return(FALSE);
+		}
+		break;
+
+	    case LC_VERSION_MIN_WATCHOS:
+		vc = (struct version_min_command *)lc;
+		if(vc->cmdsize != sizeof(struct version_min_command)){
+		    error("in swap_object_headers(): malformed load commands "
+			  "(LC_VERSION_MIN_WATCHOS command %lu has incorrect "
+			  "cmdsize", i);
+		    return(FALSE);
+		}
+		break;
+
 	    case LC_RPATH:
 		rpath = (struct rpath_command *)lc;
 		if(rpath->cmdsize < sizeof(struct rpath_command)){
@@ -1743,6 +1768,8 @@ check_dylinker_command:
 		
 	    case LC_VERSION_MIN_MACOSX:
 	    case LC_VERSION_MIN_IPHONEOS:
+	    case LC_VERSION_MIN_WATCHOS:
+	    case LC_VERSION_MIN_TVOS:
 		vc = (struct version_min_command *)lc;
 		swap_version_min_command(vc, target_byte_sex);
 		break;

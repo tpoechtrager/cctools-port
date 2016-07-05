@@ -50,17 +50,22 @@
 #include <sys/mman.h>
 #include <mach-o/fat.h>
 #include <mach-o/loader.h>
-#include <mach/m68k/thread_status.h>
-#include <mach/ppc/thread_status.h>
+#import <mach/m68k/thread_status.h>
+#import <mach/ppc/thread_status.h>
 #undef MACHINE_THREAD_STATE     /* need to undef these to avoid warnings */
 #undef MACHINE_THREAD_STATE_COUNT
 #undef THREAD_STATE_NONE
 #undef VALID_THREAD_STATE_FLAVOR
-#include <mach/m88k/thread_status.h>
-#include <mach/i860/thread_status.h>
-#include <mach/i386/thread_status.h>
-#include <mach/sparc/thread_status.h>
-#include <mach/arm/thread_status.h>
+#import <mach/m88k/thread_status.h>
+#import <mach/i860/thread_status.h>
+#import <mach/i386/thread_status.h>
+#import <mach/sparc/thread_status.h>
+/* cctools-port: need to undef these to avoid warnings */
+#undef MACHINE_THREAD_STATE
+#undef MACHINE_THREAD_STATE_COUNT
+#undef THREAD_STATE_NONE
+#undef VALID_THREAD_STATE_FLAVOR
+#import <mach/arm/thread_status.h>
 #include <mach-o/nlist.h>
 #include <mach-o/reloc.h>
 #include "stuff/bool.h"
@@ -1754,6 +1759,11 @@ struct ofile *ofile)
 	ofile->member_offset = offset;
 	ofile->member_addr = addr + offset;
 	ofile->member_size = strtoul(ar_hdr->ar_size, NULL, 10);
+	if(ofile->member_size > size - sizeof(struct ar_hdr)){
+	    archive_error(ofile, "size of first archive member extends past "
+		          "the end of the archive");
+	    ofile->member_size = size - sizeof(struct ar_hdr);
+	}
 	ofile->member_ar_hdr = ar_hdr;
 	ofile->member_type = OFILE_UNKNOWN;
 	ofile->member_name = ar_hdr->ar_name;
@@ -1761,6 +1771,11 @@ struct ofile *ofile)
 	    ofile->member_name = ar_hdr->ar_name + sizeof(struct ar_hdr);
 	    ar_name_size = strtoul(ar_hdr->ar_name + sizeof(AR_EFMT1) - 1,
 				   NULL, 10);
+	    if(ar_name_size > ofile->member_size){
+		archive_error(ofile, "size of first archive member name "
+			      "extends past the end of the archive");
+		ar_name_size = ofile->member_size;
+	    }
 	    ofile->member_name_size = ar_name_size;
 	    ofile->member_offset += ar_name_size;
 	    ofile->member_addr += ar_name_size;
@@ -1781,6 +1796,10 @@ struct ofile *ofile)
 	ofile->toc_strings = NULL;
 	ofile->toc_strsize = 0;
 	ofile->toc_bad = FALSE;
+
+	/* Clear these until we find a System V "//" named archive member */
+	ofile->sysv_ar_strtab = NULL;
+	ofile->sysv_ar_strtab_size = 0;
 
 	host_byte_sex = get_host_byte_sex();
 
@@ -1883,6 +1902,11 @@ struct ofile *ofile)
 		if(check_archive_toc(ofile) == CHECK_BAD)
 		    goto cleanup;
 	    }
+	    else if(ofile->member_type == OFILE_UNKNOWN &&
+	            strcmp(ofile->member_name, "// ") == 0){
+		ofile->sysv_ar_strtab = ofile->member_addr;
+		ofile->sysv_ar_strtab_size = ofile->member_size;
+	    }
 #ifdef LTO_SUPPORT
 	    if(ofile->member_type == OFILE_UNKNOWN &&
 	       strncmp(ofile->member_name, SYMDEF_SORTED,
@@ -1939,7 +1963,7 @@ struct ofile *ofile)
     uint32_t magic;
     enum byte_sex host_byte_sex;
     struct ar_hdr *ar_hdr;
-    uint32_t ar_name_size;
+    uint32_t ar_name_size, member_name_offset, n;
 
 	/*
 	 * Get the address and size of the archive.
@@ -2000,12 +2024,44 @@ struct ofile *ofile)
 	ofile->member_offset = offset;
 	ofile->member_addr = addr + offset;
 	ofile->member_size = strtoul(ar_hdr->ar_size, NULL, 10);
+	if(ofile->member_size > size - sizeof(struct ar_hdr)){
+	    archive_error(ofile, "size of archive member extends past "
+		          "the end of the archive");
+	    ofile->member_size = size - sizeof(struct ar_hdr);
+	}
 	ofile->member_ar_hdr = ar_hdr;
 	ofile->member_name = ar_hdr->ar_name;
-	if(strncmp(ofile->member_name, AR_EFMT1, sizeof(AR_EFMT1) - 1) == 0){
+	if(ofile->sysv_ar_strtab == NULL && ofile->sysv_ar_strtab_size == 0 &&
+	   strncmp(ofile->member_name, "// ", sizeof("// ") - 1) == 0){
+	    ofile->sysv_ar_strtab = ofile->member_addr;
+	    ofile->sysv_ar_strtab_size = ofile->member_size;
+	}
+	if(ofile->member_name[0] == '/' &&
+		(ofile->member_name[1] != ' ' && ofile->member_name[1] != '/')){
+	    member_name_offset = strtoul(ar_hdr->ar_name + 1, NULL, 10);
+	    if(member_name_offset < ofile->sysv_ar_strtab_size){
+		ofile->member_name = ofile->sysv_ar_strtab + member_name_offset;
+		ofile->member_name_size = 0;
+		for(n = member_name_offset;
+		    n < ofile->sysv_ar_strtab_size; n++){
+		    if(ofile->sysv_ar_strtab[n] == '/')
+			break;
+		    ofile->member_name_size++;
+		}
+	    }
+	    else
+		ofile->member_name_size = size_ar_name(ar_hdr);
+	}
+	else if(strncmp(ofile->member_name, AR_EFMT1,
+			sizeof(AR_EFMT1) - 1) == 0){
 	    ofile->member_name = ar_hdr->ar_name + sizeof(struct ar_hdr);
 	    ar_name_size = strtoul(ar_hdr->ar_name + sizeof(AR_EFMT1) - 1,
 				   NULL, 10);
+	    if(ar_name_size > ofile->member_size){
+		archive_error(ofile, "size of archive member name "
+			      "extends past the end of the archive");
+		ar_name_size = ofile->member_size;
+	    }
 	    ofile->member_name_size = ar_name_size;
 	    ofile->member_offset += ar_name_size;
 	    ofile->member_addr += ar_name_size;
@@ -2161,13 +2217,13 @@ ofile_specific_member(
 const char *member_name,
 struct ofile *ofile)
 {
-    int32_t i;
+    int32_t i, n;
     char *addr;
     uint64_t size, offset;
     uint32_t magic;
     enum byte_sex host_byte_sex;
     char *ar_name;
-    uint32_t ar_name_size;
+    uint32_t ar_name_size, member_name_offset;
     struct ar_hdr *ar_hdr;
 
 	/* These fields are to be filled in by this routine, clear them first */
@@ -2214,6 +2270,10 @@ struct ofile *ofile)
 	    return(FALSE);
 	}
 
+	/* Clear these until we find a System V "//" named archive member */
+	ofile->sysv_ar_strtab = NULL;
+	ofile->sysv_ar_strtab_size = 0;
+
 	offset = SARMAG;
 	if(offset != size && offset + sizeof(struct ar_hdr) > size){
 	    archive_error(ofile, "truncated or malformed (archive header of "
@@ -2223,7 +2283,36 @@ struct ofile *ofile)
 	while(size > offset){
 	    ar_hdr = (struct ar_hdr *)(addr + offset);
 	    offset += sizeof(struct ar_hdr);
-	    if(strncmp(ar_hdr->ar_name, AR_EFMT1, sizeof(AR_EFMT1) - 1) == 0){
+
+	    if(ofile->sysv_ar_strtab == NULL &&
+	       ofile->sysv_ar_strtab_size == 0 &&
+	       strncmp(ar_hdr->ar_name, "// ", sizeof("// ") - 1) == 0){
+		ofile->sysv_ar_strtab = addr + offset;
+		ofile->sysv_ar_strtab_size = strtoul(ar_hdr->ar_size, NULL, 10);
+	    }
+
+	    if(ar_hdr->ar_name[0] == '/' &&
+	       (ar_hdr->ar_name[1] != ' ' && ar_hdr->ar_name[1] != '/')){
+		member_name_offset = strtoul(ar_hdr->ar_name + 1, NULL, 10);
+		if(member_name_offset < ofile->sysv_ar_strtab_size){
+		    ar_name = ofile->sysv_ar_strtab + member_name_offset;
+		    i = 0;
+		    for(n = member_name_offset;
+			n < ofile->sysv_ar_strtab_size; n++){
+			if(ofile->sysv_ar_strtab[n] == '/')
+			    break;
+			i++;
+		    }
+		    ar_name_size = 0;
+		}
+		else{
+		    i = size_ar_name(ar_hdr);
+		    ar_name = ar_hdr->ar_name;
+		    ar_name_size = 0;
+		}
+	    }
+	    else if(strncmp(ar_hdr->ar_name, AR_EFMT1,
+			    sizeof(AR_EFMT1) - 1) == 0){
 #ifdef OTOOL
 		if(check_extend_format_1(ofile, ar_hdr, size - offset,
 				&ar_name_size) == CHECK_BAD){
@@ -2925,9 +3014,17 @@ struct ofile *ofile)
 	        if(is_llvm_bitcode(ofile, ofile->file_addr +
 		   ofile->member_offset + ofile->fat_archs[i].offset,
 		   ofile->fat_archs[i].size) == TRUE){
-		    ofile->member_type = OFILE_LLVM_BITCODE;
-		    ofile->object_addr = ofile->member_addr;
-		    ofile->object_size = ofile->member_size;
+#ifdef ALIGNMENT_CHECKS_ARCHIVE_64_BIT
+		    if(archive_64_bit_align_warning == FALSE &&
+		       (ofile->member_offset + ofile->fat_archs[i].offset) %
+		       8 != 0){
+			temporary_archive_member_warning(ofile, "fat object "
+			    "file's offset in archive not a multiple of 8) "
+			    "(must be since member is a 64-bit object file)");
+			archive_64_bit_align_warning = TRUE;
+			/* return(CHECK_BAD); */
+		    }
+#endif
 	        }
 		else
 #endif /* LTO_SUPPORT */
@@ -3483,6 +3580,12 @@ struct ofile *ofile)
 	vers = NULL;
 	big_load_end = 0;
 	for(i = 0, lc = load_commands; i < ncmds; i++){
+	    if(big_load_end + sizeof(struct load_command) > sizeofcmds){
+		Mach_O_error(ofile, "truncated or malformed object (load "
+			     "command %u extends past the end all load "
+			     "commands in the file)", i);
+		goto return_bad;
+	    }
 	    l = *lc;
 	    if(swapped)
 		swap_load_command(&l, host_byte_sex);
@@ -3564,6 +3667,7 @@ struct ofile *ofile)
 		    swap_section(s, sg->nsects, host_byte_sex);
 		for(j = 0 ; j < sg->nsects ; j++){
 		    if(mh->filetype != MH_DYLIB_STUB &&
+		       mh->filetype != MH_DSYM &&
 		       s->flags != S_ZEROFILL &&
 		       s->flags != S_THREAD_LOCAL_ZEROFILL && s->offset > size){
 			Mach_O_error(ofile, "truncated or malformed object "
@@ -3573,6 +3677,7 @@ struct ofile *ofile)
 			goto return_bad;
 		    }
 		    if(mh->filetype != MH_DYLIB_STUB &&
+		       mh->filetype != MH_DSYM &&
 		       s->flags != S_ZEROFILL &&
 		       s->flags != S_THREAD_LOCAL_ZEROFILL &&
 		       sg->fileoff == 0 && s->offset < sizeofhdrs &&
@@ -3585,6 +3690,7 @@ struct ofile *ofile)
 		    big_size = s->offset;
 		    big_size += s->size;
 		    if(mh->filetype != MH_DYLIB_STUB &&
+		       mh->filetype != MH_DSYM &&
 		       s->flags != S_ZEROFILL &&
 		       s->flags != S_THREAD_LOCAL_ZEROFILL && big_size > size){
 			Mach_O_error(ofile, "truncated or malformed object "
@@ -3594,6 +3700,7 @@ struct ofile *ofile)
 			goto return_bad;
 		    }
 		    if(mh->filetype != MH_DYLIB_STUB &&
+		       mh->filetype != MH_DSYM &&
 		       s->flags != S_ZEROFILL &&
 		       s->flags != S_THREAD_LOCAL_ZEROFILL &&
 		       s->size > sg->filesize){
@@ -3603,6 +3710,7 @@ struct ofile *ofile)
 			goto return_bad;
 		    }
 		    if(mh->filetype != MH_DYLIB_STUB &&
+		       mh->filetype != MH_DSYM &&
 		       s->size != 0 && s->addr < sg->vmaddr){
 			Mach_O_error(ofile, "malformed object (addr field of "
 				"section %u in LC_SEGMENT command %u less than "
@@ -3692,6 +3800,7 @@ struct ofile *ofile)
 		    swap_section_64(s64, sg64->nsects, host_byte_sex);
 		for(j = 0 ; j < sg64->nsects ; j++){
 		    if(mh64->filetype != MH_DYLIB_STUB &&
+		       mh64->filetype != MH_DSYM &&
 		       s64->flags != S_ZEROFILL &&
 		       s64->flags != S_THREAD_LOCAL_ZEROFILL &&
 		       s64->offset > size){
@@ -3701,9 +3810,21 @@ struct ofile *ofile)
 				j, i);
 			goto return_bad;
 		    }
+		    if(mh64->filetype != MH_DYLIB_STUB &&
+		       mh64->filetype != MH_DSYM &&
+		       s64->flags != S_ZEROFILL &&
+		       s64->flags != S_THREAD_LOCAL_ZEROFILL &&
+		       sg64->fileoff == 0 && s64->offset < sizeofhdrs &&
+		       s64->size != 0){
+			Mach_O_error(ofile, "malformed object (offset field of "
+				"section %u in LC_SEGMENT command %u not "
+				"past the headers of the file)", j, i);
+			goto return_bad;
+		    }
 		    big_size = s64->offset;
 		    big_size += s64->size;
 		    if(mh64->filetype != MH_DYLIB_STUB &&
+		       mh64->filetype != MH_DSYM &&
 		       s64->flags != S_ZEROFILL &&
 		       s64->flags != S_THREAD_LOCAL_ZEROFILL &&
 		       big_size > size){
@@ -4169,6 +4290,49 @@ check_linkedit_data_command:
 		if(vers->cmdsize < sizeof(struct version_min_command)){
 		    Mach_O_error(ofile, "malformed object (LC_VERSION_MIN_"
 			"IPHONEOS command %u has too small cmdsize field)", i);
+		    goto return_bad;
+		}
+		break;
+
+	    case LC_VERSION_MIN_TVOS:
+		if(l.cmdsize < sizeof(struct version_min_command)){
+		    Mach_O_error(ofile, "malformed object (LC_VERSION_MIN_"
+				 " cmdsize too small) in command %u",i);
+		    goto return_bad;
+		}
+		if(vers != NULL){
+		    Mach_O_error(ofile, "malformed object (more than one "
+			"LC_VERSION_MIN_ command)");
+		    goto return_bad;
+		}
+		vers = (struct version_min_command *)lc;
+		if(swapped)
+		    swap_version_min_command(vers, host_byte_sex);
+		if(vers->cmdsize < sizeof(struct version_min_command)){
+		    Mach_O_error(ofile, "malformed object (LC_VERSION_MIN_"
+			" command %u has too small cmdsize field)", i);
+		    goto return_bad;
+		}
+		break;
+
+	    case LC_VERSION_MIN_WATCHOS:
+		if(l.cmdsize < sizeof(struct version_min_command)){
+		    Mach_O_error(ofile, "malformed object (LC_VERSION_MIN_"
+				 "WATCHOS cmdsize too small) in command %u",i);
+		    goto return_bad;
+		}
+		if(vers != NULL){
+		    Mach_O_error(ofile, "malformed object (more than one "
+			"LC_VERSION_MIN_IPHONEOS, LC_VERSION_MIN_MACOSX or "
+			"LC_VERSION_MIN_WATCHOS command)");
+		    goto return_bad;
+		}
+		vers = (struct version_min_command *)lc;
+		if(swapped)
+		    swap_version_min_command(vers, host_byte_sex);
+		if(vers->cmdsize < sizeof(struct version_min_command)){
+		    Mach_O_error(ofile, "malformed object (LC_VERSION_MIN_"
+			"WATCHOS command %u has too small cmdsize field)", i);
 		    goto return_bad;
 		}
 		break;
@@ -6319,6 +6483,13 @@ const struct ar_hdr *ar_hdr)
 		i--;
 	    }while(i > 0);
 	}
+	/*
+	 * For System V archives names ends in a '/' which are not part of the
+	 * name. Except for the table of contents member named "/" and archive
+	 * string table member name which has the name "//".
+	 */
+	if(i > 1 && ar_hdr->ar_name[i] == '/')
+	    i--;
 	return(i + 1);
 }
 #endif /* !defined(RLD) */

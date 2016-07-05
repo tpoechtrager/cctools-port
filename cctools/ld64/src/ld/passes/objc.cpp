@@ -65,7 +65,7 @@ template <typename A>
 class ObjCImageInfoAtom : public ld::Atom {
 public:
 											ObjCImageInfoAtom(ld::File::ObjcConstraint objcConstraint, 
-															bool compaction, bool abi2);
+															bool compaction, bool abi2, uint8_t swiftVersion);
 
 	virtual const ld::File*					file() const					{ return NULL; }
 	virtual const char*						name() const					{ return "objc image info"; }
@@ -89,7 +89,7 @@ template <typename A> ld::Section ObjCImageInfoAtom<A>::_s_sectionABI2("__DATA",
 
 template <typename A>
 ObjCImageInfoAtom<A>::ObjCImageInfoAtom(ld::File::ObjcConstraint objcConstraint, bool compaction, 
-										bool abi2)
+										bool abi2, uint8_t swiftVersion)
 	: ld::Atom(abi2 ? _s_sectionABI2 : _s_sectionABI1, ld::Atom::definitionRegular, ld::Atom::combineNever,
 							ld::Atom::scopeLinkageUnit, ld::Atom::typeUnclassified, 
 							symbolTableNotIn, false, false, false, ld::Atom::Alignment(2))
@@ -116,6 +116,9 @@ ObjCImageInfoAtom<A>::ObjCImageInfoAtom(ld::File::ObjcConstraint objcConstraint,
 				value |= OBJC_IMAGE_IS_SIMULATED;
 			break;
 	}
+
+	// provide swift language version in final binary for runtime to inspect
+	value |= (swiftVersion << 8);
 
 	_content.version = 0;
 	A::P::E::set32(_content.flags, value);
@@ -362,7 +365,7 @@ void ObjCData<A>::setPointerInContent(ld::Internal& state, const ld::Atom* conte
 template <typename A>
 class Category : public ObjCData<A> {
 public:
-	static const ld::Atom*	getClass(ld::Internal& state, const ld::Atom* contentAtom);
+	static const ld::Atom*	getClass(ld::Internal& state, const ld::Atom* contentAtom, bool& hasAddend);
 	static const ld::Atom*	getInstanceMethods(ld::Internal& state, const ld::Atom* contentAtom);
 	static const ld::Atom*	getClassMethods(ld::Internal& state, const ld::Atom* contentAtom);
 	static const ld::Atom*	getProtocols(ld::Internal& state, const ld::Atom* contentAtom);
@@ -374,9 +377,9 @@ private:
 
 
 template <typename A>
-const ld::Atom*	Category<A>::getClass(ld::Internal& state, const ld::Atom* contentAtom)
+const ld::Atom*	Category<A>::getClass(ld::Internal& state, const ld::Atom* contentAtom, bool& hasAddend)
 {
-	return ObjCData<A>::getPointerInContent(state, contentAtom, sizeof(pint_t)); // category_t.cls
+	return ObjCData<A>::getPointerInContent(state, contentAtom, sizeof(pint_t), &hasAddend); // category_t.cls
 }
 
 template <typename A>
@@ -752,6 +755,21 @@ bool OptimizeCategories<A>::hasProperties(ld::Internal& state, const std::vector
 }
 
 
+static const ld::Atom* fixClassAliases(const ld::Atom* classAtom)
+{
+	if ( (classAtom->size() != 0) || (classAtom->definition() == ld::Atom::definitionProxy) )
+		return classAtom;
+
+	for (ld::Fixup::iterator fit=classAtom->fixupsBegin(); fit != classAtom->fixupsEnd(); ++fit) {
+		if ( fit->kind == ld::Fixup::kindNoneFollowOn ) {
+			assert(fit->offsetInAtom == 0);
+			assert(fit->binding == ld::Fixup::bindingDirectlyBound);
+			return fit->u.target;
+		}
+	}
+
+	return classAtom;
+}
 
 //
 // Helper for std::remove_if
@@ -802,7 +820,7 @@ void OptimizeCategories<A>::doit(const Options& opts, ld::Internal& state)
 	std::set<const ld::Atom*> nlcatListAtoms;
 	for (std::vector<ld::Internal::FinalSection*>::iterator sit=state.sections.begin(); sit != state.sections.end(); ++sit) {
 		ld::Internal::FinalSection* sect = *sit;
-		if ( (strcmp(sect->sectionName(), "__objc_nlcatlist") == 0) && (strcmp(sect->segmentName(), "__DATA") == 0) ) {
+		if ( (strcmp(sect->sectionName(), "__objc_nlcatlist") == 0) && (strncmp(sect->segmentName(), "__DATA", 6) == 0) ) {
 			for (std::vector<const ld::Atom*>::iterator ait=sect->atoms.begin(); ait != sect->atoms.end(); ++ait) {
 				const ld::Atom* categoryListElementAtom = *ait;
 				for (unsigned int offset=0; offset < categoryListElementAtom->size(); offset += sizeof(pint_t)) {
@@ -838,10 +856,17 @@ void OptimizeCategories<A>::doit(const Options& opts, ld::Internal& state)
 				// ignore categories also in __objc_nlcatlist
 				if ( nlcatListAtoms.count(categoryAtom) != 0 )
 					continue;
-				const ld::Atom* categoryOnClassAtom = Category<A>::getClass(state, categoryAtom); 
+				const ld::Atom* categoryOnClassAtom = fixClassAliases(Category<A>::getClass(state, categoryAtom, hasAddend));
 				assert(categoryOnClassAtom != NULL);
+				// only look at classes defined in this image
 				if ( categoryOnClassAtom->definition() != ld::Atom::definitionProxy ) {
-					// only look at classes defined in this image
+					// <rdar://problem/16107696> for now, back off optimization on new style classes
+					if ( hasAddend != 0 )
+						continue;
+					// <rdar://problem/17249777> don't apply categories to swift classes
+					if ( categoryOnClassAtom->hasFixupsOfKind(ld::Fixup::kindNoneGroupSubordinate) )
+						continue;
+
 					CatMap::iterator pos = classToCategories.find(categoryOnClassAtom);
 					if ( pos == classToCategories.end() ) {
 						classToCategories[categoryOnClassAtom] = new std::vector<const ld::Atom*>();
@@ -855,7 +880,7 @@ void OptimizeCategories<A>::doit(const Options& opts, ld::Internal& state)
 			}
 		}
 		// record method list section
-		if ( (strcmp(sect->sectionName(), "__objc_const") == 0) && (strcmp(sect->segmentName(), "__DATA") == 0) )
+		if ( (strcmp(sect->sectionName(), "__objc_const") == 0) && (strncmp(sect->segmentName(), "__DATA", 6) == 0) )
 			methodListSection = sect;
 	}
 
@@ -875,9 +900,11 @@ void OptimizeCategories<A>::doit(const Options& opts, ld::Internal& state)
 				const ld::Atom* newClassRO = Class<A>::setInstanceMethodList(state, classAtom, newInstanceMethodListAtom, deadAtoms);
 				// add new method list to final sections
 				methodListSection->atoms.push_back(newInstanceMethodListAtom);
+				state.atomToSection[newInstanceMethodListAtom] = methodListSection;
 				if ( newClassRO != NULL ) {
 					assert(strcmp(newClassRO->section().sectionName(), "__objc_const") == 0);
 					methodListSection->atoms.push_back(newClassRO);
+					state.atomToSection[newClassRO] = methodListSection;
 				}
 			}
 			// if any category adds class methods, generate new merged method list, and replace
@@ -887,9 +914,11 @@ void OptimizeCategories<A>::doit(const Options& opts, ld::Internal& state)
 				const ld::Atom* newClassRO = Class<A>::setClassMethodList(state, classAtom, newClassMethodListAtom, deadAtoms);
 				// add new method list to final sections
 				methodListSection->atoms.push_back(newClassMethodListAtom);
+				state.atomToSection[newClassMethodListAtom] = methodListSection;
 				if ( newClassRO != NULL ) {
 					assert(strcmp(newClassRO->section().sectionName(), "__objc_const") == 0);
 					methodListSection->atoms.push_back(newClassRO);
+					state.atomToSection[newClassRO] = methodListSection;
 				}
 			}
 			// if any category adds protocols, generate new merged protocol list, and replace
@@ -900,13 +929,16 @@ void OptimizeCategories<A>::doit(const Options& opts, ld::Internal& state)
 				const ld::Atom* newMetaClassRO = Class<A>::setClassProtocolList(state, classAtom, newProtocolListAtom, deadAtoms);
 				// add new protocol list to final sections
 				methodListSection->atoms.push_back(newProtocolListAtom);
+				state.atomToSection[newProtocolListAtom] = methodListSection;
 				if ( newClassRO != NULL ) {
 					assert(strcmp(newClassRO->section().sectionName(), "__objc_const") == 0);
 					methodListSection->atoms.push_back(newClassRO);
+					state.atomToSection[newClassRO] = methodListSection;
 				}
 				if ( newMetaClassRO != NULL ) {
 					assert(strcmp(newMetaClassRO->section().sectionName(), "__objc_const") == 0);
 					methodListSection->atoms.push_back(newMetaClassRO);
+					state.atomToSection[newMetaClassRO] = methodListSection;
 				}
 			}
 			// if any category adds properties, generate new merged property list, and replace
@@ -916,9 +948,11 @@ void OptimizeCategories<A>::doit(const Options& opts, ld::Internal& state)
 				const ld::Atom* newClassRO = Class<A>::setInstancePropertyList(state, classAtom, newPropertyListAtom, deadAtoms);
 				// add new property list to final sections
 				methodListSection->atoms.push_back(newPropertyListAtom);
+				state.atomToSection[newPropertyListAtom] = methodListSection;
 				if ( newClassRO != NULL ) {
 					assert(strcmp(newClassRO->section().sectionName(), "__objc_const") == 0);
 					methodListSection->atoms.push_back(newClassRO);
+					state.atomToSection[newClassRO] = methodListSection;
 				}
 			}
 		 
@@ -1171,25 +1205,25 @@ void doPass(const Options& opts, ld::Internal& state)
 #if SUPPORT_ARCH_x86_64
 			case CPU_TYPE_X86_64:
 				state.addAtom(*new ObjCImageInfoAtom<x86_64>(state.objcObjectConstraint, compaction, 
-								true));
+							  true, state.swiftVersion));
 				break;
 #endif
 #if SUPPORT_ARCH_i386
 			case CPU_TYPE_I386:
 				state.addAtom(*new ObjCImageInfoAtom<x86>(state.objcObjectConstraint, compaction, 
-							opts.objCABIVersion2POverride() ? true : false));
+							  opts.objCABIVersion2POverride() ? true : false, state.swiftVersion));
 				break;
 #endif
 #if SUPPORT_ARCH_arm_any
 			case CPU_TYPE_ARM:
 				state.addAtom(*new ObjCImageInfoAtom<arm>(state.objcObjectConstraint, compaction, 
-							true));
+							  true, state.swiftVersion));
 				break;
 #endif
 #if SUPPORT_ARCH_arm64
 			case CPU_TYPE_ARM64:
 				state.addAtom(*new ObjCImageInfoAtom<arm64>(state.objcObjectConstraint, compaction, 
-							true));
+							  true, state.swiftVersion));
 				break;
 #endif
 			default:

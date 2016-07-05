@@ -93,7 +93,14 @@
 typedef __darwin_natural_t	natural_t;
 typedef int			integer_t;
 
-#if defined(__ppc__)
+/*
+ * cctools-port: Added !defined(__ppc64__) because of:
+ * $ clang -target powerpc64le-linux-gnu -dM -E - < /dev/null | grep ppc
+ * #define __ppc64__ 1
+ * #define __ppc__ 1
+ */
+
+#if defined(__ppc__) && !defined(__ppc64__)
 
 /*
  * For 32-bit PowerPC ABIs, the scalable types were

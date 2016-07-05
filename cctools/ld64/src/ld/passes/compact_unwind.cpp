@@ -108,6 +108,7 @@ private:
 	void						addImageOffsetFixupPlusAddend(uint32_t offset, const ld::Atom* targ, uint32_t addend);
 
 	uint8_t*								_pagesForDelete;
+	uint8_t*								_pageAlignedPages;
 	uint8_t*								_pages;
 	uint64_t								_pagesSize;
 	uint8_t*								_header;
@@ -129,8 +130,8 @@ template <typename A>
 UnwindInfoAtom<A>::UnwindInfoAtom(const std::vector<UnwindEntry>& entries, uint64_t ehFrameSize)
 	: ld::Atom(_s_section, ld::Atom::definitionRegular, ld::Atom::combineNever,
 				ld::Atom::scopeLinkageUnit, ld::Atom::typeUnclassified, 
-				symbolTableNotIn, false, false, false, ld::Atom::Alignment(0)),
-		_pagesForDelete(NULL), _pages(NULL), _pagesSize(0), _header(NULL), _headerSize(0)
+				symbolTableNotIn, false, false, false, ld::Atom::Alignment(2)),
+		_pagesForDelete(NULL), _pageAlignedPages(NULL), _pages(NULL), _pagesSize(0), _header(NULL), _headerSize(0)
 {
 	// build new compressed list by removing entries where next function has same encoding 
 	std::vector<UnwindEntry> uniqueEntries;
@@ -143,8 +144,7 @@ UnwindInfoAtom<A>::UnwindInfoAtom(const std::vector<UnwindEntry>& entries, uint6
 	std::map<const ld::Atom*, uint32_t>	personalityIndexMap;
 	makePersonalityIndexes(uniqueEntries, personalityIndexMap);
 	if ( personalityIndexMap.size() > 3 ) {
-		warning("too many personality routines for compact unwind to encode");
-		return;
+		throw "too many personality routines for compact unwind to encode";
 	}
 
 	// put the most common encodings into the common table, but at most 127 of them
@@ -160,11 +160,12 @@ UnwindInfoAtom<A>::UnwindInfoAtom(const std::vector<UnwindEntry>& entries, uint6
 	const unsigned int entriesPerRegularPage = (4096-sizeof(unwind_info_regular_second_level_page_header))/sizeof(unwind_info_regular_second_level_entry);
 	assert(uniqueEntries.size() > 0);
 	const unsigned int pageCount = ((uniqueEntries.size() - 1)/entriesPerRegularPage) + 2;
-	_pagesForDelete = (uint8_t*)calloc(pageCount,4096);
+	_pagesForDelete = (uint8_t*)calloc(pageCount+1,4096);
 	if ( _pagesForDelete == NULL ) {
 		warning("could not allocate space for compact unwind info");
 		return;
 	}
+	_pageAlignedPages = (uint8_t*)((((uintptr_t)_pagesForDelete) + 4095) & -4096);
 	
 	// make last second level page smaller so that all other second level pages can be page aligned
 	uint32_t maxLastPageSize = 4096 - (ehFrameSize % 4096);
@@ -179,7 +180,7 @@ UnwindInfoAtom<A>::UnwindInfoAtom(const std::vector<UnwindEntry>& entries, uint6
 	uint8_t* secondLevelPagesStarts[pageCount*3];
 	unsigned int endIndex = uniqueEntries.size();
 	unsigned int secondLevelPageCount = 0;
-	uint8_t* pageEnd = &_pagesForDelete[pageCount*4096];
+	uint8_t* pageEnd = &_pageAlignedPages[pageCount*4096];
 	uint32_t pageSize = maxLastPageSize;
 	while ( endIndex > 0 ) {
 		endIndex = makeCompressedSecondLevelPage(uniqueEntries, commonEncodings, pageSize, endIndex, pageEnd);
@@ -193,9 +194,8 @@ UnwindInfoAtom<A>::UnwindInfoAtom(const std::vector<UnwindEntry>& entries, uint6
 		}
 	}
 	_pages = pageEnd;
-	_pagesSize = &_pagesForDelete[pageCount*4096] - pageEnd;
-	
-	
+	_pagesSize = &_pageAlignedPages[pageCount*4096] - pageEnd;
+
 	// calculate section layout
 	const uint32_t commonEncodingsArraySectionOffset = sizeof(macho_unwind_info_section_header<P>);
 	const uint32_t commonEncodingsArrayCount = commonEncodings.size();
@@ -212,7 +212,7 @@ UnwindInfoAtom<A>::UnwindInfoAtom(const std::vector<UnwindEntry>& entries, uint6
 	const uint32_t headerEndSectionOffset = lsdaIndexArraySectionOffset + lsdaIndexArraySize;
 
 	// now that we know the size of the header, slide all existing fixups on the pages
-	const int32_t fixupSlide = headerEndSectionOffset + (_pagesForDelete - _pages);
+	const int32_t fixupSlide = headerEndSectionOffset + (_pageAlignedPages - _pages);
 	for(std::vector<ld::Fixup>::iterator it = _fixups.begin(); it != _fixups.end(); ++it) {
 		it->offsetInAtom += fixupSlide;
 	}
@@ -302,6 +302,13 @@ bool UnwindInfoAtom<arm64>::encodingMeansUseDwarf(compact_unwind_encoding_t enc)
 {
 	return ((enc & UNWIND_ARM64_MODE_MASK) == UNWIND_ARM64_MODE_DWARF);
 }
+
+template <>
+bool UnwindInfoAtom<arm>::encodingMeansUseDwarf(compact_unwind_encoding_t enc)
+{
+	return ((enc & UNWIND_ARM_MODE_MASK) == UNWIND_ARM_MODE_DWARF);
+}
+
 
 template <typename A>
 void UnwindInfoAtom<A>::compressDuplicates(const std::vector<UnwindEntry>& entries, std::vector<UnwindEntry>& uniqueEntries)
@@ -418,6 +425,22 @@ void UnwindInfoAtom<arm64>::addCompressedAddressOffsetFixup(uint32_t offset, con
 }
 
 template <>
+void UnwindInfoAtom<arm>::addCompressedAddressOffsetFixup(uint32_t offset, const ld::Atom* func, const ld::Atom* fromFunc)
+{
+	if ( fromFunc->isThumb() ) {
+		_fixups.push_back(ld::Fixup(offset, ld::Fixup::k1of4, ld::Fixup::kindSetTargetAddress, func));
+		_fixups.push_back(ld::Fixup(offset, ld::Fixup::k2of4, ld::Fixup::kindSubtractTargetAddress, fromFunc));
+		_fixups.push_back(ld::Fixup(offset, ld::Fixup::k3of4, ld::Fixup::kindSubtractAddend, 1));
+		_fixups.push_back(ld::Fixup(offset, ld::Fixup::k4of4, ld::Fixup::kindStoreLittleEndianLow24of32));
+	}
+	else {
+		_fixups.push_back(ld::Fixup(offset, ld::Fixup::k1of3, ld::Fixup::kindSetTargetAddress, func));
+		_fixups.push_back(ld::Fixup(offset, ld::Fixup::k2of3, ld::Fixup::kindSubtractTargetAddress, fromFunc));
+		_fixups.push_back(ld::Fixup(offset, ld::Fixup::k3of3, ld::Fixup::kindStoreLittleEndianLow24of32));
+	}
+}
+
+template <>
 void UnwindInfoAtom<x86>::addCompressedEncodingFixup(uint32_t offset, const ld::Atom* fde)
 {
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k1of2, ld::Fixup::kindSetTargetSectionOffset, fde));
@@ -433,6 +456,13 @@ void UnwindInfoAtom<x86_64>::addCompressedEncodingFixup(uint32_t offset, const l
 
 template <>
 void UnwindInfoAtom<arm64>::addCompressedEncodingFixup(uint32_t offset, const ld::Atom* fde)
+{
+	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k1of2, ld::Fixup::kindSetTargetSectionOffset, fde));
+	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k2of2, ld::Fixup::kindStoreLittleEndianLow24of32));
+}
+
+template <>
+void UnwindInfoAtom<arm>::addCompressedEncodingFixup(uint32_t offset, const ld::Atom* fde)
 {
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k1of2, ld::Fixup::kindSetTargetSectionOffset, fde));
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k2of2, ld::Fixup::kindStoreLittleEndianLow24of32));
@@ -460,6 +490,13 @@ void UnwindInfoAtom<arm64>::addRegularAddressFixup(uint32_t offset, const ld::At
 }
 
 template <>
+void UnwindInfoAtom<arm>::addRegularAddressFixup(uint32_t offset, const ld::Atom* func)
+{
+	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k1of2, ld::Fixup::kindSetTargetImageOffset, func));
+	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k2of2, ld::Fixup::kindStoreLittleEndian32));
+}
+
+template <>
 void UnwindInfoAtom<x86>::addRegularFDEOffsetFixup(uint32_t offset, const ld::Atom* fde)
 {
 	_fixups.push_back(ld::Fixup(offset+4, ld::Fixup::k1of2, ld::Fixup::kindSetTargetSectionOffset, fde));
@@ -481,6 +518,13 @@ void UnwindInfoAtom<arm64>::addRegularFDEOffsetFixup(uint32_t offset, const ld::
 }
 
 template <>
+void UnwindInfoAtom<arm>::addRegularFDEOffsetFixup(uint32_t offset, const ld::Atom* fde)
+{
+	_fixups.push_back(ld::Fixup(offset+4, ld::Fixup::k1of2, ld::Fixup::kindSetTargetSectionOffset, fde));
+	_fixups.push_back(ld::Fixup(offset+4, ld::Fixup::k2of2, ld::Fixup::kindStoreLittleEndianLow24of32));
+}
+
+template <>
 void UnwindInfoAtom<x86>::addImageOffsetFixup(uint32_t offset, const ld::Atom* targ)
 {
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k1of2, ld::Fixup::kindSetTargetImageOffset, targ));
@@ -496,6 +540,13 @@ void UnwindInfoAtom<x86_64>::addImageOffsetFixup(uint32_t offset, const ld::Atom
 
 template <>
 void UnwindInfoAtom<arm64>::addImageOffsetFixup(uint32_t offset, const ld::Atom* targ)
+{
+	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k1of2, ld::Fixup::kindSetTargetImageOffset, targ));
+	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k2of2, ld::Fixup::kindStoreLittleEndian32));
+}
+
+template <>
+void UnwindInfoAtom<arm>::addImageOffsetFixup(uint32_t offset, const ld::Atom* targ)
 {
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k1of2, ld::Fixup::kindSetTargetImageOffset, targ));
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k2of2, ld::Fixup::kindStoreLittleEndian32));
@@ -525,6 +576,14 @@ void UnwindInfoAtom<arm64>::addImageOffsetFixupPlusAddend(uint32_t offset, const
 	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k3of3, ld::Fixup::kindStoreLittleEndian32));
 }
 
+template <>
+void UnwindInfoAtom<arm>::addImageOffsetFixupPlusAddend(uint32_t offset, const ld::Atom* targ, uint32_t addend)
+{
+	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k1of3, ld::Fixup::kindSetTargetImageOffset, targ));
+	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k2of3, ld::Fixup::kindAddAddend, addend));
+	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k3of3, ld::Fixup::kindStoreLittleEndian32));
+}
+
 
 
 
@@ -547,11 +606,11 @@ unsigned int UnwindInfoAtom<A>::makeRegularSecondLevelPage(const std::vector<Unw
 		entryTable[i].set_functionOffset(0);
 		entryTable[i].set_encoding(info.encoding);
 		// add fixup for address part of entry
-		uint32_t offset = (uint8_t*)(&entryTable[i]) - _pagesForDelete;
+		uint32_t offset = (uint8_t*)(&entryTable[i]) - _pageAlignedPages;
 		this->addRegularAddressFixup(offset, info.func);
 		if ( encodingMeansUseDwarf(info.encoding) ) {
 			// add fixup for dwarf offset part of page specific encoding
-			uint32_t encOffset = (uint8_t*)(&entryTable[i]) - _pagesForDelete;
+			uint32_t encOffset = (uint8_t*)(&entryTable[i]) - _pageAlignedPages;
 			this->addRegularFDEOffsetFixup(encOffset, info.fde);
 		}
 	}
@@ -571,11 +630,10 @@ unsigned int UnwindInfoAtom<A>::makeCompressedSecondLevelPage(const std::vector<
 	// keep adding entries to page until:
 	//  1) encoding table plus entry table plus header exceed page size
 	//  2) the file offset delta from the first to last function > 24 bits
-	//  3) custom encoding index reachs 255
+	//  3) custom encoding index reaches 255
 	//  4) run out of uniqueInfos to encode
 	std::map<compact_unwind_encoding_t, unsigned int> pageSpecificEncodings;
 	uint32_t space4 =  (pageSize - sizeof(unwind_info_compressed_second_level_page_header))/sizeof(uint32_t);
-	std::vector<uint8_t> encodingIndexes;
 	int index = endIndex-1;
 	int entryCount = 0;
 	uint64_t lastEntryAddress = uniqueInfos[index].funcTentAddress;
@@ -587,6 +645,7 @@ unsigned int UnwindInfoAtom<A>::makeCompressedSecondLevelPage(const std::vector<
 		std::map<compact_unwind_encoding_t, unsigned int>::const_iterator pos = commonEncodings.find(info.encoding);
 		if ( pos != commonEncodings.end() ) {
 			encodingIndex = pos->second;
+			if (_s_log) fprintf(stderr, "makeCompressedSecondLevelPage(): funcIndex=%d, re-use commonEncodings[%d]=0x%08X\n", index, encodingIndex, info.encoding);
 		}
 		else {
 			// no commmon entry, so add one on this page
@@ -598,12 +657,13 @@ unsigned int UnwindInfoAtom<A>::makeCompressedSecondLevelPage(const std::vector<
 			std::map<compact_unwind_encoding_t, unsigned int>::iterator ppos = pageSpecificEncodings.find(encoding);
 			if ( ppos != pageSpecificEncodings.end() ) {
 				encodingIndex = pos->second;
+				if (_s_log) fprintf(stderr, "makeCompressedSecondLevelPage(): funcIndex=%d, re-use pageSpecificEncodings[%d]=0x%08X\n", index, encodingIndex, encoding);
 			}
 			else {
 				encodingIndex = commonEncodings.size() + pageSpecificEncodings.size();
 				if ( encodingIndex <= 255 ) {
 					pageSpecificEncodings[encoding] = encodingIndex;
-					if (_s_log) fprintf(stderr, "makeCompressedSecondLevelPage(): pageSpecificEncodings[%d]=0x%08X\n", encodingIndex, encoding); 
+					if (_s_log) fprintf(stderr, "makeCompressedSecondLevelPage(): funcIndex=%d, pageSpecificEncodings[%d]=0x%08X\n", index, encodingIndex, encoding);
 				}
 				else {
 					canDo = false; // case 3)
@@ -612,8 +672,6 @@ unsigned int UnwindInfoAtom<A>::makeCompressedSecondLevelPage(const std::vector<
 				}
 			}
 		}
-		if ( canDo ) 
-			encodingIndexes.push_back(encodingIndex);
 		// compute function offset
 		uint32_t funcOffsetWithInPage = lastEntryAddress - info.funcTentAddress;
 		if ( funcOffsetWithInPage > 0x00FFFF00 ) {
@@ -621,16 +679,16 @@ unsigned int UnwindInfoAtom<A>::makeCompressedSecondLevelPage(const std::vector<
 			canDo = false; // case 2)
 			if (_s_log) fprintf(stderr, "can't use compressed page with %u entries because function offset too big\n", entryCount);
 		}
-		else {
-			++entryCount;
-		}
 		// check room for entry
-		if ( (pageSpecificEncodings.size()+entryCount) >= space4 ) {
+		if ( (pageSpecificEncodings.size()+entryCount) > space4 ) {
 			canDo = false; // case 1)
 			--entryCount;
 			if (_s_log) fprintf(stderr, "end of compressed page with %u entries because full\n", entryCount);
 		}
 		//if (_s_log) fprintf(stderr, "space4=%d, pageSpecificEncodings.size()=%ld, entryCount=%d\n", space4, pageSpecificEncodings.size(), entryCount);
+		if ( canDo ) {
+			++entryCount;
+		}
 	}
 	
 	// check for cases where it would be better to use a regular (non-compressed) page
@@ -666,6 +724,7 @@ unsigned int UnwindInfoAtom<A>::makeCompressedSecondLevelPage(const std::vector<
 		uint8_t encodingIndex;
 		if ( encodingMeansUseDwarf(info.encoding) ) {
 			// dwarf entries are always in page specific encodings
+			assert(pageSpecificEncodings.find(info.encoding+i) != pageSpecificEncodings.end());
 			encodingIndex = pageSpecificEncodings[info.encoding+i];
 		}
 		else {
@@ -678,11 +737,11 @@ unsigned int UnwindInfoAtom<A>::makeCompressedSecondLevelPage(const std::vector<
 		uint32_t entryIndex = i - endIndex + entryCount;
 		E::set32(entiresArray[entryIndex], encodingIndex << 24);
 		// add fixup for address part of entry
-		uint32_t offset = (uint8_t*)(&entiresArray[entryIndex]) - _pagesForDelete;
+		uint32_t offset = (uint8_t*)(&entiresArray[entryIndex]) - _pageAlignedPages;
 		this->addCompressedAddressOffsetFixup(offset, info.func, firstFunc);
 		if ( encodingMeansUseDwarf(info.encoding) ) {
 			// add fixup for dwarf offset part of page specific encoding
-			uint32_t encOffset = (uint8_t*)(&encodingsArray[encodingIndex-commonEncodings.size()]) - _pagesForDelete;
+			uint32_t encOffset = (uint8_t*)(&encodingsArray[encodingIndex-commonEncodings.size()]) - _pageAlignedPages;
 			this->addCompressedEncodingFixup(encOffset, info.fde);
 		}
 	}
@@ -701,16 +760,22 @@ unsigned int UnwindInfoAtom<A>::makeCompressedSecondLevelPage(const std::vector<
 
 
 
-
-
-static uint64_t calculateEHFrameSize(const ld::Internal& state)
+static uint64_t calculateEHFrameSize(ld::Internal& state)
 {
+	bool allCIEs = true;
 	uint64_t size = 0;
-	for (std::vector<ld::Internal::FinalSection*>::const_iterator sit=state.sections.begin(); sit != state.sections.end(); ++sit) {
-		ld::Internal::FinalSection* sect = *sit;
+	for (ld::Internal::FinalSection* sect : state.sections) {
 		if ( sect->type() == ld::Section::typeCFI ) {
-			for (std::vector<const ld::Atom*>::iterator ait=sect->atoms.begin(); ait != sect->atoms.end(); ++ait) {
-				size += (*ait)->size();
+			for (const ld::Atom* atom : sect->atoms) {
+				size += atom->size();
+				if ( strcmp(atom->name(), "CIE") != 0 )
+					allCIEs = false;
+			}
+			if ( allCIEs ) {
+				// <rdar://problem/21427393> Linker generates eh_frame data even when there's only an unused CIEs in it
+				sect->atoms.clear();
+				state.sections.erase(std::remove(state.sections.begin(), state.sections.end(), sect), state.sections.end());
+				return 0;
 			}
 		}
 	}
@@ -839,6 +904,12 @@ static void makeFinalLinkedImageCompactUnwindSection(const Options& opts, ld::In
 			state.addAtom(*new UnwindInfoAtom<arm64>(entries, ehFrameSize));
 			break;
 #endif
+#if SUPPORT_ARCH_arm_any
+		case CPU_TYPE_ARM:
+			if ( opts.armUsesZeroCostExceptions() )
+				state.addAtom(*new UnwindInfoAtom<arm>(entries, ehFrameSize));
+			break;
+#endif
 		default:
 			assert(0 && "no compact unwind for arch");
 	}	
@@ -891,6 +962,8 @@ template <> ld::Fixup::Kind CompactUnwindAtom<x86_64>::_s_pointerStoreKind = ld:
 template <> ld::Fixup::Kind CompactUnwindAtom<arm64>::_s_pointerKind = ld::Fixup::kindStoreLittleEndian64;
 template <> ld::Fixup::Kind CompactUnwindAtom<arm64>::_s_pointerStoreKind = ld::Fixup::kindStoreTargetAddressLittleEndian64;
 #endif
+template <> ld::Fixup::Kind CompactUnwindAtom<arm>::_s_pointerKind = ld::Fixup::kindStoreLittleEndian32;
+template <> ld::Fixup::Kind CompactUnwindAtom<arm>::_s_pointerStoreKind = ld::Fixup::kindStoreTargetAddressLittleEndian32;
 
 template <typename A>
 CompactUnwindAtom<A>::CompactUnwindAtom(ld::Internal& state,const ld::Atom* funcAtom, uint32_t startOffset,
@@ -952,6 +1025,9 @@ static void makeCompactUnwindAtom(const Options& opts, ld::Internal& state, cons
 			state.addAtom(*new CompactUnwindAtom<arm64>(state, atom, startOffset, endOffset-startOffset, cui));
 			break;
 #endif
+		case CPU_TYPE_ARM:
+			state.addAtom(*new CompactUnwindAtom<arm>(state, atom, startOffset, endOffset-startOffset, cui));
+			break;
 	}
 }
 

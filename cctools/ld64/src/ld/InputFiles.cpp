@@ -43,6 +43,15 @@
 #include <sys/sysctl.h>
 #include <libkern/OSAtomic.h>
 
+// ld64-port
+#ifdef __linux__
+#ifndef __USE_GNU
+#define __USE_GNU
+#endif
+#include <sched.h>
+#endif
+// ld64-port end
+
 #include <string>
 #include <map>
 #include <set>
@@ -58,6 +67,7 @@
 #include "InputFiles.h"
 #include "macho_relocatable_file.h"
 #include "macho_dylib_file.h"
+#include "textstub_dylib_file.hpp"
 #include "archive_file.h"
 #include "lto_file.h"
 #include "opaque_section_file.h"
@@ -227,6 +237,7 @@ ld::File* InputFiles::makeFile(const Options::FileInfo& info, bool indirectDylib
 	bool isFatFile = false;
 	uint32_t sliceToUse, sliceCount;
 	const fat_header* fh = (fat_header*)p;
+        sliceCount = 0; // ld64-port
 	if ( fh->magic == OSSwapBigToHostInt32(FAT_MAGIC) ) {
 		isFatFile = true;
 		const struct fat_arch* archs = (struct fat_arch*)(p + sizeof(struct fat_header));
@@ -257,10 +268,21 @@ ld::File* InputFiles::makeFile(const Options::FileInfo& info, bool indirectDylib
 			uint32_t fileOffset = OSSwapBigToHostInt32(archs[sliceToUse].offset);
 			len = OSSwapBigToHostInt32(archs[sliceToUse].size);
 			if ( fileOffset+len > info.fileLen ) {
-				throwf("truncated fat file. Slice from %u to %llu is past end of file with length %llu", 
+				// <rdar://problem/17593430> file size was read awhile ago.  If file is being written, wait a second to see if big enough now
+				sleep(1);
+				uint64_t newFileLen = info.fileLen;
+				struct stat statBuffer;
+				if ( stat(info.path, &statBuffer) == 0 ) {
+					newFileLen = statBuffer.st_size;
+				}
+				if ( fileOffset+len > newFileLen ) {
+					throwf("truncated fat file. Slice from %u to %llu is past end of file with length %llu", 
 						fileOffset, fileOffset+len, info.fileLen);
+				}
 			}
 			// if requested architecture is page aligned within fat file, then remap just that portion of file
+			// ld64-port: remapping the file on Cygwin fails for an unknown reason, so always go the alternative way there
+#ifndef __CYGWIN__
 			if ( (fileOffset & 0x00000FFF) == 0 ) {
 				// unmap whole file
 				munmap((caddr_t)p, info.fileLen);
@@ -270,8 +292,11 @@ ld::File* InputFiles::makeFile(const Options::FileInfo& info, bool indirectDylib
 					throwf("can't re-map file, errno=%d", errno);
 			}
 			else {
+#endif /* __CYGWIN__ */
 				p = &p[fileOffset];
+#ifndef __CYGWIN__
 			}
+#endif /* __CYGWIN__ */
 		}
 	}
 	::close(fd);
@@ -286,7 +311,17 @@ ld::File* InputFiles::makeFile(const Options::FileInfo& info, bool indirectDylib
 	objOpts.forceDwarfConversion= (_options.outputKind() == Options::kDyld);
 	objOpts.neverConvertDwarf   = !_options.needsUnwindInfoSection();
 	objOpts.verboseOptimizationHints = _options.verboseOptimizationHints();
+	objOpts.armUsesZeroCostExceptions = _options.armUsesZeroCostExceptions();
+	objOpts.simulator			= _options.targetIOSSimulator();
+	objOpts.ignoreMismatchPlatform = ((_options.outputKind() == Options::kPreload) || (_options.outputKind() == Options::kStaticExecutable));
 	objOpts.subType				= _options.subArchitecture();
+	objOpts.platform			= _options.platform();
+	objOpts.minOSVersion		= _options.minOSversion();
+	objOpts.srcKind				= ld::relocatable::File::kSourceObj;
+	objOpts.treateBitcodeAsData	= _options.bitcodeKind() == Options::kBitcodeAsData;
+	objOpts.usingBitcode		= _options.bundleBitcode();
+	objOpts.maxDefaultCommonAlignment = _options.maxDefaultCommonAlign();
+
 	ld::relocatable::File* objResult = mach_o::relocatable::parse(p, len, info.path, info.modTime, info.ordinal, objOpts);
 	if ( objResult != NULL ) {
 		OSAtomicAdd64(len, &_totalObjectSize);
@@ -303,11 +338,30 @@ ld::File* InputFiles::makeFile(const Options::FileInfo& info, bool indirectDylib
 		return objResult;
 	}
 #endif /* LTO_SUPPORT */
-	
-	// see if it is a dynamic library
-	ld::dylib::File* dylibResult = mach_o::dylib::parse(p, len, info.path, info.modTime, _options, info.ordinal, info.options.fBundleLoader, indirectDylib);
-	if ( dylibResult != NULL ) {
-		return dylibResult;
+
+	// see if it is a dynamic library (or text-based dynamic library)
+	ld::dylib::File* dylibResult;
+	bool dylibsNotAllowed = false;
+	switch ( _options.outputKind() ) {
+		case Options::kDynamicExecutable:
+		case Options::kDynamicLibrary:
+		case Options::kDynamicBundle:	
+			dylibResult = mach_o::dylib::parse(p, len, info.path, info.modTime, _options, info.ordinal, info.options.fBundleLoader, indirectDylib);
+			if ( dylibResult != NULL ) {
+				return dylibResult;
+			}
+			dylibResult = textstub::dylib::parse(p, len, info.path, info.modTime, _options, info.ordinal, info.options.fBundleLoader, indirectDylib);
+			if ( dylibResult != NULL ) {
+				return dylibResult;
+			}
+			break;
+		case Options::kStaticExecutable:
+		case Options::kDyld:
+		case Options::kPreload:
+		case Options::kObjectFile:
+		case Options::kKextBundle:
+			dylibsNotAllowed = true;
+			break;
 	}
 
 	// see if it is a static library
@@ -319,6 +373,15 @@ ld::File* InputFiles::makeFile(const Options::FileInfo& info, bool indirectDylib
 	archOpts.objcABI2				= _options.objCABIVersion2POverride();
 	archOpts.verboseLoad			= _options.whyLoad();
 	archOpts.logAllFiles			= _options.logAllFiles();
+	// Set ObjSource Kind, libclang_rt is compiler static library
+	const char* libName = strrchr(info.path, '/');
+	if ( (libName != NULL) && (strncmp(libName, "/libclang_rt", 12) == 0) )
+		archOpts.objOpts.srcKind = ld::relocatable::File::kSourceCompilerArchive;
+	else
+		archOpts.objOpts.srcKind = ld::relocatable::File::kSourceArchive;
+	archOpts.objOpts.treateBitcodeAsData = _options.bitcodeKind() == Options::kBitcodeAsData;
+	archOpts.objOpts.usingBitcode = _options.bundleBitcode();
+
 	ld::archive::File* archiveResult = ::archive::parse(p, len, info.path, info.modTime, info.ordinal, archOpts);
 	if ( archiveResult != NULL ) {
 		OSAtomicAdd64(len, &_totalArchiveSize);
@@ -333,7 +396,12 @@ ld::File* InputFiles::makeFile(const Options::FileInfo& info, bool indirectDylib
 			throwf("lto file was built for %s which is not the architecture being linked (%s): %s", fileArch(p, len), _options.architectureName(), info.path);
 		}
 		else {
-			const char* libLTO = "libLTO.so";
+#ifdef __APPLE__ // ld64-port
+      const char* libLTO = "libLTO.dylib";
+#else
+      const char* libLTO = "libLTO.so";
+#endif /* __APPLE__ */
+
 			char ldPath[PATH_MAX];
 			char tmpPath[PATH_MAX];
 			char libLTOPath[PATH_MAX];
@@ -355,6 +423,13 @@ ld::File* InputFiles::makeFile(const Options::FileInfo& info, bool indirectDylib
 		}
 	}
 #endif /* LTO_SUPPORT */
+
+	if ( dylibsNotAllowed ) {
+		cpu_type_t dummy1;
+		cpu_type_t dummy2;
+		if ( mach_o::dylib::isDylibFile(p, &dummy1, &dummy2) )
+			throw "ignoring unexpected dylib file";
+	}
 
 	// error handling
 	if ( ((fat_header*)p)->magic == OSSwapBigToHostInt32(FAT_MAGIC) ) {
@@ -534,17 +609,42 @@ void InputFiles::markExplicitlyLinkedDylibs()
 	}
 }
 
-bool InputFiles::libraryAlreadyLoaded(const char* path) 
+bool InputFiles::frameworkAlreadyLoaded(const char* path, const char* frameworkName)
 {
-	for (std::vector<ld::File*>::const_iterator it = _inputFiles.begin(); it != _inputFiles.end(); ++it) {
-		if ( strcmp(path, (*it)->path()) == 0 )
+	for (ld::File* file : _inputFiles) {
+		if ( strcmp(path, file->path()) == 0 )
+			return true;
+	}
+	for (ld::dylib::File* dylibx : _allDylibs) {
+		const char* fname = dylibx->frameworkName();
+		if ( fname == NULL )
+			continue;
+		if ( strcmp(frameworkName, fname) == 0 )
 			return true;
 	}
 	return false;
 }
 
+bool InputFiles::libraryAlreadyLoaded(const char* path)
+{
+	for (ld::File* file : _inputFiles) {
+		if ( strcmp(path, file->path()) == 0 )
+			return true;
+	}
+	for (ld::dylib::File* dylib : _allDylibs) {
+		if ( strcmp(path, dylib->path()) == 0 )
+			return true;
+	}
+	for (const LibraryInfo& libInfo : _searchLibraries) {
+		if ( strcmp(path, libInfo.archive()->path()) == 0 )
+			return true;
+	}
 
-void InputFiles::addLinkerOptionLibraries(ld::Internal& state)
+	return false;
+}
+
+
+void InputFiles::addLinkerOptionLibraries(ld::Internal& state, ld::File::AtomHandler& handler)
 {	
     if ( _options.outputKind() == Options::kObjectFile ) 
 		return;
@@ -552,14 +652,17 @@ void InputFiles::addLinkerOptionLibraries(ld::Internal& state)
 	// process frameworks specified in .o linker options
 	for (CStringSet::const_iterator it = state.linkerOptionFrameworks.begin(); it != state.linkerOptionFrameworks.end(); ++it) {
 		const char* frameworkName = *it;
+		if ( state.linkerOptionFrameworksProcessed.count(frameworkName) )
+			continue;
 		Options::FileInfo info = _options.findFramework(frameworkName);
-		if ( ! this->libraryAlreadyLoaded(info.path) ) {
+		if ( ! this->frameworkAlreadyLoaded(info.path, frameworkName) ) {
 			info.ordinal = _linkerOptionOrdinal.nextLinkerOptionOrdinal();
 			try {
 				ld::File* reader = this->makeFile(info, true);
 				ld::dylib::File* dylibReader = dynamic_cast<ld::dylib::File*>(reader);
 				if ( dylibReader != NULL ) {
 					if ( ! dylibReader->installPathVersionSpecific() ) {
+						dylibReader->forEachAtom(handler);
 						dylibReader->setImplicitlyLinked();
 						this->addDylib(dylibReader, info);
 					}
@@ -572,18 +675,24 @@ void InputFiles::addLinkerOptionLibraries(ld::Internal& state)
 				warning("Auto-Linking supplied '%s', %s", info.path, msg);
 			}
 		}
+		state.linkerOptionFrameworksProcessed.insert(frameworkName);
 	}
 	// process libraries specified in .o linker options
 	for (CStringSet::const_iterator it = state.linkerOptionLibraries.begin(); it != state.linkerOptionLibraries.end(); ++it) {
 		const char* libName = *it;
+		if ( state.linkerOptionLibrariesProcessed.count(libName) )
+			continue;
 		Options::FileInfo info = _options.findLibrary(libName);
 		if ( ! this->libraryAlreadyLoaded(info.path) ) {
 			info.ordinal = _linkerOptionOrdinal.nextLinkerOptionOrdinal();
 			try {
+				//<rdar://problem/17787306> -force_load_swift_libs
+				info.options.fForceLoad = _options.forceLoadSwiftLibs() && (strncmp(libName, "swift", 5) == 0);
 				ld::File* reader = this->makeFile(info, true);
 				ld::dylib::File* dylibReader = dynamic_cast<ld::dylib::File*>(reader);
 				ld::archive::File* archiveReader = dynamic_cast<ld::archive::File*>(reader);
 				if ( dylibReader != NULL ) {
+					dylibReader->forEachAtom(handler);
 					dylibReader->setImplicitlyLinked();
 					this->addDylib(dylibReader, info);
 				}
@@ -591,6 +700,10 @@ void InputFiles::addLinkerOptionLibraries(ld::Internal& state)
 					_searchLibraries.push_back(LibraryInfo(archiveReader));
 					if ( _options.dumpDependencyInfo() )
 						_options.dumpDependency(Options::depArchive, archiveReader->path());
+					//<rdar://problem/17787306> -force_load_swift_libs
+					if (info.options.fForceLoad) {
+						archiveReader->forEachAtom(handler);
+					}
 				}
 				else {
 					throwf("linker option dylib at %s is not a dylib", info.path);
@@ -600,6 +713,7 @@ void InputFiles::addLinkerOptionLibraries(ld::Internal& state)
 				warning("Auto-Linking supplied '%s', %s", info.path, msg);
 			}
 		}
+		state.linkerOptionLibrariesProcessed.insert(libName);
 	}
 }
 
@@ -742,20 +856,27 @@ void InputFiles::inferArchitecture(Options& opts, const char** archName)
 	_inferredArch = true;
 	// scan all input files, looking for a thin .o file.
 	// the first one found is presumably the architecture to link
-	uint8_t buffer[sizeof(mach_header_64)];
+	uint8_t buffer[4096];
 	const std::vector<Options::FileInfo>& files = opts.getInputFiles();
 	for (std::vector<Options::FileInfo>::const_iterator it = files.begin(); it != files.end(); ++it) {
 		int fd = ::open(it->path, O_RDONLY, 0);
 		if ( fd != -1 ) {
-			ssize_t amount = read(fd, buffer, sizeof(buffer));
-			::close(fd);
-			if ( amount >= (ssize_t)sizeof(buffer) ) {
-				cpu_type_t type;
-				cpu_subtype_t subtype;
-				if ( mach_o::relocatable::isObjectFile(buffer, &type, &subtype) ) {
-					opts.setArchitecture(type, subtype);
-					*archName = opts.architectureName();
-					return;
+			struct stat stat_buf;
+			if ( fstat(fd, &stat_buf) != -1) {
+				ssize_t readAmount = stat_buf.st_size;
+				if ( 4096 < readAmount )
+					readAmount = 4096;
+				ssize_t amount = read(fd, buffer, readAmount);
+				::close(fd);
+				if ( amount >= readAmount ) {
+					cpu_type_t type;
+					cpu_subtype_t subtype;
+					Options::Platform platform;
+					if ( mach_o::relocatable::isObjectFile(buffer, &type, &subtype, &platform) ) {
+						opts.setArchitecture(type, subtype, platform);
+						*archName = opts.architectureName();
+						return;
+					}
 				}
 			}
 		}
@@ -764,13 +885,17 @@ void InputFiles::inferArchitecture(Options& opts, const char** archName)
 	// no thin .o files found, so default to same architecture this tool was built as
 	warning("-arch not specified");
 #if __i386__
-	opts.setArchitecture(CPU_TYPE_I386, CPU_SUBTYPE_X86_ALL);
+	opts.setArchitecture(CPU_TYPE_I386, CPU_SUBTYPE_X86_ALL, Options::kPlatformOSX);
 #elif __x86_64__
-	opts.setArchitecture(CPU_TYPE_X86_64, CPU_SUBTYPE_X86_64_ALL);
+	opts.setArchitecture(CPU_TYPE_X86_64, CPU_SUBTYPE_X86_64_ALL, Options::kPlatformOSX);
+#elif __ppc__ // ld64-port
+    opts.setArchitecture(CPU_TYPE_POWERPC, CPU_SUBTYPE_POWERPC_ALL, Options::kPlatformOSX);
+#elif __ppc64__ // ld64-port
+    opts.setArchitecture(CPU_TYPE_POWERPC64, CPU_SUBTYPE_POWERPC_ALL, Options::kPlatformOSX);
 #elif __arm__
-	opts.setArchitecture(CPU_TYPE_ARM, CPU_SUBTYPE_ARM_V6);
-#elif __arm64__
-	opts.setArchitecture(CPU_TYPE_ARM, CPU_SUBTYPE_ARM64_ALL);
+	opts.setArchitecture(CPU_TYPE_ARM, CPU_SUBTYPE_ARM_V6, Options::kPlatformiOS); // ld64-port: Options::kPlatformOSX -> Options::kPlatformiOS
+#elif __arm64__ // ld64-port
+	opts.setArchitecture(CPU_TYPE_ARM, CPU_SUBTYPE_ARM64_ALL, Options::kPlatformiOS);
 #else
 	#error unknown default architecture
 #endif
@@ -830,6 +955,20 @@ InputFiles::InputFiles(Options& opts, const char** archName)
 	
 	// initialize info for parsing input files on worker threads
 	unsigned int ncpus;
+#ifdef __linux__ // ld64-port
+	cpu_set_t cs;
+	CPU_ZERO(&cs);
+
+	if (!sched_getaffinity(0, sizeof(cs), &cs)) {
+		ncpus = 0;
+
+		for (int i = 0; i < CPU_SETSIZE; i++)
+			if (CPU_ISSET(i, &cs))
+				ncpus++;
+	} else {
+		ncpus = 1;
+	}
+#else
 	int mib[2];
 	size_t len = sizeof(ncpus);
 	mib[0] = CTL_HW;
@@ -837,6 +976,7 @@ InputFiles::InputFiles(Options& opts, const char** archName)
 	if (sysctl(mib, 2, &ncpus, &len, NULL, 0) != 0) {
 		ncpus = 1;
 	}
+#endif
 	_availableWorkers = MIN(ncpus, files.size()); // max # workers we permit
 	_idleWorkers = 0;
 	
@@ -903,6 +1043,9 @@ void InputFiles::parseWorkerThread() {
 						warning("ignoring file %s, %s", entry.path, msg);
 					}
 				} 
+				else if ( strstr(msg, "ignoring unexpected") != NULL ) {
+					warning("%s, %s", entry.path, msg);
+				}
 				else {
 					asprintf((char**)&exception, "%s file '%s'", msg, entry.path);
 				}
@@ -1135,7 +1278,7 @@ void InputFiles::forEachInitialAtom(ld::File::AtomHandler& handler, ld::Internal
 	}
 
 	markExplicitlyLinkedDylibs();
-	addLinkerOptionLibraries(state);
+	addLinkerOptionLibraries(state, handler);
 	createIndirectDylibs();
 	createOpaqueFileSections();
 	
@@ -1284,6 +1427,14 @@ static bool vectorContains(const std::vector<ld::dylib::File*>& vec, ld::dylib::
 	return std::find(vec.begin(), vec.end(), key) != vec.end();
 }
 
+struct DylibByInstallNameSorter
+{	
+	 bool operator()(const ld::dylib::File* left, const ld::dylib::File* right)
+	 {
+          return (strcmp(left->installPath(), right->installPath()) < 0);
+	 }
+};
+
 void InputFiles::dylibs(ld::Internal& state)
 {
 	bool dylibsOK = false;
@@ -1318,20 +1469,24 @@ void InputFiles::dylibs(ld::Internal& state)
 	}
 	// add implicitly linked dylibs
 	if ( _options.nameSpace() == Options::kTwoLevelNameSpace ) {
+		std::vector<ld::dylib::File*> implicitDylibs;
 		for (InstallNameToDylib::const_iterator it=_installPathToDylibs.begin(); it != _installPathToDylibs.end(); ++it) {
 			ld::dylib::File* dylibFile = it->second;
 			if ( dylibFile->implicitlyLinked() && dylibsOK ) {
-				if ( ! vectorContains(state.dylibs, dylibFile) ) {
-					state.dylibs.push_back(dylibFile);
+				if ( ! vectorContains(implicitDylibs, dylibFile) ) {
+					implicitDylibs.push_back(dylibFile);
 				}
 			}
 		}
+		// <rdar://problem/15002251> make implicit dylib order be deterministic by sorting by install_name
+		std::sort(implicitDylibs.begin(), implicitDylibs.end(), DylibByInstallNameSorter());
+		state.dylibs.insert(state.dylibs.end(), implicitDylibs.begin(), implicitDylibs.end());
 	}
 
 	//fprintf(stderr, "all dylibs:\n");
 	//for(std::vector<ld::dylib::File*>::iterator it=state.dylibs.begin(); it != state.dylibs.end(); ++it) {
 	//	const ld::dylib::File* dylib = *it;
-	//	fprintf(stderr, "    %p %s\n", dylib, dylib->path());
+	//	fprintf(stderr, "    %p impl=%d %s\n", dylib, dylib->implicitlyLinked(), dylib->path());
 	//}
 	
 	// and -bundle_loader

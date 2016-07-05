@@ -1,4 +1,4 @@
-#ifndef _BIGNUM_H_
+#ifndef _BIGNUM_H_ /* cctools-port */
 #define _BIGNUM_H_
 
 /* bignum.h-arbitrary precision integers

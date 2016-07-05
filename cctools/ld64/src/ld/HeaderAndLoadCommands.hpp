@@ -32,6 +32,7 @@
 
 #include <vector>
 
+// ld64-port start
 #if defined(__arm__) || defined(__arm64__)
 #undef THREAD_STATE_NONE
 #undef VALID_THREAD_STATE_FLAVOR
@@ -40,6 +41,7 @@
 #endif
 
 #include <mach/i386/thread_status.h>
+// ld64-port end
 
 #include "MachOFileAbstraction.hpp"
 #include "Options.h"
@@ -58,6 +60,9 @@ public:
 
 	virtual void setUUID(const uint8_t digest[16]) = 0;
 	virtual void recopyUUIDCommand() = 0;
+	virtual const uint8_t* getUUID() const = 0;
+	virtual bool bitcodeBundleCommand(uint64_t& cmdOffset, uint64_t& cmdEnd,
+									  uint64_t& sectOffset, uint64_t& sectEnd) const = 0;
 };
 
 template <typename A>
@@ -77,6 +82,9 @@ public:
 	// overrides of HeaderAndLoadCommandsAbtract
 	virtual void setUUID(const uint8_t digest[16])	{ memcpy(_uuid, digest, 16); }
 	virtual void recopyUUIDCommand();
+	virtual const uint8_t* getUUID() const                          { return &_uuid[0]; }
+	virtual bool bitcodeBundleCommand(uint64_t& cmdOffset, uint64_t& cmdEnd,
+									  uint64_t& sectOffset, uint64_t& sectEnd) const;
 	
 private:
 	typedef typename A::P						P;
@@ -116,7 +124,6 @@ private:
 	uint8_t*					copySubUmbrellaLoadCommand(uint8_t* p, const char* name) const;
 	uint8_t*					copyFunctionStartsLoadCommand(uint8_t* p) const;
 	uint8_t*					copyDataInCodeLoadCommand(uint8_t* p) const;
-	uint8_t*					copyDependentDRLoadCommand(uint8_t* p) const;
 	uint8_t*					copyDyldEnvLoadCommand(uint8_t* p, const char* env) const;
 	uint8_t*					copyLinkerOptionsLoadCommand(uint8_t* p, const std::vector<const char*>&) const;
 	uint8_t*					copyOptimizationHintsLoadCommand(uint8_t* p) const;
@@ -146,7 +153,6 @@ private:
 	bool						_hasFunctionStartsLoadCommand;
 	bool						_hasDataInCodeLoadCommand;
 	bool						_hasSourceVersionLoadCommand;
-	bool						_hasDependentDRInfo;
 	bool						_hasOptimizationHints;
 	uint32_t					_dylibLoadCommmandsCount;
 	uint32_t					_allowableClientLoadCommmandsCount;
@@ -232,11 +238,12 @@ HeaderAndLoadCommandsAtom<A>::HeaderAndLoadCommandsAtom(const Options& opts, ld:
 	}
 	_hasRPathLoadCommands = (_options.rpaths().size() != 0);
 	_hasSubFrameworkLoadCommand = (_options.umbrellaName() != NULL);
-	_hasVersionLoadCommand = _options.addVersionLoadCommand();
+	_hasVersionLoadCommand = _options.addVersionLoadCommand() ||
+							 (!state.objectFileFoundWithNoVersion && (_options.outputKind() == Options::kObjectFile)
+							 && ((_options.platform() != Options::kPlatformUnknown) || (state.derivedPlatformLoadCommand != 0)) );
 	_hasFunctionStartsLoadCommand = _options.addFunctionStarts();
 	_hasDataInCodeLoadCommand = _options.addDataInCodeInfo();
 	_hasSourceVersionLoadCommand = _options.needsSourceVersionLoadCommand();
-	_hasDependentDRInfo = _options.needsDependentDRInfo();
 	_dylibLoadCommmandsCount = _writer.dylibCount();
 	_allowableClientLoadCommmandsCount = _options.allowableClients().size();
 	_dyldEnvironExrasCount = _options.dyldEnvironExtras().size();
@@ -335,6 +342,31 @@ unsigned int HeaderAndLoadCommandsAtom<A>::segmentCount() const
 	return count;
 }
 
+template <typename A>
+bool HeaderAndLoadCommandsAtom<A>::bitcodeBundleCommand(uint64_t &cmdOffset, uint64_t &cmdEnd,
+														uint64_t &sectOffset, uint64_t &sectEnd) const
+{
+	if ( _options.outputKind() == Options::kObjectFile ) {
+		return false;
+	}
+	cmdOffset = sizeof(macho_header<P>);
+	const char* lastSegName = "";
+	for (std::vector<ld::Internal::FinalSection*>::iterator it = _state.sections.begin(); it != _state.sections.end(); ++it) {
+		if ( strcmp(lastSegName, (*it)->segmentName()) != 0 ) {
+			lastSegName = (*it)->segmentName();
+			cmdOffset += sizeof(macho_segment_command<P>);
+		}
+		if ( strcmp((*it)->segmentName(), "__LLVM") == 0 && strcmp((*it)->sectionName(), "__bundle") == 0 ) {
+			sectOffset = (*it)->fileOffset;
+			sectEnd = (*(it + 1))->fileOffset;
+			cmdEnd = cmdOffset + sizeof(macho_section<P>);
+			return true;
+		}
+		if ( ! (*it)->isSectionHidden() )
+			cmdOffset += sizeof(macho_section<P>);
+	}
+	return false;
+}
 
 template <typename A>
 uint64_t HeaderAndLoadCommandsAtom<A>::size() const
@@ -436,9 +468,6 @@ uint64_t HeaderAndLoadCommandsAtom<A>::size() const
 		}
 	}
 	
-	if ( _hasDependentDRInfo ) 
-		sz += sizeof(macho_linkedit_data_command<P>);
-	
 	if ( _hasOptimizationHints )
 		sz += sizeof(macho_linkedit_data_command<P>);
 		
@@ -516,9 +545,6 @@ uint32_t HeaderAndLoadCommandsAtom<A>::commandsCount() const
 		}
 	}
 
-	if ( _hasDependentDRInfo ) 
-		++count;
-	
 	if ( _hasOptimizationHints )
 		++count;
 		
@@ -600,6 +626,8 @@ uint32_t HeaderAndLoadCommandsAtom<A>::flags() const
 				bits |= MH_HAS_TLV_DESCRIPTORS;
 			if ( _options.hasNonExecutableHeap() )
 				bits |= MH_NO_HEAP_EXECUTION;
+			if ( _options.markAppExtensionSafe() && (_options.outputKind() == Options::kDynamicLibrary) )
+				bits |= MH_APP_EXTENSION_SAFE;
 		}
 		if ( _options.hasExecutableStack() )
 			bits |= MH_ALLOW_STACK_EXECUTION;
@@ -699,6 +727,7 @@ struct SegInfo {
 												SegInfo(const char* n, const Options&);
 	const char*									segName;
 	uint32_t									nonHiddenSectionCount;
+	uint32_t									nonSectCreateSections;
 	uint32_t									maxProt;
 	uint32_t									initProt;
 	std::vector<ld::Internal::FinalSection*>	sections;
@@ -706,7 +735,7 @@ struct SegInfo {
 
 
 SegInfo::SegInfo(const char* n, const Options& opts) 
-	: segName(n), nonHiddenSectionCount(0), maxProt(opts.maxSegProtection(n)), initProt(opts.initialSegProtection(n)) 
+	: segName(n), nonHiddenSectionCount(0), nonSectCreateSections(0), maxProt(opts.maxSegProtection(n)), initProt(opts.initialSegProtection(n))
 { 
 }
 
@@ -729,6 +758,8 @@ uint32_t HeaderAndLoadCommandsAtom<A>::sectionFlags(ld::Internal::FinalSection* 
 				return S_REGULAR | S_ATTR_NO_DEAD_STRIP;
 			else if ( (strncmp(sect->sectionName(), "__objc_nlcatlist", 16) == 0) && (strcmp(sect->segmentName(), "__DATA") == 0) )
 				return S_REGULAR | S_ATTR_NO_DEAD_STRIP;
+			else if (  (_options.outputKind() == Options::kObjectFile) && !sect->atoms.empty() && sect->atoms.front()->dontDeadStripIfReferencesLive() )
+				return S_REGULAR | S_ATTR_LIVE_SUPPORT;
 			else
 				return S_REGULAR;
 		case ld::Section::typeCode:
@@ -758,6 +789,9 @@ uint32_t HeaderAndLoadCommandsAtom<A>::sectionFlags(ld::Internal::FinalSection* 
 			return S_REGULAR;
 		case ld::Section::typeTempLTO:
 			assert(0 && "typeTempLTO should not make it to final linked image");
+			return S_REGULAR;
+		case ld::Section::typeTempAlias:
+			assert(0 && "typeAlias should not make it to final linked image");
 			return S_REGULAR;
 		case ld::Section::typeAbsoluteSymbols:
 			assert(0 && "typeAbsoluteSymbols should not make it to final linked image");
@@ -845,6 +879,8 @@ uint32_t HeaderAndLoadCommandsAtom<A>::sectionFlags(ld::Internal::FinalSection* 
 			return S_REGULAR;
 		case ld::Section::typeDebug:
 			return S_REGULAR | S_ATTR_DEBUG;
+		case ld::Section::typeSectCreate:
+			return S_REGULAR;
 	}
 	return S_REGULAR;
 }
@@ -889,6 +925,9 @@ uint8_t* HeaderAndLoadCommandsAtom<A>::copySegmentLoadCommands(uint8_t* p) const
 		}
 		if ( ! sect->isSectionHidden() ) 
 			segs.back().nonHiddenSectionCount++;
+		if ( sect->type() != ld::Section::typeSectCreate )
+			segs.back().nonSectCreateSections++;
+
 		segs.back().sections.push_back(sect);
 	}
 	// write out segment load commands for each section with trailing sections
@@ -925,7 +964,8 @@ uint8_t* HeaderAndLoadCommandsAtom<A>::copySegmentLoadCommands(uint8_t* p) const
 		segCmd->set_maxprot(si.maxProt);
 		segCmd->set_initprot(si.initProt);
 		segCmd->set_nsects(si.nonHiddenSectionCount);
-		segCmd->set_flags(0);
+		segCmd->set_flags(si.nonSectCreateSections ? 0 : SG_NORELOC); // FIXME, really should check all References
+
 		p += sizeof(macho_segment_command<P>);
 		macho_section<P>* msect = (macho_section<P>*)p;
 		for (std::vector<ld::Internal::FinalSection*>::iterator sit = si.sections.begin(); sit != si.sections.end(); ++sit) {
@@ -1108,20 +1148,40 @@ template <typename A>
 uint8_t* HeaderAndLoadCommandsAtom<A>::copyVersionLoadCommand(uint8_t* p) const
 {
 	macho_version_min_command<P>* cmd = (macho_version_min_command<P>*)p;
-	ld::MacVersionMin macVersion = _options.macosxVersionMin();
-	ld::IOSVersionMin iOSVersion = _options.iOSVersionMin();
-	assert( (macVersion != ld::macVersionUnset) || (iOSVersion != ld::iOSVersionUnset) );
-	if ( macVersion != ld::macVersionUnset ) {
-		cmd->set_cmd(LC_VERSION_MIN_MACOSX);
-		cmd->set_cmdsize(sizeof(macho_version_min_command<P>));
-		cmd->set_version((uint32_t)macVersion);
-		cmd->set_sdk(_options.sdkVersion());
-	}
-	else {
-		cmd->set_cmd(LC_VERSION_MIN_IPHONEOS);
-		cmd->set_cmdsize(sizeof(macho_version_min_command<P>));
-		cmd->set_version((uint32_t)iOSVersion);
-		cmd->set_sdk(_options.sdkVersion());
+	switch (_options.platform()) {
+		case Options::kPlatformUnknown:
+			assert(_state.derivedPlatformLoadCommand != 0 && "unknown platform");
+			cmd->set_cmd(_state.derivedPlatformLoadCommand);
+			cmd->set_cmdsize(sizeof(macho_version_min_command<P>));
+			cmd->set_version(_state.minOSVersion);
+			cmd->set_sdk(0);
+			break;
+		case Options::kPlatformOSX:
+			cmd->set_cmd(LC_VERSION_MIN_MACOSX);
+			cmd->set_cmdsize(sizeof(macho_version_min_command<P>));
+			cmd->set_version(_state.minOSVersion);
+			cmd->set_sdk(_options.sdkVersion());
+			break;
+		case Options::kPlatformiOS:
+			cmd->set_cmd(LC_VERSION_MIN_IPHONEOS);
+			cmd->set_cmdsize(sizeof(macho_version_min_command<P>));
+			cmd->set_version(_state.minOSVersion);
+			cmd->set_sdk(_options.sdkVersion());
+			break;
+		case Options::kPlatformWatchOS:
+			cmd->set_cmd(LC_VERSION_MIN_WATCHOS);
+			cmd->set_cmdsize(sizeof(macho_version_min_command<P>));
+			cmd->set_version(_state.minOSVersion);
+			cmd->set_sdk(_options.sdkVersion());
+			break;
+#if SUPPORT_APPLE_TV
+		case Options::kPlatform_tvOS:
+			cmd->set_cmd(LC_VERSION_MIN_TVOS);
+			cmd->set_cmdsize(sizeof(macho_version_min_command<P>));
+			cmd->set_version(_state.minOSVersion);
+			cmd->set_sdk(_options.sdkVersion());
+			break;
+#endif
 	}
 	return p + sizeof(macho_version_min_command<P>);
 }
@@ -1162,7 +1222,7 @@ uint8_t* HeaderAndLoadCommandsAtom<x86>::copyThreadsLoadCommand(uint8_t* p) cons
 template <>
 uint32_t HeaderAndLoadCommandsAtom<x86_64>::threadLoadCommandSize() const
 {
-	return this->alignedSize(16 + x86_THREAD_STATE64_COUNT * 4); 
+	return this->alignedSize(16 + 42*4);	// base size + x86_THREAD_STATE64_COUNT * 4
 }
 
 template <>
@@ -1173,8 +1233,8 @@ uint8_t* HeaderAndLoadCommandsAtom<x86_64>::copyThreadsLoadCommand(uint8_t* p) c
 	macho_thread_command<P>* cmd = (macho_thread_command<P>*)p;
 	cmd->set_cmd(LC_UNIXTHREAD);
 	cmd->set_cmdsize(threadLoadCommandSize());
-	cmd->set_flavor(x86_THREAD_STATE64);			
-	cmd->set_count(x86_THREAD_STATE64_COUNT);	
+	cmd->set_flavor(4);				// x86_THREAD_STATE64
+	cmd->set_count(42);				// x86_THREAD_STATE64_COUNT
 	cmd->set_thread_register(16, start);		// rip 
 	if ( _options.hasCustomStack() )
 		cmd->set_thread_register(7, _options.customStackAddr());	// r1
@@ -1415,18 +1475,6 @@ uint8_t* HeaderAndLoadCommandsAtom<A>::copyLinkerOptionsLoadCommand(uint8_t* p, 
 }
 
 
-template <typename A>
-uint8_t* HeaderAndLoadCommandsAtom<A>::copyDependentDRLoadCommand(uint8_t* p) const
-{
-	macho_linkedit_data_command<P>* cmd = (macho_linkedit_data_command<P>*)p;
-	cmd->set_cmd(LC_DYLIB_CODE_SIGN_DRS);
-	cmd->set_cmdsize(sizeof(macho_linkedit_data_command<P>));
-	cmd->set_dataoff(_writer.dependentDRsSection->fileOffset);
-	cmd->set_datasize(_writer.dependentDRsSection->size);
-	return p + sizeof(macho_linkedit_data_command<P>);
-}
-
-
 
 template <typename A>
 uint8_t* HeaderAndLoadCommandsAtom<A>::copyOptimizationHintsLoadCommand(uint8_t* p) const
@@ -1550,9 +1598,6 @@ void HeaderAndLoadCommandsAtom<A>::copyRawContent(uint8_t buffer[]) const
 		}
 	}
 	
-	if ( _hasDependentDRInfo ) 
-		p = this->copyDependentDRLoadCommand(p);
- 
 	if ( _hasOptimizationHints )
 		p = this->copyOptimizationHintsLoadCommand(p);
  

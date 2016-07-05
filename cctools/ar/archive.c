@@ -68,7 +68,7 @@ static char rcsid[] = "$NetBSD: archive.c,v 1.7 1995/03/26 03:27:46 glass Exp $"
 
 #include <sys/param.h>
 #include <sys/stat.h>
-#include <sys/file.h>
+#include <sys/file.h> /* cctools-port */
 
 #include <ar.h>
 #include <dirent.h>
@@ -167,6 +167,9 @@ opened:
 		/* Locking seems to not be working */
 		case ENOTSUP:
 		case EHOSTUNREACH:
+#ifdef __APPLE__ /* cctools-port */
+		case EBADRPC:
+#endif /* __APPLE__ */
 		default:
 			/* Filesystem does not support locking */
 			break;
@@ -321,6 +324,7 @@ put_arobj(cfp, sb)
 		 * things for exact binary equality.
 		 */
 		if (getenv("ZERO_AR_DATE") == NULL)
+			/* cctools-port: sb->st_mtimespec.tv_sec -> sb->st_mtime */
 			tv_sec = (long int)sb->st_mtime;
 		else
 			tv_sec = (long int)0;
@@ -340,6 +344,7 @@ put_arobj(cfp, sb)
 			(void)sprintf(hb, HDR3, name, (long int)tv_sec,
 			    (unsigned int)(u_short)sb->st_uid,
 			    (unsigned int)(u_short)sb->st_gid,
+			    /* cctools-port: int64_t cast */
 			    sb->st_mode, (int64_t)sb->st_size, ARFMAG);
 			lname = 0;
 		} else if (lname > sizeof(hdr->ar_name) || strchr(name, ' '))
@@ -347,6 +352,7 @@ put_arobj(cfp, sb)
 			    (long int)tv_sec,
 			    (unsigned int)(u_short)sb->st_uid,
 			    (unsigned int)(u_short)sb->st_gid,
+			    /* cctools-port: int64_t casts */
 			    sb->st_mode, (int64_t)sb->st_size + (int64_t)((lname + 3) & ~3),
 			    ARFMAG);
 		else {
@@ -354,6 +360,7 @@ put_arobj(cfp, sb)
 			(void)sprintf(hb, HDR2, name, (long int)tv_sec,
 			    (unsigned int)(u_short)sb->st_uid,
 			    (unsigned int)(u_short)sb->st_gid,
+			    /* cctools-port: int64_t cast */
 			    sb->st_mode, (int64_t)sb->st_size, ARFMAG);
 		}
 		size = sb->st_size;

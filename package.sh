@@ -24,6 +24,7 @@ rm -f package.sh
 rm -f .gitignore
 pushd cctools &>/dev/null
 ./autogen.sh
+rm -rf autom4te.cache
 popd &>/dev/null
 popd &>/dev/null
 

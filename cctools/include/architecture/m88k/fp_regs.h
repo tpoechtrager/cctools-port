@@ -41,7 +41,7 @@
 #ifndef	_ARCH_M88K_FP_REGS_H_
 #define	_ARCH_M88K_FP_REGS_H_
 
-#include <architecture/m88k/reg_help.h>
+#import <architecture/m88k/reg_help.h>
 
 /*
  * m88k_xrf_t -- data types that MAY be in extended register file

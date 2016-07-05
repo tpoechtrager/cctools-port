@@ -23,6 +23,8 @@
 #ifndef RLD
 #include <stdio.h>
 #include <string.h>
+#include "../include/xar/xar.h" /* cctools-port: 
+				   force the use of the bundled xar header */
 #include "stuff/ofile.h"
 #include "stuff/breakout.h"
 #include "stuff/rnd.h"
@@ -90,6 +92,8 @@ struct object *object)
 	object->st = NULL;
 	object->dyst = NULL;
 	object->hints_cmd = NULL;
+	object->seg_bitcode = NULL;
+	object->seg_bitcode64 = NULL;
 	object->seg_linkedit = NULL;
 	object->seg_linkedit64 = NULL;
 	object->code_sig_cmd = NULL;
@@ -176,6 +180,12 @@ struct object *object)
 			    "one " SEG_LINKEDIT "segment): ");
 		    object->seg_linkedit = sg;
 		}
+		else if(strcmp(sg->segname, "__LLVM") == 0){
+		    if(object->seg_bitcode != NULL)
+			fatal_arch(arch, member, "malformed file (more than "
+			    "one __LLVM segment): ");
+		    object->seg_bitcode = sg;
+		}
 	    }
 	    else if(lc->cmd == LC_SEGMENT_64){
 		sg64 = (struct segment_command_64 *)lc;
@@ -184,6 +194,12 @@ struct object *object)
 			fatal_arch(arch, member, "malformed file (more than "
 			    "one " SEG_LINKEDIT "segment): ");
 		    object->seg_linkedit64 = sg64;
+		}
+		else if(strcmp(sg64->segname, "__LLVM") == 0){
+		    if(object->seg_bitcode64 != NULL)
+			fatal_arch(arch, member, "malformed file (more than "
+			    "one __LLVM segment): ");
+		    object->seg_bitcode64 = sg64;
 		}
 	    }
 	    else if(lc->cmd == LC_ID_DYLIB){
@@ -331,6 +347,21 @@ struct object *object)
 		    "be processed) in: ");
 
 	    offset = object->seg_linkedit->fileoff;
+
+	    if(object->seg_bitcode != NULL){
+		if(object->seg_bitcode->filesize < sizeof(struct xar_header))
+		    fatal_arch(arch, member, "the __LLVM segment too small "
+			       "(less than sizeof(struct xar_header)) in: ");
+		if(object->seg_bitcode->fileoff +
+		   object->seg_bitcode->filesize != offset)
+		    fatal_arch(arch, member, "the __LLVM segment not directly "
+			       "before the "  SEG_LINKEDIT " segment in: ");
+		if(object->seg_bitcode->vmaddr +
+		   object->seg_bitcode->vmsize != object->seg_linkedit->vmaddr)
+		    fatal_arch(arch, member, "the __LLVM segment's vmaddr plus "
+			       "vmsize not directly before the vmaddr of the "
+			       SEG_LINKEDIT " segment in: ");
+	    }
 	}
 	else{
 	    if(object->seg_linkedit64 == NULL)
@@ -344,6 +375,22 @@ struct object *object)
 		    "be processed) in: ");
 
 	    offset = object->seg_linkedit64->fileoff;
+
+	    if(object->seg_bitcode64 != NULL){
+		if(object->seg_bitcode64->filesize < sizeof(struct xar_header))
+		    fatal_arch(arch, member, "the __LLVM segment too small "
+			       "(less than sizeof(struct xar_header)) in: ");
+		if(object->seg_bitcode64->fileoff +
+		   object->seg_bitcode64->filesize != offset)
+		    fatal_arch(arch, member, "the __LLVM segment not directly "
+			       "before the "  SEG_LINKEDIT " segment in: ");
+		if(object->seg_bitcode64->vmaddr +
+		   object->seg_bitcode64->vmsize !=
+						object->seg_linkedit64->vmaddr)
+		    fatal_arch(arch, member, "the __LLVM segment's vmaddr plus "
+			       "vmsize not directly before the vmaddr of the "
+			       SEG_LINKEDIT " segment in: ");
+	    }
 	}
 	if(object->dyld_info != NULL){
 	    /* dyld_info starts at beginning of __LINKEDIT */
@@ -354,6 +401,13 @@ struct object *object)
 	    }
 	    else if (object->dyld_info->bind_off != 0){
 		if (object->dyld_info->bind_off != offset)
+		    order_error(arch, member, "dyld_info "
+			"out of place");
+	    }
+	    else if(object->dyld_info->export_off != 0){
+		if(object->dyld_info->export_off != offset &&
+		   object->dyld_info->weak_bind_size != 0 &&
+		   object->dyld_info->lazy_bind_size != 0)
 		    order_error(arch, member, "dyld_info "
 			"out of place");
 	    }
@@ -382,27 +436,32 @@ struct object *object)
 		      sizeof(struct relocation_info);
 	}
 	if(object->split_info_cmd != NULL){
-	    if(object->split_info_cmd->dataoff != offset)
+	    if(object->split_info_cmd->dataoff != 0 &&
+	       object->split_info_cmd->dataoff != offset)
 		order_error(arch, member, "split info data out of place");
 	    offset += object->split_info_cmd->datasize;
 	}
 	if(object->func_starts_info_cmd != NULL){
-	    if(object->func_starts_info_cmd->dataoff != offset)
+	    if(object->func_starts_info_cmd->dataoff != 0 &&
+	       object->func_starts_info_cmd->dataoff != offset)
 		order_error(arch, member, "function starts data out of place");
 	    offset += object->func_starts_info_cmd->datasize;
 	}
 	if(object->data_in_code_cmd != NULL){
-	    if(object->data_in_code_cmd->dataoff != offset)
+	    if(object->data_in_code_cmd->dataoff != 0 &&
+	       object->data_in_code_cmd->dataoff != offset)
 		order_error(arch, member, "data in code info out of place");
 	    offset += object->data_in_code_cmd->datasize;
 	}
 	if(object->code_sign_drs_cmd != NULL){
-	    if(object->code_sign_drs_cmd->dataoff != offset)
+	    if(object->code_sign_drs_cmd->dataoff != 0 &&
+	       object->code_sign_drs_cmd->dataoff != offset)
 		order_error(arch, member, "code signing DRs info out of place");
 	    offset += object->code_sign_drs_cmd->datasize;
 	}
 	if(object->link_opt_hint_cmd != NULL){
-	    if(object->link_opt_hint_cmd->dataoff != offset)
+	    if(object->link_opt_hint_cmd->dataoff != 0 &&
+	       object->link_opt_hint_cmd->dataoff != offset)
 		order_error(arch, member, "linker optimization hint info out "
 					  "of place");
 	    offset += object->link_opt_hint_cmd->datasize;
@@ -608,9 +667,10 @@ struct object *object)
 		 * at the end of the object file change the object_size to be
 		 * the end of the string table here.  This could be done at the
 		 * end of this routine but since all the later checks are fatal
-		 * we'll just do this here.
+		 * we'll just do this here.  If there is a code signature after
+		 * string table don't do this.
 		 */
-		if(rounded_strend != strend)
+		if(rounded_strend != strend && object->code_sig_cmd == NULL)
 		    object->object_size = strend;
 		end = object->st->stroff;
 	    }

@@ -1,4 +1,4 @@
-.TH OTOOL 1 "November 21, 2013" "Apple, Inc."
+.TH OTOOL 1 "March 19, 2015" "Apple Inc."
 .SH NAME
 otool \- object file displaying tool
 .SH SYNOPSIS
@@ -11,9 +11,9 @@ otool \- object file displaying tool
 .SH DESCRIPTION
 The
 .I otool
-command displays specified parts of object files or libraries.  If the,
+command displays specified parts of object files or libraries.  If the
 .B \-m
-option is not used, the file
+option is not used the file
 arguments may be of the form
 .IR "libx.a(foo.o)" ,
 to request information about only that object file and not
@@ -51,10 +51,12 @@ Display the load commands.
 .TP
 .B \-L
 Display the names and version numbers of the shared libraries that the object
-file uses.  As well as the shared library ID if the file is a shared library.
+file uses, as well as the shared library ID if the file is a shared library.
 .TP
 .B \-D
-Display just install name of a shared library.
+Display just the install name of a shared library.  See
+.IR install_name_tool (1)
+for more info.
 .TP
 .BI \-s " segname sectname"
 Display the contents of the section
@@ -72,9 +74,9 @@ flag is specified.
 .B \-t
 Display the contents of the (\_\^\_TEXT,\_\^\_text) section.  With the
 .B \-v
-flag, this disassembles the text.  And with
-.BR \-V ,
-it also symbolically disassembles the operands.
+flag, this disassembles the text.  With the
+.B \-V
+flag, it also symbolically disassembles the operands.
 .TP
 .B \-d
 Display the contents of the (\_\^\_DATA,\_\^\_data) section.
@@ -109,6 +111,9 @@ Display the data in code table.
 .TP
 .B \-C
 Display the linker optimization hints (-v for verbose mode can also be added).
+.TP
+.B \-P
+Print the info plist section, (\_\^\_TEXT,\_\^\_info\_plist), as strings.
 
 .PP
 The following options may also be given:
@@ -138,7 +143,7 @@ option.
 Don't print leading addresses or headers with disassembly of sections.
 .TP
 .B \-q
-Use the llvm disassembler when doing disassembly, this is available for the x86
+Use the llvm disassembler when doing disassembly; this is available for the x86
 and arm architectures.  This is the default.
 .TP
 .BI \-mcpu= arg
@@ -148,9 +153,9 @@ When doing disassembly using the llvm disassembler use the cpu
 .B \-function_offsets
 When doing disassembly print the decimal offset from the last label printed.
 .TP
-.TP
 .B \-j
-When doing disassembly print the print the opcode bytes of the instructions.
+When doing disassembly print the opcode bytes of the instructions.
+.TP
 .B \-Q
 Use
 .IR otool (1)'s
@@ -161,9 +166,10 @@ Specifies the architecture,
 .I arch_type,
 of the file for
 .IR otool (1)
-to operate on when the file is a universal file.  (See
+to operate on when the file is a universal file (aka a file with multiple
+architectures).  (See
 .IR arch (3)
-for the currently know
+for the currently known
 .IR arch_type s.)
 The
 .I arch_type
@@ -174,5 +180,10 @@ otherwise, all architectures in the file are shown.
 .B \-m
 The object file names are not assumed to be in the archive(member) syntax,
 which allows file names containing parenthesis.
+.TP
+.B \-\-version
+Print the
+.IR otool (1)
+version information.
 .SH "SEE ALSO"
 install_name_tool(1), dyld(1) and libtool(1)

@@ -28,6 +28,9 @@
 /*
  * Copyright 1995 NeXT Computer, Inc. All rights reserved.
  */
+#if defined(__CYGWIN__)
+#include_next <machine/types.h>
+#else
 #ifndef _BSD_MACHINE_TYPES_H_
 #define _BSD_MACHINE_TYPES_H_
 
@@ -42,3 +45,4 @@
 #endif
 
 #endif /* _BSD_MACHINE_TYPES_H_ */
+#endif /* __CYGWIN__ */

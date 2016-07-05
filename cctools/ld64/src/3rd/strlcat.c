@@ -23,6 +23,14 @@
 
 #ifndef __APPLE__
 
+/*
+ * Otherwise string.h may hide strnlen().
+ * https://github.com/tpoechtrager/cctools-port/pull/8
+ */
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 #include <string.h>
 
 size_t

@@ -49,8 +49,8 @@
 #ifndef	_MACH_M88K_THREAD_STATE_
 #define	_MACH_M88K_THREAD_STATE_
 
-#include <architecture/m88k/fp_regs.h>
-#include <architecture/m88k/reg_help.h>
+#import <architecture/m88k/fp_regs.h>
+#import <architecture/m88k/reg_help.h>
 
 /**************************************************************************
  * Data Typedefs used by thread_getstatus() and thread_setstatus()        *

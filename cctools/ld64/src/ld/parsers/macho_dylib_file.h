@@ -37,9 +37,9 @@ extern bool isDylibFile(const uint8_t* fileContent, cpu_type_t* result, cpu_subt
 extern const char* archName(const uint8_t* fileContent);
 
 
-extern ld::dylib::File* parse(const uint8_t* fileContent, uint64_t fileLength, const char* path, 
-								time_t modTime, const Options& opts, ld::File::Ordinal ordinal, 
-								bool bundleLoader, bool indirectDylib);
+extern ld::dylib::File* parse(const uint8_t* fileContent, uint64_t fileLength, const char* path,
+							  time_t modTime, const Options& opts, ld::File::Ordinal ordinal,
+							  bool bundleLoader, bool indirectDylib);
 
 } // namespace dylib
 } // namespace mach_o

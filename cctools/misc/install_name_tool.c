@@ -661,6 +661,11 @@ uint32_t *header_size)
     struct rpath_command *rpath1, *rpath2;
     enum bool delete;
 
+	for(i = 0; i < nrpaths; i++)
+	    rpaths[i].found = FALSE;
+	for(i = 0; i < ndelete_rpaths; i++)
+	    delete_rpaths[i].found = FALSE;
+
 	/*
 	 * Make a pass through the load commands and figure out what the new
 	 * size of the the commands needs to be and how much room there is for
@@ -790,6 +795,8 @@ uint32_t *header_size)
 		}
 		for(j = 0; j < nrpaths; j++){
 		    if(strcmp(rpaths[j].old, path1) == 0){
+			if(rpaths[j].found == TRUE)
+			    break;
 			rpaths[j].found = TRUE;
 			new_size = rnd(sizeof(struct rpath_command) +
 				         strlen(rpaths[j].new) + 1,
@@ -800,6 +807,8 @@ uint32_t *header_size)
 		}
 		for(j = 0; j < ndelete_rpaths; j++){
 		    if(strcmp(delete_rpaths[j].old, path1) == 0){
+			if(delete_rpaths[j].found == TRUE)
+			    break;
 			delete_rpaths[j].found = TRUE;
 			new_sizeofcmds -= rpath1->cmdsize;
 			break;
@@ -817,6 +826,7 @@ uint32_t *header_size)
 		      "\"-delete_rpath %s\"", delete_rpaths[i].old,
 		      arch->file_name, arch_name, delete_rpaths[i].old);
 	    }
+	    delete_rpaths[i].found = FALSE;
 	}
 	for(i = 0; i < nrpaths; i++){
 	    if(rpaths[i].found == FALSE){
@@ -825,6 +835,7 @@ uint32_t *header_size)
 		      "\"-rpath %s %s\"", rpaths[i].old, arch->file_name,
 		      arch_name, rpaths[i].old, rpaths[i].new);
 	    }
+	    rpaths[i].found = FALSE;
 	}
 
 	for(i = 0; i < nadd_rpaths; i++){
@@ -944,6 +955,9 @@ uint32_t *header_size)
 		path1 = (char *)rpath1 + rpath1->path.offset;
 		for(j = 0; j < ndelete_rpaths; j++){
 		    if(strcmp(delete_rpaths[j].old, path1) == 0){
+			if(delete_rpaths[j].found == TRUE)
+			    break;
+			delete_rpaths[j].found = TRUE;
 			delete = TRUE;
 			break;
 		    }
@@ -952,6 +966,11 @@ uint32_t *header_size)
 		    break;
 		for(j = 0; j < nrpaths; j++){
 		    if(strcmp(rpaths[j].old, path1) == 0){
+			if(rpaths[j].found == TRUE){
+			    memcpy(lc2, lc1, lc1->cmdsize);
+			    break;
+			}
+			rpaths[j].found = TRUE;
 			memcpy(lc2, lc1, sizeof(struct rpath_command));
 			rpath2 = (struct rpath_command *)lc2;
 			rpath2->cmdsize = rnd(sizeof(struct rpath_command) +

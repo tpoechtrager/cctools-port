@@ -11,6 +11,12 @@
  */
 
 /* If the real libdispatch exists, use that instead of the toy one. */
+#if !defined(__has_include)
+#define __has_include(x) 0
+#endif
+#if __has_include(<dispatch/dispatch.h>) && !defined(__TOY_DISPATCH__)
+#	include <dispatch/dispatch.h>
+#else
 
 /**
  * Function type for functions that can be added to dispatch queues.
@@ -38,3 +44,4 @@ void dispatch_release(dispatch_queue_t queue);
 
 #define dispatch_retain toy_dispatch_retain
 void dispatch_retain(dispatch_queue_t queue);
+#endif

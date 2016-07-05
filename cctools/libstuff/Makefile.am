@@ -14,7 +14,7 @@ libstuff_la_SOURCES =  \
 	crc32.c  \
 	dylib_roots.c  \
 	dylib_table.c  \
-	emulated.c  \
+	port.c  \
 	errors.c  \
 	execute.c  \
 	fatal_arch.c  \
@@ -40,5 +40,6 @@ libstuff_la_SOURCES =  \
 	SymLoc.c  \
 	unix_standard_mode.c  \
 	version_number.c  \
-	writeout.c
+	writeout.c \
+	coff_bytesex.c
 

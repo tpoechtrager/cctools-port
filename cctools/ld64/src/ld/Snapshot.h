@@ -87,9 +87,9 @@ public:
 private:
 
     friend class SnapshotArchiveFileLog;
-    
+#if __has_extension(blocks) // ld64-port
     typedef std::vector<void(^)(void)> SnapshotLog;    
-
+#endif
     struct strcompclass {
         bool operator() (const char *a, const char *b) const { return ::strcmp(a, b) < 0; }
     };
@@ -127,8 +127,9 @@ private:
 
     void addFrameworkArg(const char *framework);
     void addDylibArg(const char *dylib);
-
+#if __has_extension(blocks)     // ld64-port
     SnapshotLog fLog;           // log of events that recorded data in a snapshot prior to createSnapshot()
+#endif
     bool fRecordArgs;           // record command line 
     bool fRecordObjects;        // record .o files 
     bool fRecordDylibSymbols;   // record referenced dylib/framework symbols

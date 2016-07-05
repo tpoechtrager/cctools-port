@@ -199,6 +199,7 @@ static int PREFIX(_table_resize)(PREFIX(_table) *table)
 	__sync_synchronize();
 	table->old = NULL;
 #	if !defined(ENABLE_GC) && defined(MAP_TABLE_SINGLE_THREAD)
+	free(copy->table);
 	free(copy);
 #	endif
 	return 1;
@@ -339,7 +340,7 @@ static void *PREFIX(_table_get_cell)(PREFIX(_table) *table, const void *key)
 	// Value does not exist.
 	if (!MAP_TABLE_VALUE_NULL(cell->value))
 	{
-		if (MAP_TABLE_COMPARE_FUNCTION(key, cell->value))
+		if (MAP_TABLE_COMPARE_FUNCTION((void*)key, cell->value))           // cctools-port: added (void*)
 		{
 			return cell;
 		}
@@ -348,7 +349,7 @@ static void *PREFIX(_table_get_cell)(PREFIX(_table) *table, const void *key)
 		for (int hop = __builtin_ffs(jump) ; hop > 0 ; hop = __builtin_ffs(jump))
 		{
 			PREFIX(_table_cell) hopCell = PREFIX(_table_lookup)(table, hash+hop);
-			if (MAP_TABLE_COMPARE_FUNCTION(key, hopCell->value))
+			if (MAP_TABLE_COMPARE_FUNCTION((void*)key, hopCell->value)) // cctools-port: added (void*)
 			{
 				return hopCell;
 			}

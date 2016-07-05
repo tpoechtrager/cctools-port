@@ -20,8 +20,6 @@
 	mov   (\receiver), %r10               # Load the dtable from the class
 1:                                        # classLoaded
 	mov   DTABLE_OFFSET(%r10), %r10       # Load the dtable from the class
-	cmpq  uninstalled_dtable(%rip), %r10  # If this is not (yet) a valid dtable
-	je    5f                              # Do a slow lookup
 	
 	push  %r12
 	push  %r13
@@ -58,6 +56,143 @@
 	test  %r10, %r10
 	jz    5f                             # Nil slot - invoke some kind of forwarding mechanism
 	mov   SLOT_OFFSET(%r10), %r10
+
+7:
+#ifdef WITH_TRACING
+
+	push  %r12
+	push  %r13
+	push  %r10
+
+	mov   (\sel), %r11                    # Load the selector index
+	lea   tracing_dtable(%rip), %r10
+	mov   (%r10), %r10
+
+	mov   SHIFT_OFFSET(%r10), %r13        # Load the shift (dtable size)
+	mov   DATA_OFFSET(%r10), %r12         # load the address of the start of the array
+	pop   %r10
+	cmpl  $8, %r13d                       # If this is a small dtable, jump to the small dtable handlers
+	je    10f 
+	cmpl  $0, %r13d
+	je    11f 
+
+	mov   %r11, %r13
+	and   $0xff0000, %r13
+	shrl  $13, %r13d                      # Right shift 16, but then left shift by 3 *sizeof(void*)
+	add   %r13, %r12
+	mov   (%r12), %r12
+	mov   DATA_OFFSET(%r12), %r12
+10:                                        # dtable16:
+	mov   %r11, %r13
+	and   $0xff00, %r13
+	shrl  $5, %r13d
+	add   %r13, %r12
+	mov   (%r12), %r12
+	mov   DATA_OFFSET(%r12), %r12
+11:                                       # dtable8:
+	mov   %r11, %r13
+	and   $0xff, %r13
+	shll  $3, %r13d
+	add   %r13, %r12
+	mov   (%r12), %r11
+	pop   %r13
+	pop   %r12
+	test  %r11, %r11
+	jz    12f
+
+	push  %rax                           # We need to preserve all registers that may contain arguments:
+	push  %rdi
+	push  %rsi
+	push  %rdx
+	push  %rcx
+	push  %r8
+	push  %r9
+	push  %r10
+	push  %r11
+	mov   \receiver, %rdi                # Arg 0 is receiver
+	mov   \sel, %rsi                     # Arg 1 is selector 
+	mov   %r10, %rdx                     # Arg 2 is IMP
+	mov   $0, %rcx                       # Arg 3 is entry / exit (0/1)
+	mov   $0, %r8                        # Arg 4 is return value (0 on entry)
+
+	call  *%r11                          # Call the tracing function
+	cmpq  $0, %rax
+	jz    13f                            # If it returns 0, don't call the end-tracing function.
+	cmpq  $1, %rax                       # If it returns 1, do call the tracing function
+	jne   14f                            # Any other value is an interposition
+	                                     # function to call instead of the method
+
+	call  pushTraceReturnStack           # rax now contains a thread-local buffer for storing returns
+
+	pop   %r11                           # Restore all of the argument registers
+	pop   %r10                           # except rax, which we'll need before the call
+	pop   %r9
+	pop   %r8
+	pop   %rcx
+	pop   %rdx
+	pop   %rsi
+	pop   %rdi
+
+	mov   \receiver, (%rax)              # Store the receiver in TLS
+	mov   \sel, 8(%rax)                  # Store the selector in TLS
+	mov   %r10, 16(%rax)                 # Store the method in TLS
+	mov   %r11, 24(%rax)                 # Store the tracing function in TLS
+	mov   8(%rsp), %r11                  # r11 now contains the return address
+	mov   %r11, 32(%rax)                 # Store the method-return address in TLS
+
+	pop   %rax
+	pop   %r11                           # r11 now contains the return address, but we don't care
+
+	call  *%r10                          # Call the IMP.  The stack should now be in the same state
+	                                     # that it was on entry into this function
+
+	push  %rax                           # Now we are free to clobber argument
+	push  %rdx                           # registers, but we must preserve return registers...
+
+	call  popTraceReturnStack            # rax now contains a thread-local buffer for storing returns
+	
+	push  %rax                           # save the return value, because we'll need it after the tracing function call
+	mov   (%rax), %rdi                   # Load the receiver into arg 0
+	mov   8(%rax), %rsi                  # Load the selector into arg 1
+	mov   16(%rax), %rdx                 # Load the IMP into arg 3
+	mov   $1, %rcx                       # Arg 4 is 1 (tracing on exit)
+	mov   %rax, %r8                      # Arg 5 is the return result
+
+	mov   24(%rax), %r11                 # Reload the address of the tracing function
+
+	call  *%r11                          # Call the tracing function
+	pop   %rax                           # Reload the real return address
+	mov   32(%rax), %r11
+	pop   %rdx                           # Reload saved values
+	pop   %rax
+	jmp   *%r11                          # Simulate a return by jumping to the cached return address
+
+13:                                      # Skip tracing on exit and just tail-call the method
+	pop   %r11
+	pop   %r10
+	pop   %r9
+	pop   %r8
+	pop   %rcx
+	pop   %rdx
+	pop   %rsi
+	pop   %rdi
+	pop   %rax
+	jmp   *%r10
+
+14: 
+	mov   %rax, %r10
+	pop   %r9
+	pop   %r9
+	pop   %r9
+	pop   %r8
+	pop   %rcx
+	pop   %rdx
+	pop   %rsi
+	pop   %rdi
+	pop   %rax
+
+12:
+#endif // WITH_TRACING
 	jmp   *%r10
 4:                                       # returnNil:
 	                                     # Both of the return registers are
@@ -95,11 +230,11 @@
 	push  %rsi                           # Save self where it can be modified
 	mov   %rsp, %rdi
 	push  %rdx
-	mov   %rdx, %rsi                     # move _cmd to where the callee expects it to be
+	mov   %rdx, %rsi                     # move _cmd to where the callee expects it to be
 .endif
 
 	.cfi_adjust_cfa_offset 0xD8
-	call  slowMsgLookup                  # Call the slow lookup function
+	call  CDECL(slowMsgLookup)           # Call the slow lookup function
 	mov   %rax, %r10                     # Load the returned IMP
 
 	pop   %rdx
@@ -121,24 +256,24 @@
 	pop   %rcx
 	pop   %rbx
 	pop   %rax
-	jmp   *%r10
+	jmp   7b
 6:                                        # smallObject:
 	and   \receiver, %r10                 # Find the small int type
 	shll  $3, %r10d
-	lea   SmallObjectClasses(%rip), %r11
+	lea   CDECL(SmallObjectClasses)(%rip), %r11
 	add   %r11, %r10
 	mov   (%r10), %r10
 	jmp   1b 
 	.cfi_endproc
 .endm
-.globl objc_msgSend
-	.type	objc_msgSend, @function
-.globl objc_msgSend_fpret
-	.type	objc_msgSend_fpret, @function
-objc_msgSend_fpret:
-objc_msgSend:
+.globl CDECL(objc_msgSend)
+TYPE_DIRECTIVE(CDECL(objc_msgSend), @function)
+.globl CDECL(objc_msgSend_fpret)
+TYPE_DIRECTIVE(CDECL(objc_msgSend_fpret), @function)
+CDECL(objc_msgSend_fpret):
+CDECL(objc_msgSend):
 	MSGSEND %rdi, %rsi
-.globl objc_msgSend_stret
-	.type	objc_msgSend_stret, @function
-objc_msgSend_stret:
+.globl CDECL(objc_msgSend_stret)
+TYPE_DIRECTIVE(CDECL(objc_msgSend_stret), @function)
+CDECL(objc_msgSend_stret):
 	MSGSEND %rsi, %rdx

@@ -117,6 +117,10 @@ Produce a mach-o dylinker that has file type MH_DYLINKER.  Only used when buildi
 The default.  Implied by -dylib, -bundle, or -execute
 .It Fl static
 Produces a mach-o file that does not use the dyld.  Only used building the kernel. 
+.It Fl preload
+Produces a mach-o file in which the mach_header, load commands, and symbol table are
+not in any segment.  This output type is used for firmware or embedded development
+where the segments are copied out of the mach-o into ROM/Flash.
 .It Fl arch Ar arch_name
 Specifies which architecture (e.g. ppc, ppc64, i386, x86_64) the output file should be.
 .It Fl o Ar path
@@ -358,7 +362,7 @@ The argument
 .Ar size
 is a hexadecimal number with an optional leading 0x. The 
 .Ar size
-should be an even multiple of 4KB, that is the last three hexadecimal digits should be zero.
+should be a multiple of the architecture's page size (4KB or 16KB).
 .It Fl allow_stack_execute 
 Marks executable so that all stacks in the task will be given stack execution privilege. This includes pthread stacks.
 .It Fl export_dynamic
@@ -384,8 +388,6 @@ Don't turn private external (aka visibility=hidden) symbols into static symbols,
 but rather leave them as private external in the resulting object file.
 .It Fl d
 Force definition of common symbols.  That is, transform tentative definitions into real definitions.
-.It Fl rename_section Ar fromSegment fromSection toSegment toSection
-Renames section fromSegment/fromSection to toSegment/toSection.
 .El
 .Ss Options that control symbol resolution
 .Bl -tag
@@ -482,6 +484,7 @@ Logs a chain of references to
 .Ar symbol_name .
 Only applicable with -dead_strip .
 It can help debug why something that you think should be dead strip removed is not removed.
+See -exported_symbols_list for syntax and use of wildcards.
 .It Fl print_statistics
 Logs information about the amount of memory and time the linker used.
 .It Fl t
@@ -517,14 +520,85 @@ contains a list of non-global symbol names that should be remain in the output f
 symbol names will be removed from the output file's symbol table. See -exported_symbols_list for syntax and use
 of wildcards.
 .El
+.Ss Options for Bitcode build flow
+.Bl -tag
+.It Fl bitcode_bundle
+Generates an embedded bitcode bundle in the output binary. The bitcode bundle is embedded in __LLVM, __bundle section.
+This option requires all the object files, static libraries and user frameworks/dylibs contain bitcode.
+Note: not all the linker options are supported to use together with -bitcode_bundle.
+.It Fl bitcode_hide_symbol
+Specifies this option together with -bitcode_bundle to hide all non-exported symbols from output bitcode bundle.
+The hide symbol process might not be reversible. To obtain a reverse mapping file to recover all the symbols, use
+-bitcode_symbol_map option.
+.It Fl bitcode_symbol_map Ar path
+Specifies the output for bitcode symbol reverse mapping (.bcsymbolmap). If
+.Ar path
+is an existing directory, UUID.bcsymbolmap will be written to that directory.
+Otherwise, the reverse map will be written to a file at
+.Ar path .
+.El
 .Ss Rarely used Options
 .Bl -tag
 .It Fl v
 Prints the version of the linker.
+.It Fl no_deduplicate
+Don't run deduplication pass in linker
+.It Fl verbose_deduplicate
+Prints names of functions that are eliminated by deduplication and total code savings size.
+.It Fl dirty_data_list Ar filename
+Specifies a file containing the names of data symbols likely to be dirtied.
+If the linker is creating a __DATA_DIRTY segment, those symbols will be moved
+to that segment.
+.It Fl max_default_common_align Ar value
+Any common symbols (aka tentative definitions, or uninitialized (zeroed) variables) that have no explicit alignment
+are normally aligned to their next power of two size (e.g. a 240 byte array is 256 aligned).
+This option lets you reduce the max alignment.  For instance, a value of 0x40 would reduce
+the alignment for a 240 byte array to 64 bytes (instead of 256). The value specified must be a hexadecimal power of two
+If -max_default_common_align is not used, the default alignment is already
+limited to 0x8 (2^3) bytes for -preload and 0x8000 (2^15) for all other output types.
+.It Fl move_to_rw_segment Ar segment_name Ar filename
+Moves data symbols to another segment.  The command line option specifies the
+target segment name and a path to a file containing a list of symbols to move.
+Comments can be added to the symbol file by starting a line with a #.
+If there are multiple instances of a symbol name (for instance a "static int foo=5;" in multiple files)
+the symbol name in the symbol list file can be prefixed with the object file name 
+(e.g. "init.o:_foo") to move a specific instance.
+.It Fl move_to_ro_section Ar segment_name Ar section_name Ar filename
+Moves code symbols to another segment.  The command line option specifies the
+target segment name and a path to a file containing a list of symbols to move.
+Comments can be added to the symbol file by starting a line with a #.
+If there are multiple instances of a symbol name (for instance a "static int foo() {}" in multiple files)
+the symbol name in the symbol list file can be prefixed with the object file name 
+(e.g. "init.o:_foo") to move a specific instance.
+.It Fl rename_section Ar orgSegment orgSection newSegment newSection
+Renames section orgSegment/orgSection to newSegment/newSection.
+.It Fl rename_segment Ar orgSegment newSegment 
+Renames all sections with orgSegment segment name to have newSegment segment name.
+.It Fl trace_symbol_layout
+For using in debugging -rename_section, -rename_segment, -move_to_ro_segment, and -move_to_rw_segment.
+This option prints out a line show where and why each symbol was moved.
+Note: These options do not chain.  For each symbol, the linker first checks
+-move_to_ro_segment and -move_to_rw_segment.  If the symbol is not moved,
+it checks for an applicable -rename_section.  Only if the symbol still has
+not been moved, does the linker look for an applicable -rename_segment option.
+.It Fl section_order Ar segname Ar colon_separated_section_list
+Only for use with -preload.  Specifies the order that sections with the specified segment should be layout out.
+For example: "-section_order __ROM __text:__const:__cstring". 
+.It Fl segment_order Ar colon_separated_segment_list
+Only for use with -preload.  Specifies the order segments should be layout out.
+For example: "-segment_order __ROM:__ROM2:__RAM". 
 .It Fl allow_heap_execute
 Normally i386 main executables will be marked so that the Mac OS X 10.7 and later kernel 
 will only allow pages with the x-bit to execute instructions. This option overrides that
 behavior and allows instructions on any page to be executed.
+.It Fl application_extension
+Specifies that the code is being linked for use in an application extension.  The linker
+will then validiate that any dynamic libraries linked against are safe for use in
+application extensions.
+.It Fl no_application_extension
+Specifies that the code is being linked is not safe for use in an application extension. 
+For instance, can be used when creating a framework that should not be used in
+an application extension.
 .It Fl fatal_warnings
 Causes the linker to exit with a non-zero value if any warnings were emitted.
 .It Fl no_eh_labels
@@ -697,10 +771,18 @@ option is used, the temporary file will be stored at the specified path and rema
 is complete.  Without the option, the linker picks a path and deletes the object file before the linker 
 tool completes, thus tools such as the debugger or dsymutil will not be able to access the DWARF debug
 info in the temporary object file.
+.It Fl lto_library Ar path
+When performing Link Time Optimization (LTO), the linker normally loads libLTO.dylib relative to the linker
+binary (../lib/libLTO.dylib). This option allows the user to specify the path to a specific libLTO.dylib
+to load instead.
 .It Fl page_align_data_atoms
 During development, this option can be used to space out all global variables so each is on a separate page. 
 This is useful when analyzing dirty and resident pages.  The information can then be used to create an 
 order file  to cluster commonly used/dirty globals onto the same page(s).
+.It Fl not_for_dyld_shared_cache
+Normally, the linker will add extra info to dylibs with -install_name starting with /usr/lib or
+/System/Library/ that allows the dylib to be placed into the dyld shared cache.  Adding this option
+tells the linker to not add that extra info.
 .El
 .Ss Obsolete Options
 .Bl -tag
@@ -712,8 +794,6 @@ Object files (MH_OBJECT) with a LINKEDIT segment are no longer supported. This o
 This is the default.  This option is obsolete.
 .It Fl fvmlib
 Fixed VM shared libraries (MH_FVMLIB) are no longer supported. This option is obsolete.
-.It Fl preload
-Preload executables (MH_PRELOAD) are no longer supported. 
 .It Fl sectobjectsymbols Ar segname Ar sectname
 Adding a local label at a section start is no longer supported.  This option is obsolete.
 .It Fl nofixprebinding

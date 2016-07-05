@@ -21,7 +21,7 @@ the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
 
 #ifdef NeXT_MOD
 #include "arch64_32.h"
-#include <mach-o/nlist.h>
+#import <mach-o/nlist.h>
 #else /* !defined(NeXT_MOD) */
 #ifndef		VMS
 #include "a.out.h"		/* Needed to define struct nlist. Sigh. */

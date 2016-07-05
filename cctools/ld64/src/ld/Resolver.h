@@ -63,7 +63,8 @@ public:
 								  _symbolTable(opts, state.indirectBindingTable),
 								  _haveLLVMObjs(false),
 								  _completedInitialObjectFiles(false),
-								  _ltoCodeGenFinished(false) {}
+								  _ltoCodeGenFinished(false),
+								  _haveAliases(false) {}
 								
 
 		virtual void		doAtom(const ld::Atom&);
@@ -90,6 +91,7 @@ private:
 	void					fillInInternalState();
 	void					fillInHelpersInInternalState();
 	void					removeCoalescedAwayAtoms();
+	void					syncAliases();
 	void					fillInEntryPoint();
 	void					linkTimeOptimize();
 	void					convertReferencesToIndirect(const ld::Atom& atom);
@@ -124,12 +126,14 @@ private:
 	ld::Internal&					_internal;
 	std::vector<const ld::Atom*>	_atoms;
 	std::set<const ld::Atom*>		_deadStripRoots;
+	std::vector<const ld::Atom*>	_dontDeadStripIfReferencesLive;
 	std::vector<const ld::Atom*>	_atomsWithUnresolvedReferences;
 	std::vector<const class AliasAtom*>	_aliasesFromCmdLine;
 	SymbolTable						_symbolTable;
 	bool							_haveLLVMObjs;
 	bool							_completedInitialObjectFiles;
 	bool							_ltoCodeGenFinished;
+	bool							_haveAliases;
 };
 
 

@@ -1,4 +1,4 @@
-#ifndef _RELAX_H
+#ifndef _RELAX_H /* cctools-port */
 #define _RELAX_H
 /* The type used for a target address */
 #ifdef ARCH64
@@ -50,4 +50,4 @@ typedef struct relax_type {
     relax_substateT rlx_more;	  /* Next longer relax-state. */
 				  /* 0 means there is no 'next' relax-state. */
 } relax_typeS;
-#endif
+#endif /* _RELAX_H */

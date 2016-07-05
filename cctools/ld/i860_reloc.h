@@ -31,7 +31,7 @@
  * #include <reloc.h>
  * #include "section.h"
  */
-extern void i860_reloc(
+__private_extern__ void i860_reloc(
     char *contents,
     struct relocation_info *relocs,
     struct section_map *map);

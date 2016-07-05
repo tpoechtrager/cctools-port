@@ -109,7 +109,7 @@ public:
 	/// Information about a frame layout and registers saved determined 
 	/// by "running" the dwarf FDE "instructions"
 	///  
-	enum { kMaxRegisterNumber = 120 };
+	enum { kMaxRegisterNumber = 300 };
 	enum RegisterSavedWhere { kRegisterUnused, kRegisterInCFA, kRegisterOffsetFromCFA,
 							kRegisterInRegister, kRegisterAtExpression, kRegisterIsExpression } ;
 	struct RegisterLocation {

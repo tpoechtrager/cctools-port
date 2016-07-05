@@ -43,6 +43,7 @@
 #include "stuff/symbol.h"
 #include "stuff/llvm.h"
 #include "stuff/guess_short_name.h"
+#include "stuff/execute.h"
 #include "otool.h"
 #include "dyld_bind_info.h"
 #include "ofile_print.h"
@@ -70,6 +71,13 @@ enum bool lflag = FALSE; /* print the load commands */
 enum bool Lflag = FALSE; /* print the shared library names */
 enum bool Dflag = FALSE; /* print the shared library id name */
 enum bool tflag = FALSE; /* print the text */
+enum bool Uflag = FALSE; /* print the text symbol by symbol,
+			    for llvm-objdump testing must be used with -t */
+enum bool no_show_raw_insn = FALSE; /* no raw inst, for llvm-objdump testing
+				       with 32-bit arm */
+#ifdef LLVM_OTOOL
+enum bool show_objdump_command = FALSE; /* print the objdump command */
+#endif /* LLVM_OTOOL */
 enum bool dflag = FALSE; /* print the data */
 enum bool oflag = FALSE; /* print the objctive-C info */
 enum bool Oflag = FALSE; /* print the objctive-C selector strings only */
@@ -95,6 +103,7 @@ enum bool Bflag = FALSE; /* force Thumb disassembly (ARM objects only) */
 enum bool Qflag = FALSE; /* use otool's disassembler */
 enum bool qflag = FALSE; /* use 'C' Public llvm-mc disassembler */
 enum bool jflag = FALSE; /* print opcode bytes */
+enum bool Pflag = FALSE; /* print (__TEXT,__info_plist) section as strings */
 char *pflag = NULL; 	 /* procedure name to start disassembling from */
 char *segname = NULL;	 /* name of the section to print the contents of */
 char *sectname = NULL;
@@ -109,6 +118,8 @@ enum bool object_processing = FALSE;
 
 static void usage(
     void);
+
+#ifndef LLVM_OTOOL
 
 static void processor(
     struct ofile *ofile,
@@ -259,6 +270,42 @@ static void setup_dyld_bind_info(
     struct dyld_bind_info **dbi, /* output */
     uint64_t *ndbi);
 
+static void print_text_by_symbols(
+    cpu_type_t cputype,
+    enum byte_sex object_byte_sex,
+    char *sect,
+    uint32_t size,
+    uint64_t addr,
+    uint32_t sect_flags,
+    struct symbol *sorted_symbols,
+    uint32_t nsorted_symbols,
+    struct nlist *symbols,
+    struct nlist_64 *symbols64,
+    uint32_t nsymbols,
+    char *strings,
+    uint32_t strings_size,
+    struct relocation_info *relocs,
+    uint32_t nrelocs,
+    struct relocation_info *ext_relocs,
+    uint32_t next_relocs,
+    struct relocation_info *loc_relocs,
+    uint32_t nloc_relocs,
+    struct dyld_bind_info *dbi,
+    uint64_t ndbi,
+    uint32_t *indirect_symbols,
+    uint32_t nindirect_symbols,
+    struct load_command *load_commands,
+    uint32_t ncmds,
+    uint32_t sizeofcmds,
+    enum bool disassemble,
+    enum bool verbose,
+    cpu_subtype_t cpusubtype,
+    char *object_addr,
+    uint32_t object_size,
+    struct data_in_code_entry *dices,
+    uint32_t ndices,
+    uint64_t seg_addr);
+
 static void print_text(
     cpu_type_t cputype,
     enum byte_sex object_byte_sex,
@@ -306,9 +353,24 @@ static void print_argstrings(
     char *object_addr,
     uint32_t object_size);
 
+#else /* defined(LLVM_OTOOL) */
+
+static void llvm_otool(
+    char **files,
+    uint32_t nfiles,
+    struct arch_flag *arch_flags,
+    uint32_t narch_flags,
+    enum bool all_archs,
+    enum bool version);
+
+#endif /* LLVM_OTOOL */
+
 /* apple_version is created by the libstuff/Makefile */
 extern char apple_version[];
 char *version = apple_version;
+#if defined(__CYGWIN__) && defined(__clang__) /* cctools-port */
+int otool_cygwin;
+#endif
 
 int
 main(
@@ -320,15 +382,20 @@ char **envp)
     uint32_t j, nfiles;
     struct arch_flag *arch_flags;
     uint32_t narch_flags;
-    enum bool all_archs, use_member_syntax;
+    enum bool all_archs, use_member_syntax, version;
     char **files;
+#ifndef LLVM_OTOOL
+    const char *disssembler_version;
+#endif /* !defined(LLVM_OTOOL) */
 
 	progname = argv[0];
 	arch_flags = NULL;
 	narch_flags = 0;
-	all_archs = TRUE;
+	all_archs = TRUE; /* cctools-port: FALSE -> TRUE */
 	use_member_syntax = TRUE;
 	llvm_mc = FALSE;
+	version = FALSE;
+	errors = 0;
 
 	if(argc <= 1)
 	    usage();
@@ -346,6 +413,22 @@ char **envp)
 	    }
 	    if(argv[i][0] != '-'){
 		files[nfiles++] = argv[i];
+		continue;
+	    }
+	    if(strcmp(argv[i], "--version") == 0){
+		fprintf(stderr,
+#ifndef LLVM_OTOOL
+			"otool(1):"
+#else /* defined(LLVM_OTOOL) */
+			"llvm-otool(1):"
+#endif /* LLVM_OTOOL */
+			" Apple Inc. version %s\n", apple_version);
+#ifndef LLVM_OTOOL
+		disssembler_version = llvm_disasm_version_string();
+		if(disssembler_version != NULL)
+		    fprintf(stderr, "disassmbler: %s\n", disssembler_version);
+#endif /* !defined(LLVM_OTOOL) */
+		version = TRUE;
 		continue;
 	    }
 	    if(strcmp(argv[i], "-arch") == 0){
@@ -393,6 +476,10 @@ char **envp)
 		}
 		continue;
 	    }
+	    if(strcmp(argv[i], "-no-show-raw-insn") == 0){
+		no_show_raw_insn = TRUE;
+		continue;
+	    }
 	    if(argv[i][1] == 'p'){
 		if(argc <=  i + 1){
 		    error("-p requires an argument (a text symbol name)");
@@ -404,6 +491,12 @@ char **envp)
 		i++;
 		continue;
 	    }
+#ifdef LLVM_OTOOL
+	    if(strcmp(argv[i], "-show-objdump-command") == 0){
+		show_objdump_command = TRUE;
+		continue;
+	    }
+#endif /* LLVM_OTOOL */
 	    if(argv[i][1] == 's'){
 		if(argc <=  i + 2){
 		    error("-s requires two arguments (a segment name and a "
@@ -458,6 +551,9 @@ char **envp)
 		case 't':
 		    tflag = TRUE;
 		    object_processing = TRUE;
+		    break;
+		case 'U':
+		    Uflag = TRUE;
 		    break;
 		case 'd':
 		    dflag = TRUE;
@@ -538,6 +634,10 @@ char **envp)
 		case 'j':
 		    jflag = TRUE;
 		    break;
+		case 'P':
+		    Pflag = TRUE;
+		    object_processing = TRUE;
+		    break;
 		default:
 		    error("unknown char `%c' in flag %s\n", argv[i][j],argv[i]);
 		    usage();
@@ -550,9 +650,10 @@ char **envp)
 	 */
 	if(!fflag && !aflag && !hflag && !lflag && !Lflag && !tflag && !dflag &&
 	   !oflag && !Oflag && !rflag && !Tflag && !Mflag && !Rflag && !Iflag &&
-	   !Cflag && !print_bind_info &&
+	   !Cflag && !print_bind_info && !version && !Pflag &&
 	   !Hflag && !Gflag && !Sflag && !cflag && !iflag && !Dflag &&!segname){
-	    error("one of -fahlLtdoOrTMRIHCGScis must be specified");
+	    error("one of -fahlLtdoOrTMRIHCGScisP or --version must be "
+		  "specified");
 	    usage();
 	}
 	if(qflag && Qflag){
@@ -565,7 +666,7 @@ char **envp)
 	 */
 	if(!Qflag)
 	    qflag = TRUE;
-	if(nfiles == 0){
+	if(nfiles == 0 && version == FALSE){
 	    error("at least one file must be specified");
 	    usage();
 	}
@@ -584,12 +685,23 @@ char **envp)
 		segname = NULL;
 		sectname = NULL;
 	    }
+	    /* treat "-v -s __TEXT __info_plist" the same as -P */
+	    else if(vflag == TRUE && strcmp(segname, SEG_TEXT) == 0 &&
+	       strcmp(sectname, "__info_plist") == 0){
+		Pflag = TRUE;
+		segname = NULL;
+		sectname = NULL;
+	    }
 	}
 
+#ifndef LLVM_OTOOL
 	for(j = 0; j < nfiles; j++){
 	    ofile_process(files[j], arch_flags, narch_flags, all_archs, TRUE,
 			  TRUE, use_member_syntax, processor, NULL);
 	}
+#else /* defined(LLVM_OTOOL) */
+	llvm_otool(files, nfiles, arch_flags, narch_flags, all_archs, version);
+#endif /* LLVM_OTOOL */
 
 	if(errors)
 	    return(EXIT_FAILURE);
@@ -606,8 +718,8 @@ usage(
 void)
 {
 	fprintf(stderr,
-		"Usage: %s [-arch arch_type] [-fahlLDtdorSTMRIHGvVcXmqQjC] "
-		"[-mcpu=arg] <object file> ...\n", progname);
+		"Usage: %s [-arch arch_type] [-fahlLDtdorSTMRIHGvVcXmqQjCP] "
+		"[-mcpu=arg] [--version] <object file> ...\n", progname);
 
 	fprintf(stderr, "\t-f print the fat headers\n");
 	fprintf(stderr, "\t-a print the archive header\n");
@@ -643,9 +755,142 @@ void)
 	fprintf(stderr, "\t-Q use otool(1)'s disassembler\n");
 	fprintf(stderr, "\t-mcpu=arg use `arg' as the cpu for disassembly\n");
 	fprintf(stderr, "\t-j print opcode bytes\n");
+	fprintf(stderr, "\t-P print the info plist section as strings\n");
 	fprintf(stderr, "\t-C print linker optimization hints\n");
+	fprintf(stderr, "\t--version print the version of %s\n", progname);
 	exit(EXIT_FAILURE);
 }
+
+#ifdef LLVM_OTOOL
+
+static void llvm_otool(
+char **files,
+uint32_t nfiles,
+struct arch_flag *arch_flags,
+uint32_t narch_flags,
+enum bool all_archs,
+enum bool version)
+{
+    char *objdump;
+    struct stat stat_buf;
+    uint32_t i;
+
+	objdump = cmd_with_prefix("objdump");
+	if(stat(objdump, &stat_buf) == -1)
+	    objdump = cmd_with_prefix("llvm-objdump");
+
+	reset_execute_list();
+	add_execute_list(objdump);
+	add_execute_list("-macho");
+
+	if(fflag)
+	    add_execute_list("-universal-headers");
+	if(aflag){
+	    add_execute_list("-archive-headers");
+	    if(Vflag)
+		add_execute_list("-archive-member-offsets");
+	}
+	if(hflag && !lflag)
+	    add_execute_list("-private-header");
+	if(lflag)
+	    add_execute_list("-private-headers");
+	if(tflag){
+	    if(vflag)
+		add_execute_list("-disassemble");
+	    else{
+		add_execute_list("-section");
+		add_execute_list("__TEXT,__text");
+	    }
+	}
+	if(tflag || segname != NULL){
+	    add_execute_list("-full-leading-addr");
+	    add_execute_list("-print-imm-hex");
+	}
+	if(pflag != NULL){
+	    add_execute_list("-dis-symname");
+	    add_execute_list(pflag);
+	}
+	if(*mcpu != '\0')
+	    add_execute_list(makestr("-mcpu=", mcpu, NULL));
+	if(Iflag)
+	    add_execute_list("-indirect-symbols");
+	if(Gflag)
+	    add_execute_list("-data-in-code");
+	if(Cflag)
+	    add_execute_list("-link-opt-hints");
+	if(Pflag)
+	    add_execute_list("-info-plist");
+	if(segname != NULL && sectname != NULL){
+	    add_execute_list("-section");
+	    add_execute_list(makestr(segname, ",", sectname, NULL));
+	}
+	if(dflag){
+	    add_execute_list("-section");
+	    add_execute_list("__DATA,__data");
+	}
+	if(rflag)
+	    add_execute_list("-r");
+	if(Sflag)
+	    error("for -S functionality, use llvm-nm with -print-armap");
+	if(version)
+	    add_execute_list("-version");
+	if(print_bind_info)
+	    add_execute_list("-bind");
+	if(Lflag)
+	    add_execute_list("-dylibs-used");
+	if(Dflag)
+	    add_execute_list("-dylib-id");
+	if(oflag)
+	    add_execute_list("-objc-meta-data");
+
+	if(!vflag)
+	    add_execute_list("-non-verbose");
+	if(!Vflag && (tflag || segname != NULL))
+	    add_execute_list("-no-symbolic-operands");
+	if((!jflag && (tflag || segname != NULL)) || no_show_raw_insn)
+	    add_execute_list("-no-show-raw-insn");
+	if(Xflag)
+	    add_execute_list("-no-leading-addr");
+
+	if(all_archs){
+	    add_execute_list("-arch");
+	    add_execute_list("all");
+	}
+	for(i = 0; i < narch_flags; i++){
+	    add_execute_list("-arch");
+	    add_execute_list(arch_flags[i].name);
+	}
+
+	if(Bflag)
+	    warning("-B functionality not implemented in objdump(1)");
+	if(cflag)
+	    warning("-c functionality not implemented in objdump(1)");
+	if(Wflag)
+	    warning("-W functionality not implemented in objdump(1)");
+	if(function_offsets)
+	    warning("-function-offsets functionality not implemented in "
+		    "objdump(1)");
+	if(Oflag)
+	    warning("-O functionality obsolete");
+	if(Tflag)
+	    warning("-T functionality obsolete");
+	if(Mflag)
+	    warning("-M functionality obsolete");
+	if(Rflag)
+	    warning("-R functionality obsolete");
+	if(iflag)
+	    warning("-i functionality obsolete");
+	if(Qflag)
+	    warning("-Q functionality obsolete");
+
+	for(i = 0; i < nfiles; i++)
+	    add_execute_list(files[i]);
+
+	if(execute_list(show_objdump_command) == 0)
+	    fatal("internal objdump command failed");
+}
+
+#else /* !defined(LLVM_OTOOL) */
 
 static
 void
@@ -691,6 +936,7 @@ void *cookie) /* cookie is not used */
     uint32_t nloh;
     struct dyld_bind_info *dbi;
     uint64_t ndbi;
+    uint64_t big_size;
 
 	sorted_symbols = NULL;
 	nsorted_symbols = 0;
@@ -748,7 +994,8 @@ void *cookie) /* cookie is not used */
 	 * Archive table of contents.
 	 */
 	if(ofile->member_ar_hdr != NULL &&
-	   strncmp(ofile->member_name, SYMDEF, sizeof(SYMDEF)-1) == 0){
+	   (strncmp(ofile->member_name, SYMDEF, sizeof(SYMDEF)-1) == 0 ||
+	    strncmp(ofile->member_name, "/ ", sizeof("/ ")-1) == 0)){
 	    if(Sflag == FALSE)
 		return;
 	    if(ofile->file_type == OFILE_FAT){
@@ -761,19 +1008,40 @@ void *cookie) /* cookie is not used */
 	    }
 	    if(addr + size > ofile->file_addr + ofile->file_size)
 		size = (ofile->file_addr + ofile->file_size) - addr;
-	    print_library_toc(ofile->member_ar_hdr, /* toc_ar_hdr */
-			      ofile->member_name, /* toc_name */
-			      ofile->member_name_size, /* toc_name_size */
-			      ofile->member_addr, /* toc_addr */
-			      ofile->member_size, /* toc_size */
-			      get_toc_byte_sex(addr, size),
-			      ofile->file_name, /* library_name */
-			      addr, /* library_addr */
-			      size, /* library_size */
-			      arch_name,
-			      vflag);
+	    if(strncmp(ofile->member_name, SYMDEF, sizeof(SYMDEF)-1) == 0)
+		print_library_toc(ofile->member_ar_hdr, /* toc_ar_hdr */
+				  ofile->member_name, /* toc_name */
+				  ofile->member_name_size, /* toc_name_size */
+				  ofile->member_addr, /* toc_addr */
+				  ofile->member_size, /* toc_size */
+				  get_toc_byte_sex(addr, size),
+				  ofile->file_name, /* library_name */
+				  addr, /* library_addr */
+				  size, /* library_size */
+				  arch_name,
+				  vflag);
+	    else
+		print_sysv_library_toc(ofile->member_ar_hdr, /* toc_ar_hdr */
+				       ofile->member_name, /* toc_name */
+				       ofile->member_name_size,
+							   /* toc_name_size */
+				       ofile->member_addr, /* toc_addr */
+				       ofile->member_size, /* toc_size */
+				       get_toc_byte_sex(addr, size),
+				       ofile->file_name, /* library_name */
+				       addr, /* library_addr */
+				       size, /* library_size */
+				       arch_name,
+				       vflag);
 	    return;
 	}
+	/*
+	 * Quietly skip the System V archive string table member name which has
+	 * the name "//", just as we skip the table of contents above.
+	 */
+	if(ofile->member_ar_hdr != NULL &&
+	   strncmp(ofile->member_name, "// ", sizeof("// ")-1) == 0)
+	    return;
 
 	if(object_processing == FALSE)
 	    return;
@@ -962,11 +1230,24 @@ void *cookie) /* cookie is not used */
 	/*
 	 * Load commands.
 	 */
-	if(mh_sizeofcmds + sizeof_mach_header > size){
+	big_size = mh_sizeofcmds;
+	big_size += sizeof_mach_header;
+	if(big_size > size){
+	    /*
+	     * For malformed binaries trim the mh_sizeofcmds to be no bigger
+	     * than the size of the file after the mach_header.  This will
+	     * limit the printing of the unknown load commands so it does not
+	     * appear to be in an infinite loop printing the zero's we created
+	     * with the memset().
+	     */
+	    if(size > sizeof_mach_header)
+		mh_sizeofcmds = size - sizeof_mach_header;
+	    else
+		mh_sizeofcmds = sizeof(struct load_command);
 	    load_commands = allocate(mh_sizeofcmds);
 	    memset(load_commands, '\0', mh_sizeofcmds);
-	    memcpy(load_commands, ofile->load_commands, 
-		   size - sizeof_mach_header);
+	    if(size > sizeof_mach_header)
+		memcpy(load_commands, ofile->load_commands, mh_sizeofcmds);
 	    ofile->load_commands = load_commands;
 	}
 	if(lflag)
@@ -1324,7 +1605,18 @@ void *cookie) /* cookie is not used */
 		    printf("Contents of (%.16s,%.16s) section\n", segname,
 			   sectname);
 	    }
-	    print_text(mh_cputype, ofile->object_byte_sex, sect, sect_size,
+	    if(Uflag)
+		print_text_by_symbols(mh_cputype, ofile->object_byte_sex, sect,
+		       sect_size, sect_addr, sect_flags, sorted_symbols,
+		       nsorted_symbols, symbols, symbols64, nsymbols, strings,
+		       strings_size, relocs, nrelocs, ext_relocs, next_relocs,
+		       loc_relocs, nloc_relocs, dbi, ndbi, indirect_symbols,
+		       nindirect_symbols, ofile->load_commands, mh_ncmds,
+		       mh_sizeofcmds, vflag, Vflag, mh_cpusubtype,
+		       ofile->object_addr, ofile->object_size, dices, ndices,
+		       seg_addr);
+	    else
+		print_text(mh_cputype, ofile->object_byte_sex, sect, sect_size,
 		       sect_addr, sect_flags, sorted_symbols,
 		       nsorted_symbols, symbols, symbols64, nsymbols, strings,
 		       strings_size, relocs, nrelocs, ext_relocs, next_relocs,
@@ -1378,6 +1670,18 @@ void *cookie) /* cookie is not used */
 	    }
 	}
 
+	if(Pflag){
+	    if(get_sect_info(SEG_TEXT, "__info_plist", ofile->load_commands,
+		mh_ncmds, mh_sizeofcmds, mh_filetype, ofile->object_byte_sex,
+		addr, size, &sect, &sect_size, &sect_addr,
+		&sect_relocs, &sect_nrelocs, &sect_flags, &seg_addr) == TRUE){
+
+		if(Xflag == FALSE)
+		    printf("(%s,%s) section\n", SEG_TEXT, "__info_plist");
+		printf("%.*s\n", (int)sect_size, sect);
+	    }
+	}
+
 	if(segname != NULL && sectname != NULL &&
 	   (sect_flags & S_ATTR_PURE_INSTRUCTIONS) !=
 		S_ATTR_PURE_INSTRUCTIONS &&
@@ -1412,6 +1716,16 @@ void *cookie) /* cookie is not used */
 		   mh_sizeofcmds, ofile->object_byte_sex, ofile->object_addr,
 		   ofile->object_size, vflag);
 	    }
+	    else if(strcmp(segname, "__LLVM") == 0 &&
+	       strcmp(sectname, "__bundle") == 0 &&
+	       (vflag == TRUE || Vflag == TRUE) &&
+	       get_sect_info(segname, sectname, ofile->load_commands,
+                   mh_ncmds, mh_sizeofcmds, mh_filetype, ofile->object_byte_sex,
+                   addr, size, &sect, &sect_size, &sect_addr, &sect_relocs,
+		   &sect_nrelocs, &sect_flags, &seg_addr) == TRUE){
+		print_bitcode_section(sect, sect_size, vflag, Vflag, aflag,
+				      NULL);
+	    }
 #ifdef EFI_SUPPORT
 	    else if(strcmp(segname, "__RELOC") == 0 &&
 	       strcmp(sectname, "__reloc") == 0 && vflag == TRUE){
@@ -1445,19 +1759,22 @@ void *cookie) /* cookie is not used */
 					      Xflag == TRUE ? FALSE : TRUE);
 			break;
 		    case S_4BYTE_LITERALS:
-			print_literal4_section(sect, sect_size, sect_addr,
-					      ofile->object_byte_sex,
-					      Xflag == TRUE ? FALSE : TRUE);
-			break;
-		    case S_8BYTE_LITERALS:
-			print_literal8_section(sect, sect_size, sect_addr,
-					      ofile->object_byte_sex,
-					      Xflag == TRUE ? FALSE : TRUE);
-			break;
-		    case S_16BYTE_LITERALS:
-			print_literal16_section(sect, sect_size, sect_addr,
+			print_literal4_section(mh_cputype, sect, sect_size,
+					       sect_addr,
 					       ofile->object_byte_sex,
 					       Xflag == TRUE ? FALSE : TRUE);
+			break;
+		    case S_8BYTE_LITERALS:
+			print_literal8_section(mh_cputype, sect, sect_size,
+					       sect_addr,
+					       ofile->object_byte_sex,
+					       Xflag == TRUE ? FALSE : TRUE);
+			break;
+		    case S_16BYTE_LITERALS:
+			print_literal16_section(mh_cputype, sect, sect_size,
+						sect_addr,
+					        ofile->object_byte_sex,
+					        Xflag == TRUE ? FALSE : TRUE);
 			break;
 		    case S_LITERAL_POINTERS:
 			/* create aligned, sorted relocations entries */
@@ -1789,9 +2106,10 @@ uint32_t *strings_size)
 	}
 	else{
 	    *strings = object_addr + st.stroff;
-	    if(st.stroff + st.strsize > object_size){
+	    bigsize = st.stroff;
+	    bigsize += st.strsize;
+	    if(bigsize > object_size){
 		printf("string table extends past end of file\n");
-		*strings_size = object_size - st.symoff;
 	    }
 	    else
 		*strings_size = st.strsize;
@@ -2651,7 +2969,8 @@ uint64_t *seg_addr)
 		}
 		else{
 		    *sect_pointer = object_addr + s.offset;
-		    if(s.offset + s.size > object_size){
+		    if(s.size > object_size ||
+		       s.offset + s.size > object_size){
 			printf("section (%.16s,%.16s) extends past end of "
 			       "file\n", s.segname, s.sectname);
 			*sect_size = object_size - s.offset;
@@ -2692,10 +3011,10 @@ uint64_t *seg_addr)
 		}
 		else{
 		    *sect_pointer = object_addr + s64.offset;
-		    if(s64.offset + s64.size > object_size){
+		    if(s64.size > object_size ||
+                       s64.offset + s64.size > object_size){
 			printf("section (%.16s,%.16s) extends past end of "
 			       "file\n", s64.segname, s64.sectname);
-			*sect_size = object_size - s64.offset;
 		    }
 		    else
 			*sect_size = s64.size;
@@ -2821,6 +3140,8 @@ uint64_t *ndbi)
     uint8_t *start, *end;
     const char **dylibs;
 
+    a = NULL; /* cctools-port */
+
 	/* If already setup just return. */
 	if(*dbi != NULL)
 	    return;
@@ -2911,12 +3232,15 @@ uint64_t *ndbi)
 			memcpy((char *)&dl, (char *)lc, size);
 			if(swapped)
 			    swap_dylib_command(&dl, host_byte_sex);
-			if(dl.dylib.name.offset < dl.cmdsize)
+			short_name = NULL;
+			if(dl.dylib.name.offset < dl.cmdsize &&
+			   dl.dylib.name.offset < left){
 			    p = (char *)lc + dl.dylib.name.offset;
+			    short_name = guess_short_name(p,
+						  &is_framework, &has_suffix);
+			}
 			else
 			    p = "(bad offset for dylib.name.offset)";
-		        short_name = guess_short_name(p,
-						  &is_framework, &has_suffix);
 			if(short_name != NULL)
 			    dylibs[ndylibs++] = short_name;
 			else
@@ -3054,6 +3378,68 @@ uint64_t *ndbi)
 
 static
 void
+print_text_by_symbols(
+cpu_type_t cputype,
+enum byte_sex object_byte_sex,
+char *sect,
+uint32_t size,
+uint64_t addr,
+uint32_t sect_flags,
+struct symbol *sorted_symbols,
+uint32_t nsorted_symbols,
+struct nlist *symbols,
+struct nlist_64 *symbols64,
+uint32_t nsymbols,
+char *strings,
+uint32_t strings_size,
+struct relocation_info *relocs,
+uint32_t nrelocs,
+struct relocation_info *ext_relocs,
+uint32_t next_relocs,
+struct relocation_info *loc_relocs,
+uint32_t nloc_relocs,
+struct dyld_bind_info *dbi,
+uint64_t ndbi,
+uint32_t *indirect_symbols,
+uint32_t nindirect_symbols,
+struct load_command *load_commands,
+uint32_t ncmds,
+uint32_t sizeofcmds,
+enum bool disassemble,
+enum bool verbose,
+cpu_subtype_t cpusubtype,
+char *object_addr,
+uint32_t object_size,
+struct data_in_code_entry *dices,
+uint32_t ndices,
+uint64_t seg_addr)
+{
+    uint32_t i, symbol_size;
+    uint64_t symbol_addr, symbol_offset;
+
+	for(i = 0; i < nsorted_symbols; i++){
+	    symbol_addr = sorted_symbols[i].n_value;
+	    if(symbol_addr < addr || symbol_addr >= addr + size)
+		continue;
+	    symbol_offset = symbol_addr - addr;
+	    if(i+1 < nsorted_symbols &&
+               sorted_symbols[i+1].n_value < addr + size)
+		symbol_size = sorted_symbols[i+1].n_value - symbol_addr;
+	    else
+		symbol_size = (addr + size) - symbol_addr;
+	    print_text(cputype, object_byte_sex, sect + symbol_offset,
+		       symbol_size, symbol_addr, sect_flags, sorted_symbols,
+		       nsorted_symbols, symbols, symbols64, nsymbols, strings,
+		       strings_size, relocs, nrelocs, ext_relocs, next_relocs,
+		       loc_relocs, nloc_relocs, dbi, ndbi, indirect_symbols,
+		       nindirect_symbols, load_commands, ncmds, sizeofcmds,
+		       disassemble, verbose, cpusubtype, object_addr,
+                       object_size, dices, ndices, seg_addr);
+	}
+}
+
+static
+void
 print_text(
 cpu_type_t cputype,
 enum byte_sex object_byte_sex,
@@ -3112,6 +3498,13 @@ uint64_t seg_addr)
 	n = 0;
 	ninsts = 0;
 	insts = NULL;
+
+	/*
+	 * If the section has a type of S_ZEROFILL then its section contents
+         * pointer is NULL, so in this case just do nothing.
+	 */
+	if(sect == NULL)
+	    return;
 
 	if(disassemble == TRUE){
 	    if(pflag){
@@ -3180,6 +3573,8 @@ uint64_t seg_addr)
 		}
 		llvm_disasm_set_options(i386_dc,
 		    LLVMDisassembler_Option_PrintImmHex);
+		llvm_disasm_set_options(i386_dc,
+		    LLVMDisassembler_Option_SetInstrComments);
 		if(eflag)
 		    llvm_disasm_set_options(i386_dc,
 			LLVMDisassembler_Option_UseMarkup);
@@ -3192,12 +3587,14 @@ uint64_t seg_addr)
 		}
 		llvm_disasm_set_options(x86_64_dc,
 		    LLVMDisassembler_Option_PrintImmHex);
+		llvm_disasm_set_options(x86_64_dc,
+		    LLVMDisassembler_Option_SetInstrComments);
 		if(eflag)
 		    llvm_disasm_set_options(x86_64_dc,
 			LLVMDisassembler_Option_UseMarkup);
 	    }
 	    if(cputype == CPU_TYPE_ARM64){
-		arm64_dc = create_arm64_llvm_disassembler();
+		arm64_dc = create_arm64_llvm_disassembler(cpusubtype);
 		if(arm64_dc == NULL){
 		    printf("can't create arm64 llvm disassembler\n");
 		    return;
@@ -3713,3 +4110,5 @@ __fpclassify(long double x)
 	return(0);
 }
 #endif /* !defined(__DYNAMIC__) */
+
+#endif /* !defined(LLVM_OTOOL) */

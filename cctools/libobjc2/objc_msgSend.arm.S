@@ -34,12 +34,6 @@
 
 	ldr    r4, [r4, #DTABLE_OFFSET]        // Dtable -> r4
 
-	ldr    r5, LUninstalledDtable          // &uninstalled_dtable -> r5
-	ldr    r5, [r5]
-
-	teq    r4, r5                          // If dtable == &uninstalled_dtable
-	beq    5f                              // Do a slow lookup
-
 	ldr    r5, [\sel]                      // selector->index -> r5
 
 	ldr    r6, [r4, #SHIFT_OFFSET]        // dtable->shift -> r6
@@ -52,11 +46,11 @@
 
 	and    r6, r5, #0xff0000
 	ldr    r4, [r4, r6, asr#14]
-	ldr    r4, [r4, #DTABLE_OFFSET]        
+	ldr    r4, [r4, #DATA_OFFSET]        
 1:                                        // dtable16
 	and    r6, r5, #0xff00
 	ldr    r4, [r4, r6, asr#6]
-	ldr    r4, [r4, #DTABLE_OFFSET]        
+	ldr    r4, [r4, #DATA_OFFSET]        
 2:                                        // dtable8
 	and    r6, r5, #0xff
 	ldr    ip, [r4, r6, asl#2]
@@ -81,9 +75,10 @@
 
 	push   {\receiver}                    // &self, _cmd in arguments
 	.save  {\receiver}
+	mov    r0, sp
 	mov    r1, \sel
 
-	bl     slowMsgLookup(PLT)             // This is the only place where the CFI directives have to be accurate...
+	bl     CDECL(slowMsgLookup)(PLT)      // This is the only place where the CFI directives have to be accurate...
 	mov    ip, r0                         // IMP -> ip
 
 	pop    {r5}                           // restore (modified) self to r5
@@ -93,21 +88,18 @@
 	.fnend
 .endm
 
-.globl objc_msgSend_fpret
-	.type	objc_msgSend_fpret, %function
-.globl objc_msgSend
-	.type	objc_msgSend, %function
-objc_msgSend:
-objc_msgSend_fpret:
+.globl CDECL(objc_msgSend_fpret)
+TYPE_DIRECTIVE(CDECL(objc_msgSend_fpret), %function)
+.globl CDECL(objc_msgSend)
+TYPE_DIRECTIVE(CDECL(objc_msgSend), %function)
+CDECL(objc_msgSend):
+CDECL(objc_msgSend_fpret):
 	MSGSEND r0, r1
-.globl objc_msgSend_stret
-	.type	objc_msgSend_stret, %function
-objc_msgSend_stret:
+.globl CDECL(objc_msgSend_stret)
+TYPE_DIRECTIVE(CDECL(objc_msgSend_stret), %function)
+CDECL(objc_msgSend_stret):
 	MSGSEND r1, r2
 
 LSmallIntClass:
 	.long   SmallObjectClasses
-	.align  2
-LUninstalledDtable:
-	.long   uninstalled_dtable
 	.align  2
