@@ -32,7 +32,7 @@ typedef char uuid_string_t__[37];
 #endif
 
 #ifdef __NetBSD__
-#define stoi(a,b) atoi(a.c_str()); do { const char *p = a.c_str(); *b = 0; while (isdigit(*p++)) (*b)++; } while (0)
+#define stoi(a,b) atoi(a.c_str()); do { if (!b) break; const char *p = a.c_str(); *b = 0; while (isdigit(*p++)) (*b)++; } while (0)
 #endif
 
 #include <dlfcn.h>

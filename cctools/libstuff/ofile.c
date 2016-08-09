@@ -1965,6 +1965,8 @@ struct ofile *ofile)
     struct ar_hdr *ar_hdr;
     uint32_t ar_name_size, member_name_offset, n;
 
+	ar_name_size = 0; /* cctools-port */
+
 	/*
 	 * Get the address and size of the archive.
 	 */
