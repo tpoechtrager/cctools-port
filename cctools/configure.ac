@@ -49,7 +49,8 @@ case $host_os in
   ;;
   cygwin* )
     iscygwin=yes
-    EXTRAFLAGS="-D__LARGE64_FILES -fno-PIC"
+    # https://github.com/tpoechtrager/osxcross/issues/87
+    EXTRAFLAGS="-D__LARGE64_FILES -D_GNU_SOURCE -fno-PIC"
     WARNINGS="-Wno-attributes"
     XCC="gcc"
     XCXX="g++"

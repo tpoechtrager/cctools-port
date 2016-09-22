@@ -85,7 +85,8 @@ char *get_executable_path(char *epath, size_t buflen)
     if (!ok) return NULL;
     l = strlen(epath);
 #else
-    ssize_t l = readlink("/proc/self/exe", epath, buflen);
+    ssize_t l = readlink("/proc/self/exe", epath, buflen - 1);
+    if (l > 0) epath[l] = '\0';
 #endif
     if (l <= 0) return NULL;
     epath[buflen - 1] = '\0';
