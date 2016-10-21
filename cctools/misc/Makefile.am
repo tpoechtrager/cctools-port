@@ -16,7 +16,9 @@ bin_PROGRAMS =  \
 	pagestuff \
 	ranlib \
 	codesign_allocate \
-	bitcode_strip
+	bitcode_strip \
+	ctf_insert \
+	check_dylib
 
 LDADD =  \
 	$(top_builddir)/libstuff/libstuff.la \
@@ -46,3 +48,5 @@ ranlib_CFLAGS = -DRANLIB $(AM_CFLAGS)
 codesign_allocate_SOURCES = codesign_allocate.c
 bitcode_strip_SOURCES= bitcode_strip.c
 bitcode_strip_CFLAGS = -DALLOW_ARCHIVES $(AM_CFLAGS)
+ctf_insert_SOURCES= ctf_insert.c
+check_dylib_SOURCES= check_dylib.c
