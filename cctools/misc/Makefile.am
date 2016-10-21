@@ -18,7 +18,9 @@ bin_PROGRAMS =  \
 	codesign_allocate \
 	bitcode_strip \
 	ctf_insert \
-	check_dylib
+	check_dylib \
+	cmpdylib \
+	inout
 
 LDADD =  \
 	$(top_builddir)/libstuff/libstuff.la \
@@ -50,3 +52,5 @@ bitcode_strip_SOURCES= bitcode_strip.c
 bitcode_strip_CFLAGS = -DALLOW_ARCHIVES $(AM_CFLAGS)
 ctf_insert_SOURCES= ctf_insert.c
 check_dylib_SOURCES= check_dylib.c
+cmpdylib_SOURCES= cmpdylib.c
+inout_SOURCES= inout.c
