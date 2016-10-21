@@ -283,7 +283,7 @@ char **envp)
 	    run_clang = 1;
 
 #ifndef DISABLE_CLANG_AS /* cctools-port */
-	if(getenv("NO_CLANG_AS") != NULL) /* cctools-port */
+	if(getenv("CCTOOLS_NO_CLANG_AS") != NULL) /* cctools-port */
 	    run_clang = 0;
 
 	/*
@@ -298,9 +298,13 @@ char **envp)
 	    arch_flag.cputype == CPU_TYPE_ARM)){
 #if 0 /* cctools port */
 	    as = makestr(prefix, CLANG, NULL);
-#else
-	    as = find_clang();
 #endif
+	    /* cctools-port start */
+#ifndef __APPLE__
+	    char *target_triple = getenv("CCTOOLS_CLANG_AS_TARGET_TRIPLE");
+#endif /* ! __APPLE__ */
+	    as = find_clang();
+	    /* cctools-port end */
 	    if(!as || access(as, F_OK) != 0){ /* cctools-port: added  !as || */
 		printf("%s: assembler (%s) not installed\n", progname,
 		       as ? as : "clang"); /* cctools-port:
@@ -364,10 +368,12 @@ char **envp)
 	    new_argv[j] = "-c";
 	    j++;
 	    /* cctools-port start */
+#ifndef __APPLE__
 	    new_argv[j] = "-target";
 	    j++;
-	    new_argv[j] = "unknown-apple-darwin";
+	    new_argv[j] = target_triple ? target_triple : "unknown-apple-darwin";
 	    j++;
+#endif /* ! __APPLE__ */
 	    /* cctools-port end */
 	    new_argv[j] = NULL;
 	    if(execute(new_argv, verbose))
