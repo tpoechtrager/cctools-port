@@ -5,6 +5,14 @@ pushd "${0%/*}" &>/dev/null
 
 PLATFORM=$(uname -s)
 
+if [ -z "$LLVM_DSYMUTIL" ]; then
+    LLVM_DSYMUTIL=llvm-dsymutil
+fi
+
+if [ -z "$JOBS" ]; then
+    JOBS=$(nproc 2>/dev/null || ncpus 2>/dev/null || echo 1)
+fi
+
 set -e
 
 function verbose_cmd
@@ -29,7 +37,7 @@ function extract()
             bzip2 -dc $1 | tar $tarflags -
             ;;
         *)
-            echo "unhandled archive type"
+            echo "unhandled archive type" 1>&2
             exit 1
             ;;
     esac
@@ -80,7 +88,26 @@ echo ""
 echo "*** building wrapper ***"
 echo ""
 
-echo "int main(){return 0;}" | cc -xc -O2 -o $TARGETDIR/bin/dsymutil -
+OK=0
+
+set +e
+which $LLVM_DSYMUTIL &>/dev/null
+if [ $? -eq 0 ]; then
+    case $($LLVM_DSYMUTIL --version | \
+           grep "LLVM version" | head -1 | awk '{print $3}') in
+        3.8*|3.9*|4.0*) OK=1 ;;
+    esac
+fi
+set -e
+
+if [ $OK -eq 1 ]; then
+    ln -sf $(which $LLVM_DSYMUTIL) $TARGETDIR/bin/dsymutil
+    pushd $TARGETDIR/bin &>/dev/null
+    ln -sf $TRIPLE-lipo lipo
+    popd &>/dev/null
+else
+    echo "int main(){return 0;}" | cc -xc -O2 -o $TARGETDIR/bin/dsymutil -
+fi
 
 verbose_cmd cc -O2 -Wall -Wextra -pedantic wrapper.c \
     -DTARGET_CPU=\"\\\"$2\\\"\" \
@@ -100,7 +127,7 @@ mkdir -p tmp
 pushd tmp &>/dev/null
 git clone https://github.com/tpoechtrager/ldid.git
 pushd ldid &>/dev/null
-make INSTALLPREFIX=$TARGETDIR -j4 install
+make INSTALLPREFIX=$TARGETDIR -j$JOBS install
 popd &>/dev/null
 popd &>/dev/null
 
@@ -112,7 +139,7 @@ pushd ../../cctools &>/dev/null
 git clean -fdx . &>/dev/null || true
 ./autogen.sh
 ./configure --target=$TRIPLE --prefix=$TARGETDIR
-make -j4 && make install
+make -j$JOBS && make install
 popd &>/dev/null
 
 echo ""

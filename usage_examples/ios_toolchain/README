@@ -7,7 +7,7 @@ USAGE:
 Please ensure you have read and understood the Xcode license terms before
 building this toolchain: https://www.apple.com/legal/sla/docs/xcode.pdf.
 
-./build.sh /path/to/sdk.tar.* <target cpu>
+[LLVM_DSYMUTIL=llvm-dsymutil] ./build.sh /path/to/sdk.tar.* <target cpu>
 
 Target CPU should be one of armv6, armv7, armv7s and arm64.
 
