@@ -358,8 +358,6 @@ if test "x$isdarwin" != "xyes"; then
   AC_CONFIG_FILES([libobjc2/Makefile])
 fi
 
-AC_CONFIG_FILES([ld/Makefile])
-
 AC_CONFIG_FILES([ld64/Makefile])
 AC_CONFIG_FILES([ld64/src/Makefile])
 AC_CONFIG_FILES([ld64/src/3rd/Makefile])
