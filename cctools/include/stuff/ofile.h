@@ -63,6 +63,7 @@ struct ofile {
 
     struct fat_header *fat_header;  /* If a fat file these are filled in and */
     struct fat_arch *fat_archs;     /*  if needed converted to host byte sex */
+    struct fat_arch_64 *fat_archs64;
 
     /* If this is a fat file then these are valid and filled in */
     uint32_t narch;	    	    /* the current architecture */
@@ -78,10 +79,12 @@ struct ofile {
     struct ar_hdr *toc_ar_hdr;	    /* the archive header for the toc */
     char *toc_name;		    /* name of toc member */
     uint32_t toc_name_size;	    /* size of name of toc member */
-    struct ranlib *toc_ranlibs;     /* ranlib structs */
-    uint32_t       toc_nranlibs;    /* number of ranlib structs */
+    enum bool toc_is_32bit;	    /* TRUE if toc is 32-bit */
+    struct ranlib *toc_ranlibs;     /* 32-bit ranlib structs */
+    struct ranlib_64 *toc_ranlibs64; /* 64-bit ranlib_64 structs */
+    uint64_t       toc_nranlibs;    /* number of ranlib structs */
     char          *toc_strings;     /* strings of symbol names (for above) */
-    uint32_t       toc_strsize;     /* number of bytes for the strings above */
+    uint64_t       toc_strsize;     /* number of bytes for the strings above */
     enum bool	   toc_bad;	    /* the toc needs to be rebuilt */
 
     /* If this structure is currently referencing a System V archive and it has

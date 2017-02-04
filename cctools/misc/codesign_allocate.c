@@ -206,7 +206,7 @@ char **envp)
 		      arch_signs[i].arch_flag.name, arch_signs[i].datasize);
 	}
 
-	writeout(archs, narchs, output, 0777, TRUE, FALSE, FALSE, NULL);
+	writeout(archs, narchs, output, 0777, TRUE, FALSE, FALSE, FALSE, NULL);
 
 	if(errors)
 	    return(EXIT_FAILURE);

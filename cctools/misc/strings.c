@@ -319,7 +319,8 @@ char *arch_name,
 void *cookie)
 {
     char *addr;
-    uint32_t offset, size, i, j;
+    uint64_t offset, size;
+    uint32_t i, j;
     uint32_t ncmds;
     struct flags *flags;
     struct load_command *lc;
@@ -334,11 +335,20 @@ void *cookie)
 	 * If the ofile is not an object file then process it without reguard
 	 * to sections.
 	 */
-	if(ofile->object_addr == NULL){
+	if(ofile->object_addr == NULL || ofile->member_type == OFILE_LLVM_BITCODE){
 	    if(ofile->file_type == OFILE_FAT && ofile->arch_flag.cputype != 0){
-		addr = ofile->file_addr + ofile->fat_archs[ofile->narch].offset;
-		size = ofile->fat_archs[ofile->narch].size;
-		offset = ofile->fat_archs[ofile->narch].offset;
+		if(ofile->fat_header->magic == FAT_MAGIC_64){
+		    addr = ofile->file_addr +
+			   ofile->fat_archs64[ofile->narch].offset;
+		    size = ofile->fat_archs64[ofile->narch].size;
+		    offset = ofile->fat_archs64[ofile->narch].offset;
+		}
+		else{
+		    addr = ofile->file_addr +
+			   ofile->fat_archs[ofile->narch].offset;
+		    size = ofile->fat_archs[ofile->narch].size;
+		    offset = ofile->fat_archs[ofile->narch].offset;
+		}
 	    }
 	    else{
 		addr = ofile->file_addr;

@@ -24,7 +24,7 @@ __private_extern__ void lto_get_nlist_64(
     void *mod,
     uint32_t symbol_index);
 
-__private_extern__ char * lto_symbol_name(
+__private_extern__ const char * lto_symbol_name(
     void *mod,
     uint32_t symbol_index);
 

@@ -40,14 +40,15 @@
 extern void print_fat_headers(
     struct fat_header *fat_header,
     struct fat_arch *fat_archs,
-    uint64_t size,
+    struct fat_arch_64 *fat_archs64,
+    uint64_t filesize,
     enum bool verbose);
 
 extern void print_ar_hdr(
     struct ar_hdr *ar_hdr,
     char *member_name,
     uint32_t member_name_size,
-    uint32_t member_offset,
+    uint64_t member_offset,
     enum bool verbose,
     enum bool print_offset);
 

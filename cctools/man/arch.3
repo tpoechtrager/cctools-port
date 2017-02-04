@@ -1,4 +1,4 @@
-.Dd September 13, 2013
+.Dd March 11, 2016
 .Dt ARCH 3
 .Sh NAME
 .Nm NXGetAllArchInfos ,
@@ -20,6 +20,8 @@
 .Fn NXGetArchInfoFromCpuType "cpu_type_t cputype" "cpu_subtype_t cpusubtype"
 .Ft extern struct fat_arch *
 .Fn NXFindBestFatArch "cpu_type_t cputype" "cpu_subtype_t cpusubtype" "struct fat_arch *fat_archs" "uint32_t nfat_archs"
+.Ft extern struct fat_arch_64 *
+.Fn NXFindBestFatArch_64 "cpu_type_t cputype" "cpu_subtype_t cpusubtype" "struct fat_arch_64 *fat_archs64" "uint32_t nfat_archs"
 .Ft extern cpu_subtype_t
 .Fn NXCombineCpuSubtypes "cpu_type_t cputype" "cpu_subtype_t cpusubtype1" "cpu_subtype_t cpusubtype2"
 .Sh DESCRIPTION
@@ -48,7 +50,7 @@ It is used to hold the name of the architecture and the corresponding CPU type
 and CPU subtype, together with the architecture's byte order and a brief description string.
 .Pp
 The currently known architectures are:
-.Bl -column hppa7100LC CPU_TYPE_POWERPC CPU_SUBTYPE_MC68030_ONLY
+.Bl -column hppa7100LC CPU_TYPE_POWERPC64 CPU_SUBTYPE_MC68030_ONLY
 .It Em Name Ta Em "CPU Type" Ta Em "CPU Subtype" Ta Em Description
 .It x86_64 Ta CPU_TYPE_X86_64 Ta CPU_SUBTYPE_X86_64_ALL Ta Intel x86-64
 .It i386 Ta CPU_TYPE_I386 Ta CPU_SUBTYPE_I386_ALL Ta Intel 80x86
@@ -126,6 +128,11 @@ It is possible that this routine could fail if new CPU types or CPU subtypes
 are added and an old version of this routine is used.
 But if there is an exact match between the CPU type and CPU subtype and one of
 the fat_arch structs, this routine will always succeed.
+.Pp
+.Fn NXFindBestFatArch_64
+is the same as
+.Fn NXFindBestFatArch
+but returns and takes fat_arch_64 structs.
 .Pp
 .Fn NXCombineCpuSubtypes
 returns the resulting CPU subtype when combining two different CPU subtypes for

@@ -239,6 +239,8 @@ char *argv[])
 		  arch_flag->name);
 	    exit(EXIT_FAILURE);
 	}
+	if(errors)
+	    exit(EXIT_FAILURE);
 	if(strcmp(argv[start], "-p") == 0){
 	    print_file_parts();
 	    start++;
@@ -304,8 +306,13 @@ char *file_name)
 	if(ofile.file_type == OFILE_FAT){
 	    fp = new_file_part();
 	    fp->offset = 0;
-	    fp->size = sizeof(struct fat_header) +
-		       ofile.fat_header->nfat_arch * sizeof(struct fat_arch);
+	    fp->size = sizeof(struct fat_header);
+	    if(ofile.fat_header->magic == FAT_MAGIC_64)
+		fp->size += ofile.fat_header->nfat_arch *
+			    sizeof(struct fat_arch_64);
+	    else
+		fp->size += ofile.fat_header->nfat_arch *
+			    sizeof(struct fat_arch);
 	    fp->type = FP_FAT_HEADERS;
 	    insert_file_part(fp);
 
@@ -321,14 +328,27 @@ char *file_name)
 		       arch_flag->cputype == ofile.mh_cputype &&
 		       (arch_flag->cpusubtype & ~CPU_SUBTYPE_MASK) ==
 			(ofile.mh_cpusubtype & ~CPU_SUBTYPE_MASK)){
-			arch_offset = ofile.fat_archs[ofile.narch].offset; 
-			arch_size = ofile.fat_archs[ofile.narch].size; 
+			if(ofile.fat_header->magic == FAT_MAGIC_64){
+			    arch_offset =
+				ofile.fat_archs64[ofile.narch].offset; 
+			    arch_size = ofile.fat_archs64[ofile.narch].size; 
+			}
+			else{
+			    arch_offset = ofile.fat_archs[ofile.narch].offset; 
+			    arch_size = ofile.fat_archs[ofile.narch].size; 
+			}
 			arch_found = TRUE;
 		    }
 		    /* make mach-o parts for this */
 		    fp = new_file_part();
-		    fp->offset = ofile.fat_archs[ofile.narch].offset;
-		    fp->size = ofile.fat_archs[ofile.narch].size;
+		    if(ofile.fat_header->magic == FAT_MAGIC_64){
+			fp->offset = ofile.fat_archs64[ofile.narch].offset;
+			fp->size = ofile.fat_archs64[ofile.narch].size;
+		    }
+		    else{
+			fp->offset = ofile.fat_archs[ofile.narch].offset;
+			fp->size = ofile.fat_archs[ofile.narch].size;
+		    }
 		    fp->type = FP_MACH_O;
 		    insert_file_part(fp);
 		    create_mach_o_parts(fp);

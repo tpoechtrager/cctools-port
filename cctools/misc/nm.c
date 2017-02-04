@@ -162,7 +162,7 @@ struct process_flags {
 };
 
 struct symbol {
-    char *name;
+    const char *name;
     char *indr_name;
     struct nlist_64 nl;
 };
@@ -1818,7 +1818,8 @@ struct value_diff *value_diffs)
 {
     uint32_t i;
     unsigned char c;
-    char *ta_xfmt, *i_xfmt, *spaces, *dashes, *p;
+    char *ta_xfmt, *i_xfmt, *spaces, *dashes;
+    const char *p;
 
 	if(ofile->mh != NULL ||
 	   (ofile->lto != NULL &&

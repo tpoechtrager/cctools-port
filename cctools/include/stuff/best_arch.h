@@ -28,6 +28,23 @@
 #include <stuff/bool.h>
 
 /*
+ * cpusubtype_findbestarch_64() is passed a cputype and cpusubtype and a set of
+ * fat_arch_64 structs and selects the best one that matches (if any) and
+ * returns a pointer to that fat_arch_64 struct (or NULL).  The fat_arch_64
+ * structs must be in the host byte sex and correct such that the fat_archs64
+ * really points to enough memory for nfat_arch_64 structs.  It is possible
+ * that this routine could fail if new cputypes or cpusubtypes are added and an
+ * old version of this routine is used.  But if there is an exact match between
+ * the cputype and cpusubtype and one of the fat_arch_64 structs this routine
+ * will always succeed.
+ */
+__private_extern__ struct fat_arch_64 * cpusubtype_findbestarch_64(
+    cpu_type_t cputype,
+    cpu_subtype_t cpusubtype,
+    struct fat_arch_64 *fat_archs64,
+    uint32_t nfat_archs);
+
+/*
  * cpusubtype_findbestarch() is passed a cputype and cpusubtype and a set of
  * fat_arch structs and selects the best one that matches (if any) and returns
  * a pointer to that fat_arch struct (or NULL).  The fat_arch structs must be

@@ -153,7 +153,14 @@ struct ofile *ofile)
 		arch = new_arch(archs, narchs);
 		arch->file_name = savestr(filename);
 		arch->type = ofile->arch_type;
-		arch->fat_arch = ofile->fat_archs + ofile->narch;
+		if(ofile->fat_header->magic == FAT_MAGIC_64){
+		    arch->fat_arch64 = ofile->fat_archs64 + ofile->narch;
+		    arch->fat_arch = NULL;
+		}
+		else{
+		    arch->fat_arch = ofile->fat_archs + ofile->narch;
+		    arch->fat_arch64 = NULL;
+		}
 		arch->fat_arch_name = savestr(ofile->arch_flag.name);
 
 		if(ofile->arch_type == OFILE_ARCHIVE){
@@ -176,15 +183,29 @@ struct ofile *ofile)
 #ifdef LTO_SUPPORT
 		else if(ofile->arch_type == OFILE_LLVM_BITCODE){
 		    arch->lto = ofile->lto;
-		    arch->unknown_addr = ofile->file_addr +
-					 arch->fat_arch->offset;
-		    arch->unknown_size = arch->fat_arch->size;
+		    if(ofile->fat_header->magic == FAT_MAGIC_64){
+			arch->unknown_addr = ofile->file_addr +
+					     arch->fat_arch64->offset;
+			arch->unknown_size = arch->fat_arch64->size;
+		    }
+		    else{
+			arch->unknown_addr = ofile->file_addr +
+					     arch->fat_arch->offset;
+			arch->unknown_size = arch->fat_arch->size;
+		    }
 		}
 #endif /* LTO_SUPPORT */
 		else{ /* ofile->arch_type == OFILE_UNKNOWN */
-		    arch->unknown_addr = ofile->file_addr +
-					 arch->fat_arch->offset;
-		    arch->unknown_size = arch->fat_arch->size;
+		    if(ofile->fat_header->magic == FAT_MAGIC_64){
+			arch->unknown_addr = ofile->file_addr +
+					     arch->fat_arch64->offset;
+			arch->unknown_size = arch->fat_arch64->size;
+		    }
+		    else{
+			arch->unknown_addr = ofile->file_addr +
+					     arch->fat_arch->offset;
+			arch->unknown_size = arch->fat_arch->size;
+		    }
 		}
 	    }while(ofile_next_arch(ofile) == TRUE);
 	}

@@ -979,7 +979,7 @@ void *cookie) /* cookie is not used */
 	 * Archive headers.
 	 */
 	if(aflag && ofile->member_ar_hdr != NULL){
-	    uint32_t member_offset;
+	    uint64_t member_offset;
 
 	    member_offset = ofile->member_offset - sizeof(struct ar_hdr);
 	    if(strncmp(ofile->member_ar_hdr->ar_name, AR_EFMT1,
@@ -999,8 +999,16 @@ void *cookie) /* cookie is not used */
 	    if(Sflag == FALSE)
 		return;
 	    if(ofile->file_type == OFILE_FAT){
-		addr = ofile->file_addr + ofile->fat_archs[ofile->narch].offset;
-		size = ofile->fat_archs[ofile->narch].size;
+		if(ofile->fat_header->magic == FAT_MAGIC_64){
+		    addr = ofile->file_addr +
+			   ofile->fat_archs64[ofile->narch].offset;
+		    size = ofile->fat_archs64[ofile->narch].size;
+		}
+		else{
+		    addr = ofile->file_addr +
+			   ofile->fat_archs[ofile->narch].offset;
+		    size = ofile->fat_archs[ofile->narch].size;
+		}
 	    }
 	    else{
 		addr = ofile->file_addr;
@@ -1080,9 +1088,16 @@ void *cookie) /* cookie is not used */
 			size = ofile->member_size;
 		    }
 		    else{
-			addr = ofile->file_addr +
-			       ofile->fat_archs[ofile->narch].offset;
-			size = ofile->fat_archs[ofile->narch].size;
+			if(ofile->fat_header->magic == FAT_MAGIC_64){
+			    addr = ofile->file_addr +
+				   ofile->fat_archs64[ofile->narch].offset;
+			    size = ofile->fat_archs64[ofile->narch].size;
+			}
+			else{
+			    addr = ofile->file_addr +
+				   ofile->fat_archs[ofile->narch].offset;
+			    size = ofile->fat_archs[ofile->narch].size;
+			}
 		    }
 		    if(addr + size > ofile->file_addr + ofile->file_size)
 			size = (ofile->file_addr + ofile->file_size) - addr;
@@ -1665,8 +1680,9 @@ void *cookie) /* cookie is not used */
 
 		if(Xflag == FALSE)
 		    printf("(%s,%s) section\n", SEG_DATA, SECT_DATA);
-		print_sect(mh_cputype, ofile->object_byte_sex, sect, sect_size,
-			   sect_addr);
+		if(sect != NULL)
+		    print_sect(mh_cputype, ofile->object_byte_sex, sect, sect_size,
+			       sect_addr);
 	    }
 	}
 

@@ -266,10 +266,10 @@ map_input(void)
 		  "past the end of the file) in: %s", input);
 	magic = *(uint32_t *)input_addr;
 #ifdef __BIG_ENDIAN__
-	if(magic == FAT_MAGIC)
+	if(magic == FAT_MAGIC || magic == FAT_MAGIC_64)
 #endif /* __BIG_ENDIAN__ */
 #ifdef __LITTLE_ENDIAN__
-	if(magic == SWAP_INT(FAT_MAGIC))
+	if(magic == SWAP_INT(FAT_MAGIC) || magic == SWAP_INT(FAT_MAGIC_64))
 #endif /* __LITTLE_ENDIAN__ */
 	    fatal("file: %s is a fat file (%s only operates on Mach-O files, "
 		  "use lipo(1) on it to get a Mach-O file)", input, progname);

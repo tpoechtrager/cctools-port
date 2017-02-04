@@ -918,7 +918,7 @@ char *envp[])
                 if(write_to_stdout)
                     output_file = NULL;
 		writeout(archs, narchs, output_file, mode, TRUE, FALSE, FALSE,
-			 NULL);
+		         FALSE, NULL);
 		if(errors){
                     if(write_to_stdout == FALSE)
                         unlink(output_file);
@@ -928,7 +928,7 @@ char *envp[])
 	    else{
 		output_file = makestr(input_file, ".redo_prebinding", NULL);
 		writeout(archs, narchs, output_file, mode, TRUE, FALSE, FALSE,
-			 NULL);
+			 FALSE, NULL);
 		if(errors){
 		    unlink(output_file);
 		    return(2);
@@ -1608,8 +1608,8 @@ uint32_t *throttle)
             gid = stat_buf.st_gid;
 
 	    if(output_file != NULL){
-		writeout(archs, narchs, (char *)output_file, mode, TRUE, FALSE, 
-			 FALSE, throttle);
+		writeout(archs, narchs, (char *)output_file, mode, TRUE, FALSE,
+			 FALSE, FALSE, throttle);
 		if(errors){
 		    unlink(output_file);
 		    goto error_return;
@@ -1617,8 +1617,8 @@ uint32_t *throttle)
 	    }
 	    else{
 		output_file = makestr(file_name, ".redo_prebinding", NULL);
-		writeout(archs, narchs, (char *)output_file, mode, TRUE, FALSE, 
-			 FALSE, throttle);
+		writeout(archs, narchs, (char *)output_file, mode, TRUE, FALSE,
+			 FALSE, FALSE, throttle);
 		if(errors){
 		    unlink(output_file);
 		    goto error_return;
@@ -1729,6 +1729,7 @@ uint32_t *outlen)
     uid_t uid;
     gid_t gid;
     enum bool calculate_input_prebind_cksum, seen_archive;
+    uint64_t outlen64;
 
 	reset_statics();
 	progname = (char *)program_name;
@@ -1824,12 +1825,14 @@ uint32_t *outlen)
 	    }
 
 	    if(output_file != NULL){
-	    	if(outbuf != NULL)
+	    	if(outbuf != NULL){
 		    writeout_to_mem(archs, narchs, (char *)output_file, outbuf,
-	    			    outlen, TRUE, FALSE, FALSE, &seen_archive);
-	    	else
+	    			    &outlen64, TRUE, FALSE, FALSE, FALSE,
+				    &seen_archive);
+		    *outlen = outlen64;
+	    	}else
 		    writeout(archs, narchs, (char *)output_file, mode, TRUE, 
-			     FALSE, FALSE, NULL);
+			     FALSE, FALSE, FALSE, NULL);
 		if(errors){
 		    if(outbuf == NULL)
 			unlink(output_file);
@@ -1838,12 +1841,14 @@ uint32_t *outlen)
 	    }
 	    else{
 		output_file = makestr(file_name, ".redo_prebinding", NULL);
-		if(outbuf != NULL)
+		if(outbuf != NULL){
 		    writeout_to_mem(archs, narchs, (char *)output_file, outbuf,
-				    outlen, TRUE, FALSE, FALSE, &seen_archive);
-		else
+				    &outlen64, TRUE, FALSE, FALSE, FALSE,
+				    &seen_archive);
+		    *outlen = outlen64;
+		}else
 		    writeout(archs, narchs, (char *)output_file, mode, TRUE, 
-			     FALSE, FALSE, NULL);
+			     FALSE, FALSE, FALSE, NULL);
 		if(errors){
 		    if(outbuf == NULL)
 			unlink(output_file);
@@ -2211,6 +2216,10 @@ char **error_message)
 		    (*cksums)[i].has_cksum = 1;
 		    (*cksums)[i].cksum = arch->object->cs->cksum;
 		}
+	    }
+	    else if(arch->fat_arch64 != NULL){
+		(*cksums)[i].cputype = arch->fat_arch64->cputype;
+		(*cksums)[i].cpusubtype = arch->fat_arch64->cpusubtype;
 	    }
 	    else if(arch->fat_arch != NULL){
 		(*cksums)[i].cputype = arch->fat_arch->cputype;
@@ -3544,6 +3553,7 @@ uint32_t *image_pointer)
     char *dylib_name;
     struct ofile *ofile;
     struct fat_arch *best_fat_arch;
+    struct fat_arch_64 *best_fat_arch64;
     struct load_command *lc;
     struct dylib_command *dl_id;
     enum bool already_loaded, is_framework;
@@ -3640,12 +3650,23 @@ uint32_t *image_pointer)
 	 * the correct architecture.
 	 */
 	if(ofile->file_type == OFILE_FAT){
-	    best_fat_arch = cpusubtype_findbestarch(
-		arch_flag.cputype,
-		arch_flag.cpusubtype,
-		ofile->fat_archs,
-		ofile->fat_header->nfat_arch);
-	    if(best_fat_arch == NULL){
+	    if(ofile->fat_header->magic == FAT_MAGIC_64){
+		best_fat_arch64 = cpusubtype_findbestarch_64(
+		    arch_flag.cputype,
+		    arch_flag.cpusubtype,
+		    ofile->fat_archs64,
+		    ofile->fat_header->nfat_arch);
+		best_fat_arch = NULL;
+	    }
+	    else{
+		best_fat_arch = cpusubtype_findbestarch(
+		    arch_flag.cputype,
+		    arch_flag.cpusubtype,
+		    ofile->fat_archs,
+		    ofile->fat_header->nfat_arch);
+		best_fat_arch64 = NULL;
+	    }
+	    if(best_fat_arch == NULL && best_fat_arch64 == NULL){
 		/*
 		 * If we are allowing missing architectures except one see if
 		 * this is not the one that can't be missing.
@@ -3664,8 +3685,14 @@ uint32_t *image_pointer)
 
 	    (void)ofile_first_arch(ofile);
 	    do{
-		if(best_fat_arch != ofile->fat_archs + ofile->narch)
-		    continue;
+		if(ofile->fat_header->magic == FAT_MAGIC_64){
+		    if(best_fat_arch64 != ofile->fat_archs64 + ofile->narch)
+			continue;
+		}
+		else{
+		    if(best_fat_arch != ofile->fat_archs + ofile->narch)
+			continue;
+		}
 		if(ofile->arch_type == OFILE_ARCHIVE){
 		    error("file: %s (for architecture %s) is an archive (not "
 			  "a Mach-O dynamic shared library)", dylib_name,

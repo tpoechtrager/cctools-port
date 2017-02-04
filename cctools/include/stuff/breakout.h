@@ -36,7 +36,7 @@
  */
 struct toc_entry {
     char *symbol_name;
-    int32_t member_index;
+    int64_t member_index;
 };
 
 /*
@@ -50,9 +50,10 @@ struct arch {
     enum ofile_type type;	/* The type of file for this architecture */
 				/*  can be OFILE_ARCHIVE, OFILE_Mach_O, */
     				/*  OFILE_LLVM_BITCODE or OFILE_UNKNOWN. */
-    struct fat_arch *fat_arch;	/* If this came from fat file this is valid */
-			        /*  and not NULL (needed for the align value */
-				/*  and to output a fat file if only one arch)*/
+    struct fat_arch *fat_arch;	/* If this came from fat file one of these */
+    struct fat_arch_64		/* is valid and not NULL (needed for the */
+		    *fat_arch64;/* align value and to output a fat file if */
+				/* only one arch) */
     char *fat_arch_name;	/* If this came from fat file this is valid */
 				/*  and is tthe name of this architecture */
 				/*  (used for error messages). */
@@ -71,13 +72,15 @@ struct arch {
     enum bool      toc_long_name;/* use the long name in the output */
     char	  *toc_name;	 /* name of toc member */
     uint32_t       toc_name_size;/* size of name of toc member */
-    uint32_t       ntocs;	/* number of table of contents entries */
+    uint64_t       ntocs;	/* number of table of contents entries */
+    enum bool	   using_64toc; /* TRUE if we are using a 64-bit toc */
     struct toc_entry
 		  *toc_entries; /* the table of contents entries */
-    struct ranlib *toc_ranlibs;	/* the ranlib structs */
+    struct ranlib *toc_ranlibs;	/* the 32-bit ranlib structs */
+    struct ranlib_64 *toc_ranlibs64; /* the 64-bit ranlib structs */
     char	  *toc_strings;	/* strings of symbol names for toc entries */
-    uint32_t       toc_strsize;	/* number of bytes for the strings above */
-    uint32_t	  library_size;	/* current working size and final output size */
+    uint64_t       toc_strsize;	/* number of bytes for the strings above */
+    uint64_t	  library_size;	/* current working size and final output size */
 				/*  for this arch when it's a library (used */
 				/*  for creating the toc entries). */
 
@@ -275,6 +278,7 @@ __private_extern__ void writeout(
     unsigned short mode,
     enum bool sort_toc,
     enum bool commons_in_toc,
+    enum bool force_64bit_toc,
     enum bool library_warnings,
     uint32_t *throttle);
 
@@ -283,9 +287,10 @@ __private_extern__ void writeout_to_mem(
     uint32_t narchs,
     char *filename,
     void **outputbuf,
-    uint32_t *length,
+    uint64_t *length,
     enum bool sort_toc,
     enum bool commons_in_toc,
+    enum bool force_64bit_toc,
     enum bool library_warning,
     enum bool *seen_archive);
 

@@ -353,6 +353,8 @@ enum byte_sex target_byte_sex)
 }
 
 struct info {
+    char *object_addr;
+    uint32_t object_size;
     enum bool swapped;
     enum byte_sex host_byte_sex;
     struct section_info_64 *sections;
@@ -511,6 +513,8 @@ enum bool Vflag)
     struct section_info_64 *s;
     struct info info;
 
+	info.object_addr = object_addr;
+	info.object_size = object_size;
 	info.host_byte_sex = get_host_byte_sex();
 	info.swapped = info.host_byte_sex != object_byte_sex;
 	info.cputype = cputype;
@@ -626,6 +630,8 @@ void (*func)(uint64_t, struct info *))
 	    left = s->size - i; 
 	    size = left < sizeof(uint64_t) ?
 		   left : sizeof(uint64_t);
+	    if(s->contents + i + size > info->object_addr + info->object_size)
+		return;
 	    memcpy(&p, s->contents + i, size);
 
 	    if(i + sizeof(uint64_t) > s->size)
@@ -1951,6 +1957,8 @@ enum bool verbose)
     const char *name;
 
 	printf("Contents of (" SEG_OBJC ",%s) section\n", sectname);
+	info.object_addr = object_addr;
+	info.object_size = object_size;
 	info.host_byte_sex = get_host_byte_sex();
 	info.swapped = info.host_byte_sex != object_byte_sex;
 	info.cputype = cputype;

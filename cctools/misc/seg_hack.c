@@ -113,7 +113,7 @@ char **envp)
 	if(stat(input, &stat_buf) == -1)
 	    system_error("can't stat input file: %s", input);
 	writeout(archs, narchs, output, stat_buf.st_mode & 0777,
-		     TRUE, FALSE, FALSE, NULL);
+		     TRUE, FALSE, FALSE, FALSE, NULL);
 
 	if(errors)
 	    return(EXIT_FAILURE);

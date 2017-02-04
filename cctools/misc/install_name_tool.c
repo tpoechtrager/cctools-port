@@ -337,7 +337,8 @@ char **envp)
 	    exit(EXIT_FAILURE);
 
 	if(output != NULL)
-	    writeout(archs, narchs, output, 0777, TRUE, FALSE, FALSE, NULL);
+	    writeout(archs, narchs, output, 0777, TRUE, FALSE, FALSE, FALSE,
+		     NULL);
 	else
 	    write_on_input(archs, narchs, input);
 
@@ -416,7 +417,9 @@ char *input)
 	    system_error("can't open input file: %s for writing", input);
 
 	for(i = 0; i < narchs; i++){
-	    if(archs[i].fat_arch != NULL)
+	    if(archs[i].fat_arch64 != NULL)
+		offset = archs[i].fat_arch64->offset;
+	    else if(archs[i].fat_arch != NULL)
 		offset = archs[i].fat_arch->offset;
 	    else
 		offset = 0;

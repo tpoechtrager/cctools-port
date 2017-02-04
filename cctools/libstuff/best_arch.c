@@ -29,34 +29,47 @@
 
 #ifndef RLD
 /*
- * cpusubtype_findbestarch() is passed a cputype and cpusubtype and a set of
- * fat_arch structs and selects the best one that matches (if any) and returns
- * a pointer to that fat_arch struct (or NULL).  The fat_arch structs must be
- * in the host byte sex and correct such that the fat_archs really points to
- * enough memory for nfat_arch structs.  It is possible that this routine could
- * fail if new cputypes or cpusubtypes are added and an old version of this
- * routine is used.  But if there is an exact match between the cputype and
- * cpusubtype and one of the fat_arch structs this routine will always succeed.
+ * internal_cpusubtype_findbestarch() is passed a cputype and cpusubtype and a
+ * either set of fat_arch structs or fat_arch_64 structs and selects the best
+ * one that matches (if any) and returns an index to the array of structs or
+ * -1 if none works for the cputype and cpusubtype.  The fat_arch structs or
+ * fat_arch_64 structs must be in the host byte sex and correct such that the
+ * fat_archs really points to enough memory for nfat_arch structs.  It is
+ * possible that this routine could fail if new cputypes or cpusubtypes are
+ * added and an old version of this routine is used.  But if there is an exact
+ * match between the cputype and cpusubtype and one of the structs this routine
+ * will always succeed.
  */
-__private_extern__
-struct fat_arch *
-cpusubtype_findbestarch(
+static
+int32_t
+internal_cpusubtype_findbestarch(
 cpu_type_t cputype,
 cpu_subtype_t cpusubtype,
 struct fat_arch *fat_archs,
+struct fat_arch_64 *fat_archs64,
 uint32_t nfat_archs)
 {
     uint32_t i;
     long lowest_family, lowest_model, lowest_index;
+    cpu_type_t fat_cputype;
+    cpu_subtype_t fat_cpusubtype;
 
 	/*
 	 * Look for the first exact match.
 	 */
 	for(i = 0; i < nfat_archs; i++){
-	    if(fat_archs[i].cputype == cputype &&
-	       (fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+	    if(fat_archs64 != NULL){
+		fat_cputype = fat_archs64[i].cputype;
+		fat_cpusubtype = fat_archs64[i].cpusubtype;
+	    }
+	    else{
+		fat_cputype = fat_archs[i].cputype;
+		fat_cpusubtype = fat_archs[i].cpusubtype;
+	    }
+	    if(fat_cputype == cputype &&
+	       (fat_cpusubtype & ~CPU_SUBTYPE_MASK) ==
 	       (cpusubtype & ~CPU_SUBTYPE_MASK))
-		return(fat_archs + i);
+		return(i);
 	}
 
 	/*
@@ -86,19 +99,35 @@ uint32_t nfat_archs)
 		 */
 	    case CPU_SUBTYPE_POWERPC_970:
 		for(i = 0; i < nfat_archs; i++){
-		    if(fat_archs[i].cputype != cputype)
+		    if(fat_archs64 != NULL){
+			fat_cputype = fat_archs64[i].cputype;
+			fat_cpusubtype = fat_archs64[i].cpusubtype;
+		    }
+		    else{
+			fat_cputype = fat_archs[i].cputype;
+			fat_cpusubtype = fat_archs[i].cpusubtype;
+		    }
+		    if(fat_cputype != cputype)
 			continue;
-		    if((fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+		    if((fat_cpusubtype & ~CPU_SUBTYPE_MASK) ==
 		       CPU_SUBTYPE_POWERPC_970)
-			return(fat_archs + i);
+			return(i);
 		}
 	    default:
 		for(i = 0; i < nfat_archs; i++){
-		    if(fat_archs[i].cputype != cputype)
+		    if(fat_archs64 != NULL){
+			fat_cputype = fat_archs64[i].cputype;
+			fat_cpusubtype = fat_archs64[i].cpusubtype;
+		    }
+		    else{
+			fat_cputype = fat_archs[i].cputype;
+			fat_cpusubtype = fat_archs[i].cpusubtype;
+		    }
+		    if(fat_cputype != cputype)
 			continue;
-		    if((fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+		    if((fat_cpusubtype & ~CPU_SUBTYPE_MASK) ==
 		       CPU_SUBTYPE_POWERPC_ALL)
-			return(fat_archs + i);
+			return(i);
 		}
 	    }
 	    break;
@@ -110,11 +139,19 @@ uint32_t nfat_archs)
 	    switch(cpusubtype & ~CPU_SUBTYPE_MASK){
 	    default:
 		for(i = 0; i < nfat_archs; i++){
-		    if(fat_archs[i].cputype != cputype)
+		    if(fat_archs64 != NULL){
+			fat_cputype = fat_archs64[i].cputype;
+			fat_cpusubtype = fat_archs64[i].cpusubtype;
+		    }
+		    else{
+			fat_cputype = fat_archs[i].cputype;
+			fat_cpusubtype = fat_archs[i].cpusubtype;
+		    }
+		    if(fat_cputype != cputype)
 			continue;
-		    if((fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+		    if((fat_cpusubtype & ~CPU_SUBTYPE_MASK) ==
 		       CPU_SUBTYPE_I386_ALL)
-			return(fat_archs + i);
+			return(i);
 		}
 	    }
 	    break;
@@ -131,11 +168,19 @@ uint32_t nfat_archs)
 		 * earilier subtypes.
 		 */
 		for(i = 0; i < nfat_archs; i++){
-		    if(fat_archs[i].cputype != cputype)
+		    if(fat_archs64 != NULL){
+			fat_cputype = fat_archs64[i].cputype;
+			fat_cpusubtype = fat_archs64[i].cpusubtype;
+		    }
+		    else{
+			fat_cputype = fat_archs[i].cputype;
+			fat_cpusubtype = fat_archs[i].cpusubtype;
+		    }
+		    if(fat_cputype != cputype)
 			continue;
-		    if((fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+		    if((fat_cpusubtype & ~CPU_SUBTYPE_MASK) ==
 		       CPU_SUBTYPE_PENT)
-			return(fat_archs + i);
+			return(i);
 		}
 	    case CPU_SUBTYPE_PENT:
 	    case CPU_SUBTYPE_486SX:
@@ -144,11 +189,19 @@ uint32_t nfat_archs)
 		 * break into the loop to look for the i386_ALL.
 		 */
 		for(i = 0; i < nfat_archs; i++){
-		    if(fat_archs[i].cputype != cputype)
+		    if(fat_archs64 != NULL){
+			fat_cputype = fat_archs64[i].cputype;
+			fat_cpusubtype = fat_archs64[i].cpusubtype;
+		    }
+		    else{
+			fat_cputype = fat_archs[i].cputype;
+			fat_cpusubtype = fat_archs[i].cpusubtype;
+		    }
+		    if(fat_cputype != cputype)
 			continue;
-		    if((fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+		    if((fat_cpusubtype & ~CPU_SUBTYPE_MASK) ==
 		       CPU_SUBTYPE_486)
-			return(fat_archs + i);
+			return(i);
 		}
 		break;
 	    case CPU_SUBTYPE_I386_ALL:
@@ -157,78 +210,134 @@ uint32_t nfat_archs)
 		break;
 	    }
 	    for(i = 0; i < nfat_archs; i++){
-		if(fat_archs[i].cputype != cputype)
+		if(fat_archs64 != NULL){
+		    fat_cputype = fat_archs64[i].cputype;
+		    fat_cpusubtype = fat_archs64[i].cpusubtype;
+		}
+		else{
+		    fat_cputype = fat_archs[i].cputype;
+		    fat_cpusubtype = fat_archs[i].cpusubtype;
+		}
+		if(fat_cputype != cputype)
 		    continue;
-		if((fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+		if((fat_cpusubtype & ~CPU_SUBTYPE_MASK) ==
 		   CPU_SUBTYPE_I386_ALL)
-		    return(fat_archs + i);
+		    return(i);
 	    }
 
 	    /*
 	     * A match failed, promote as little as possible.
 	     */
 	    for(i = 0; i < nfat_archs; i++){
-		if(fat_archs[i].cputype != cputype)
+		if(fat_archs64 != NULL){
+		    fat_cputype = fat_archs64[i].cputype;
+		    fat_cpusubtype = fat_archs64[i].cpusubtype;
+		}
+		else{
+		    fat_cputype = fat_archs[i].cputype;
+		    fat_cpusubtype = fat_archs[i].cpusubtype;
+		}
+		if(fat_cputype != cputype)
 		    continue;
-		if((fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+		if((fat_cpusubtype & ~CPU_SUBTYPE_MASK) ==
 		   CPU_SUBTYPE_486)
-		    return(fat_archs + i);
+		    return(i);
 	    }
 	    for(i = 0; i < nfat_archs; i++){
-		if(fat_archs[i].cputype != cputype)
+		if(fat_archs64 != NULL){
+		    fat_cputype = fat_archs64[i].cputype;
+		    fat_cpusubtype = fat_archs64[i].cpusubtype;
+		}
+		else{
+		    fat_cputype = fat_archs[i].cputype;
+		    fat_cpusubtype = fat_archs[i].cpusubtype;
+		}
+		if(fat_cputype != cputype)
 		    continue;
-		if((fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+		if((fat_cpusubtype & ~CPU_SUBTYPE_MASK) ==
 		   CPU_SUBTYPE_486SX)
-		    return(fat_archs + i);
+		    return(i);
 	    }
 	    for(i = 0; i < nfat_archs; i++){
-		if(fat_archs[i].cputype != cputype)
+		if(fat_archs64 != NULL){
+		    fat_cputype = fat_archs64[i].cputype;
+		    fat_cpusubtype = fat_archs64[i].cpusubtype;
+		}
+		else{
+		    fat_cputype = fat_archs[i].cputype;
+		    fat_cpusubtype = fat_archs[i].cpusubtype;
+		}
+		if(fat_cputype != cputype)
 		    continue;
-		if((fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+		if((fat_cpusubtype & ~CPU_SUBTYPE_MASK) ==
 		   CPU_SUBTYPE_586)
-		    return(fat_archs + i);
+		    return(i);
 	    }
 	    /*
 	     * Now look for the lowest family and in that the lowest model.
 	     */
 	    lowest_family = CPU_SUBTYPE_INTEL_FAMILY_MAX + 1;
 	    for(i = 0; i < nfat_archs; i++){
-		if(fat_archs[i].cputype != cputype)
+		if(fat_archs64 != NULL){
+		    fat_cputype = fat_archs64[i].cputype;
+		    fat_cpusubtype = fat_archs64[i].cpusubtype;
+		}
+		else{
+		    fat_cputype = fat_archs[i].cputype;
+		    fat_cpusubtype = fat_archs[i].cpusubtype;
+		}
+		if(fat_cputype != cputype)
 		    continue;
-		if(CPU_SUBTYPE_INTEL_FAMILY(fat_archs[i].cpusubtype &
+		if(CPU_SUBTYPE_INTEL_FAMILY(fat_cpusubtype &
 					    ~CPU_SUBTYPE_MASK) <
 		   lowest_family)
 		    lowest_family = CPU_SUBTYPE_INTEL_FAMILY(
-				fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK);
+				fat_cpusubtype & ~CPU_SUBTYPE_MASK);
 	    }
 	    /* if no intel cputypes found return NULL */
 	    if(lowest_family == CPU_SUBTYPE_INTEL_FAMILY_MAX + 1)
-		return(NULL);
+		return(-1);
 	    lowest_model = LONG_MAX;
 	    lowest_index = -1;
 	    for(i = 0; i < nfat_archs; i++){
-		if(fat_archs[i].cputype != cputype)
+		if(fat_archs64 != NULL){
+		    fat_cputype = fat_archs64[i].cputype;
+		    fat_cpusubtype = fat_archs64[i].cpusubtype;
+		}
+		else{
+		    fat_cputype = fat_archs[i].cputype;
+		    fat_cpusubtype = fat_archs[i].cpusubtype;
+		}
+		if(fat_cputype != cputype)
 		    continue;
-		if(CPU_SUBTYPE_INTEL_FAMILY(fat_archs[i].cpusubtype &
+		if(CPU_SUBTYPE_INTEL_FAMILY(fat_cpusubtype &
 					    ~CPU_SUBTYPE_MASK) ==
 		   lowest_family){
-		    if(CPU_SUBTYPE_INTEL_MODEL(fat_archs[i].cpusubtype &
+		    if(CPU_SUBTYPE_INTEL_MODEL(fat_cpusubtype &
 					       ~CPU_SUBTYPE_MASK) <
 		       lowest_model){
 		        lowest_model = CPU_SUBTYPE_INTEL_MODEL(
-				fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK);
+				fat_cpusubtype & ~CPU_SUBTYPE_MASK);
 			lowest_index = i;
 		    }
 		}
 	    }
-	    return(fat_archs + lowest_index);
+	    return(lowest_index);
 	case CPU_TYPE_MC680x0:
 	    for(i = 0; i < nfat_archs; i++){
-		if(fat_archs[i].cputype != cputype)
+		if(fat_archs64 != NULL){
+		    fat_cputype = fat_archs64[i].cputype;
+		    fat_cpusubtype = fat_archs64[i].cpusubtype;
+		}
+		else{
+		    fat_cputype = fat_archs[i].cputype;
+		    fat_cpusubtype = fat_archs[i].cpusubtype;
+		}
+		if(fat_cputype != cputype)
 		    continue;
-		if((fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+		if((fat_cpusubtype & ~CPU_SUBTYPE_MASK) ==
 		   CPU_SUBTYPE_MC680x0_ALL)
-		    return(fat_archs + i);
+		    return(i);
 	    }
 	    /*
 	     * Try to promote if starting from CPU_SUBTYPE_MC680x0_ALL and
@@ -236,18 +345,34 @@ uint32_t nfat_archs)
 	     */
 	    if((cpusubtype & ~CPU_SUBTYPE_MASK) == CPU_SUBTYPE_MC680x0_ALL){
 		for(i = 0; i < nfat_archs; i++){
-		    if(fat_archs[i].cputype != cputype)
+		    if(fat_archs64 != NULL){
+			fat_cputype = fat_archs64[i].cputype;
+			fat_cpusubtype = fat_archs64[i].cpusubtype;
+		    }
+		    else{
+			fat_cputype = fat_archs[i].cputype;
+			fat_cpusubtype = fat_archs[i].cpusubtype;
+		    }
+		    if(fat_cputype != cputype)
 			continue;
-		    if((fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+		    if((fat_cpusubtype & ~CPU_SUBTYPE_MASK) ==
 		       CPU_SUBTYPE_MC68040)
-			return(fat_archs + i);
+			return(i);
 		}
 		for(i = 0; i < nfat_archs; i++){
-		    if(fat_archs[i].cputype != cputype)
+		    if(fat_archs64 != NULL){
+			fat_cputype = fat_archs64[i].cputype;
+			fat_cpusubtype = fat_archs64[i].cpusubtype;
+		    }
+		    else{
+			fat_cputype = fat_archs[i].cputype;
+			fat_cpusubtype = fat_archs[i].cpusubtype;
+		    }
+		    if(fat_cputype != cputype)
 			continue;
-		    if((fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+		    if((fat_cpusubtype & ~CPU_SUBTYPE_MASK) ==
 		       CPU_SUBTYPE_MC68030_ONLY)
-			return(fat_archs + i);
+			return(i);
 		}
 	    }
 	    break;
@@ -272,27 +397,51 @@ uint32_t nfat_archs)
 		 */
 	    case CPU_SUBTYPE_POWERPC_970:
 		for(i = 0; i < nfat_archs; i++){
-		    if(fat_archs[i].cputype != cputype)
+		    if(fat_archs64 != NULL){
+			fat_cputype = fat_archs64[i].cputype;
+			fat_cpusubtype = fat_archs64[i].cpusubtype;
+		    }
+		    else{
+			fat_cputype = fat_archs[i].cputype;
+			fat_cpusubtype = fat_archs[i].cpusubtype;
+		    }
+		    if(fat_cputype != cputype)
 			continue;
-		    if((fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+		    if((fat_cpusubtype & ~CPU_SUBTYPE_MASK) ==
 		       CPU_SUBTYPE_POWERPC_970)
-			return(fat_archs + i);
+			return(i);
 		}
 	    case CPU_SUBTYPE_POWERPC_7450:
 	    case CPU_SUBTYPE_POWERPC_7400:
 		for(i = 0; i < nfat_archs; i++){
-		    if(fat_archs[i].cputype != cputype)
+		    if(fat_archs64 != NULL){
+			fat_cputype = fat_archs64[i].cputype;
+			fat_cpusubtype = fat_archs64[i].cpusubtype;
+		    }
+		    else{
+			fat_cputype = fat_archs[i].cputype;
+			fat_cpusubtype = fat_archs[i].cpusubtype;
+		    }
+		    if(fat_cputype != cputype)
 			continue;
-		    if((fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+		    if((fat_cpusubtype & ~CPU_SUBTYPE_MASK) ==
 		       CPU_SUBTYPE_POWERPC_7450)
-			return(fat_archs + i);
+			return(i);
 		}
 		for(i = 0; i < nfat_archs; i++){
-		    if(fat_archs[i].cputype != cputype)
+		    if(fat_archs64 != NULL){
+			fat_cputype = fat_archs64[i].cputype;
+			fat_cpusubtype = fat_archs64[i].cpusubtype;
+		    }
+		    else{
+			fat_cputype = fat_archs[i].cputype;
+			fat_cpusubtype = fat_archs[i].cpusubtype;
+		    }
+		    if(fat_cputype != cputype)
 			continue;
-		    if((fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+		    if((fat_cpusubtype & ~CPU_SUBTYPE_MASK) ==
 		       CPU_SUBTYPE_POWERPC_7400)
-			return(fat_archs + i);
+			return(i);
 		}
 	    case CPU_SUBTYPE_POWERPC_750:
 	    case CPU_SUBTYPE_POWERPC_604e:
@@ -301,54 +450,110 @@ uint32_t nfat_archs)
 	    case CPU_SUBTYPE_POWERPC_603e:
 	    case CPU_SUBTYPE_POWERPC_603:
 		for(i = 0; i < nfat_archs; i++){
-		    if(fat_archs[i].cputype != cputype)
+		    if(fat_archs64 != NULL){
+			fat_cputype = fat_archs64[i].cputype;
+			fat_cpusubtype = fat_archs64[i].cpusubtype;
+		    }
+		    else{
+			fat_cputype = fat_archs[i].cputype;
+			fat_cpusubtype = fat_archs[i].cpusubtype;
+		    }
+		    if(fat_cputype != cputype)
 			continue;
-		    if((fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+		    if((fat_cpusubtype & ~CPU_SUBTYPE_MASK) ==
 		       CPU_SUBTYPE_POWERPC_750)
-			return(fat_archs + i);
+			return(i);
 		}
 		for(i = 0; i < nfat_archs; i++){
-		    if(fat_archs[i].cputype != cputype)
+		    if(fat_archs64 != NULL){
+			fat_cputype = fat_archs64[i].cputype;
+			fat_cpusubtype = fat_archs64[i].cpusubtype;
+		    }
+		    else{
+			fat_cputype = fat_archs[i].cputype;
+			fat_cpusubtype = fat_archs[i].cpusubtype;
+		    }
+		    if(fat_cputype != cputype)
 			continue;
-		    if((fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+		    if((fat_cpusubtype & ~CPU_SUBTYPE_MASK) ==
 		       CPU_SUBTYPE_POWERPC_604e)
-			return(fat_archs + i);
+			return(i);
 		}
 		for(i = 0; i < nfat_archs; i++){
-		    if(fat_archs[i].cputype != cputype)
+		    if(fat_archs64 != NULL){
+			fat_cputype = fat_archs64[i].cputype;
+			fat_cpusubtype = fat_archs64[i].cpusubtype;
+		    }
+		    else{
+			fat_cputype = fat_archs[i].cputype;
+			fat_cpusubtype = fat_archs[i].cpusubtype;
+		    }
+		    if(fat_cputype != cputype)
 			continue;
-		    if((fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK)
+		    if((fat_cpusubtype & ~CPU_SUBTYPE_MASK)
 		        == CPU_SUBTYPE_POWERPC_604)
-			return(fat_archs + i);
+			return(i);
 		}
 		for(i = 0; i < nfat_archs; i++){
-		    if(fat_archs[i].cputype != cputype)
+		    if(fat_archs64 != NULL){
+			fat_cputype = fat_archs64[i].cputype;
+			fat_cpusubtype = fat_archs64[i].cpusubtype;
+		    }
+		    else{
+			fat_cputype = fat_archs[i].cputype;
+			fat_cpusubtype = fat_archs[i].cpusubtype;
+		    }
+		    if(fat_cputype != cputype)
 			continue;
-		    if((fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+		    if((fat_cpusubtype & ~CPU_SUBTYPE_MASK) ==
 		       CPU_SUBTYPE_POWERPC_603ev)
-			return(fat_archs + i);
+			return(i);
 		}
 		for(i = 0; i < nfat_archs; i++){
-		    if(fat_archs[i].cputype != cputype)
+		    if(fat_archs64 != NULL){
+			fat_cputype = fat_archs64[i].cputype;
+			fat_cpusubtype = fat_archs64[i].cpusubtype;
+		    }
+		    else{
+			fat_cputype = fat_archs[i].cputype;
+			fat_cpusubtype = fat_archs[i].cpusubtype;
+		    }
+		    if(fat_cputype != cputype)
 			continue;
-		    if((fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+		    if((fat_cpusubtype & ~CPU_SUBTYPE_MASK) ==
 		       CPU_SUBTYPE_POWERPC_603e)
-			return(fat_archs + i);
+			return(i);
 		}
 		for(i = 0; i < nfat_archs; i++){
-		    if(fat_archs[i].cputype != cputype)
+		    if(fat_archs64 != NULL){
+			fat_cputype = fat_archs64[i].cputype;
+			fat_cpusubtype = fat_archs64[i].cpusubtype;
+		    }
+		    else{
+			fat_cputype = fat_archs[i].cputype;
+			fat_cpusubtype = fat_archs[i].cpusubtype;
+		    }
+		    if(fat_cputype != cputype)
 			continue;
-		    if((fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+		    if((fat_cpusubtype & ~CPU_SUBTYPE_MASK) ==
 		       CPU_SUBTYPE_POWERPC_603)
-			return(fat_archs + i);
+			return(i);
 		}
 	    default:
 		for(i = 0; i < nfat_archs; i++){
-		    if(fat_archs[i].cputype != cputype)
+		    if(fat_archs64 != NULL){
+			fat_cputype = fat_archs64[i].cputype;
+			fat_cpusubtype = fat_archs64[i].cpusubtype;
+		    }
+		    else{
+			fat_cputype = fat_archs[i].cputype;
+			fat_cpusubtype = fat_archs[i].cpusubtype;
+		    }
+		    if(fat_cputype != cputype)
 			continue;
-		    if((fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+		    if((fat_cpusubtype & ~CPU_SUBTYPE_MASK) ==
 		       CPU_SUBTYPE_POWERPC_ALL)
-			return(fat_archs + i);
+			return(i);
 		}
 	    }
 	    break;
@@ -363,63 +568,119 @@ uint32_t nfat_archs)
 	    case CPU_SUBTYPE_VEO_1:
 	    case CPU_SUBTYPE_VEO_3:
 		for(i = 0; i < nfat_archs; i++){
-		    if(fat_archs[i].cputype != cputype)
+		    if(fat_archs64 != NULL){
+			fat_cputype = fat_archs64[i].cputype;
+			fat_cpusubtype = fat_archs64[i].cpusubtype;
+		    }
+		    else{
+			fat_cputype = fat_archs[i].cputype;
+			fat_cpusubtype = fat_archs[i].cpusubtype;
+		    }
+		    if(fat_cputype != cputype)
 			continue;
-		    if((fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+		    if((fat_cpusubtype & ~CPU_SUBTYPE_MASK) ==
 		       CPU_SUBTYPE_VEO_2)
-			return(fat_archs + i);
+			return(i);
 		}
 	    case CPU_SUBTYPE_VEO_4:
 		for(i = 0; i < nfat_archs; i++){
-		    if(fat_archs[i].cputype != cputype)
+		    if(fat_archs64 != NULL){
+			fat_cputype = fat_archs64[i].cputype;
+			fat_cpusubtype = fat_archs64[i].cpusubtype;
+		    }
+		    else{
+			fat_cputype = fat_archs[i].cputype;
+			fat_cpusubtype = fat_archs[i].cpusubtype;
+		    }
+		    if(fat_cputype != cputype)
 			continue;
-		    if((fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+		    if((fat_cpusubtype & ~CPU_SUBTYPE_MASK) ==
 		       CPU_SUBTYPE_VEO_3)
-			return(fat_archs + i);
+			return(i);
 		}
 		for(i = 0; i < nfat_archs; i++){
-		    if(fat_archs[i].cputype != cputype)
+		    if(fat_archs64 != NULL){
+			fat_cputype = fat_archs64[i].cputype;
+			fat_cpusubtype = fat_archs64[i].cpusubtype;
+		    }
+		    else{
+			fat_cputype = fat_archs[i].cputype;
+			fat_cpusubtype = fat_archs[i].cpusubtype;
+		    }
+		    if(fat_cputype != cputype)
 			continue;
-		    if((fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+		    if((fat_cpusubtype & ~CPU_SUBTYPE_MASK) ==
 		       CPU_SUBTYPE_VEO_2)
-			return(fat_archs + i);
+			return(i);
 		}
 	    }
 	    break;
 	case CPU_TYPE_MC88000:
 	    for(i = 0; i < nfat_archs; i++){
-		if(fat_archs[i].cputype != cputype)
+		if(fat_archs64 != NULL){
+		    fat_cputype = fat_archs64[i].cputype;
+		    fat_cpusubtype = fat_archs64[i].cpusubtype;
+		}
+		else{
+		    fat_cputype = fat_archs[i].cputype;
+		    fat_cpusubtype = fat_archs[i].cpusubtype;
+		}
+		if(fat_cputype != cputype)
 		    continue;
-		if((fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+		if((fat_cpusubtype & ~CPU_SUBTYPE_MASK) ==
 		   CPU_SUBTYPE_MC88000_ALL)
-		    return(fat_archs + i);
+		    return(i);
 	    }
 	    break;
 	case CPU_TYPE_I860:
 	    for(i = 0; i < nfat_archs; i++){
-		if(fat_archs[i].cputype != cputype)
+		if(fat_archs64 != NULL){
+		    fat_cputype = fat_archs64[i].cputype;
+		    fat_cpusubtype = fat_archs64[i].cpusubtype;
+		}
+		else{
+		    fat_cputype = fat_archs[i].cputype;
+		    fat_cpusubtype = fat_archs[i].cpusubtype;
+		}
+		if(fat_cputype != cputype)
 		    continue;
-		if((fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+		if((fat_cpusubtype & ~CPU_SUBTYPE_MASK) ==
 		   CPU_SUBTYPE_I860_ALL)
-		    return(fat_archs + i);
+		    return(i);
 	    }
 	    break;
 	case CPU_TYPE_HPPA:
 	    for(i = 0; i < nfat_archs; i++){
-		if(fat_archs[i].cputype != cputype)
+		if(fat_archs64 != NULL){
+		    fat_cputype = fat_archs64[i].cputype;
+		    fat_cpusubtype = fat_archs64[i].cpusubtype;
+		}
+		else{
+		    fat_cputype = fat_archs[i].cputype;
+		    fat_cpusubtype = fat_archs[i].cpusubtype;
+		}
+		if(fat_cputype != cputype)
 		    continue;
-		if((fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+		if((fat_cpusubtype & ~CPU_SUBTYPE_MASK) ==
 		   CPU_SUBTYPE_HPPA_ALL)
-		    return(fat_archs + i);
+		    return(i);
 	    }
 	    break;
 	case CPU_TYPE_SPARC:
 	    for(i = 0; i < nfat_archs; i++){
-		if(fat_archs[i].cputype != cputype)
+		if(fat_archs64 != NULL){
+		    fat_cputype = fat_archs64[i].cputype;
+		    fat_cpusubtype = fat_archs64[i].cpusubtype;
+		}
+		else{
+		    fat_cputype = fat_archs[i].cputype;
+		    fat_cpusubtype = fat_archs[i].cpusubtype;
+		}
+		if(fat_cputype != cputype)
 		    continue;
-		if((fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+		if((fat_cpusubtype & ~CPU_SUBTYPE_MASK) ==
 		   CPU_SUBTYPE_SPARC_ALL)
-		    return(fat_archs + i);
+		    return(i);
 	    }
 	    break;
 	case CPU_TYPE_ARM:
@@ -438,93 +699,244 @@ uint32_t nfat_archs)
 	    if(cpusubtype == CPU_SUBTYPE_ARM_ALL ||
 	       cpusubtype == CPU_SUBTYPE_ARM_V7K){
 		for(i = 0; i < nfat_archs; i++){
-		    if(fat_archs[i].cputype == cputype &&
-		       fat_archs[i].cpusubtype == CPU_SUBTYPE_ARM_V7S)
-			return(fat_archs + i);
+		    if(fat_archs64 != NULL){
+			fat_cputype = fat_archs64[i].cputype;
+			fat_cpusubtype = fat_archs64[i].cpusubtype;
+		    }
+		    else{
+			fat_cputype = fat_archs[i].cputype;
+			fat_cpusubtype = fat_archs[i].cpusubtype;
+		    }
+		    if(fat_cputype == cputype &&
+		       fat_cpusubtype == CPU_SUBTYPE_ARM_V7S)
+			return(i);
 		}
 	    }
 	    if(cpusubtype == CPU_SUBTYPE_ARM_ALL ||
 	       cpusubtype == CPU_SUBTYPE_ARM_V7S){
 		for(i = 0; i < nfat_archs; i++){
-		    if(fat_archs[i].cputype == cputype &&
-		       fat_archs[i].cpusubtype == CPU_SUBTYPE_ARM_V7F)
-			return(fat_archs + i);
+		    if(fat_archs64 != NULL){
+			fat_cputype = fat_archs64[i].cputype;
+			fat_cpusubtype = fat_archs64[i].cpusubtype;
+		    }
+		    else{
+			fat_cputype = fat_archs[i].cputype;
+			fat_cpusubtype = fat_archs[i].cpusubtype;
+		    }
+		    if(fat_cputype == cputype &&
+		       fat_cpusubtype == CPU_SUBTYPE_ARM_V7F)
+			return(i);
 		}
 	    }
 	    if(cpusubtype == CPU_SUBTYPE_ARM_ALL ||
 	       cpusubtype == CPU_SUBTYPE_ARM_V7F){
 		for(i = 0; i < nfat_archs; i++){
-		    if(fat_archs[i].cputype == cputype &&
-		       fat_archs[i].cpusubtype == CPU_SUBTYPE_ARM_V7)
-			return(fat_archs + i);
+		    if(fat_archs64 != NULL){
+			fat_cputype = fat_archs64[i].cputype;
+			fat_cpusubtype = fat_archs64[i].cpusubtype;
+		    }
+		    else{
+			fat_cputype = fat_archs[i].cputype;
+			fat_cpusubtype = fat_archs[i].cpusubtype;
+		    }
+		    if(fat_cputype == cputype &&
+		       fat_cpusubtype == CPU_SUBTYPE_ARM_V7)
+			return(i);
 		}
 	    }
 	    if(cpusubtype == CPU_SUBTYPE_ARM_ALL ||
 	       cpusubtype == CPU_SUBTYPE_ARM_V7 ||
 	       cpusubtype == CPU_SUBTYPE_ARM_V6){
 		for(i = 0; i < nfat_archs; i++){
-		    if(fat_archs[i].cputype == cputype &&
-		       fat_archs[i].cpusubtype == CPU_SUBTYPE_ARM_V6)
-			return(fat_archs + i);
+		    if(fat_archs64 != NULL){
+			fat_cputype = fat_archs64[i].cputype;
+			fat_cpusubtype = fat_archs64[i].cpusubtype;
+		    }
+		    else{
+			fat_cputype = fat_archs[i].cputype;
+			fat_cpusubtype = fat_archs[i].cpusubtype;
+		    }
+		    if(fat_cputype == cputype &&
+		       fat_cpusubtype == CPU_SUBTYPE_ARM_V6)
+			return(i);
 		}
 	    }
 	    if(cpusubtype == CPU_SUBTYPE_ARM_ALL ||
 	       cpusubtype == CPU_SUBTYPE_ARM_V6 ||
 	       cpusubtype == CPU_SUBTYPE_ARM_V5TEJ){
 		for(i = 0; i < nfat_archs; i++){
-		    if(fat_archs[i].cputype == cputype &&
-		       fat_archs[i].cpusubtype == CPU_SUBTYPE_ARM_V5TEJ)
-			return(fat_archs + i);
+		    if(fat_archs64 != NULL){
+			fat_cputype = fat_archs64[i].cputype;
+			fat_cpusubtype = fat_archs64[i].cpusubtype;
+		    }
+		    else{
+			fat_cputype = fat_archs[i].cputype;
+			fat_cpusubtype = fat_archs[i].cpusubtype;
+		    }
+		    if(fat_cputype == cputype &&
+		       fat_cpusubtype == CPU_SUBTYPE_ARM_V5TEJ)
+			return(i);
 		}
 	    }
 	    if(cpusubtype == CPU_SUBTYPE_ARM_ALL ||
 	       cpusubtype == CPU_SUBTYPE_ARM_XSCALE){
 		for(i = 0; i < nfat_archs; i++){
-		    if(fat_archs[i].cputype == cputype &&
-		       fat_archs[i].cpusubtype == CPU_SUBTYPE_ARM_XSCALE)
-			return(fat_archs + i);
+		    if(fat_archs64 != NULL){
+			fat_cputype = fat_archs64[i].cputype;
+			fat_cpusubtype = fat_archs64[i].cpusubtype;
+		    }
+		    else{
+			fat_cputype = fat_archs[i].cputype;
+			fat_cpusubtype = fat_archs[i].cpusubtype;
+		    }
+		    if(fat_cputype == cputype &&
+		       fat_cpusubtype == CPU_SUBTYPE_ARM_XSCALE)
+			return(i);
 		}
 	    }
 	    for(i = 0; i < nfat_archs; i++){
-		if(fat_archs[i].cputype == cputype &&
-		   fat_archs[i].cpusubtype == CPU_SUBTYPE_ARM_V4T)
-		    return(fat_archs + i);
+		if(fat_archs64 != NULL){
+		    fat_cputype = fat_archs64[i].cputype;
+		    fat_cpusubtype = fat_archs64[i].cpusubtype;
+		}
+		else{
+		    fat_cputype = fat_archs[i].cputype;
+		    fat_cpusubtype = fat_archs[i].cpusubtype;
+		}
+		if(fat_cputype == cputype &&
+		   fat_cpusubtype == CPU_SUBTYPE_ARM_V4T)
+		    return(i);
 	    }
 	    for(i = 0; i < nfat_archs; i++){
-		if(fat_archs[i].cputype == cputype &&
-		   fat_archs[i].cpusubtype == CPU_SUBTYPE_ARM_V6M)
-		    return(fat_archs + i);
+		if(fat_archs64 != NULL){
+		    fat_cputype = fat_archs64[i].cputype;
+		    fat_cpusubtype = fat_archs64[i].cpusubtype;
+		}
+		else{
+		    fat_cputype = fat_archs[i].cputype;
+		    fat_cpusubtype = fat_archs[i].cpusubtype;
+		}
+		if(fat_cputype == cputype &&
+		   fat_cpusubtype == CPU_SUBTYPE_ARM_V6M)
+		    return(i);
 	    }
 	    for(i = 0; i < nfat_archs; i++){
-		if(fat_archs[i].cputype == cputype &&
-		   fat_archs[i].cpusubtype == CPU_SUBTYPE_ARM_V7M)
-		    return(fat_archs + i);
+		if(fat_archs64 != NULL){
+		    fat_cputype = fat_archs64[i].cputype;
+		    fat_cpusubtype = fat_archs64[i].cpusubtype;
+		}
+		else{
+		    fat_cputype = fat_archs[i].cputype;
+		    fat_cpusubtype = fat_archs[i].cpusubtype;
+		}
+		if(fat_cputype == cputype &&
+		   fat_cpusubtype == CPU_SUBTYPE_ARM_V7M)
+		    return(i);
 	    }
 	    for(i = 0; i < nfat_archs; i++){
-		if(fat_archs[i].cputype == cputype &&
-		   fat_archs[i].cpusubtype == CPU_SUBTYPE_ARM_V7EM)
-		    return(fat_archs + i);
+		if(fat_archs64 != NULL){
+		    fat_cputype = fat_archs64[i].cputype;
+		    fat_cpusubtype = fat_archs64[i].cpusubtype;
+		}
+		else{
+		    fat_cputype = fat_archs[i].cputype;
+		    fat_cpusubtype = fat_archs[i].cpusubtype;
+		}
+		if(fat_cputype == cputype &&
+		   fat_cpusubtype == CPU_SUBTYPE_ARM_V7EM)
+		    return(i);
 	    }
 	    for(i = 0; i < nfat_archs; i++){
-		if(fat_archs[i].cputype == cputype &&
-		   fat_archs[i].cpusubtype == CPU_SUBTYPE_ARM_ALL)
-		    return(fat_archs + i);
+		if(fat_archs64 != NULL){
+		    fat_cputype = fat_archs64[i].cputype;
+		    fat_cpusubtype = fat_archs64[i].cpusubtype;
+		}
+		else{
+		    fat_cputype = fat_archs[i].cputype;
+		    fat_cpusubtype = fat_archs[i].cpusubtype;
+		}
+		if(fat_cputype == cputype &&
+		   fat_cpusubtype == CPU_SUBTYPE_ARM_ALL)
+		    return(i);
 	    }
 
 	case CPU_TYPE_ARM64:
 	    for(i = 0; i < nfat_archs; i++){
-		if(fat_archs[i].cputype != cputype)
+		if(fat_archs64 != NULL){
+		    fat_cputype = fat_archs64[i].cputype;
+		    fat_cpusubtype = fat_archs64[i].cpusubtype;
+		}
+		else{
+		    fat_cputype = fat_archs[i].cputype;
+		    fat_cpusubtype = fat_archs[i].cpusubtype;
+		}
+		if(fat_cputype != cputype)
 		    continue;
-		if((fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+		if((fat_cpusubtype & ~CPU_SUBTYPE_MASK) ==
 		   CPU_SUBTYPE_ARM64_ALL)
-		    return(fat_archs + i);
+		    return(i);
 	    }
 	    break;
 
 	default:
-	    return(NULL);
+	    return(-1);
 	}
-	return(NULL);
+	return(-1);
+}
+
+/*
+ * cpusubtype_findbestarch_64() is passed a cputype and cpusubtype and a set of
+ * fat_arch_64 structs and selects the best one that matches (if any) and
+ * returns a pointer to that fat_arch_64 struct (or NULL).  The fat_arch_64
+ * structs must be in the host byte sex and correct such that the fat_archs64
+ * really points to enough memory for nfat_arch_64 structs.  It is possible
+ * that this routine could fail if new cputypes or cpusubtypes are added and an
+ * old version of this routine is used.  But if there is an exact match between
+ * the cputype and cpusubtype and one of the fat_arch structs this routine will
+ * always succeed.
+ */
+__private_extern__
+struct fat_arch_64 *
+cpusubtype_findbestarch_64(
+cpu_type_t cputype,
+cpu_subtype_t cpusubtype,
+struct fat_arch_64 *fat_archs64,
+uint32_t nfat_archs)
+{
+    int32_t i;
+
+	i = internal_cpusubtype_findbestarch(cputype, cpusubtype, NULL,
+					     fat_archs64, nfat_archs);
+	if(i == -1)
+	    return(NULL);
+	return(fat_archs64 + i);
+}
+
+/*
+ * cpusubtype_findbestarch() is passed a cputype and cpusubtype and a set of
+ * fat_arch structs and selects the best one that matches (if any) and returns
+ * a pointer to that fat_arch struct (or NULL).  The fat_arch structs must be
+ * in the host byte sex and correct such that the fat_archs really points to
+ * enough memory for nfat_arch structs.  It is possible that this routine could
+ * fail if new cputypes or cpusubtypes are added and an old version of this
+ * routine is used.  But if there is an exact match between the cputype and
+ * cpusubtype and one of the fat_arch structs this routine will always succeed.
+ */
+__private_extern__
+struct fat_arch *
+cpusubtype_findbestarch(
+cpu_type_t cputype,
+cpu_subtype_t cpusubtype,
+struct fat_arch *fat_archs,
+uint32_t nfat_archs)
+{
+    int32_t i;
+
+	i = internal_cpusubtype_findbestarch(cputype, cpusubtype, fat_archs,
+					     NULL, nfat_archs);
+	if(i == -1)
+	    return(NULL);
+	return(fat_archs + i);
 }
 #endif /* RLD */
 

@@ -104,6 +104,11 @@ __private_extern__ void swap_fat_arch(
     uint32_t nfat_arch,
     enum byte_sex target_byte_sex);
 
+__private_extern__ void swap_fat_arch_64(
+    struct fat_arch_64 *fat_archs64,
+    uint32_t nfat_arch,
+    enum byte_sex target_byte_sex);
+
 __private_extern__ void swap_mach_header(
     struct mach_header *mh,
     enum byte_sex target_byte_sex);
@@ -391,6 +396,11 @@ __private_extern__ void swap_nlist_64(
 __private_extern__ void swap_ranlib(
     struct ranlib *ranlibs,
     uint32_t nranlibs,
+    enum byte_sex target_byte_sex);
+
+__private_extern__ void swap_ranlib_64(
+    struct ranlib_64 *ranlibs,
+    uint64_t nranlibs,
     enum byte_sex target_byte_sex);
 
 __private_extern__ void swap_relocation_info(

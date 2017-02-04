@@ -12,21 +12,28 @@
 #include <mach-o/nlist.h>
 #include <mach-o/dyld.h>
 
+/* cctools-port */
+#if LTO_API_VERSION < 5
+typedef unsigned char lto_bool_t;
+#endif
+/* cctools-port end */
+
 static int get_lto_cputype(
     struct arch_flag *arch_flag,
-    char *target_triple);
+    const char *target_triple);
 
 static int tried_to_load_lto = 0;
 static void *lto_handle = NULL;
-static int (*lto_is_object)(const void* mem, size_t length) = NULL;
+static lto_bool_t (*lto_is_object)(const void* mem, size_t length) = NULL;
 static lto_module_t (*lto_create)(const void* mem, size_t length) = NULL;
 static lto_module_t (*lto_create_local)(const void* mem, size_t length,
 					const char *path) = NULL;
 static void (*lto_dispose)(void *mod) = NULL;
-static char * (*lto_get_target)(void *mod) = NULL;
-static uint32_t (*lto_get_num_symbols)(void *mod) = NULL;
-static lto_symbol_attributes (*lto_get_sym_attr)(void *mod, uint32_t n) = NULL;
-static char * (*lto_get_sym_name)(void *mod, uint32_t n) = NULL;
+static const char * (*lto_get_target)(void *mod) = NULL;
+static unsigned int (*lto_get_num_symbols)(void *mod) = NULL;
+static lto_symbol_attributes (*lto_get_sym_attr)(void *mod,
+                              unsigned int n) = NULL;
+static const char * (*lto_get_sym_name)(void *mod, unsigned int n) = NULL;
 
 /*
  * is_llvm_bitcode() is passed an ofile struct pointer and a pointer and size
@@ -156,6 +163,7 @@ void **pmod) /* maybe NULL */
 	       lto_get_num_symbols == NULL ||
 	       lto_get_sym_attr == NULL ||
 	       lto_get_sym_name == NULL){
+		fprintf(stderr, "libLTO: %s", dlerror()); /* cctools-port */
 		dlclose(lto_handle);
 		if(lto_path != NULL)
 		    free(lto_path);
@@ -205,7 +213,7 @@ static
 int
 get_lto_cputype(
 struct arch_flag *arch_flag,
-char *target_triple)
+const char *target_triple)
 {
     char *p;
     size_t n;
@@ -406,7 +414,7 @@ uint32_t symbol_index)
  * and returns the name of that symbol.
  */
 __private_extern__
-char *
+const char *
 lto_symbol_name(
 void *mod,
 uint32_t symbol_index)

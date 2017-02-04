@@ -67,7 +67,7 @@ int asprintf(char **strp, const char *fmt, ...);
  */
 struct toc {
     char *name;		/* symbol defined by */
-    int32_t index1;	/* library member at this index plus 1 */
+    int64_t index1;	/* library member at this index plus 1 */
 };
 
 /* used by error routines as the name of the program */
@@ -152,6 +152,9 @@ struct cmd_flags {
     uint32_t debug;	/* debug value to debug output_flush() routine */
     enum bool		/* don't warn if members have no symbols */
 	no_warning_for_no_symbols;
+    enum bool toc64;	/* force the use of the 64-bit toc */
+    enum bool fat64;	/* force the use of 64-bit fat files
+			   when a fat is to be created */
 };
 static struct cmd_flags cmd_flags = { 0 };
 
@@ -186,10 +189,12 @@ struct arch {
     char *toc_name;		/* name of toc member */
     uint32_t toc_name_size;/* size of name of toc member */
     struct toc    *tocs;	/* internal table of contents */
-    struct ranlib *toc_ranlibs;	/* ranlib structs for output */
-    uint32_t       toc_nranlibs;/* number of ranlib structs */
+    enum bool using_64toc;	/* TRUE if we are using a 64-bit toc */
+    struct ranlib *toc_ranlibs;	/* 32-bit ranlib structs for output */
+    struct ranlib_64 *toc_ranlibs64;	/* 64-bit ranlib structs for output */
+    uint64_t       toc_nranlibs;/* number of ranlib structs */
     char	  *toc_strings;	/* strings of symbol names for ranlib structs */
-    uint32_t       toc_strsize;	/* number of bytes for the strings above */
+    uint64_t       toc_strsize;	/* number of bytes for the strings above */
 
     /* the members of this architecture in the library */
     struct member *members;	/* the members of the library for this arch */
@@ -1006,6 +1011,12 @@ char **envp)
 		else if(strcmp(argv[i], "-no_warning_for_no_symbols") == 0){
 		    cmd_flags.no_warning_for_no_symbols = TRUE;
 		}
+		else if(strcmp(argv[i], "-toc64") == 0){
+		    cmd_flags.toc64 = TRUE;
+		}
+		else if(strcmp(argv[i], "-fat64") == 0){
+		    cmd_flags.fat64 = TRUE;
+		}
 #ifdef DEBUG
 		else if(strcmp(argv[i], "-debug") == 0){
 		    if(i + 1 >= argc){
@@ -1333,6 +1344,8 @@ void)
 	for(i = 0; i < cmd_flags.nfiles; i++){
 	    if(strncmp(cmd_flags.files[i], "-l", 2) == 0 ||
 	       strncmp(cmd_flags.files[i], "-weak-l", 7) == 0){
+		if(cmd_flags.dynamic == TRUE)
+		    continue;
 		file_name = file_name_from_l_flag(cmd_flags.files[i]);
 		if(file_name != NULL)
 		    if(ofile_map(file_name, NULL, NULL, ofiles + i, TRUE) ==
@@ -2255,6 +2268,8 @@ void)
 		free(archs[i].tocs);
 	    if(archs[i].toc_ranlibs != NULL)
 		free(archs[i].toc_ranlibs);
+	    if(archs[i].toc_ranlibs64 != NULL)
+		free(archs[i].toc_ranlibs64);
 	    if(archs[i].toc_strings != NULL)
 		free(archs[i].toc_strings);
 	    if(archs[i].members != NULL)
@@ -2290,6 +2305,7 @@ struct ofile *ofile)
     struct arch *arch;
     struct fat_header *fat_header;
     struct fat_arch *fat_arch;
+    struct fat_arch_64 *fat_arch64;
     int fd;
 #ifndef __OPENSTEP__
     struct utimbuf timep;
@@ -2336,8 +2352,11 @@ struct ofile *ofile)
 	 * architecture.
 	 */
 	if(narchs > 1){
-	    library_size = sizeof(struct fat_header) +
-			   sizeof(struct fat_arch) * narchs;
+	    library_size = sizeof(struct fat_header);
+	    if(cmd_flags.fat64 == TRUE)
+		library_size += sizeof(struct fat_arch_64) * narchs;
+	    else
+		library_size += sizeof(struct fat_arch) * narchs;
 	    /*
 	     * The ar(1) program uses the -q flag to ranlib(1) to add a table
 	     * of contents only of the output is not a fat file.  This is done
@@ -2399,6 +2418,7 @@ struct ofile *ofile)
 	if(cmd_flags.ranlib == TRUE && narchs == 1 &&
 	   ofile != NULL && ofile->toc_addr != NULL &&
 	   ofile->toc_bad == FALSE &&
+	   archs[0].using_64toc != ofile->toc_is_32bit &&
 	   archs[0].toc_nranlibs == ofile->toc_nranlibs &&
 	   archs[0].toc_strsize == ofile->toc_strsize){
 
@@ -2407,7 +2427,8 @@ struct ofile *ofile)
 	     * the one we built does not (or vice a versa) then don't update it
 	     * in place.
 	     */
-	    if(strcmp(ofile->toc_ar_hdr->ar_name, AR_EFMT1) == 0){
+	    if(strncmp(ofile->toc_ar_hdr->ar_name, AR_EFMT1,
+		       sizeof(AR_EFMT1) - 1) == 0){
 	       if(archs[0].toc_long_name != TRUE)
 		goto fail_to_update_toc_in_place;
 	    }
@@ -2456,13 +2477,27 @@ struct ofile *ofile)
 	     */
 	    if(different_offsets == TRUE){
 		same_toc = FALSE;
-		for(i = 0; i < archs[0].toc_nranlibs; i++){
-		    for(j = 0; j < archs[0].nmembers; j++){
-			if(archs[0].members[j].offset == 
-			   archs[0].toc_ranlibs[i].ran_off){
-			    archs[0].toc_ranlibs[i].ran_off = 
-				archs[0].members[j].input_member_offset;
-			    break;
+		if(archs[0].using_64toc == FALSE){
+		    for(i = 0; i < archs[0].toc_nranlibs; i++){
+			for(j = 0; j < archs[0].nmembers; j++){
+			    if(archs[0].members[j].offset == 
+			       archs[0].toc_ranlibs[i].ran_off){
+				archs[0].toc_ranlibs[i].ran_off = 
+				    archs[0].members[j].input_member_offset;
+				break;
+			    }
+			}
+		    }
+		}
+		else{
+		    for(i = 0; i < archs[0].toc_nranlibs; i++){
+			for(j = 0; j < archs[0].nmembers; j++){
+			    if(archs[0].members[j].offset == 
+			       archs[0].toc_ranlibs64[i].ran_off){
+				archs[0].toc_ranlibs64[i].ran_off = 
+				    archs[0].members[j].input_member_offset;
+				break;
+			    }
 			}
 		    }
 		}
@@ -2475,12 +2510,23 @@ struct ofile *ofile)
 		 */
 		same_toc = TRUE;
 		for(i = 0; i < archs[0].toc_nranlibs; i++){
-		    if(archs[0].toc_ranlibs[i].ran_un.ran_strx != 
-		       ofile->toc_ranlibs[i].ran_un.ran_strx ||
-		       archs[0].toc_ranlibs[i].ran_off !=
-		       ofile->toc_ranlibs[i].ran_off){
-			same_toc = FALSE;
-			break;
+		    if(archs[0].using_64toc == FALSE){
+			if(archs[0].toc_ranlibs[i].ran_un.ran_strx != 
+			   ofile->toc_ranlibs[i].ran_un.ran_strx ||
+			   archs[0].toc_ranlibs[i].ran_off !=
+			   ofile->toc_ranlibs[i].ran_off){
+			    same_toc = FALSE;
+			    break;
+			}
+		    }
+		    else{
+			if(archs[0].toc_ranlibs64[i].ran_un.ran_strx != 
+			   ofile->toc_ranlibs64[i].ran_un.ran_strx ||
+			   archs[0].toc_ranlibs64[i].ran_off !=
+			   ofile->toc_ranlibs64[i].ran_off){
+			    same_toc = FALSE;
+			    break;
+			}
 		    }
 		}
 		if(same_toc == TRUE){
@@ -2555,35 +2601,71 @@ fail_to_update_toc_in_place:
 
 	/*
 	 * If there is more than one architecture then fill in the fat file
-	 * header and the fat_arch structures in the buffer.
+	 * header and the fat_arch or fat_arch64 structures in the buffer.
 	 */
 	if(narchs > 1){
 	    fat_header = (struct fat_header *)library;
-	    fat_header->magic = FAT_MAGIC;
+	    if(cmd_flags.fat64 == TRUE)
+		fat_header->magic = FAT_MAGIC_64;
+	    else
+		fat_header->magic = FAT_MAGIC;
 	    fat_header->nfat_arch = narchs;
-	    offset = sizeof(struct fat_header) +
-			    sizeof(struct fat_arch) * narchs;
-	    fat_arch = (struct fat_arch *)(library + sizeof(struct fat_header));
+	    offset = sizeof(struct fat_header);
+	    if(cmd_flags.fat64 == TRUE){
+		offset += sizeof(struct fat_arch_64) * narchs;
+		fat_arch64 = (struct fat_arch_64 *)
+			     (library + sizeof(struct fat_header));
+		fat_arch = NULL;
+	    }
+	    else{
+		offset += sizeof(struct fat_arch) * narchs;
+		fat_arch = (struct fat_arch *)
+			   (library + sizeof(struct fat_header));
+		fat_arch64 = NULL;
+	    }
 	    for(i = 0; i < narchs; i++){
-		fat_arch[i].cputype = archs[i].arch_flag.cputype;
-		fat_arch[i].cpusubtype = archs[i].arch_flag.cpusubtype;
-		if(offset > UINT32_MAX)
+		if(cmd_flags.fat64 == TRUE){
+		    fat_arch64[i].cputype = archs[i].arch_flag.cputype;
+		    fat_arch64[i].cpusubtype = archs[i].arch_flag.cpusubtype;
+		}
+		else{
+		    fat_arch[i].cputype = archs[i].arch_flag.cputype;
+		    fat_arch[i].cpusubtype = archs[i].arch_flag.cpusubtype;
+		}
+		if(cmd_flags.fat64 == FALSE && offset > UINT32_MAX)
 		    error("file too large to create as a fat file because "
 			  "offset field in struct fat_arch is only 32-bits and "
 			  "offset (%llu) to architecture %s exceeds that",
 			  offset, archs[i].arch_flag.name);
-		if(fat_arch[i].cputype & CPU_ARCH_ABI64)
-		    fat_arch[i].align = 3;
+		if(archs[i].arch_flag.cputype & CPU_ARCH_ABI64){
+		    if(cmd_flags.fat64 == TRUE)
+			fat_arch64[i].align = 3;
+		    else
+			fat_arch[i].align = 3;
+		}
+		else{
+		    if(cmd_flags.fat64 == TRUE)
+			fat_arch64[i].align = 2;
+		    else
+			fat_arch[i].align = 2;
+		}
+		if(cmd_flags.fat64 == TRUE)
+		    offset = rnd(offset, 1 << fat_arch64[i].align);
 		else
-		    fat_arch[i].align = 2;
-		offset = rnd(offset, 1 << fat_arch[i].align);
-		fat_arch[i].offset = offset;
-		if(archs[i].size > UINT32_MAX)
+		    offset = rnd(offset, 1 << fat_arch[i].align);
+		if(cmd_flags.fat64 == TRUE)
+		    fat_arch64[i].offset = offset;
+		else
+		    fat_arch[i].offset = offset;
+		if(cmd_flags.fat64 == FALSE && archs[i].size > UINT32_MAX)
 		    error("file too large to create as a fat file because "
 			  "size field in struct fat_arch is only 32-bits and "
 			  "size (%llu) of architecture %s exceeds that",
 			  archs[i].size, archs[i].arch_flag.name);
-		fat_arch[i].size = archs[i].size;
+		if(cmd_flags.fat64 == TRUE)
+		    fat_arch64[i].size = archs[i].size;
+		else
+		    fat_arch[i].size = archs[i].size;
 		offset += archs[i].size;
 	    }
 	    if(errors != 0){
@@ -2592,10 +2674,16 @@ fail_to_update_toc_in_place:
 	    }
 #ifdef __LITTLE_ENDIAN__
 	    swap_fat_header(fat_header, BIG_ENDIAN_BYTE_SEX);
-	    swap_fat_arch(fat_arch, narchs, BIG_ENDIAN_BYTE_SEX);
+	    if(cmd_flags.fat64 == TRUE)
+		swap_fat_arch_64(fat_arch64, narchs, BIG_ENDIAN_BYTE_SEX);
+	    else
+		swap_fat_arch(fat_arch, narchs, BIG_ENDIAN_BYTE_SEX);
 #endif /* __LITTLE_ENDIAN__ */
-	    offset = sizeof(struct fat_header) +
-			    sizeof(struct fat_arch) * narchs;
+	    offset = sizeof(struct fat_header);
+	    if(cmd_flags.fat64 == TRUE)
+		offset += sizeof(struct fat_arch_64) * narchs;
+	    else
+		offset += sizeof(struct fat_arch) * narchs;
 	}
 	else
 	    offset = 0;
@@ -2841,14 +2929,20 @@ enum byte_sex host_byte_sex)
 /*
  * put_toc_member() put the contents member for arch into the buffer p and 
  * returns the pointer to the buffer after the table of contents.
- * The table of contents member is:
- *	the archive header
+ * The table of contents member uses either a 32-bit toc or a 64-bit toc.
+ * Both forms start with:
+ *  the archive header
  *  the archive member name (if using a long name)
- *	a uint32_t for the number of bytes of the ranlib structs
- *	the ranlib structs
- *	a uint32_t for the number of bytes of the strings for the
- *    ranlibs
- *	the strings for the ranlib structs
+ * then for a 32-bit toc the rest is this:
+ *  a uint32_t for the number of bytes of the ranlib structs
+ *  the ranlib structs
+ *  a uint32_t for the number of bytes of the strings for the ranlibs
+ *  the strings for the ranlib structs
+ * and for a 64-bit toc the rest is this:
+ *  a uint64_t for the number of bytes of the ranlib structs
+ *  the ranlib_64 structs
+ *  a uint64_t for the number of bytes of the strings for the ranlibs
+ *  the strings for the ranlib structs
  */
 static
 char *
@@ -2859,6 +2953,7 @@ enum byte_sex host_byte_sex,
 enum byte_sex target_byte_sex)
 {
     uint32_t l;
+    uint64_t l64;
 
 	memcpy(p, (char *)&arch->toc_ar_hdr, sizeof(struct ar_hdr));
 	p += sizeof(struct ar_hdr);
@@ -2870,27 +2965,52 @@ enum byte_sex target_byte_sex)
 		  sizeof(struct ar_hdr));
 	}
 
-	l = arch->toc_nranlibs * sizeof(struct ranlib);
-	if(target_byte_sex != host_byte_sex)
-	    l = SWAP_INT(l);
-	memcpy(p, (char *)&l, sizeof(uint32_t));
-	p += sizeof(uint32_t);
+	if(arch->using_64toc == FALSE){
+	    l = arch->toc_nranlibs * sizeof(struct ranlib);
+	    if(target_byte_sex != host_byte_sex)
+		l = SWAP_INT(l);
+	    memcpy(p, (char *)&l, sizeof(uint32_t));
+	    p += sizeof(uint32_t);
 
-	if(target_byte_sex != host_byte_sex)
-	    swap_ranlib(arch->toc_ranlibs, arch->toc_nranlibs,
-			target_byte_sex);
-	memcpy(p, (char *)arch->toc_ranlibs,
-	       arch->toc_nranlibs * sizeof(struct ranlib));
-	p += arch->toc_nranlibs * sizeof(struct ranlib);
+	    if(target_byte_sex != host_byte_sex)
+		swap_ranlib(arch->toc_ranlibs, arch->toc_nranlibs,
+			    target_byte_sex);
+	    memcpy(p, (char *)arch->toc_ranlibs,
+		   arch->toc_nranlibs * sizeof(struct ranlib));
+	    p += arch->toc_nranlibs * sizeof(struct ranlib);
 
-	l = arch->toc_strsize;
-	if(target_byte_sex != host_byte_sex)
-	    l = SWAP_INT(l);
-	memcpy(p, (char *)&l, sizeof(uint32_t));
-	p += sizeof(uint32_t);
+	    l = arch->toc_strsize;
+	    if(target_byte_sex != host_byte_sex)
+		l = SWAP_INT(l);
+	    memcpy(p, (char *)&l, sizeof(uint32_t));
+	    p += sizeof(uint32_t);
 
-	memcpy(p, (char *)arch->toc_strings, arch->toc_strsize);
-	p += arch->toc_strsize;
+	    memcpy(p, (char *)arch->toc_strings, arch->toc_strsize);
+	    p += arch->toc_strsize;
+        }
+	else{
+	    l64 = arch->toc_nranlibs * sizeof(struct ranlib_64);
+	    if(target_byte_sex != host_byte_sex)
+		l64 = SWAP_LONG_LONG(l64);
+	    memcpy(p, (char *)&l64, sizeof(uint64_t));
+	    p += sizeof(uint64_t);
+
+	    if(target_byte_sex != host_byte_sex)
+		swap_ranlib_64(arch->toc_ranlibs64, arch->toc_nranlibs,
+			       target_byte_sex);
+	    memcpy(p, (char *)arch->toc_ranlibs64,
+		   arch->toc_nranlibs * sizeof(struct ranlib_64));
+	    p += arch->toc_nranlibs * sizeof(struct ranlib_64);
+
+	    l64 = arch->toc_strsize;
+	    if(target_byte_sex != host_byte_sex)
+		l64 = SWAP_LONG_LONG(l64);
+	    memcpy(p, (char *)&l64, sizeof(uint64_t));
+	    p += sizeof(uint64_t);
+
+	    memcpy(p, (char *)arch->toc_strings, arch->toc_strsize);
+	    p += arch->toc_strsize;
+	}
 
 	return(p);
 }
@@ -3654,12 +3774,14 @@ char *output)
 	arch->tocs = allocate(sizeof(struct toc) * arch->toc_nranlibs);
 	arch->toc_strsize = rnd(arch->toc_strsize, 8);
 	arch->toc_strings = allocate(arch->toc_strsize);
+	if(arch->toc_strsize >= 8)
+	    memset(arch->toc_strings + arch->toc_strsize - 7, '\0', 7);
 
 	/*
-	 * Second pass over the members to fill in the ranlib structs and
-	 * the strings for the table of contents.  The ran_name field is
+	 * Second pass over the members to fill in the toc structs and
+	 * the strings for the table of contents.  The toc name field is
 	 * filled in with a pointer to a string contained in arch->toc_strings
-	 * for easy sorting and conversion to an index.  The ran_off field is
+	 * for easy sorting and conversion to an index.  The toc index1 field is
 	 * filled in with the member index plus one to allow marking with it's
 	 * negative value by check_sort_tocs() and easy conversion to the
 	 * real offset.
@@ -3819,13 +3941,100 @@ char *output)
 	    arch->toc_size += arch->toc_name_size +
 			      (rnd(sizeof(struct ar_hdr), 8) -
 			       sizeof(struct ar_hdr));
+
+	/*
+	 * Now with the size of the 32-bit toc known we can now see if it will
+	 * work or if we have offsets to members that are more than 32-bits and
+	 * we need to switch to the 64-bit toc, or switch to that if we are
+	 * forcing a 64-bit toc via the command line option.
+	 */
+	if(cmd_flags.toc64 == TRUE)
+	    arch->using_64toc = TRUE;
+	else{
+	    arch->using_64toc = FALSE;
+	    for(i = 0; i < arch->nmembers; i++){
+		if(arch->members[i].offset + SARMAG + arch->toc_size >
+		   UINT32_MAX){
+		    arch->using_64toc = TRUE;
+		    break;
+		}
+	    }
+	}
+	if(arch->using_64toc){
+	    if(cmd_flags.use_long_names == FALSE &&
+	       cmd_flags.L_or_T_specified == TRUE)
+		fatal("archive requires a 64-bit toc that must be aligned so "
+		      "-T can't be specified");
+	    arch->toc_long_name = TRUE;
+	    if(sorted == FALSE){
+		/*
+		 * This  assumes that "__.SYMDEF_64\0\0\0\0" is 16 bytes
+		 * and
+		 * (rnd(sizeof(struct ar_hdr), 8) - sizeof(struct ar_hdr)
+		 * is 4 bytes.
+		 */
+		ar_name = AR_EFMT1 "20";
+		arch->toc_name_size = 16;
+		arch->toc_name = SYMDEF_64 "\0\0\0\0";
+	    }
+	    else{
+		arch->toc_name = SYMDEF_64_SORTED;
+		arch->toc_name_size = sizeof(SYMDEF_64_SORTED) - 1;
+		/*
+		 * This assumes that "__.SYMDEF_64 SORTED\0\0\0\0\0" is 24 bytes
+		 * and
+		 * (rnd(sizeof(struct ar_hdr), 8) - sizeof(struct ar_hdr)
+		 * is 4 bytes.
+		 */
+		ar_name = AR_EFMT1 "28";
+		arch->toc_name_size = 24;
+		arch->toc_name = SYMDEF_64_SORTED "\0\0\0\0\0";
+	    }
+	    /*
+	     * Free the space for the 32-bit ranlib structs and allocate space
+	     * for the 64-bit ranlib structs.
+	     */
+	    free(arch->toc_ranlibs);
+	    arch->toc_ranlibs = NULL;
+	    arch->toc_ranlibs64 = allocate(sizeof(struct ranlib_64) *
+				           arch->toc_nranlibs);
+	    /*
+	     * Now the size of the toc member when it is a 64-bit toc can be
+	     * set.  It is made up of the sizeof an archive header struct (the
+	     * size of the name which is always a long name to get 8-byte
+	     * alignment then the toc which is (as defined in ranlib.h):
+	     *   a uint64_t for the number of bytes of the ranlib_64 structs
+	     *   the ranlib_64 structures
+	     *   a uint64_t for the number of bytes of the strings
+	     *   the strings
+	     */
+	    arch->toc_size = sizeof(struct ar_hdr) +
+			     sizeof(uint64_t) +
+			     arch->toc_nranlibs * sizeof(struct ranlib_64) +
+			     sizeof(uint64_t) +
+			     arch->toc_strsize;
+	    /* add the size of the name as a long name is always used */
+	    arch->toc_size += arch->toc_name_size +
+			      (rnd(sizeof(struct ar_hdr), 8) -
+			       sizeof(struct ar_hdr));
+	}
+
 	for(i = 0; i < arch->nmembers; i++)
 	    arch->members[i].offset += SARMAG + arch->toc_size;
+
 	for(i = 0; i < arch->toc_nranlibs; i++){
-	    arch->toc_ranlibs[i].ran_un.ran_strx =
-		arch->tocs[i].name - arch->toc_strings;
-	    arch->toc_ranlibs[i].ran_off =
-		arch->members[arch->tocs[i].index1 - 1].offset;
+	    if(arch->using_64toc){
+		arch->toc_ranlibs64[i].ran_un.ran_strx =
+		    arch->tocs[i].name - arch->toc_strings;
+		arch->toc_ranlibs64[i].ran_off =
+		    arch->members[arch->tocs[i].index1 - 1].offset;
+	    }
+	    else{
+		arch->toc_ranlibs[i].ran_un.ran_strx =
+		    arch->tocs[i].name - arch->toc_strings;
+		arch->toc_ranlibs[i].ran_off =
+		    arch->members[arch->tocs[i].index1 - 1].offset;
+	    }
 	}
 
 	sprintf((char *)(&arch->toc_ar_hdr), "%-*s%-*ld%-*u%-*u%-*o%-*ld",

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-BASE_VERSION=877.8
-NEW_VERSION=886
+BASE_VERSION=886
+NEW_VERSION=895
 
 set -e
 
@@ -15,6 +15,7 @@ wget http://www.opensource.apple.com/tarballs/cctools/cctools-$NEW_VERSION.tar.g
 
 tar xzf cctools-$BASE_VERSION* &>/dev/null
 tar xzf cctools-$NEW_VERSION* &>/dev/null
+rm *.tar.gz
 
 pushd cctools-$NEW_VERSION*
 

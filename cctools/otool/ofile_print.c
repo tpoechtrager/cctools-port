@@ -240,7 +240,8 @@
 #define MAXSECTALIGN		15 /* 2**15 or 0x8000 */
 
 static void print_arch(
-    struct fat_arch *fat_arch);
+    cpu_type_t cputype,
+    cpu_subtype_t cpusubtype);
 static void print_cputype(
     cpu_type_t cputype,
     cpu_subtype_t cpusubtype);
@@ -306,92 +307,130 @@ static int rel_bsearch(
     struct relocation_info *rel);
 
 /*
- * Print the fat header and the fat_archs.  The caller is responsible for making
- * sure the structures are properly aligned and that the fat_archs is of the
- * size fat_header->nfat_arch * sizeof(struct fat_arch).
+ * Print the fat header and the fat_archs or fat_archs64.  The caller is
+ * responsible for making sure the structures are properly aligned and that the
+ * fat_archs or fat_archs64 is of the size fat_header->nfat_arch *
+ * sizeof(struct fat_arch) or sizeof(struct fat_arch_64).
  */
 void
 print_fat_headers(
 struct fat_header *fat_header,
 struct fat_arch *fat_archs,
-uint64_t size,
+struct fat_arch_64 *fat_archs64,
+uint64_t filesize,
 enum bool verbose)
 {
-    uint32_t i, j;
+    uint32_t i, j, sizeof_fat_arch;
     uint64_t big_size;
+    cpu_type_t cputype;
+    cpu_subtype_t cpusubtype;
+    uint64_t offset;
+    uint64_t size;
+    uint32_t align;
 
 	if(verbose){
-	    if(fat_header->magic == FAT_MAGIC)
+	    if(fat_header->magic == FAT_MAGIC_64)
+		printf("fat_magic FAT_MAGIC_64\n");
+	    else if(fat_header->magic == FAT_MAGIC)
 		printf("fat_magic FAT_MAGIC\n");
 	    else
 		printf("fat_magic 0x%x\n", (unsigned int)(fat_header->magic));
 	}
 	else
 	    printf("fat_magic 0x%x\n", (unsigned int)(fat_header->magic));
+	if(fat_header->magic == FAT_MAGIC_64)
+	    sizeof_fat_arch = sizeof(struct fat_arch_64);
+	else
+	    sizeof_fat_arch = sizeof(struct fat_arch);
+
+
 	printf("nfat_arch %u", fat_header->nfat_arch);
 	big_size = fat_header->nfat_arch;
-	big_size *= sizeof(struct fat_arch);
+	big_size *= sizeof_fat_arch;
 	big_size += sizeof(struct fat_header);
 	if(fat_header->nfat_arch == 0)
 	    printf(" (malformed, contains zero architecture types)\n");
-	else if(big_size > size)
+	else if(big_size > filesize)
 	    printf(" (malformed, architectures past end of file)\n");
 	else
 	    printf("\n");
 
 	for(i = 0; i < fat_header->nfat_arch; i++){
 	    big_size = i;
-	    big_size *= sizeof(struct fat_arch);
+	    big_size *= sizeof_fat_arch;
 	    big_size += sizeof(struct fat_header);
-	    if(big_size > size)
+	    if(big_size > filesize)
 		break;
 	    printf("architecture ");
 	    for(j = 0; i != 0 && j <= i - 1; j++){
-		if(fat_archs[i].cputype != 0 && fat_archs[i].cpusubtype != 0 &&
-		   fat_archs[i].cputype == fat_archs[j].cputype &&
-		   (fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
-		   (fat_archs[j].cpusubtype & ~CPU_SUBTYPE_MASK)){
-		    printf("(illegal duplicate architecture) ");
-		    break;
+		if(fat_header->magic == FAT_MAGIC_64){
+		    if(fat_archs64[i].cputype != 0 &&
+		       fat_archs64[i].cpusubtype != 0 &&
+		       fat_archs64[i].cputype == fat_archs64[j].cputype &&
+		       (fat_archs64[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+		       (fat_archs64[j].cpusubtype & ~CPU_SUBTYPE_MASK)){
+			printf("(illegal duplicate architecture) ");
+			break;
+		    }
+		}
+		else{
+		    if(fat_archs[i].cputype != 0 &&
+		       fat_archs[i].cpusubtype != 0 &&
+		       fat_archs[i].cputype == fat_archs[j].cputype &&
+		       (fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+		       (fat_archs[j].cpusubtype & ~CPU_SUBTYPE_MASK)){
+			printf("(illegal duplicate architecture) ");
+			break;
+		    }
 		}
 	    }
+	    if(fat_header->magic == FAT_MAGIC_64){
+		cputype = fat_archs64[i].cputype;
+		cpusubtype = fat_archs64[i].cpusubtype;
+		offset = fat_archs64[i].offset;
+		size = fat_archs64[i].size;
+		align = fat_archs64[i].align;
+	    }
+	    else{
+		cputype = fat_archs[i].cputype;
+		cpusubtype = fat_archs[i].cpusubtype;
+		offset = fat_archs[i].offset;
+		size = fat_archs[i].size;
+		align = fat_archs[i].align;
+	    }
 	    if(verbose){
-		print_arch(fat_archs + i);
-		print_cputype(fat_archs[i].cputype,
-			      fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK);
+		print_arch(cputype, cpusubtype);
+		print_cputype(cputype, cpusubtype & ~CPU_SUBTYPE_MASK);
 	    }
 	    else{
 		printf("%u\n", i);
-		printf("    cputype %d\n", fat_archs[i].cputype);
-		printf("    cpusubtype %d\n", fat_archs[i].cpusubtype &
-					      ~CPU_SUBTYPE_MASK);
+		printf("    cputype %d\n", cputype);
+		printf("    cpusubtype %d\n", cpusubtype & ~CPU_SUBTYPE_MASK);
 	    }
-	    if(verbose && (fat_archs[i].cpusubtype & CPU_SUBTYPE_MASK) ==
+	    if(verbose && (cpusubtype & CPU_SUBTYPE_MASK) ==
 	       CPU_SUBTYPE_LIB64)
 		printf("    capabilities CPU_SUBTYPE_LIB64\n");
 	    else
 		printf("    capabilities 0x%x\n", (unsigned int)
-		       ((fat_archs[i].cpusubtype & CPU_SUBTYPE_MASK) >>24));
-	    printf("    offset %u", fat_archs[i].offset);
-	    if(fat_archs[i].offset > size)
+		       ((cpusubtype & CPU_SUBTYPE_MASK) >>24));
+	    printf("    offset %llu", offset);
+	    if(offset > filesize)
 		printf(" (past end of file)");
-	    if(fat_archs[i].offset % (1 << fat_archs[i].align) != 0)
-		printf(" (not aligned on it's alignment (2^%u))\n",
-		       fat_archs[i].align);
+	    if(offset % (1 << align) != 0)
+		printf(" (not aligned on it's alignment (2^%u))\n", align);
 	    else
 		printf("\n");
 
-	    printf("    size %u", fat_archs[i].size);
-	    big_size = fat_archs[i].offset;
-	    big_size += fat_archs[i].size;
-	    if(big_size > size)
+	    printf("    size %llu", size);
+	    big_size = offset;
+	    big_size += size;
+	    if(big_size > filesize)
 		printf(" (past end of file)\n");
 	    else
 		printf("\n");
 
-	    printf("    align 2^%u (%d)", fat_archs[i].align,
-		   1 << fat_archs[i].align);
-	    if(fat_archs[i].align > MAXSECTALIGN)
+	    printf("    align 2^%u (%d)", align, 1 << align);
+	    if(align > MAXSECTALIGN)
 		printf("( too large, maximum 2^%d)\n", MAXSECTALIGN);
 	    else
 		printf("\n");
@@ -405,11 +444,12 @@ enum bool verbose)
 static
 void
 print_arch(
-struct fat_arch *fat_arch)
+cpu_type_t cputype,
+cpu_subtype_t cpusubtype)
 {
-	switch(fat_arch->cputype){
+	switch(cputype){
 	case CPU_TYPE_MC680x0:
-	    switch(fat_arch->cpusubtype & ~CPU_SUBTYPE_MASK){
+	    switch(cpusubtype & ~CPU_SUBTYPE_MASK){
 	    case CPU_SUBTYPE_MC680x0_ALL:
 		printf("m68k\n");
 		break;
@@ -424,7 +464,7 @@ struct fat_arch *fat_arch)
 	    }
 	    break;
 	case CPU_TYPE_MC88000:
-	    switch(fat_arch->cpusubtype & ~CPU_SUBTYPE_MASK){
+	    switch(cpusubtype & ~CPU_SUBTYPE_MASK){
 	    case CPU_SUBTYPE_MC88000_ALL:
 	    case CPU_SUBTYPE_MC88110:
 		printf("m88k\n");
@@ -434,7 +474,7 @@ struct fat_arch *fat_arch)
 	    }
 	    break;
 	case CPU_TYPE_I386:
-	    switch(fat_arch->cpusubtype & ~CPU_SUBTYPE_MASK){
+	    switch(cpusubtype & ~CPU_SUBTYPE_MASK){
 	    case CPU_SUBTYPE_I386_ALL:
 	    /* case CPU_SUBTYPE_386: same as above */
 		printf("i386\n");
@@ -459,15 +499,15 @@ struct fat_arch *fat_arch)
 		break;
 	    default:
 		printf("intel x86 family %d model %d\n",
-		       CPU_SUBTYPE_INTEL_FAMILY(fat_arch->cpusubtype &
+		       CPU_SUBTYPE_INTEL_FAMILY(cpusubtype &
 						~CPU_SUBTYPE_MASK),
-		       CPU_SUBTYPE_INTEL_MODEL(fat_arch->cpusubtype &
+		       CPU_SUBTYPE_INTEL_MODEL(cpusubtype &
 					       ~CPU_SUBTYPE_MASK));
 		break;
 	    }
 	    break;
 	case CPU_TYPE_X86_64:
-	    switch(fat_arch->cpusubtype & ~CPU_SUBTYPE_MASK){
+	    switch(cpusubtype & ~CPU_SUBTYPE_MASK){
 	    case CPU_SUBTYPE_X86_64_ALL:
 		printf("x86_64\n");
 		break;
@@ -479,7 +519,7 @@ struct fat_arch *fat_arch)
 	    }		
 	    break;
 	case CPU_TYPE_I860:
-	    switch(fat_arch->cpusubtype & ~CPU_SUBTYPE_MASK){
+	    switch(cpusubtype & ~CPU_SUBTYPE_MASK){
 	    case CPU_SUBTYPE_I860_ALL:
 	    case CPU_SUBTYPE_I860_860:
 		printf("i860\n");
@@ -489,7 +529,7 @@ struct fat_arch *fat_arch)
 	    }
 	    break;
 	case CPU_TYPE_POWERPC:
-	    switch(fat_arch->cpusubtype & ~CPU_SUBTYPE_MASK){
+	    switch(cpusubtype & ~CPU_SUBTYPE_MASK){
 	    case CPU_SUBTYPE_POWERPC_ALL:
 		printf("ppc\n");
 		break;
@@ -534,7 +574,7 @@ struct fat_arch *fat_arch)
 	    }
 	    break;
 	case CPU_TYPE_POWERPC64:
-	    switch(fat_arch->cpusubtype & ~CPU_SUBTYPE_MASK){
+	    switch(cpusubtype & ~CPU_SUBTYPE_MASK){
 	    case CPU_SUBTYPE_POWERPC_ALL:
 		printf("ppc64\n");
 		break;
@@ -546,7 +586,7 @@ struct fat_arch *fat_arch)
 	    }		
 	    break;
 	case CPU_TYPE_VEO:
-	    switch(fat_arch->cpusubtype & ~CPU_SUBTYPE_MASK){
+	    switch(cpusubtype & ~CPU_SUBTYPE_MASK){
 	    case CPU_SUBTYPE_VEO_1:
 		printf("veo1\n");
 		break;
@@ -564,7 +604,7 @@ struct fat_arch *fat_arch)
 	    }
 	    break;
 	case CPU_TYPE_HPPA:
-	    switch(fat_arch->cpusubtype & ~CPU_SUBTYPE_MASK){
+	    switch(cpusubtype & ~CPU_SUBTYPE_MASK){
 	    case CPU_SUBTYPE_HPPA_ALL:
 	    case CPU_SUBTYPE_HPPA_7100LC:
 		printf("hppa\n");
@@ -574,7 +614,7 @@ struct fat_arch *fat_arch)
 	    }
 	    break;
 	case CPU_TYPE_SPARC:
-	    switch(fat_arch->cpusubtype & ~CPU_SUBTYPE_MASK){
+	    switch(cpusubtype & ~CPU_SUBTYPE_MASK){
 	    case CPU_SUBTYPE_SPARC_ALL:
 		printf("sparc\n");
 	    break;
@@ -583,7 +623,7 @@ struct fat_arch *fat_arch)
 	    }
 	    break;
 	case CPU_TYPE_ARM:
-	    switch(fat_arch->cpusubtype & ~CPU_SUBTYPE_MASK){
+	    switch(cpusubtype & ~CPU_SUBTYPE_MASK){
 	    case CPU_SUBTYPE_ARM_ALL:
 		printf("arm\n");
 		break;
@@ -626,7 +666,7 @@ struct fat_arch *fat_arch)
 	    }
 	    break;
 	case CPU_TYPE_ARM64:
-	    switch(fat_arch->cpusubtype & ~CPU_SUBTYPE_MASK){
+	    switch(cpusubtype & ~CPU_SUBTYPE_MASK){
 	    case CPU_SUBTYPE_ARM64_ALL:
 		printf("arm64\n");
 	    break;
@@ -637,7 +677,7 @@ struct fat_arch *fat_arch)
 	    }
 	    break;
 	case CPU_TYPE_ANY:
-	    switch((int)(fat_arch->cpusubtype & ~CPU_SUBTYPE_MASK)){
+	    switch((int)(cpusubtype & ~CPU_SUBTYPE_MASK)){
 	    case CPU_SUBTYPE_MULTIPLE:
 		printf("any\n");
 		break;
@@ -653,8 +693,8 @@ struct fat_arch *fat_arch)
 	    break;
 print_arch_unknown:
 	default:
-	    printf("cputype (%d) cpusubtype (%d)\n", fat_arch->cputype,
-		   fat_arch->cpusubtype & ~CPU_SUBTYPE_MASK);
+	    printf("cputype (%d) cpusubtype (%d)\n", cputype,
+		   cpusubtype & ~CPU_SUBTYPE_MASK);
 	    break;
 	}
 }
@@ -988,7 +1028,7 @@ print_ar_hdr(
 struct ar_hdr *ar_hdr,
 char *member_name,
 uint32_t member_name_size,
-uint32_t member_offset,
+uint64_t member_offset,
 enum bool verbose,
 enum bool print_offset)
 {
@@ -1029,7 +1069,7 @@ enum bool print_offset)
 	size_buf[sizeof(ar_hdr->ar_size)] = '\0';
 
 	if(print_offset == TRUE)
-	    printf("%u\t", member_offset);
+	    printf("%llu\t", member_offset);
 
 	if(verbose == TRUE){
 	    mode = strtoul(mode_buf, &endp, 8);
@@ -1159,7 +1199,8 @@ uint32_t mode)
  * object files could be of differing byte sex in an erroneous library).  There
  * is no problem of a library containing no objects with respect to the byte
  * sex of the table of contents since the table of contents would be made up
- * of two binary uint32_t zeros which are the same in either byte sex.
+ * of two binary uint32_t or two binary uint64_t zeros which are the same in
+ * either byte sex.
  */
 void
 print_library_toc(
@@ -1175,10 +1216,13 @@ uint64_t library_size,
 char *arch_name,
 enum bool verbose)
 {
+    enum bool using_64toc;
     enum byte_sex host_byte_sex;
-    uint32_t ran_size, nranlibs, str_size, i, member_name_size;
-    uint64_t toc_offset;
+    uint32_t ran_size, str_size, i, member_name_size;
+    uint64_t ran_size64, nranlibs, str_size64, sizeof_rans, string_size;
+    uint64_t toc_offset, ran_off, ran_strx;
     struct ranlib *ranlibs;
+    struct ranlib_64 *ranlibs64;
     char *strings, *member_name;
     struct ar_hdr *ar_hdr;
     int n;
@@ -1191,14 +1235,32 @@ enum bool verbose)
 	toc_offset = 0;
 	strings = NULL;
 
-	if(toc_offset + sizeof(uint32_t) > toc_size){
-	    error_with_arch(arch_name, "truncated table of contents in: "
-		"%s(%.*s) (size of ranlib structs extends past the end of the "
-		"table of contents member)", library_name, (int)toc_name_size,
-		toc_name);
-	    return;
+	if(strncmp(toc_name, SYMDEF_64, sizeof(SYMDEF_64)-1) == 0 ||
+	   strncmp(toc_name, SYMDEF_64_SORTED, sizeof(SYMDEF_64_SORTED)-1) == 0)
+	    using_64toc = TRUE;
+	else
+	    using_64toc = FALSE;
+
+	if(using_64toc == FALSE){
+	    if(toc_offset + sizeof(uint32_t) > toc_size){
+		error_with_arch(arch_name, "truncated table of contents in: "
+		    "%s(%.*s) (size of ranlib structs extends past the end "
+		    "of the table of contents member)", library_name,
+		    (int)toc_name_size, toc_name);
+		return;
+	    }
+	    memcpy((char *)&ran_size, toc_addr + toc_offset, sizeof(uint32_t));
 	}
-	memcpy((char *)&ran_size, toc_addr + toc_offset, sizeof(uint32_t));
+	else{
+	    if(toc_offset + sizeof(uint64_t) > toc_size){
+		error_with_arch(arch_name, "truncated table of contents in: "
+		    "%s(%.*s) (size of ranlib_64 structs extends past the end "
+		    "of the table of contents member)", library_name,
+		    (int)toc_name_size, toc_name);
+		return;
+	    }
+	    memcpy((char *)&ran_size64, toc_addr +toc_offset, sizeof(uint64_t));
+	}
 	/*
 	 * With the advent of things like LTO object files we may end up getting
 	 * handed UNKNOWN_BYTE_SEX for the table of contents byte sex.  So at
@@ -1208,49 +1270,101 @@ enum bool verbose)
 	 */
 	if(toc_byte_sex == UNKNOWN_BYTE_SEX)
 	    toc_byte_sex = host_byte_sex;
-	if(toc_byte_sex != host_byte_sex)
-	    ran_size = SWAP_INT(ran_size);
-	toc_offset += sizeof(uint32_t);
+	if(toc_byte_sex != host_byte_sex){
+	    if(using_64toc == FALSE)
+		ran_size = SWAP_INT(ran_size);
+	    else
+		ran_size64 = SWAP_LONG_LONG(ran_size64);
+	}
+	if(using_64toc == FALSE)
+	    toc_offset += sizeof(uint32_t);
+	else
+	    toc_offset += sizeof(uint64_t);
 
 	big_size = toc_offset;
-	big_size += ran_size;
+	if(using_64toc == FALSE)
+	    big_size += ran_size;
+	else
+	    big_size += ran_size64;
 	if(big_size > toc_size){
-	    error_with_arch(arch_name, "truncated table of contents in: "
-		"%s(%.*s) (ranlib structures extends past the end of the "
-		"table of contents member)", library_name, (int)toc_name_size,
-		toc_name);
-	    return;
-	}
-	ranlibs = allocate(ran_size);
-	memcpy((char *)ranlibs, toc_addr + toc_offset, ran_size);
-	nranlibs = ran_size / sizeof(struct ranlib);
-	if(toc_byte_sex != host_byte_sex)
-	    swap_ranlib(ranlibs, nranlibs, host_byte_sex);
-	toc_offset += ran_size;
-
-	if(verbose){
-	    if(toc_offset + sizeof(uint32_t) > toc_size){
+	    if(using_64toc == FALSE)
 		error_with_arch(arch_name, "truncated table of contents in: "
-		    "%s(%.*s) (size of ranlib strings extends past the end of "
+		    "%s(%.*s) (ranlib structures extends past the end of "
 		    "the table of contents member)", library_name,
 		    (int)toc_name_size, toc_name);
-		free(ranlibs);
-		return;
-	    }
-	    memcpy((char *)&str_size, toc_addr + toc_offset,
-		   sizeof(uint32_t));
+	    else
+		error_with_arch(arch_name, "truncated table of contents in: "
+		    "%s(%.*s) (ranlib_64 structures extends past the end of "
+		    "the table of contents member)", library_name,
+		    (int)toc_name_size, toc_name);
+	    return;
+	}
+	if(using_64toc == FALSE){
+	    ranlibs = allocate(ran_size);
+	    ranlibs64 = NULL;
+	    memcpy((char *)ranlibs, toc_addr + toc_offset, ran_size);
+	    nranlibs = ran_size / sizeof(struct ranlib);
 	    if(toc_byte_sex != host_byte_sex)
-		str_size = SWAP_INT(str_size);
-	    toc_offset += sizeof(uint32_t);
+		swap_ranlib(ranlibs, nranlibs, host_byte_sex);
+	    sizeof_rans = ran_size;
+	    toc_offset += ran_size;
+	}
+	else{
+	    ranlibs64 = allocate(ran_size64);
+	    ranlibs = NULL;
+	    memcpy((char *)ranlibs64, toc_addr + toc_offset, ran_size64);
+	    nranlibs = ran_size64 / sizeof(struct ranlib_64);
+	    if(toc_byte_sex != host_byte_sex)
+		swap_ranlib_64(ranlibs64, nranlibs, host_byte_sex);
+	    sizeof_rans = ran_size64;
+	    toc_offset += ran_size64;
+	}
+
+	if(verbose){
+	    if(using_64toc == FALSE){
+		if(toc_offset + sizeof(uint32_t) > toc_size){
+		    error_with_arch(arch_name, "truncated table of contents "
+			"in: %s(%.*s) (size of ranlib strings extends past "
+			"the end of the table of contents member)",
+			library_name, (int)toc_name_size, toc_name);
+		    free(ranlibs);
+		    return;
+		}
+		memcpy((char *)&str_size, toc_addr + toc_offset,
+		       sizeof(uint32_t));
+		if(toc_byte_sex != host_byte_sex)
+		    str_size = SWAP_INT(str_size);
+		string_size = str_size;
+		toc_offset += sizeof(uint32_t);
+	    }
+	    else{
+		if(toc_offset + sizeof(uint64_t) > toc_size){
+		    error_with_arch(arch_name, "truncated table of contents "
+			"in: %s(%.*s) (size of ranlib strings extends past "
+			"the end of the table of contents member)",
+			library_name, (int)toc_name_size, toc_name);
+		    free(ranlibs64);
+		    return;
+		}
+		memcpy((char *)&str_size64, toc_addr + toc_offset,
+		       sizeof(uint64_t));
+		if(toc_byte_sex != host_byte_sex)
+		    str_size64 = SWAP_LONG_LONG(str_size64);
+		string_size = str_size64;
+		toc_offset += sizeof(uint64_t);
+	    }
 
 	    big_size = toc_offset;
-	    big_size += str_size;
+	    big_size += string_size;
 	    if(big_size > toc_size){
 		error_with_arch(arch_name, "truncated table of contents in: "
 		    "%s(%.*s) (ranlib strings extends past the end of the "
 		    "table of contents member)", library_name,
 		    (int)toc_name_size, toc_name);
-		free(ranlibs);
+		if(ranlibs != NULL)
+		    free(ranlibs);
+		if(ranlibs64 != NULL)
+		    free(ranlibs64);
 		return;
 	    }
 	    strings = toc_addr + toc_offset;
@@ -1262,14 +1376,19 @@ enum bool verbose)
 	    printf(" (for architecture %s)\n", arch_name);
 	else
 	    printf("\n");
-	printf("size of ranlib structures: %u (number %u)\n", ran_size,
+	printf("size of ranlib structures: %llu (number %llu)\n", sizeof_rans,
 	       nranlibs);
 	if(verbose){
-	    printf("size of strings: %u", str_size);
-	    if(str_size % sizeof(int32_t) != 0)
-		printf(" (not multiple of sizeof(int32_t))\n");
-	    else
-		printf("\n");
+	    printf("size of strings: %llu", string_size);
+	    if(using_64toc == FALSE){
+		if(string_size % sizeof(int32_t) != 0)
+		    printf(" (not multiple of sizeof(int32_t))");
+	    }
+	    else{
+		if(string_size % sizeof(int64_t) != 0)
+		    printf(" (not multiple of sizeof(int64_t))");
+	    }
+	    printf("\n");
 	}
 	if(verbose)
 	    printf("object           symbol name\n");
@@ -1277,10 +1396,18 @@ enum bool verbose)
 	    printf("object offset  string index\n");
 
 	for(i = 0; i < nranlibs; i++){
+	    if(using_64toc == FALSE){
+		ran_off = ranlibs[i].ran_off;
+		ran_strx = ranlibs[i].ran_un.ran_strx;
+	    }
+	    else{
+		ran_off = ranlibs64[i].ran_off;
+		ran_strx = ranlibs64[i].ran_un.ran_strx;
+	    }
 	    if(verbose){
-		if(ranlibs[i].ran_off + sizeof(struct ar_hdr) <= library_size){
+		if(ran_off + sizeof(struct ar_hdr) <= library_size){
 		    ar_hdr = (struct ar_hdr *)
-			     (library_addr + ranlibs[i].ran_off);
+			     (library_addr + ran_off);
 		    if(strncmp(ar_hdr->ar_name, AR_EFMT1,
 			       sizeof(AR_EFMT1) - 1) == 0){
 			member_name = ar_hdr->ar_name + sizeof(struct ar_hdr);
@@ -1299,21 +1426,23 @@ enum bool verbose)
 		    }
 		}
 		else{
-		    n = sprintf(buf, "?(%u) ", (uint32_t)ranlibs[i].ran_off);
+		    n = sprintf(buf, "?(%llu) ", ran_off);
 		    printf("%s%.*s", buf, 17 - n, "              ");
 		}
-		if(ranlibs[i].ran_un.ran_strx < str_size)
-		    printf("%s\n", strings + ranlibs[i].ran_un.ran_strx);
+		if(ran_strx < string_size)
+		    printf("%s\n", strings + ran_strx);
 		else
-		    printf("?(%u)\n", (uint32_t)ranlibs[i].ran_un.ran_strx);
+		    printf("?(%llu)\n", ran_strx);
 	    }
 	    else{
-		printf("%-14u %u\n", (uint32_t)ranlibs[i].ran_off,
-			(uint32_t)ranlibs[i].ran_un.ran_strx);
+		printf("%-14llu %llu\n", ran_off, ran_strx);
 	    }
 	}
 
-	free(ranlibs);
+	if(ranlibs != NULL)
+	    free(ranlibs);
+	if(ranlibs64 != NULL)
+	    free(ranlibs64);
 }
 
 /*
@@ -8980,7 +9109,7 @@ uint64_t addr)
 		for(j = 0;
 		    j < 4 * sizeof(int32_t) && i + j < size;
 		    j += sizeof(int32_t)){
-		    if(i + j + sizeof(int32_t) < size){
+		    if(i + j + sizeof(int32_t) <= size){
 			memcpy(&long_word, sect + i + j, sizeof(int32_t));
 			if(swapped)
 			    long_word = SWAP_INT(long_word);

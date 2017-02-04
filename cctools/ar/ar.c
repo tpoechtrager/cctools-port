@@ -103,12 +103,13 @@ main(argc, argv)
 	int argc;
 	char **argv;
 {
-	int c, retval, verbose, run_ranlib;
+	int c, retval, verbose, run_ranlib, toc64;
 	char *p;
 	int (*fcall) __P((char **));
 
 	fcall = 0;
 	verbose = 0;
+	toc64 = 0;
 	progname = argv[0];
 	run_ranlib = 1;
 
@@ -133,7 +134,7 @@ main(argc, argv)
 	 * extended format #1.  The new option -L allows ar to use the extended 
 	 * format and the old -T option causes the truncation of names.
 	 */
-	while ((c = getopt(argc, argv, "abcdilLmopqrSsTtuVvx")) != -1) {
+	while ((c = getopt(argc, argv, "abcdilLmopqrSsTtuVvx6")) != -1) {
 		switch(c) {
 		case 'a':
 			options |= AR_A;
@@ -193,6 +194,9 @@ main(argc, argv)
 			break;
 		case 'V':
 			verbose = 1;
+			break;
+		case '6':
+			toc64 = 1;
 			break;
 		case 'v':
 			options |= AR_V;
@@ -281,6 +285,8 @@ main(argc, argv)
 		add_execute_list("-f");
 	    else
 		add_execute_list("-q");
+	    if(toc64)
+		add_execute_list("-toc64");
 	    add_execute_list(archive);
 	    if(execute_list(verbose) == 0){
 		(void)fprintf(stderr, "%s: internal ranlib command failed\n",

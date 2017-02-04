@@ -327,6 +327,29 @@ enum byte_sex target_byte_sex)
 
 __private_extern__
 void
+swap_fat_arch_64(
+struct fat_arch_64 *fat_archs64,
+uint32_t nfat_arch,
+enum byte_sex target_byte_sex)
+{
+    uint32_t i;
+#ifdef __MWERKS__
+    enum byte_sex dummy;
+        dummy = target_byte_sex;
+#endif
+
+	for(i = 0; i < nfat_arch; i++){
+	    fat_archs64[i].cputype    = SWAP_INT(fat_archs64[i].cputype);
+	    fat_archs64[i].cpusubtype = SWAP_INT(fat_archs64[i].cpusubtype);
+	    fat_archs64[i].offset     = SWAP_LONG_LONG(fat_archs64[i].offset);
+	    fat_archs64[i].size       = SWAP_LONG_LONG(fat_archs64[i].size);
+	    fat_archs64[i].align      = SWAP_INT(fat_archs64[i].align);
+	    fat_archs64[i].reserved   = SWAP_INT(fat_archs64[i].reserved);
+	}
+}
+
+__private_extern__
+void
 swap_mach_header(
 struct mach_header *mh,
 enum byte_sex target_byte_sex)
@@ -2696,6 +2719,22 @@ enum byte_sex target_byte_sex)
 	for(i = 0; i < nranlibs; i++){
 	    ranlibs[i].ran_un.ran_strx = SWAP_INT(ranlibs[i].ran_un.ran_strx);
 	    ranlibs[i].ran_off = SWAP_INT(ranlibs[i].ran_off);
+	}
+}
+
+__private_extern__
+void
+swap_ranlib_64(
+struct ranlib_64 *ranlibs,
+uint64_t nranlibs,
+enum byte_sex target_byte_sex)
+{
+    uint64_t i;
+
+	for(i = 0; i < nranlibs; i++){
+	    ranlibs[i].ran_un.ran_strx =
+		SWAP_LONG_LONG(ranlibs[i].ran_un.ran_strx);
+	    ranlibs[i].ran_off = SWAP_LONG_LONG(ranlibs[i].ran_off);
 	}
 }
 

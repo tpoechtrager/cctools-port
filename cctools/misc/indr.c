@@ -352,7 +352,7 @@ char *envp[])
 	if(stat(input_file, &stat_buf) == -1)
 	    system_error("can't stat input file: %s", input_file);
 	writeout(archs, narchs, output_file, stat_buf.st_mode & 0777, TRUE,
-		 FALSE, FALSE, NULL);
+		 FALSE, FALSE, FALSE, NULL);
 
 	if(errors)
 	    return(EXIT_FAILURE);
@@ -481,6 +481,10 @@ enum bool nflag)
 	    else if(archs[i].type == OFILE_Mach_O){
 		cputype = archs[i].object->mh_cputype;
 		cpusubtype = archs[i].object->mh_cpusubtype;
+	    }
+	    else if(archs[i].fat_arch64 != NULL){
+		cputype = archs[i].fat_arch64->cputype;
+		cpusubtype = archs[i].fat_arch64->cpusubtype;
 	    }
 	    else if(archs[i].fat_arch != NULL){
 		cputype = archs[i].fat_arch->cputype;

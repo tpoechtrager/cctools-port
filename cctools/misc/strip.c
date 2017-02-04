@@ -69,11 +69,18 @@ static uint32_t nflag;	/* save N_SECT global symbols */
 static uint32_t Sflag;	/* -S strip only debugger symbols N_STAB */
 static uint32_t xflag;	/* -x strip non-globals */
 static uint32_t Xflag;	/* -X strip local symbols with 'L' names */
+static uint32_t Tflag;	/* -T strip symbols that start with '__T' names */
 static uint32_t cflag;	/* -c strip section contents from dynamic libraries
 			   files to create stub libraries */
 static uint32_t no_uuid;/* -no_uuid strip LC_UUID load commands */
+static uint32_t no_split_info; /* -no_split_info strip LC_SEGMENT_SPLIT_INFO
+				  load command and its payload */
+static uint32_t no_code_signature_warning;
+		/* -no_code_signature_warning then don't warn when the code
+		   signature would be invalid */
 static uint32_t vflag;	/* -v for verbose debugging ld -r executions */
 static uint32_t lflag;	/* -l do ld -r executions even if it has bugs */
+static enum bool toc64flag = FALSE; /* -toc64 for a 64-bit toc in archives */
 static uint32_t strip_all = 1;
 /*
  * This is set on an object by object basis if the strip_all flag is still set
@@ -257,6 +264,11 @@ static void strip_LC_UUID_commands(
     struct member *member,
     struct object *object);
 
+static void strip_LC_SEGMENT_SPLIT_INFO_command(
+    struct arch *arch,
+    struct member *member,
+    struct object *object);
+
 #ifndef NMEDIT
 static void strip_LC_CODE_SIGNATURE_commands(
     struct arch *arch,
@@ -413,6 +425,15 @@ char *envp[])
 		else if(strcmp(argv[i], "-no_uuid") == 0){
 		    no_uuid = 1;
 		}
+		else if(strcmp(argv[i], "-no_split_info") == 0){
+		    no_split_info = 1;
+		}
+		else if(strcmp(argv[i], "-no_code_signature_warning") == 0){
+		    no_code_signature_warning = 1;
+		}
+		else if(strcmp(argv[i], "-toc64") == 0){
+		    toc64flag = TRUE;
+		}
 #endif /* !defined(NMEDIT) */
 		else if(strcmp(argv[i], "-arch") == 0){
 		    if(i + 1 == argc){
@@ -461,6 +482,10 @@ char *envp[])
 			    break;
 			case 'X':
 			    Xflag = 1;
+			    strip_all = 0;
+			    break;
+			case 'T':
+			    Tflag = 1;
 			    strip_all = 0;
 			    break;
 			case 'x':
@@ -657,7 +682,13 @@ enum bool all_archs)
 	    system_error("can't stat input file: %s", input_file);
 	if(output_file != NULL){
 	    writeout(archs, narchs, output_file, stat_buf.st_mode & 0777,
-		     TRUE, FALSE, FALSE, NULL);
+		     TRUE, FALSE,
+#ifdef NMEDIT
+		     FALSE,
+#else
+		     toc64flag,
+#endif
+		     FALSE, NULL);
 	}
 	else{
 	    unix_standard_mode = get_unix_standard_mode();
@@ -709,7 +740,13 @@ enum bool all_archs)
 	    }
 #endif /* NMEDIT */
 	    writeout(archs, narchs, output_file, stat_buf.st_mode & 0777,
-		     TRUE, FALSE, FALSE, NULL);
+		     TRUE, FALSE,
+#ifdef NMEDIT
+		     FALSE,
+#else
+		     toc64flag,
+#endif
+		     FALSE, NULL);
 	    if(rename_file != NULL){
 		if(rename(output_file, rename_file) == -1)
 		    system_error("can't move temporary file: %s to file: %s",
@@ -792,6 +829,10 @@ enum bool all_archs)
 	    else if(archs[i].type == OFILE_Mach_O){
 		cputype = archs[i].object->mh_cputype;
 		cpusubtype = archs[i].object->mh_cpusubtype;
+	    }
+	    else if(archs[i].fat_arch64 != NULL){
+		cputype = archs[i].fat_arch64->cputype;
+		cpusubtype = archs[i].fat_arch64->cpusubtype;
 	    }
 	    else if(archs[i].fat_arch != NULL){
 		cputype = archs[i].fat_arch->cputype;
@@ -1233,7 +1274,7 @@ struct object *object)
 
 #ifndef NMEDIT
 	if(sfile != NULL || Rfile != NULL || dfile != NULL || Aflag || uflag ||
-	   Sflag || xflag || Xflag || nflag || rflag || 
+	   Sflag || xflag || Xflag || Tflag || nflag || rflag ||
 	   default_dyld_executable || object->mh_filetype == MH_DYLIB ||
 	   object->mh_filetype == MH_DYLINKER)
 #endif /* !defined(NMEDIT) */
@@ -1369,8 +1410,10 @@ struct object *object)
 		/*
 		 * When stripping out the section contents to create a
 		 * dynamic library stub we also remove the split info data.
+		 * And we also remove the split info data if the -no_split_info
+		 * option is specified
 		 */
-		if(!cflag)
+		if(!cflag && !no_split_info)
 #endif /* !(NMEDIT) */
 		{
 		    object->output_split_info_data = object->object_addr +
@@ -1382,6 +1425,10 @@ struct object *object)
 		}
 		object->input_sym_info_size += object->split_info_cmd->datasize;
 	    }
+#ifndef NMEDIT
+	    if(no_split_info == TRUE)
+		strip_LC_SEGMENT_SPLIT_INFO_command(arch, member, object);
+#endif /* !(NMEDIT) */
 
 	    if(object->func_starts_info_cmd != NULL){
 #ifndef NMEDIT
@@ -1702,8 +1749,10 @@ struct object *object)
 		     * When stripping out the section contents to create a
 		     * dynamic library stub the split info data gets
 		     * stripped.
+		     * And we it also gets stripped if the -no_split_info
+		     * option is specified
 		     */
-		    if(cflag){
+		    if(cflag || no_split_info){
 			object->split_info_cmd->dataoff = 0;
 			object->split_info_cmd->datasize = 0;
 		    }
@@ -2032,6 +2081,8 @@ struct object *object)
 	    }
 	    if(no_uuid == TRUE)
 		strip_LC_UUID_commands(arch, member, object);
+	    if(no_split_info == TRUE)
+		strip_LC_SEGMENT_SPLIT_INFO_command(arch, member, object);
 	}
 #endif /* !defined(NMEDIT) */
 
@@ -2279,7 +2330,11 @@ struct object *object)
 	 * Issue a warning if object file has a code signature that the
 	 * operation will invalidate it.
 	 */
-	if(object->code_sig_cmd != NULL)
+	if(object->code_sig_cmd != NULL
+#ifndef NMEDIT
+ 	   && !no_code_signature_warning
+#endif /* !(NMEDIT) */
+	  )
 	    warning_arch(arch, member, "changes being made to the file will "
 		"invalidate the code signature in: ");
 }
@@ -2537,6 +2592,12 @@ enum byte_sex host_byte_sex)
     uint32_t n_strx, value;
     uint64_t value64;
     enum bool made_local;
+    uint32_t mh_flags;
+
+	if(object->mh != NULL)
+	    mh_flags = object->mh->flags;
+	else
+	    mh_flags = object->mh64->flags;
 
 	for(k = 0; k < nitems; k++){
 	    made_local = FALSE;
@@ -2603,6 +2664,13 @@ enum byte_sex host_byte_sex)
 			saves[index] - 1;
 		}
 #else /* !defined(NMEDIT) */
+		else if(Tflag && (mh_flags & MH_DYLDLINK) == MH_DYLDLINK &&
+	                n_strx != 0 &&
+			strncmp(strings + n_strx, "__T", 3) == 0){
+		    object->output_indirect_symtab[reserved1 + k] =
+			    INDIRECT_SYMBOL_LOCAL | INDIRECT_SYMBOL_ABS;
+		    made_local = TRUE;
+		}
 		else{
 		    if(*missing_reloc_symbols == 0){
 			error_arch(arch, member, "symbols referenced by "
@@ -2924,6 +2992,15 @@ uint32_t nextrefsyms)
 			return(FALSE);
 		    }
 		}
+	    }
+	    /*
+	     * If the -T flag is specified then if this is a final linked
+	     * binary never save symbols that start with "__T".
+	     */
+	    if(Tflag && (mh_flags & MH_DYLDLINK) == MH_DYLDLINK &&
+	       n_strx != 0 && strncmp(strings + n_strx, "__T", 3) == 0){
+		/* don't save this symbol */
+		continue;
 	    }
 	    if((n_type & N_EXT) == 0){ /* local symbol */
 		/*
@@ -4298,6 +4375,128 @@ struct object *object)
 		break;
 	    case LC_SEGMENT_SPLIT_INFO:
 		object->split_info_cmd = (struct linkedit_data_command *)lc1;
+		break;
+	    case LC_FUNCTION_STARTS:
+		object->func_starts_info_cmd =
+				         (struct linkedit_data_command *)lc1;
+		break;
+	    case LC_DATA_IN_CODE:
+		object->data_in_code_cmd =
+				         (struct linkedit_data_command *)lc1;
+		break;
+	    case LC_DYLIB_CODE_SIGN_DRS:
+		object->code_sign_drs_cmd =
+				         (struct linkedit_data_command *)lc1;
+		break;
+	    case LC_LINKER_OPTIMIZATION_HINT:
+		object->link_opt_hint_cmd =
+				         (struct linkedit_data_command *)lc1;
+		break;
+	    case LC_CODE_SIGNATURE:
+		object->code_sig_cmd = (struct linkedit_data_command *)lc1;
+		break;
+	    case LC_DYLD_INFO_ONLY:
+	    case LC_DYLD_INFO:
+		object->dyld_info = (struct dyld_info_command *)lc1;
+	    }
+	    lc1 = (struct load_command *)((char *)lc1 + lc1->cmdsize);
+	}
+}
+
+/*
+ * strip_LC_SEGMENT_SPLIT_INFO_command() is called when -no_split_info is
+ * specified to the LC_SEGMENT_SPLIT_INFO load command from the object's load
+ * commands.
+ */
+static
+void
+strip_LC_SEGMENT_SPLIT_INFO_command(
+struct arch *arch,
+struct member *member,
+struct object *object)
+{
+    uint32_t i, ncmds, mh_sizeofcmds, sizeofcmds;
+    struct load_command *lc1, *lc2, *new_load_commands;
+    struct segment_command *sg;
+
+	/*
+	 * See if there is a LC_SEGMENT_SPLIT_INFO load command.
+	 * if no LC_SEGMENT_SPLIT_INFO load command just return.
+	 */
+	if(object->split_info_cmd == NULL)
+	    return;
+
+	/*
+	 * Allocate space for the new load commands as zero it out so any holes
+	 * will be zero bytes.
+	 */
+        if(arch->object->mh != NULL){
+            ncmds = arch->object->mh->ncmds;
+	    mh_sizeofcmds = arch->object->mh->sizeofcmds;
+	}
+	else{
+            ncmds = arch->object->mh64->ncmds;
+	    mh_sizeofcmds = arch->object->mh64->sizeofcmds;
+	}
+	new_load_commands = allocate(mh_sizeofcmds);
+	memset(new_load_commands, '\0', mh_sizeofcmds);
+
+	/*
+	 * Copy all the load commands except the LC_SEGMENT_SPLIT_INFO load
+	 * command into the allocated space for the new load commands.
+	 */
+	lc1 = arch->object->load_commands;
+	lc2 = new_load_commands;
+	sizeofcmds = 0;
+	for(i = 0; i < ncmds; i++){
+	    if(lc1->cmd != LC_SEGMENT_SPLIT_INFO){
+		memcpy(lc2, lc1, lc1->cmdsize);
+		sizeofcmds += lc2->cmdsize;
+		lc2 = (struct load_command *)((char *)lc2 + lc2->cmdsize);
+	    }
+	    lc1 = (struct load_command *)((char *)lc1 + lc1->cmdsize);
+	}
+
+	/*
+	 * Finally copy the updated load commands over the existing load
+	 * commands.
+	 */
+	memcpy(arch->object->load_commands, new_load_commands, sizeofcmds);
+	if(mh_sizeofcmds > sizeofcmds){
+		memset((char *)arch->object->load_commands + sizeofcmds, '\0', 
+			   (mh_sizeofcmds - sizeofcmds));
+	}
+	ncmds -= 1;
+        if(arch->object->mh != NULL) {
+            arch->object->mh->sizeofcmds = sizeofcmds;
+            arch->object->mh->ncmds = ncmds;
+        } else {
+            arch->object->mh64->sizeofcmds = sizeofcmds;
+            arch->object->mh64->ncmds = ncmds;
+        }
+	free(new_load_commands);
+
+	/* reset the pointers into the load commands */
+	object->split_info_cmd = NULL;
+	lc1 = arch->object->load_commands;
+	for(i = 0; i < ncmds; i++){
+	    switch(lc1->cmd){
+	    case LC_SYMTAB:
+		arch->object->st = (struct symtab_command *)lc1;
+	        break;
+	    case LC_DYSYMTAB:
+		arch->object->dyst = (struct dysymtab_command *)lc1;
+		break;
+	    case LC_TWOLEVEL_HINTS:
+		arch->object->hints_cmd = (struct twolevel_hints_command *)lc1;
+		break;
+	    case LC_PREBIND_CKSUM:
+		arch->object->cs = (struct prebind_cksum_command *)lc1;
+		break;
+	    case LC_SEGMENT:
+		sg = (struct segment_command *)lc1;
+		if(strcmp(sg->segname, SEG_LINKEDIT) == 0)
+		    arch->object->seg_linkedit = sg;
 		break;
 	    case LC_FUNCTION_STARTS:
 		object->func_starts_info_cmd =

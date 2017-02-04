@@ -921,6 +921,8 @@ enum bool archives_with_fat_objects)
 #ifdef OTOOL
     uint32_t small_nfat_arch;
 #endif /* OTOOL */
+    uint64_t offset;
+    uint32_t align;
 
 	/* fill in the start of the ofile structure */
 	ofile->file_name = savestr(file_name);
@@ -939,10 +941,12 @@ enum bool archives_with_fat_objects)
 
 	/* see if this file is a fat file (always in big endian byte sex) */
 #ifdef __BIG_ENDIAN__
-	if(size >= sizeof(struct fat_header) && magic == FAT_MAGIC)
+	if(size >= sizeof(struct fat_header) &&
+	   (magic == FAT_MAGIC || magic == FAT_MAGIC_64))
 #endif /* __BIG_ENDIAN__ */
 #ifdef __LITTLE_ENDIAN__
-	if(size >= sizeof(struct fat_header) && SWAP_INT(magic) == FAT_MAGIC)
+	if(size >= sizeof(struct fat_header) &&
+	   (SWAP_INT(magic) == FAT_MAGIC || SWAP_INT(magic) == FAT_MAGIC_64))
 #endif /* __LITTLE_ENDIAN__ */
 	{
 	    ofile->file_type = OFILE_FAT;
@@ -955,44 +959,79 @@ enum bool archives_with_fat_objects)
 		printf("Fat headers\n");
 #endif /* OTOOL */
 	    big_size = ofile->fat_header->nfat_arch;
-	    big_size *= sizeof(struct fat_arch);
+	    if(ofile->fat_header->magic == FAT_MAGIC_64)
+		big_size *= sizeof(struct fat_arch_64);
+	    else
+		big_size *= sizeof(struct fat_arch);
 	    big_size += sizeof(struct fat_header);
 	    if(big_size > size){
 #ifdef OTOOL
-		error("fat file: %s truncated or malformed (fat_arch structs "
-		      "would extend past the end of the file)", file_name);
-		ofile->fat_archs = allocate(size - sizeof(struct fat_header));
-		memset(ofile->fat_archs, '\0',
-		       size - sizeof(struct fat_header));
-		memcpy(ofile->fat_archs,
-		       addr + sizeof(struct fat_header),
-	    	       size - sizeof(struct fat_header));
-		small_nfat_arch = (size - sizeof(struct fat_header)) /
-				  sizeof(struct fat_arch);
+		error("fat file: %s truncated or malformed (fat_arch%s structs "
+		      "would extend past the end of the file)", file_name,
+		      ofile->fat_header->magic == FAT_MAGIC_64 ? "_64" : "");
+		if(ofile->fat_header->magic == FAT_MAGIC_64){
+		    ofile->fat_archs64 = allocate(size -
+						   sizeof(struct fat_header));
+		    memset(ofile->fat_archs64, '\0',
+			   size - sizeof(struct fat_header));
+		    memcpy(ofile->fat_archs64,
+			   addr + sizeof(struct fat_header),
+			   size - sizeof(struct fat_header));
+		    small_nfat_arch = (size - sizeof(struct fat_header)) /
+				      sizeof(struct fat_arch_64);
 #ifdef __LITTLE_ENDIAN__
-		swap_fat_arch(ofile->fat_archs, small_nfat_arch,
-			      host_byte_sex);
+		    swap_fat_arch_64(ofile->fat_archs64, small_nfat_arch,
+				     host_byte_sex);
 #endif /* __LITTLE_ENDIAN__ */
+		}
+		else{
+		    ofile->fat_archs = allocate(size -
+						sizeof(struct fat_header));
+		    memset(ofile->fat_archs, '\0',
+			   size - sizeof(struct fat_header));
+		    memcpy(ofile->fat_archs,
+			   addr + sizeof(struct fat_header),
+			   size - sizeof(struct fat_header));
+		    small_nfat_arch = (size - sizeof(struct fat_header)) /
+				      sizeof(struct fat_arch);
+#ifdef __LITTLE_ENDIAN__
+		    swap_fat_arch(ofile->fat_archs, small_nfat_arch,
+				  host_byte_sex);
+#endif /* __LITTLE_ENDIAN__ */
+		}
 		if(otool_first_ofile_map && fflag)
 		    print_fat_headers(ofile->fat_header, ofile->fat_archs,
-				      size, vflag);
-		free(ofile->fat_archs);
+				      ofile->fat_archs64, size, vflag);
+		if(ofile->fat_header->magic == FAT_MAGIC_64)
+		    free(ofile->fat_archs64);
+		else
+		    free(ofile->fat_archs);
 		ofile_unmap(ofile);
 		return(FALSE);
 #else /* !defined(OTOOL) */
 		goto unknown;
 #endif /* OTOOL */
 	    }
-	    ofile->fat_archs = (struct fat_arch *)(addr +
-						   sizeof(struct fat_header));
+	    if(ofile->fat_header->magic == FAT_MAGIC_64){
+		ofile->fat_archs64 = (struct fat_arch_64 *)
+				     (addr + sizeof(struct fat_header));
 #ifdef __LITTLE_ENDIAN__
-	    swap_fat_arch(ofile->fat_archs, ofile->fat_header->nfat_arch,
-			  host_byte_sex);
+		swap_fat_arch_64(ofile->fat_archs64,
+				 ofile->fat_header->nfat_arch, host_byte_sex);
 #endif /* __LITTLE_ENDIAN__ */
+	    }
+	    else{
+		ofile->fat_archs = (struct fat_arch *)
+				   (addr + sizeof(struct fat_header));
+#ifdef __LITTLE_ENDIAN__
+		swap_fat_arch(ofile->fat_archs, ofile->fat_header->nfat_arch,
+			      host_byte_sex);
+#endif /* __LITTLE_ENDIAN__ */
+	    }
 #ifdef OTOOL
 	    if(otool_first_ofile_map && fflag)
 		print_fat_headers(ofile->fat_header, ofile->fat_archs,
-				  size, vflag);
+				  ofile->fat_archs64, size, vflag);
 #endif /* OTOOL */
 	    if(check_fat(ofile) == CHECK_BAD){
 		ofile_unmap(ofile);
@@ -1032,12 +1071,23 @@ enum bool archives_with_fat_objects)
 
 	    ofile->narch = UINT_MAX;
 	    for(i = 0; i < ofile->fat_header->nfat_arch; i++){
-		if(ofile->fat_archs[i].cputype ==
-			ofile->arch_flag.cputype &&
-		   (ofile->fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
-			(ofile->arch_flag.cpusubtype & ~CPU_SUBTYPE_MASK)){
-		    ofile->narch = i;
-		    break;
+		if(ofile->fat_header->magic == FAT_MAGIC_64){
+		    if(ofile->fat_archs64[i].cputype ==
+			    ofile->arch_flag.cputype &&
+		       (ofile->fat_archs64[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+			    (ofile->arch_flag.cpusubtype & ~CPU_SUBTYPE_MASK)){
+			ofile->narch = i;
+			break;
+		    }
+		}
+		else{
+		    if(ofile->fat_archs[i].cputype ==
+			    ofile->arch_flag.cputype &&
+		       (ofile->fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+			    (ofile->arch_flag.cpusubtype & ~CPU_SUBTYPE_MASK)){
+			ofile->narch = i;
+			break;
+		    }
 		}
 	    }
 	    if(ofile->narch == UINT_MAX){
@@ -1050,15 +1100,33 @@ enum bool archives_with_fat_objects)
 			 (ofile->arch_flag.cpusubtype & ~CPU_SUBTYPE_MASK));
 		ofile->narch = UINT_MAX;
 		for(i = 0; i < ofile->fat_header->nfat_arch; i++){
-		    if(ofile->fat_archs[i].cputype ==
-			    ofile->arch_flag.cputype &&
-		       (family == TRUE ||
-			(ofile->fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
-			(ofile->arch_flag.cpusubtype & ~CPU_SUBTYPE_MASK))){
-			ofile->arch_flag.cpusubtype =
-			    ofile->fat_archs[i].cpusubtype;
-			ofile->narch = i;
-			break;
+		    if(ofile->fat_header->magic == FAT_MAGIC_64){
+			if(ofile->fat_archs64[i].cputype ==
+				ofile->arch_flag.cputype &&
+			   (family == TRUE ||
+			    (ofile->fat_archs64[i].cpusubtype &
+			     ~CPU_SUBTYPE_MASK) ==
+			    (ofile->arch_flag.cpusubtype &
+			     ~CPU_SUBTYPE_MASK))){
+			    ofile->arch_flag.cpusubtype =
+				ofile->fat_archs64[i].cpusubtype;
+			    ofile->narch = i;
+			    break;
+			}
+		    }
+		    else{
+			if(ofile->fat_archs[i].cputype ==
+				ofile->arch_flag.cputype &&
+			   (family == TRUE ||
+			    (ofile->fat_archs[i].cpusubtype &
+			     ~CPU_SUBTYPE_MASK) ==
+			    (ofile->arch_flag.cpusubtype &
+			     ~CPU_SUBTYPE_MASK))){
+			    ofile->arch_flag.cpusubtype =
+				ofile->fat_archs[i].cpusubtype;
+			    ofile->narch = i;
+			    break;
+			}
 		    }
 		}
 	    }
@@ -1074,8 +1142,18 @@ enum bool archives_with_fat_objects)
 #endif
 	    }
 	    /* Now determine the file type for this specific architecture */
-	    size = ofile->fat_archs[i].size;
-	    addr = addr + ofile->fat_archs[i].offset;
+	    if(ofile->fat_header->magic == FAT_MAGIC_64){
+		size = ofile->fat_archs64[i].size;
+		addr = addr + ofile->fat_archs64[i].offset;
+		offset = ofile->fat_archs64[i].offset;
+		align = ofile->fat_archs64[i].align;
+	    }
+	    else{
+		size = ofile->fat_archs[i].size;
+		addr = addr + ofile->fat_archs[i].offset;
+		offset = ofile->fat_archs[i].offset;
+		align = ofile->fat_archs[i].align;
+	    }
 	    if(size >= sizeof(struct mach_header))
 		memcpy(&magic, addr, sizeof(uint32_t));
 	    /* see if this file is a 32-bit Mach-O file */
@@ -1083,7 +1161,7 @@ enum bool archives_with_fat_objects)
 	       (magic == MH_MAGIC ||
 		magic == SWAP_INT(MH_MAGIC))){
 #ifdef ALIGNMENT_CHECKS
-		if(ofile->fat_archs[i].offset % 4 != 0){
+		if(offset % 4 != 0){
 		    error("fat file: %s architecture %s malformed for a 32-bit "
 			  "object file (offset is not a multiple of 4)",
 			  ofile->file_name, arch_flag->name);
@@ -1128,7 +1206,7 @@ enum bool archives_with_fat_objects)
 	            (magic == MH_MAGIC_64 ||
 		     magic == SWAP_INT(MH_MAGIC_64))){
 #ifdef ALIGNMENT_CHECKS
-		if(ofile->fat_archs[i].offset % 8 != 0){
+		if(offset % 8 != 0){
 		    error("fat file: %s architecture %s malformed for a 64-bit "
 			  "object file (offset is not a multiple of 8)",
 			  ofile->file_name, arch_flag->name);
@@ -1181,7 +1259,7 @@ enum bool archives_with_fat_objects)
 		}
 #ifdef ALIGNMENT_CHECKS
 		if(ofile->archive_cputype != 0 &&
-		   ofile->fat_archs[i].offset % sizeof(uint32_t) != 0){
+		   offset % sizeof(uint32_t) != 0){
 		    error("fat file: %s architecture %s malformed archive that "
 			  "contains object files (offset to archive is not a "
 			  "multiple of sizeof(uint32_t))",
@@ -1478,7 +1556,7 @@ struct ofile *ofile,
 uint32_t narch)
 {
     char *addr;
-    uint32_t size;
+    uint64_t size, offset;
     uint32_t magic;
     enum byte_sex host_byte_sex;
 
@@ -1498,8 +1576,18 @@ uint32_t narch)
 	ofile->mh64 = NULL;
 	ofile->load_commands = NULL;
 
-	ofile->arch_flag.cputype = ofile->fat_archs[ofile->narch].cputype;
-	ofile->arch_flag.cpusubtype = ofile->fat_archs[ofile->narch].cpusubtype;
+	if(ofile->fat_header->magic == FAT_MAGIC_64){
+	    ofile->arch_flag.cputype =
+		ofile->fat_archs64[ofile->narch].cputype;
+	    ofile->arch_flag.cpusubtype =
+		ofile->fat_archs64[ofile->narch].cpusubtype;
+	}
+	else{
+	    ofile->arch_flag.cputype =
+		ofile->fat_archs[ofile->narch].cputype;
+	    ofile->arch_flag.cpusubtype =
+		ofile->fat_archs[ofile->narch].cpusubtype;
+	}
 	set_arch_flag_name(&(ofile->arch_flag));
 
 
@@ -1511,8 +1599,16 @@ uint32_t narch)
 	    ofile->member_ar_hdr = NULL;
 	    ofile->member_type = OFILE_UNKNOWN;
 
-	    size = ofile->fat_archs[ofile->narch].size;
-	    addr = ofile->file_addr + ofile->fat_archs[ofile->narch].offset;
+	    if(ofile->fat_header->magic == FAT_MAGIC_64){
+		size = ofile->fat_archs64[ofile->narch].size;
+		addr = ofile->file_addr +
+		       ofile->fat_archs64[ofile->narch].offset;
+	    }
+	    else{
+		size = ofile->fat_archs[ofile->narch].size;
+		addr = ofile->file_addr +
+		       ofile->fat_archs[ofile->narch].offset;
+	    }
 	}
 	else{
 	    if(ofile->file_type != OFILE_ARCHIVE ||
@@ -1520,10 +1616,18 @@ uint32_t narch)
 		error("internal error. ofile_specific_arch() called but file "
 		      "is not a fat file or an archive with a fat member ");
 	    }
-	    size = ofile->fat_archs[ofile->narch].size;
-	    addr = ofile->file_addr +
-		   ofile->member_offset +
-		   ofile->fat_archs[ofile->narch].offset;
+	    if(ofile->fat_header->magic == FAT_MAGIC_64){
+		size = ofile->fat_archs64[ofile->narch].size;
+		addr = ofile->file_addr +
+		       ofile->member_offset +
+		       ofile->fat_archs64[ofile->narch].offset;
+	    }
+	    else{
+		size = ofile->fat_archs[ofile->narch].size;
+		addr = ofile->file_addr +
+		       ofile->member_offset +
+		       ofile->fat_archs[ofile->narch].offset;
+	    }
 	}
 
 #ifdef OTOOL
@@ -1535,6 +1639,10 @@ uint32_t narch)
 	if(addr + size > ofile->file_addr + ofile->file_size)
 	    size = (ofile->file_addr + ofile->file_size) - addr;
 #endif /* OTOOL */
+	if(ofile->fat_header->magic == FAT_MAGIC_64)
+	    offset = ofile->fat_archs64[ofile->narch].offset;
+	else
+	    offset = ofile->fat_archs[ofile->narch].offset;
 
 	if(size >= sizeof(struct mach_header))
 	    memcpy(&magic, addr, sizeof(uint32_t));
@@ -1542,7 +1650,7 @@ uint32_t narch)
 	if(size >= sizeof(struct mach_header) &&
 	   (magic == MH_MAGIC || magic == SWAP_INT(MH_MAGIC))){
 #ifdef ALIGNMENT_CHECKS
-	    if(ofile->fat_archs[ofile->narch].offset % 4 != 0){
+	    if(offset % 4 != 0){
 		if(ofile->file_type == OFILE_ARCHIVE){
 		    error("fat file: %s(%.*s) architecture %s malformed for a "
 			  "32-bit object file (offset is not a multiple of 4)",
@@ -1576,7 +1684,7 @@ uint32_t narch)
 	else if(size >= sizeof(struct mach_header_64) &&
 	   (magic == MH_MAGIC_64 || magic == SWAP_INT(MH_MAGIC_64))){
 #ifdef ALIGNMENT_CHECKS
-	    if(ofile->fat_archs[ofile->narch].offset % 8 != 0){
+	    if(offset % 8 != 0){
 		if(ofile->file_type == OFILE_ARCHIVE){
 		    error("fat file: %s(%.*s) architecture %s malformed for an "
 			  "object file (offset is not a multiple of 8)",
@@ -1612,9 +1720,7 @@ uint32_t narch)
 	    if(check_archive(ofile, FALSE) == CHECK_BAD)
 		goto cleanup;
 #ifdef ALIGNMENT_CHECKS
-	    if(ofile->archive_cputype != 0 &&
-	       ofile->fat_archs[ofile->narch].offset %
-		sizeof(uint32_t) != 0){
+	    if(ofile->archive_cputype != 0 && offset % sizeof(uint32_t) != 0){
 		error("fat file: %s architecture %s malformed archive that "
 		      "contains object files (offset to archive is not a "
 		      "multiple of sizeof(uint32_t))",
@@ -1681,6 +1787,7 @@ struct ofile *ofile)
     enum byte_sex host_byte_sex;
     struct ar_hdr *ar_hdr;
     uint32_t ar_name_size;
+    uint32_t sizeof_fat_archs;
 
 	/* These fields are to be filled in by this routine, clear them first */
 	ofile->member_offset = 0;
@@ -1714,8 +1821,16 @@ struct ofile *ofile)
 		      ofile->file_name);
 		return(FALSE);
 	    }
-	    addr = ofile->file_addr + ofile->fat_archs[ofile->narch].offset;
-	    size = ofile->fat_archs[ofile->narch].size;
+	    if(ofile->fat_header->magic == FAT_MAGIC_64){
+		addr = ofile->file_addr +
+		       ofile->fat_archs64[ofile->narch].offset;
+		size = ofile->fat_archs64[ofile->narch].size;
+	    }
+	    else{
+		addr = ofile->file_addr +
+		       ofile->fat_archs[ofile->narch].offset;
+		size = ofile->fat_archs[ofile->narch].size;
+	    }
 	}
 	else if(ofile->file_type == OFILE_ARCHIVE){
 	    addr = ofile->file_addr;
@@ -1792,6 +1907,7 @@ struct ofile *ofile)
 	ofile->toc_name = NULL;
 	ofile->toc_name_size = 0;
 	ofile->toc_ranlibs = NULL;
+	ofile->toc_ranlibs64 = NULL;
 	ofile->toc_nranlibs = 0;
 	ofile->toc_strings = NULL;
 	ofile->toc_strsize = 0;
@@ -1806,10 +1922,10 @@ struct ofile *ofile)
 	if(ofile->member_size > sizeof(uint32_t)){
 	    memcpy(&magic, ofile->member_addr, sizeof(uint32_t));
 #ifdef __BIG_ENDIAN__
-	    if(magic == FAT_MAGIC)
+	    if(magic == FAT_MAGIC || magic == FAT_MAGIC_64)
 #endif /* __BIG_ENDIAN__ */
 #ifdef __LITTLE_ENDIAN__
-	    if(magic == SWAP_INT(FAT_MAGIC))
+	    if(magic == SWAP_INT(FAT_MAGIC) || magic == SWAP_INT(FAT_MAGIC_64))
 #endif /* __LITTLE_ENDIAN__ */
 	    {
 		ofile->member_type = OFILE_FAT;
@@ -1818,20 +1934,38 @@ struct ofile *ofile)
 #ifdef __LITTLE_ENDIAN__
 		swap_fat_header(ofile->fat_header, host_byte_sex);
 #endif /* __LITTLE_ENDIAN__ */
-		if(sizeof(struct fat_header) +
-		   ofile->fat_header->nfat_arch *
-		   sizeof(struct fat_arch) > ofile->member_size){
+		if(ofile->fat_header->magic == FAT_MAGIC_64)
+		    sizeof_fat_archs = ofile->fat_header->nfat_arch *
+				       sizeof(struct fat_arch_64);
+		else
+		    sizeof_fat_archs = ofile->fat_header->nfat_arch *
+				       sizeof(struct fat_arch);
+		if(sizeof(struct fat_header) + sizeof_fat_archs >
+		   ofile->member_size){
 		    archive_member_error(ofile, "fat file truncated or "
-			    "malformed (fat_arch structs would extend past "
-			    "the end of the archive member)");
+			    "malformed (fat_arch%s structs would extend past "
+			    "the end of the archive member)",
+			    ofile->fat_header->magic == FAT_MAGIC_64 ?
+			    "_64" : "");
 		    goto fatcleanup;
 		}
-		ofile->fat_archs = (struct fat_arch *)
-		    (ofile->member_addr + sizeof(struct fat_header));
+		if(ofile->fat_header->magic == FAT_MAGIC_64){
+		    ofile->fat_archs64 = (struct fat_arch_64 *)
+			(ofile->member_addr + sizeof(struct fat_header));
 #ifdef __LITTLE_ENDIAN__
-		swap_fat_arch(ofile->fat_archs,
-			      ofile->fat_header->nfat_arch, host_byte_sex);
+		    swap_fat_arch_64(ofile->fat_archs64,
+				     ofile->fat_header->nfat_arch,
+				     host_byte_sex);
 #endif /* __LITTLE_ENDIAN__ */
+		}
+		else{
+		    ofile->fat_archs = (struct fat_arch *)
+			(ofile->member_addr + sizeof(struct fat_header));
+#ifdef __LITTLE_ENDIAN__
+		    swap_fat_arch(ofile->fat_archs,
+				  ofile->fat_header->nfat_arch, host_byte_sex);
+#endif /* __LITTLE_ENDIAN__ */
+		}
 		if(check_fat_object_in_archive(ofile) == FALSE)
 		    goto fatcleanup;
 	    }
@@ -1893,7 +2027,11 @@ struct ofile *ofile)
 	       (strncmp(ofile->member_name, SYMDEF_SORTED,
 		        sizeof(SYMDEF_SORTED) - 1) == 0 ||
 	        strncmp(ofile->member_name, SYMDEF,
-		        sizeof(SYMDEF) - 1) == 0)){
+		        sizeof(SYMDEF) - 1) == 0 ||
+	        strncmp(ofile->member_name, SYMDEF_64_SORTED,
+		        sizeof(SYMDEF_64_SORTED) - 1) == 0 ||
+	        strncmp(ofile->member_name, SYMDEF_64,
+		        sizeof(SYMDEF_64) - 1) == 0)){
 		ofile->toc_addr = ofile->member_addr;
 		ofile->toc_size = ofile->member_size;
 		ofile->toc_ar_hdr = ofile->member_ar_hdr;
@@ -1926,6 +2064,7 @@ struct ofile *ofile)
 fatcleanup:
 	ofile->fat_header = NULL;
 	ofile->fat_archs = NULL;
+	ofile->fat_archs64 = NULL;
 cleanup:
 	ofile->member_offset = 0;
 	ofile->member_addr = 0;
@@ -1964,6 +2103,7 @@ struct ofile *ofile)
     enum byte_sex host_byte_sex;
     struct ar_hdr *ar_hdr;
     uint32_t ar_name_size, member_name_offset, n;
+    uint32_t sizeof_fat_archs;
 
 	ar_name_size = 0; /* cctools-port */
 
@@ -1977,8 +2117,16 @@ struct ofile *ofile)
 		      ofile->file_name);
 		return(FALSE);
 	    }
-	    addr = ofile->file_addr + ofile->fat_archs[ofile->narch].offset;
-	    size = ofile->fat_archs[ofile->narch].size;
+	    if(ofile->fat_header->magic == FAT_MAGIC_64){
+		addr = ofile->file_addr +
+		       ofile->fat_archs64[ofile->narch].offset;
+		size = ofile->fat_archs64[ofile->narch].size;
+	    }
+	    else{
+		addr = ofile->file_addr +
+		       ofile->fat_archs[ofile->narch].offset;
+		size = ofile->fat_archs[ofile->narch].size;
+	    }
 	}
 	else if(ofile->file_type == OFILE_ARCHIVE){
 	    addr = ofile->file_addr;
@@ -2086,10 +2234,10 @@ struct ofile *ofile)
 	if(ofile->member_size > sizeof(uint32_t)){
 	    memcpy(&magic, ofile->member_addr, sizeof(uint32_t));
 #ifdef __BIG_ENDIAN__
-	    if(magic == FAT_MAGIC)
+	    if(magic == FAT_MAGIC || magic == FAT_MAGIC_64)
 #endif /* __BIG_ENDIAN__ */
 #ifdef __LITTLE_ENDIAN__
-	    if(magic == SWAP_INT(FAT_MAGIC))
+	    if(magic == SWAP_INT(FAT_MAGIC) || magic == SWAP_INT(FAT_MAGIC_64))
 #endif /* __LITTLE_ENDIAN__ */
 	    {
 		ofile->member_type = OFILE_FAT;
@@ -2097,20 +2245,38 @@ struct ofile *ofile)
 #ifdef __LITTLE_ENDIAN__
 		swap_fat_header(ofile->fat_header, host_byte_sex);
 #endif /* __LITTLE_ENDIAN__ */
-		if(sizeof(struct fat_header) +
-		   ofile->fat_header->nfat_arch *
-		   sizeof(struct fat_arch) > ofile->member_size){
+		if(ofile->fat_header->magic == FAT_MAGIC_64)
+		    sizeof_fat_archs = ofile->fat_header->nfat_arch *
+				       sizeof(struct fat_arch_64);
+		else
+		    sizeof_fat_archs = ofile->fat_header->nfat_arch *
+				       sizeof(struct fat_arch);
+		if(sizeof(struct fat_header) + sizeof_fat_archs >
+		   ofile->member_size){
 		    archive_member_error(ofile, "fat file truncated or "
-			    "malformed (fat_arch structs would extend past "
-			    "the end of the archive member)");
+			    "malformed (fat_arch%s structs would extend past "
+			    "the end of the archive member)",
+			    ofile->fat_header->magic == FAT_MAGIC_64 ?
+			    "_64" : "");
 		    goto cleanup;
 		}
-		ofile->fat_archs = (struct fat_arch *)(ofile->member_addr +
-					       sizeof(struct fat_header));
+		if(ofile->fat_header->magic == FAT_MAGIC_64){
+		    ofile->fat_archs64 = (struct fat_arch_64 *)
+			(ofile->member_addr + sizeof(struct fat_header));
 #ifdef __LITTLE_ENDIAN__
-		swap_fat_arch(ofile->fat_archs,
-			      ofile->fat_header->nfat_arch, host_byte_sex);
+		    swap_fat_arch_64(ofile->fat_archs64,
+				     ofile->fat_header->nfat_arch,
+				     host_byte_sex);
 #endif /* __LITTLE_ENDIAN__ */
+		}
+		else{
+		    ofile->fat_archs = (struct fat_arch *)
+			(ofile->member_addr + sizeof(struct fat_header));
+#ifdef __LITTLE_ENDIAN__
+		    swap_fat_arch(ofile->fat_archs,
+				  ofile->fat_header->nfat_arch, host_byte_sex);
+#endif /* __LITTLE_ENDIAN__ */
+		}
 		if(check_fat_object_in_archive(ofile) == FALSE)
 		    goto cleanup;
 	    }
@@ -2186,6 +2352,7 @@ cleanup:
 	if(ofile->member_type == OFILE_FAT){
 	    ofile->fat_header = NULL;
 	    ofile->fat_archs = NULL;
+	    ofile->fat_archs64 = NULL;
 	}
 	ofile->member_offset = 0;
 	ofile->member_addr = NULL;
@@ -2227,6 +2394,7 @@ struct ofile *ofile)
     char *ar_name;
     uint32_t ar_name_size, member_name_offset;
     struct ar_hdr *ar_hdr;
+    uint32_t sizeof_fat_archs;
 
 	/* These fields are to be filled in by this routine, clear them first */
 	ofile->member_offset = 0;
@@ -2253,8 +2421,16 @@ struct ofile *ofile)
 		      ofile->file_name);
 		return(FALSE);
 	    }
-	    addr = ofile->file_addr + ofile->fat_archs[ofile->narch].offset;
-	    size = ofile->fat_archs[ofile->narch].size;
+	    if(ofile->fat_header->magic == FAT_MAGIC_64){
+		addr = ofile->file_addr +
+		       ofile->fat_archs64[ofile->narch].offset;
+		size = ofile->fat_archs64[ofile->narch].size;
+	    }
+	    else{
+		addr = ofile->file_addr +
+		       ofile->fat_archs[ofile->narch].offset;
+		size = ofile->fat_archs[ofile->narch].size;
+	    }
 	}
 	else if(ofile->file_type == OFILE_ARCHIVE){
 	    addr = ofile->file_addr;
@@ -2352,10 +2528,11 @@ struct ofile *ofile)
 		    memcpy(&magic, addr + offset + ar_name_size,
 			   sizeof(uint32_t));
 #ifdef __BIG_ENDIAN__
-		    if(magic == FAT_MAGIC)
+		    if(magic == FAT_MAGIC || magic == FAT_MAGIC_64)
 #endif /* __BIG_ENDIAN__ */
 #ifdef __LITTLE_ENDIAN__
-		    if(magic == SWAP_INT(FAT_MAGIC))
+		    if(magic == SWAP_INT(FAT_MAGIC) ||
+		       magic == SWAP_INT(FAT_MAGIC_64))
 #endif /* __LITTLE_ENDIAN__ */
 		    {
 			ofile->member_type = OFILE_FAT;
@@ -2364,22 +2541,43 @@ struct ofile *ofile)
 #ifdef __LITTLE_ENDIAN__
 			swap_fat_header(ofile->fat_header, host_byte_sex);
 #endif /* __LITTLE_ENDIAN__ */
-			if(sizeof(struct fat_header) +
-			   ofile->fat_header->nfat_arch *
-			   sizeof(struct fat_arch) > ofile->member_size){
+			if(ofile->fat_header->magic == FAT_MAGIC_64)
+			    sizeof_fat_archs = ofile->fat_header->nfat_arch *
+					       sizeof(struct fat_arch_64);
+			else
+			    sizeof_fat_archs = ofile->fat_header->nfat_arch *
+					       sizeof(struct fat_arch);
+			if(sizeof(struct fat_header) + sizeof_fat_archs >
+			   ofile->member_size){
 			    archive_member_error(ofile, "fat file truncated or "
-				    "malformed (fat_arch structs would extend "
-				    "past the end of the archive member)");
+				    "malformed (fat_arch%s structs would extend"
+				    " past the end of the archive member)",
+				    ofile->fat_header->magic == FAT_MAGIC_64 ?
+				    "_64" : "");
 			    goto fatcleanup;
 			}
-			ofile->fat_archs =
-			    (struct fat_arch *)(addr + offset + ar_name_size +
+			if(ofile->fat_header->magic == FAT_MAGIC_64){
+			    ofile->fat_archs64 =
+				(struct fat_arch_64 *)
+				(addr + offset + ar_name_size +
 					        sizeof(struct fat_header));
 #ifdef __LITTLE_ENDIAN__
-			swap_fat_arch(ofile->fat_archs,
-				      ofile->fat_header->nfat_arch,
-				      host_byte_sex);
+			    swap_fat_arch_64(ofile->fat_archs64,
+					     ofile->fat_header->nfat_arch,
+				             host_byte_sex);
 #endif /* __LITTLE_ENDIAN__ */
+			}
+			else{
+			    ofile->fat_archs =
+				(struct fat_arch *)
+				(addr + offset + ar_name_size +
+					        sizeof(struct fat_header));
+#ifdef __LITTLE_ENDIAN__
+			    swap_fat_arch(ofile->fat_archs,
+					  ofile->fat_header->nfat_arch,
+				          host_byte_sex);
+#endif /* __LITTLE_ENDIAN__ */
+			}
 			if(check_fat_object_in_archive(ofile) == FALSE)
 			    goto fatcleanup;
 		    }
@@ -2460,6 +2658,7 @@ struct ofile *ofile)
 fatcleanup:
 	ofile->fat_header = NULL;
 	ofile->fat_archs = NULL;
+	ofile->fat_archs64 = NULL;
 cleanup:
 	ofile->member_offset = 0;
 	ofile->member_addr = NULL;
@@ -2818,6 +3017,7 @@ struct ofile *ofile)
 	printf("file_type = 0x%x\n", (unsigned int)ofile->file_type);
 	printf("fat_header = 0x%x\n", (unsigned int)ofile->fat_header);
 	printf("fat_archs = 0x%x\n", (unsigned int)ofile->fat_archs);
+	printf("fat_archs64 = 0x%x\n", (unsigned int)ofile->fat_archs64);
 	printf("narch = 0x%x\n", (unsigned int)ofile->narch);
 	printf("arch_type = 0x%x\n", (unsigned int)ofile->arch_type);
 	printf("arch_flag.name = %s\n", ofile->arch_flag.name);
@@ -2846,7 +3046,7 @@ struct ofile *ofile)
 
 /*
  * check_fat() checks the fat ofile for correctness (the fat_header and
- * fat_archs are assumed to be in the host byte sex).
+ * fat_archs or fat_archs64 are assumed to be in the host byte sex).
  */
 static
 enum check_type
@@ -2859,6 +3059,11 @@ struct ofile *ofile)
 
     uint32_t i, j;
     uint64_t big_size;
+    cpu_type_t cputype;
+    cpu_subtype_t cpusubtype;
+    uint64_t offset;
+    uint64_t size;
+    uint32_t align;
 
 	if(ofile->file_type != OFILE_FAT){
 	    error("internal error. check_fat() call and file type of: %s is "
@@ -2871,47 +3076,73 @@ struct ofile *ofile)
 	    return(CHECK_BAD);
 	}
 	for(i = 0; i < ofile->fat_header->nfat_arch; i++){
-	    big_size = ofile->fat_archs[i].offset;
-	    big_size += ofile->fat_archs[i].size;
+	    if(ofile->fat_header->magic == FAT_MAGIC_64){
+		cputype = ofile->fat_archs64[i].cputype;
+		cpusubtype = ofile->fat_archs64[i].cpusubtype;
+		offset = ofile->fat_archs64[i].offset;
+		size = ofile->fat_archs64[i].size;
+		align = ofile->fat_archs64[i].align;
+	    }
+	    else{
+		cputype = ofile->fat_archs[i].cputype;
+		cpusubtype = ofile->fat_archs[i].cpusubtype;
+		offset = ofile->fat_archs[i].offset;
+		size = ofile->fat_archs[i].size;
+		align = ofile->fat_archs[i].align;
+	    }
+	    big_size = offset;
+	    big_size += size;
 	    if(big_size > ofile->file_size){
 		error("fat file: %s truncated or malformed (offset plus size "
 		      "of cputype (%d) cpusubtype (%d) extends past the "
 		      "end of the file)", ofile->file_name,
-		      ofile->fat_archs[i].cputype,
-		      ofile->fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK);
+		      cputype, cpusubtype & ~CPU_SUBTYPE_MASK);
 		return(CHECK_BAD);
 	    }
-	    if(ofile->fat_archs[i].align > MAXSECTALIGN){
+	    if(align > MAXSECTALIGN){
 		error("fat file: %s align (2^%u) too large for cputype (%d) "
 		      "cpusubtype (%d) (maximum 2^%d)", ofile->file_name,
-		      ofile->fat_archs[i].align, ofile->fat_archs[i].cputype,
-		      ofile->fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK,
+		      align, cputype, cpusubtype & ~CPU_SUBTYPE_MASK,
 		      MAXSECTALIGN);
 		return(CHECK_BAD);
 	    }
-	    if(ofile->fat_archs[i].offset %
-	       (1 << ofile->fat_archs[i].align) != 0){
-		error("fat file: %s offset: %u for cputype (%d) cpusubtype "
+	    if(offset %
+	       (1 << align) != 0){
+		error("fat file: %s offset: %llu for cputype (%d) cpusubtype "
 		      "(%d)) not aligned on it's alignment (2^%u)",
-		      ofile->file_name,
-		      ofile->fat_archs[i].offset,
-		      ofile->fat_archs[i].cputype,
-		      ofile->fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK,
-		      ofile->fat_archs[i].align);
+		      ofile->file_name, offset, cputype,
+		      cpusubtype & ~CPU_SUBTYPE_MASK, align);
 		return(CHECK_BAD);
 	    }
 	}
 	for(i = 0; i < ofile->fat_header->nfat_arch; i++){
 	    for(j = i + 1; j < ofile->fat_header->nfat_arch; j++){
-		if(ofile->fat_archs[i].cputype ==
-		     ofile->fat_archs[j].cputype &&
-		   (ofile->fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
-		     (ofile->fat_archs[j].cpusubtype & ~CPU_SUBTYPE_MASK)){
-		    error("fat file: %s contains two of the same "
-			  "architecture (cputype (%d) cpusubtype (%d))",
-			  ofile->file_name, ofile->fat_archs[i].cputype,
-			  ofile->fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK);
-		    return(CHECK_BAD);
+		if(ofile->fat_header->magic == FAT_MAGIC_64){
+		    if(ofile->fat_archs64[i].cputype ==
+			 ofile->fat_archs64[j].cputype &&
+		       (ofile->fat_archs64[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+			 (ofile->fat_archs64[j].cpusubtype &
+				~CPU_SUBTYPE_MASK)){
+			error("fat file: %s contains two of the same "
+			      "architecture (cputype (%d) cpusubtype (%d))",
+			      ofile->file_name, ofile->fat_archs64[i].cputype,
+			      ofile->fat_archs64[i].cpusubtype &
+				~CPU_SUBTYPE_MASK);
+			return(CHECK_BAD);
+		    }
+		}
+		else{
+		    if(ofile->fat_archs[i].cputype ==
+			 ofile->fat_archs[j].cputype &&
+		       (ofile->fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+			 (ofile->fat_archs[j].cpusubtype & ~CPU_SUBTYPE_MASK)){
+			error("fat file: %s contains two of the same "
+			      "architecture (cputype (%d) cpusubtype (%d))",
+			      ofile->file_name, ofile->fat_archs[i].cputype,
+			      ofile->fat_archs[i].cpusubtype &
+				~CPU_SUBTYPE_MASK);
+			return(CHECK_BAD);
+		    }
 		}
 	    }
 	}
@@ -2921,9 +3152,10 @@ struct ofile *ofile)
 
 /*
  * check_fat_object_in_archive() checks the fat object file which is a member
- * of a thin archive for correctness (the fat_header and fat_archs are assumed
- * to be in the host byte sex).  This is not a legal form but allowed when
- * archives_with_fat_objects is TRUE when ofile_map() is called.
+ * of a thin archive for correctness (the fat_header and fat_archs or
+ * fat_archs64 are assumed to be in the host byte sex).  This is not a legal
+ * form but allowed when archives_with_fat_objects is TRUE when ofile_map() is
+ * called.
  */
 static
 enum check_type
@@ -2932,6 +3164,11 @@ struct ofile *ofile)
 {
     uint32_t i, j;
     uint32_t magic;
+    cpu_type_t cputype;
+    cpu_subtype_t cpusubtype;
+    uint64_t offset;
+    uint64_t size;
+    uint32_t align;
 
 	if(ofile->file_type != OFILE_ARCHIVE){
 	    error("internal error. check_fat_object_in_archive() called and "
@@ -2944,31 +3181,39 @@ struct ofile *ofile)
 	    return(CHECK_BAD);
 	}
 	for(i = 0; i < ofile->fat_header->nfat_arch; i++){
-	    if(ofile->fat_archs[i].offset + ofile->fat_archs[i].size >
-	       ofile->member_size){
+	    if(ofile->fat_header->magic == FAT_MAGIC_64){
+		cputype = ofile->fat_archs64[i].cputype;
+		cpusubtype = ofile->fat_archs64[i].cpusubtype;
+		offset = ofile->fat_archs64[i].offset;
+		size = ofile->fat_archs64[i].size;
+		align = ofile->fat_archs64[i].align;
+	    }
+	    else{
+		cputype = ofile->fat_archs[i].cputype;
+		cpusubtype = ofile->fat_archs[i].cpusubtype;
+		offset = ofile->fat_archs[i].offset;
+		size = ofile->fat_archs[i].size;
+		align = ofile->fat_archs[i].align;
+	    }
+	    if(offset + size > ofile->member_size){
 		archive_member_error(ofile, "fat file truncated or malformed "
 			"(offset plus size of cputype (%d) cpusubtype (%d) "
 			"extends past the end of the file)", 
-		        ofile->fat_archs[i].cputype,
-		        ofile->fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK);
+		        cputype, cpusubtype & ~CPU_SUBTYPE_MASK);
 		return(CHECK_BAD);
 	    }
-	    if(ofile->fat_archs[i].align > MAXSECTALIGN){
+	    if(align > MAXSECTALIGN){
 		archive_member_error(ofile, "fat file's align (2^%u) too "
 			"large for cputype (%d) cpusubtype (%d) (maximum 2^%d)",
-			ofile->fat_archs[i].align, ofile->fat_archs[i].cputype,
-			ofile->fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK,
+			align, cputype, cpusubtype & ~CPU_SUBTYPE_MASK,
 			MAXSECTALIGN);
 		return(CHECK_BAD);
 	    }
-	    if(ofile->fat_archs[i].offset %
-	       (1 << ofile->fat_archs[i].align) != 0){
-		archive_member_error(ofile, "fat file's offset: %u for "
+	    if(offset % (1 << align) != 0){
+		archive_member_error(ofile, "fat file's offset: %llu for "
 			"cputype (%d) cpusubtype (%d) not aligned on it's "
-			"alignment (2^%u)", ofile->fat_archs[i].offset,
-			ofile->fat_archs[i].cputype,
-			ofile->fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK,
-			ofile->fat_archs[i].align);
+			"alignment (2^%u)", offset, cputype,
+			cpusubtype & ~CPU_SUBTYPE_MASK, align);
 		return(CHECK_BAD);
 	    }
 
@@ -2976,20 +3221,20 @@ struct ofile *ofile)
 	     * The only supported format where fat files are allowed to appear
 	     * in archives is when the fat file contains only object files.
 	     */
-	    if(ofile->fat_archs[i].size < sizeof(struct mach_header)){
+	    if(size < sizeof(struct mach_header)){
 		archive_member_error(ofile, "fat file for cputype (%d) "
 			"cpusubtype (%d) is not an object file (size too small "
-			"to be an object file)", ofile->fat_archs[i].cputype,
-			ofile->fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK);
+			"to be an object file)", cputype,
+			cpusubtype & ~CPU_SUBTYPE_MASK);
 		return(CHECK_BAD);
 	    }
 	    memcpy(&magic,
 		   ofile->file_addr + ofile->member_offset +
-			ofile->fat_archs[i].offset,
+			offset,
 		   sizeof(uint32_t));
 	    if(magic == MH_MAGIC || magic == SWAP_INT(MH_MAGIC)){
 #ifdef ALIGNMENT_CHECKS
-		if((ofile->member_offset + ofile->fat_archs[i].offset) %
+		if((ofile->member_offset + offset) %
 		   4 != 0){
 		    archive_member_error(ofile, "fat object file's offset in "
 			    "archive not a multiple of 4) (must be since "
@@ -3001,7 +3246,7 @@ struct ofile *ofile)
 	    else if(magic == MH_MAGIC_64 || magic == SWAP_INT(MH_MAGIC_64)){
 #ifdef ALIGNMENT_CHECKS_ARCHIVE_64_BIT
 		if(archive_64_bit_align_warning == FALSE &&
-		   (ofile->member_offset + ofile->fat_archs[i].offset) %
+		   (ofile->member_offset + offset) %
 		   8 != 0){
 		    temporary_archive_member_warning(ofile, "fat object file's "
 			"offset in archive not a multiple of 8) (must be since "
@@ -3014,11 +3259,11 @@ struct ofile *ofile)
 	    else{
 #ifdef LTO_SUPPORT
 	        if(is_llvm_bitcode(ofile, ofile->file_addr +
-		   ofile->member_offset + ofile->fat_archs[i].offset,
-		   ofile->fat_archs[i].size) == TRUE){
+		   ofile->member_offset + offset,
+		   size) == TRUE){
 #ifdef ALIGNMENT_CHECKS_ARCHIVE_64_BIT
 		    if(archive_64_bit_align_warning == FALSE &&
-		       (ofile->member_offset + ofile->fat_archs[i].offset) %
+		       (ofile->member_offset + offset) %
 		       8 != 0){
 			temporary_archive_member_warning(ofile, "fat object "
 			    "file's offset in archive not a multiple of 8) "
@@ -3033,23 +3278,40 @@ struct ofile *ofile)
 		{
 		    archive_member_error(ofile, "fat file for cputype (%d) "
 			    "cpusubtype (%d) is not an object file (bad magic "
-			    "number)", ofile->fat_archs[i].cputype,
-			    ofile->fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK);
+			    "number)", cputype,
+			    cpusubtype & ~CPU_SUBTYPE_MASK);
 		    return(CHECK_BAD);
 		}
 	    }
 	}
 	for(i = 0; i < ofile->fat_header->nfat_arch; i++){
 	    for(j = i + 1; j < ofile->fat_header->nfat_arch; j++){
-		if(ofile->fat_archs[i].cputype ==
-		     ofile->fat_archs[j].cputype &&
-		   (ofile->fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
-		     (ofile->fat_archs[j].cpusubtype & ~CPU_SUBTYPE_MASK)){
-		    archive_member_error(ofile, "fat file contains two of the "
-			"same architecture (cputype (%d) cpusubtype (%d))",
-			ofile->fat_archs[i].cputype,
-			ofile->fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK);
-		    return(CHECK_BAD);
+		if(ofile->fat_header->magic == FAT_MAGIC_64){
+		    if(ofile->fat_archs64[i].cputype ==
+			 ofile->fat_archs64[j].cputype &&
+		       (ofile->fat_archs64[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+			 (ofile->fat_archs64[j].cpusubtype &
+				~CPU_SUBTYPE_MASK)){
+			error("fat file: %s contains two of the same "
+			      "architecture (cputype (%d) cpusubtype (%d))",
+			      ofile->file_name, ofile->fat_archs64[i].cputype,
+			      ofile->fat_archs64[i].cpusubtype &
+				~CPU_SUBTYPE_MASK);
+			return(CHECK_BAD);
+		    }
+		}
+		else{
+		    if(ofile->fat_archs[i].cputype ==
+			 ofile->fat_archs[j].cputype &&
+		       (ofile->fat_archs[i].cpusubtype & ~CPU_SUBTYPE_MASK) ==
+			 (ofile->fat_archs[j].cpusubtype & ~CPU_SUBTYPE_MASK)){
+			error("fat file: %s contains two of the same "
+			      "architecture (cputype (%d) cpusubtype (%d))",
+			      ofile->file_name, ofile->fat_archs[i].cputype,
+			      ofile->fat_archs[i].cpusubtype &
+				~CPU_SUBTYPE_MASK);
+			return(CHECK_BAD);
+		    }
 		}
 	    }
 	}
@@ -3084,11 +3346,22 @@ enum bool archives_with_fat_objects)
 	 * cpusubtype if known) and make sure it is an archive.
 	 */
 	if(ofile->file_type == OFILE_FAT){
-	    addr = ofile->file_addr + ofile->fat_archs[ofile->narch].offset;
-	    size = ofile->fat_archs[ofile->narch].size;
-	    ofile->archive_cputype = ofile->fat_archs[ofile->narch].cputype;
-	    ofile->archive_cpusubtype =
-				     ofile->fat_archs[ofile->narch].cpusubtype;
+	    if(ofile->fat_header->magic == FAT_MAGIC_64){
+		addr = ofile->file_addr +
+		       ofile->fat_archs64[ofile->narch].offset;
+		size = ofile->fat_archs64[ofile->narch].size;
+		ofile->archive_cputype =
+				ofile->fat_archs64[ofile->narch].cputype;
+		ofile->archive_cpusubtype =
+				ofile->fat_archs64[ofile->narch].cpusubtype;
+	    }
+	    else{
+		addr = ofile->file_addr + ofile->fat_archs[ofile->narch].offset;
+		size = ofile->fat_archs[ofile->narch].size;
+		ofile->archive_cputype = ofile->fat_archs[ofile->narch].cputype;
+		ofile->archive_cpusubtype =
+				ofile->fat_archs[ofile->narch].cpusubtype;
+	    }
 	}
 	else if(ofile->file_type == OFILE_ARCHIVE){
 	    addr = ofile->file_addr;
@@ -3157,10 +3430,11 @@ enum bool archives_with_fat_objects)
 	    if(size - offset > sizeof(uint32_t)){
 		memcpy(&magic, addr + offset, sizeof(uint32_t));
 #ifdef __BIG_ENDIAN__
-		if(magic == FAT_MAGIC)
+		if(magic == FAT_MAGIC || (magic == FAT_MAGIC_64)
 #endif /* __BIG_ENDIAN__ */
 #ifdef __LITTLE_ENDIAN__
-		if(magic == SWAP_INT(FAT_MAGIC))
+		if(magic == SWAP_INT(FAT_MAGIC) ||
+		   magic == SWAP_INT(FAT_MAGIC_64))
 #endif /* __LITTLE_ENDIAN__ */
 		{
 		    if(archives_with_fat_objects == FALSE ||
@@ -3294,12 +3568,17 @@ enum check_type
 check_archive_toc(
 struct ofile *ofile)
 {
-    uint32_t i, symdef_length, offset, nranlibs, strsize;
+    uint32_t symdef_length, nranlibs, strsize;
+    uint64_t i, n, offset, ran_off, nranlibs64, strsize64;
     enum byte_sex host_byte_sex, toc_byte_sex;
     struct ranlib *ranlibs;
+    struct ranlib_64 *ranlibs64;
     char *strings;
+    enum bool toc_is_32bit;
 
+	ofile->toc_is_32bit = TRUE;
 	ofile->toc_ranlibs = NULL;
+	ofile->toc_ranlibs64 = NULL;
 	ofile->toc_nranlibs = 0;
 	ofile->toc_strings = NULL;
 	ofile->toc_strsize = 0;
@@ -3311,21 +3590,48 @@ struct ofile *ofile)
 	    return(CHECK_GOOD);
 
 	symdef_length = ofile->toc_size;
-	/*
-	 * The contents of a __.SYMDEF file is begins with a 32-bit word giving 
-	 * the size in bytes of ranlib structures which immediately follow, and
-	 * then continues with a string table consisting of a 32-bit word giving
-	 * the number of bytes of strings which follow and then the strings
-	 * themselves.  So the smallest valid size is two 32-bit words long.
-	 */
-	if(symdef_length < 2 * sizeof(uint32_t)){
+	if(strncmp(ofile->member_name, SYMDEF_64_SORTED,
+		   ofile->member_name_size) == 0 ||
+	   strncmp(ofile->member_name, SYMDEF_64,
+		   ofile->member_name_size) == 0)
+	    toc_is_32bit = FALSE;
+	else
+	    toc_is_32bit = TRUE;
+	if(toc_is_32bit == TRUE){
 	    /*
-	     * Size of table of contents for archive too small to be a valid
-	     * table of contents.
+	     * The contents of a __.SYMDEF file is begins with a 32-bit word
+	     * giving the size in bytes of ranlib structures which immediately
+	     * follow, and then continues with a string table consisting of a
+	     * 32-bit word giving the number of bytes of strings which follow
+	     * and then the strings themselves.  So the smallest valid size is
+	     * two 32-bit words long.
 	     */
-	    ofile->toc_bad = TRUE;
-	    return(CHECK_GOOD);
-	}
+	    if(symdef_length < 2 * sizeof(uint32_t)){
+		/*
+		 * Size of table of contents for archive too small to be a valid
+		 * table of contents.
+		 */
+		ofile->toc_bad = TRUE;
+		return(CHECK_GOOD);
+	    }
+	} else {
+	    /*
+	     * The contents of a __.SYMDEF_64 file is begins with a 64-bit word
+	     * giving the size in bytes of ranlib structures which immediately
+	     * follow, and then continues with a string table consisting of a
+	     * 64-bit word giving the number of bytes of strings which follow
+	     * and then the strings themselves.  So the smallest valid size is
+	     * two 64-bit words long.
+	     */
+	    if(symdef_length < 2 * sizeof(uint64_t)){
+		/*
+		 * Size of table of contents for archive too small to be a valid
+		 * table of contents.
+		 */
+		ofile->toc_bad = TRUE;
+		return(CHECK_GOOD);
+	    }
+        }
 	host_byte_sex = get_host_byte_sex();
 	toc_byte_sex = get_toc_byte_sex(ofile->file_addr, ofile->file_size);
 	if(toc_byte_sex == UNKNOWN_BYTE_SEX){
@@ -3337,62 +3643,134 @@ struct ofile *ofile)
 	    return(CHECK_GOOD);
 	}
 	offset = 0;
-	nranlibs = *((uint32_t *)(ofile->toc_addr + offset));
-	if(toc_byte_sex != host_byte_sex)
-	    nranlibs = SWAP_INT(nranlibs);
-	nranlibs = nranlibs / sizeof(struct ranlib);
-	offset += sizeof(uint32_t);
-	ranlibs = (struct ranlib *)(ofile->toc_addr + offset);
-	offset += sizeof(struct ranlib) * nranlibs;
-	if(nranlibs == 0)
-	    return(CHECK_GOOD);
-	if(offset - (2 * sizeof(uint32_t)) > symdef_length){
-	    /*
-	     * Truncated or malformed archive.  The ranlib structures in table
-	     * of contents extends past the end of the table of contents.
-	     */
-	    ofile->toc_bad = TRUE;
-	    return(CHECK_GOOD);
+	if(toc_is_32bit == TRUE){
+	    nranlibs = *((uint32_t *)(ofile->toc_addr + offset));
+	    if(toc_byte_sex != host_byte_sex)
+		nranlibs = SWAP_INT(nranlibs);
+	    nranlibs = nranlibs / sizeof(struct ranlib);
+	    n = nranlibs;
+	    offset += sizeof(uint32_t);
+
+	    ranlibs = (struct ranlib *)(ofile->toc_addr + offset);
+	    offset += sizeof(struct ranlib) * nranlibs;
+	    if(nranlibs == 0)
+		return(CHECK_GOOD);
+	    if(offset - (2 * sizeof(uint32_t)) > symdef_length){
+		/*
+		 * Truncated or malformed archive.  The ranlib structures in
+		 * table of contents extends past the end of the table of
+		 * contents.
+		 */
+		ofile->toc_bad = TRUE;
+		return(CHECK_GOOD);
+	    }
+
+	    strsize = *((uint32_t *)(ofile->toc_addr + offset));
+	    if(toc_byte_sex != host_byte_sex)
+		strsize = SWAP_INT(strsize);
+	    offset += sizeof(uint32_t);
+
+	    strings = ofile->toc_addr + offset;
+	    offset += strsize;
+	    if(offset - (2 * sizeof(uint32_t)) > symdef_length){
+		/*
+		 * Truncated or malformed archive.  The ranlib strings in table
+		 * of contents extends past the end of the table of contents.
+		 */
+		ofile->toc_bad = TRUE;
+		return(CHECK_GOOD);
+	    }
+	    if(symdef_length == 2 * sizeof(uint32_t))
+		return(CHECK_GOOD);
+	} else {
+	    nranlibs64 = *((uint64_t *)(ofile->toc_addr + offset));
+	    if(toc_byte_sex != host_byte_sex)
+		nranlibs64 = SWAP_LONG_LONG(nranlibs64);
+	    nranlibs64 = nranlibs64 / sizeof(struct ranlib_64);
+	    n = nranlibs64;
+	    offset += sizeof(uint64_t);
+
+	    ranlibs64 = (struct ranlib_64 *)(ofile->toc_addr + offset);
+	    offset += sizeof(struct ranlib_64) * nranlibs64;
+	    if(nranlibs64 == 0)
+		return(CHECK_GOOD);
+	    if(offset - (2 * sizeof(uint64_t)) > symdef_length){
+		/*
+		 * Truncated or malformed archive.  The ranlib structures in
+		 * table of contents extends past the end of the table of
+		 * contents.
+		 */
+		ofile->toc_bad = TRUE;
+		return(CHECK_GOOD);
+	    }
+
+	    strsize64 = *((uint64_t *)(ofile->toc_addr + offset));
+	    if(toc_byte_sex != host_byte_sex)
+		strsize64 = SWAP_LONG_LONG(strsize64);
+	    offset += sizeof(uint64_t);
+
+	    strings = ofile->toc_addr + offset;
+	    offset += strsize64;
+	    if(offset - (2 * sizeof(uint64_t)) > symdef_length){
+		/*
+		 * Truncated or malformed archive.  The ranlib strings in table
+		 * of contents extends past the end of the table of contents.
+		 */
+		ofile->toc_bad = TRUE;
+		return(CHECK_GOOD);
+	    }
+	    if(symdef_length == 2 * sizeof(uint64_t))
+		return(CHECK_GOOD);
 	}
-	strsize = *((uint32_t *)(ofile->toc_addr + offset));
-	if(toc_byte_sex != host_byte_sex)
-	    strsize = SWAP_INT(strsize);
-	offset += sizeof(uint32_t);
-	strings = ofile->toc_addr + offset;
-	offset += strsize;
-	if(offset - (2 * sizeof(uint32_t)) > symdef_length){
-	    /*
-	     * Truncated or malformed archive.  The ranlib strings in table of
-	     * contents extends past the end of the table of contents.
-	     */
-	    ofile->toc_bad = TRUE;
-	    return(CHECK_GOOD);
-	}
-	if(symdef_length == 2 * sizeof(uint32_t))
-	    return(CHECK_GOOD);
 
 	/*
 	 * Check the string offset and the member offsets of the ranlib structs.
 	 */
-	if(toc_byte_sex != host_byte_sex)
-	    swap_ranlib(ranlibs, nranlibs, host_byte_sex);
-	for(i = 0; i < nranlibs; i++){
-	    if(ranlibs[i].ran_un.ran_strx >= strsize){
-		/*
-		 * Malformed table of contents.  The ranlib struct at this index
-		 * has a bad string index field.
-		 */
-		ofile->toc_bad = TRUE;
-		return(CHECK_GOOD);
+	if(toc_byte_sex != host_byte_sex){
+	    if(toc_is_32bit == TRUE)
+	        swap_ranlib(ranlibs, nranlibs, host_byte_sex);
+	    else
+	        swap_ranlib_64(ranlibs64, nranlibs64, host_byte_sex);
+	}
+	for(i = 0; i < n; i++){
+	    if(toc_is_32bit == TRUE){
+		if(ranlibs[i].ran_un.ran_strx >= strsize){
+		    /*
+		     * Malformed table of contents.  The ranlib struct at this
+		     * index has a bad string index field.
+		     */
+		    ofile->toc_bad = TRUE;
+		    return(CHECK_GOOD);
+		}
+		if(ranlibs[i].ran_off >= ofile->file_size){
+		    /*
+		     * Malformed table of contents.  The ranlib struct at this
+		     * index has a bad library member offset field.
+		     */
+		    ofile->toc_bad = TRUE;
+		    return(CHECK_GOOD);
+		}
+		ran_off = ranlibs[i].ran_off;
+	    } else {
+		if(ranlibs64[i].ran_un.ran_strx >= strsize64){
+		    /*
+		     * Malformed table of contents.  The ranlib struct at this
+		     * index has a bad string index field.
+		     */
+		    ofile->toc_bad = TRUE;
+		    return(CHECK_GOOD);
+		}
+		if(ranlibs64[i].ran_off >= ofile->file_size){
+		    /*
+		     * Malformed table of contents.  The ranlib struct at this
+		     * index has a bad library member offset field.
+		     */
+		    ofile->toc_bad = TRUE;
+		    return(CHECK_GOOD);
+		}
+		ran_off = ranlibs64[i].ran_off;
 	    }
-	    if(ranlibs[i].ran_off >= ofile->file_size){
-		/*
-		 * Malformed table of contents.  The ranlib struct at this index
-		 * has a bad library member offset field.
-		 */
-		ofile->toc_bad = TRUE;
-		return(CHECK_GOOD);
-	    }
+
 	    /*
 	     * These should be on 4 byte boundaries because the maximum
 	     * alignment of the header structures and relocation are 4 bytes.
@@ -3402,7 +3780,7 @@ struct ofile *ofile)
 	     * machine.
 	     */
 #if defined(mc68000) || defined(__i386__)
-	    if(ranlibs[i].ran_off % sizeof(short) != 0){
+	    if(ran_off % sizeof(short) != 0){
 		/*
 		 * Malformed table of contents.  This ranlib struct library
 		 * member offset not a multiple 2 bytes.
@@ -3411,20 +3789,38 @@ struct ofile *ofile)
 		return(CHECK_GOOD);
 	    }
 #else
-	    if(ranlibs[i].ran_off % sizeof(uint32_t) != 0){
-		/*
-		 * Malformed table of contents.  This ranlib struct library
-	         * member offset not a multiple of 4 bytes.
-		 */
-		ofile->toc_bad = TRUE;
-		return(CHECK_GOOD);
+	    if(toc_is_32bit == TRUE){
+		if(ran_off % sizeof(uint32_t) != 0){
+		    /*
+		     * Malformed table of contents.  This ranlib struct library
+		     * member offset not a multiple of 4 bytes.
+		     */
+		    ofile->toc_bad = TRUE;
+		    return(CHECK_GOOD);
+		}
+	    } else {
+		if(ran_off % sizeof(uint64_t) != 0){
+		    /*
+		     * Malformed table of contents.  This ranlib struct library
+		     * member offset not a multiple of 8 bytes.
+		     */
+		    ofile->toc_bad = TRUE;
+		    return(CHECK_GOOD);
+		}
 	    }
 #endif
 	}
+	ofile->toc_is_32bit = toc_is_32bit;
 	ofile->toc_ranlibs = ranlibs;
-	ofile->toc_nranlibs = nranlibs;
+	ofile->toc_ranlibs64 = ranlibs64;
 	ofile->toc_strings = strings;
-	ofile->toc_strsize = strsize;
+	if(toc_is_32bit == TRUE){
+	    ofile->toc_nranlibs = nranlibs;
+	    ofile->toc_strsize = strsize;
+	} else {
+	    ofile->toc_nranlibs = nranlibs64;
+	    ofile->toc_strsize = strsize64;
+	}
 	return(CHECK_GOOD);
 }
 
@@ -3488,6 +3884,7 @@ struct ofile *ofile)
     char *struct_dylib_module_name, *struct_nlist_name;
     uint64_t big_size, big_end, big_load_end;
     struct element elements;
+    cpu_type_t fat_cputype;
 
 	elements.offset = 0;
 	elements.size = 0;
@@ -3552,7 +3949,11 @@ struct ofile *ofile)
 		"Mach-O headers") == CHECK_BAD)
 	    goto return_bad;
 	if(ofile->file_type == OFILE_FAT){
-	    if(ofile->fat_archs[ofile->narch].cputype != ofile->mh_cputype){
+	    if(ofile->fat_header->magic == FAT_MAGIC_64)
+	        fat_cputype = ofile->fat_archs64[ofile->narch].cputype;
+	    else
+	        fat_cputype = ofile->fat_archs[ofile->narch].cputype;
+	    if(fat_cputype != ofile->mh_cputype){
 		Mach_O_error(ofile, "malformed fat file (fat header "
 		    "architecture: %u's cputype does not match "
 		    "object file's mach header)", ofile->narch);

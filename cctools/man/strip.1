@@ -1,4 +1,4 @@
-.TH STRIP 1 "August 4, 2006" "Apple Computer, Inc."
+.TH STRIP 1 "February 25, 2016" "Apple, Inc."
 .SH NAME
 strip \- remove symbols
 .SH SYNOPSIS
@@ -213,6 +213,9 @@ and other compilers).
 .TP
 .B \-X
 Remove the local symbols whose names begin with `L'.
+.TP
+.B \-T
+Remove the symbols whose names begin with `\_\^\_T'.
 .TP 
 .B \-x
 Remove all local symbols (saving only global symbols).
@@ -232,6 +235,12 @@ Write the result into the file
 .TP
 .B \-no_uuid
 Remove any LC_UUID load commands.
+.TP
+.B \-no_split_info
+Remove the LC_SEGMENT_SPLIT_INFO load command and its payload load.
+.TP
+.B \-no_code_signature_warning
+Don't warn when the code signature would be invalid in the output.
 .TP
 .BI \-arch " arch_type"
 Specifies the architecture,
