@@ -505,6 +505,7 @@ bool File<A>::forEachAtom(ld::File::AtomHandler& handler) const
 					}
 				}
 			}
+#ifdef LTO_SUPPORT // ld64-port
 			else if ( validLTOFile(member->content(), member->contentSize(), _objOpts) ) {
 				if ( lto::hasObjCCategory(member->content(), member->contentSize()) ) {
 					MemberState& state = this->makeObjectFileForMember(member);
@@ -516,6 +517,7 @@ bool File<A>::forEachAtom(ld::File::AtomHandler& handler) const
 					}
 				}
 			}
+#endif
 		}
 	}
 	return didSome;

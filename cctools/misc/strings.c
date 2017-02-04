@@ -335,7 +335,12 @@ void *cookie)
 	 * If the ofile is not an object file then process it without reguard
 	 * to sections.
 	 */
-	if(ofile->object_addr == NULL || ofile->member_type == OFILE_LLVM_BITCODE){
+	if(ofile->object_addr == NULL
+#ifdef LTO_SUPPORT /* cctools-port */
+		|| ofile->member_type == OFILE_LLVM_BITCODE
+#endif /* LTO_SUPPORT */
+	  )
+	{
 	    if(ofile->file_type == OFILE_FAT && ofile->arch_flag.cputype != 0){
 		if(ofile->fat_header->magic == FAT_MAGIC_64){
 		    addr = ofile->file_addr +

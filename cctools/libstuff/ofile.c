@@ -3576,6 +3576,11 @@ struct ofile *ofile)
     char *strings;
     enum bool toc_is_32bit;
 
+	/* cctools-port start */
+	ranlibs = NULL;
+	ranlibs64 = NULL;
+	/* cctools-port end */
+
 	ofile->toc_is_32bit = TRUE;
 	ofile->toc_ranlibs = NULL;
 	ofile->toc_ranlibs64 = NULL;

@@ -296,12 +296,14 @@ private:
 								std::vector<const ld::Atom*>&		newAtoms,
 								std::vector<const char*>&			additionalUndefines);
 
+#if LTO_API_VERSION >= 18 // ld64-port
 	static thinlto_code_gen_t init_thinlto_codegen(const std::vector<File*>&           files,
 												   const std::vector<const ld::Atom*>& allAtoms,
 												   ld::Internal&				       state,
 												   const OptimizeOptions&			   options,
 												   CStringToAtom&                      deadllvmAtoms,
 												   CStringToAtom&                      llvmAtoms);
+#endif
 
 	static std::vector<File*>		_s_files;
 	static bool						_s_llvmOptionsProcessed;
@@ -793,7 +795,7 @@ std::tuple<uint8_t *, size_t> Parser::codegen(const OptimizeOptions& options,
 											  ld::Internal&			 state,
 											  lto_code_gen_t		 generator,
 											  std::string&           object_path) {
-	uint8_t *machOFile;
+	uint8_t *machOFile = NULL; // ld64-port: = NULL
 	size_t machOFileLen;
 
 	if ( ::lto_codegen_set_pic_model(generator, getCodeModel(options)) )
@@ -1052,6 +1054,7 @@ bool Parser::optimizeLTO(const std::vector<File*>				files,
 	return true;
 }
 
+#if LTO_API_VERSION >= 18 // ld64-port
 // Create the ThinLTO codegenerator
 thinlto_code_gen_t Parser::init_thinlto_codegen(const std::vector<File*>&           files,
 									            const std::vector<const ld::Atom*>& allAtoms,
@@ -1202,6 +1205,7 @@ thinlto_code_gen_t Parser::init_thinlto_codegen(const std::vector<File*>&       
 
 	return thingenerator;
 }
+#endif // LTO_API_VERSION >= 18 // ld64-port
 
 // Full LTO processing
 bool Parser::optimizeThinLTO(const std::vector<File*>&              files,

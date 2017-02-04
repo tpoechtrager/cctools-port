@@ -847,9 +847,6 @@ void dumper::dumpFixup(const ld::Fixup* ref)
 		case ld::Fixup::kindStoreARM64PCRelToGOT:
 			printf(", then store as 32-bit delta to GOT entry");
 			break;
-		case ld::Fixup::kindStoreARM64PointerToGOT32:
-			printf(", then store as 32-bit pointer to GOT entry");
-			break;
 		case ld::Fixup::kindDtraceExtra:
 			printf("dtrace static probe extra info");
 			break;

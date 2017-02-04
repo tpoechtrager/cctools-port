@@ -1229,7 +1229,10 @@ enum bool verbose)
     char buf[20];
     uint64_t big_size;
 
-    str_size = 0; /* cctools-port */
+	/* cctools-port start */
+	str_size = 0;
+	string_size = 0;
+	/* cctools-port end */
 
 	host_byte_sex = get_host_byte_sex();
 	toc_offset = 0;
