@@ -406,5 +406,5 @@ private:
 ld::Section KextStubAtom::_s_section("__TEXT", "__stubs", ld::Section::typeCode);
 
 
-} // namespace x86_64 
+} // namespace arm64
 

@@ -50,11 +50,12 @@ struct objc_image_info  {
 	uint32_t	flags;
 };
 
-#define OBJC_IMAGE_SUPPORTS_GC			(1<<1)
-#define OBJC_IMAGE_REQUIRES_GC			(1<<2)
-#define OBJC_IMAGE_OPTIMIZED_BY_DYLD	(1<<3)
-#define OBJC_IMAGE_SUPPORTS_COMPACTION	(1<<4)
-#define OBJC_IMAGE_IS_SIMULATED			(1<<5)
+#define OBJC_IMAGE_SUPPORTS_GC						(1<<1)
+#define OBJC_IMAGE_REQUIRES_GC						(1<<2)
+#define OBJC_IMAGE_OPTIMIZED_BY_DYLD				(1<<3)
+#define OBJC_IMAGE_SUPPORTS_COMPACTION				(1<<4)
+#define OBJC_IMAGE_IS_SIMULATED						(1<<5)
+#define OBJC_IMAGE_HAS_CATEGORY_CLASS_PROPERTIES	(1<<6)
 
 
 
@@ -65,7 +66,7 @@ template <typename A>
 class ObjCImageInfoAtom : public ld::Atom {
 public:
 											ObjCImageInfoAtom(ld::File::ObjcConstraint objcConstraint, 
-															bool compaction, bool abi2, uint8_t swiftVersion);
+															  bool compaction, bool abi2, bool hasCategoryClassProperties, uint8_t swiftVersion);
 
 	virtual const ld::File*					file() const					{ return NULL; }
 	virtual const char*						name() const					{ return "objc image info"; }
@@ -89,7 +90,7 @@ template <typename A> ld::Section ObjCImageInfoAtom<A>::_s_sectionABI2("__DATA",
 
 template <typename A>
 ObjCImageInfoAtom<A>::ObjCImageInfoAtom(ld::File::ObjcConstraint objcConstraint, bool compaction, 
-										bool abi2, uint8_t swiftVersion)
+										bool abi2, bool hasCategoryClassProperties, uint8_t swiftVersion)
 	: ld::Atom(abi2 ? _s_sectionABI2 : _s_sectionABI1, ld::Atom::definitionRegular, ld::Atom::combineNever,
 							ld::Atom::scopeLinkageUnit, ld::Atom::typeUnclassified, 
 							symbolTableNotIn, false, false, false, ld::Atom::Alignment(2))
@@ -115,6 +116,10 @@ ObjCImageInfoAtom<A>::ObjCImageInfoAtom(ld::File::ObjcConstraint objcConstraint,
 		case ld::File::objcConstraintRetainReleaseForSimulator:
 				value |= OBJC_IMAGE_IS_SIMULATED;
 			break;
+	}
+
+	if ( hasCategoryClassProperties ) {
+		value |= OBJC_IMAGE_HAS_CATEGORY_CLASS_PROPERTIES;
 	}
 
 	// provide swift language version in final binary for runtime to inspect
@@ -206,9 +211,12 @@ ld::Section ProtocolListAtom<A>::_s_section("__DATA", "__objc_const", ld::Sectio
 template <typename A>
 class PropertyListAtom : public ld::Atom {
 public:
+	enum class PropertyKind { ClassProperties, InstanceProperties };
+
 											PropertyListAtom(ld::Internal& state, const ld::Atom* baseProtocolList, 
-															const std::vector<const ld::Atom*>* categories, 
-															std::set<const ld::Atom*>& deadAtoms);
+													 const std::vector<const ld::Atom*>* categories, 
+													 std::set<const ld::Atom*>& deadAtoms, 
+													 PropertyKind kind);
 
 	virtual const ld::File*					file() const					{ return _file; }
 	virtual const char*						name() const					{ return "objc merged property list"; }
@@ -273,6 +281,8 @@ public:
 private:	
 	typedef typename A::P::uint_t			pint_t;
 
+	void addFixupAtOffset(uint32_t offset);
+
 	const ld::Atom*							_atom;
 	std::vector<ld::Fixup>					_fixups;
 };
@@ -314,7 +324,7 @@ const ld::Atom* ObjCData<A>::getPointerInContent(ld::Internal& state, const ld::
 	if ( hasAddend != NULL )
 		*hasAddend = false;
 	for (ld::Fixup::iterator fit=contentAtom->fixupsBegin(); fit != contentAtom->fixupsEnd(); ++fit) {
-		if ( fit->offsetInAtom == offset ) {
+		if ( (fit->offsetInAtom == offset) && (fit->kind != ld::Fixup::kindNoneFollowOn) ) {
 			switch ( fit->binding ) {
 				case ld::Fixup::bindingsIndirectlyBound:
 					target = state.indirectBindingTable[fit->u.bindingIndex];
@@ -369,7 +379,8 @@ public:
 	static const ld::Atom*	getInstanceMethods(ld::Internal& state, const ld::Atom* contentAtom);
 	static const ld::Atom*	getClassMethods(ld::Internal& state, const ld::Atom* contentAtom);
 	static const ld::Atom*	getProtocols(ld::Internal& state, const ld::Atom* contentAtom);
-	static const ld::Atom*	getProperties(ld::Internal& state, const ld::Atom* contentAtom);
+	static const ld::Atom*	getInstanceProperties(ld::Internal& state, const ld::Atom* contentAtom);
+	static const ld::Atom*	getClassProperties(ld::Internal& state, const ld::Atom* contentAtom);
 	static uint32_t         size() { return 6*sizeof(pint_t); }
 private:	
 	typedef typename A::P::uint_t			pint_t;
@@ -401,9 +412,18 @@ const ld::Atom*	Category<A>::getProtocols(ld::Internal& state, const ld::Atom* c
 }
 
 template <typename A>
-const ld::Atom*	Category<A>::getProperties(ld::Internal& state, const ld::Atom* contentAtom)
+const ld::Atom*	Category<A>::getInstanceProperties(ld::Internal& state, const ld::Atom* contentAtom)
 {
 	return ObjCData<A>::getPointerInContent(state, contentAtom, 5*sizeof(pint_t)); // category_t.instanceProperties
+}
+
+template <typename A>
+const ld::Atom*	Category<A>::getClassProperties(ld::Internal& state, const ld::Atom* contentAtom)
+{
+	// Only specially-marked files have this field.
+	if (!contentAtom->file()->objcHasCategoryClassPropertiesField()) return NULL;
+
+	return ObjCData<A>::getPointerInContent(state, contentAtom, 6*sizeof(pint_t)); // category_t.classProperties
 }
 
 
@@ -446,10 +466,12 @@ private:
 template <typename A>
 class Class : public ObjCData<A> {
 public:
+	static const ld::Atom*	getMetaClass(ld::Internal& state, const ld::Atom* classAtom);
 	static const ld::Atom*	getInstanceMethodList(ld::Internal& state, const ld::Atom* classAtom);
 	static const ld::Atom*	getInstanceProtocolList(ld::Internal& state, const ld::Atom* classAtom);
 	static const ld::Atom*	getInstancePropertyList(ld::Internal& state, const ld::Atom* classAtom);
 	static const ld::Atom*	getClassMethodList(ld::Internal& state, const ld::Atom* classAtom);
+	static const ld::Atom*	getClassPropertyList(ld::Internal& state, const ld::Atom* classAtom);
 	static const ld::Atom*	setInstanceMethodList(ld::Internal& state, const ld::Atom* classAtom, 
 												const ld::Atom* methodListAtom, std::set<const ld::Atom*>& deadAtoms);
 	static const ld::Atom*	setInstanceProtocolList(ld::Internal& state, const ld::Atom* classAtom, 
@@ -460,74 +482,117 @@ public:
 												const ld::Atom* methodListAtom, std::set<const ld::Atom*>& deadAtoms);
 	static const ld::Atom*	setClassProtocolList(ld::Internal& state, const ld::Atom* classAtom, 
 												const ld::Atom* protocolListAtom, std::set<const ld::Atom*>& deadAtoms);
-	static uint32_t         size() { return 5*sizeof(pint_t); }
-	static unsigned int		class_ro_header_size();
+	static const ld::Atom*	setClassPropertyList(ld::Internal& state, const ld::Atom* classAtom, 
+												const ld::Atom* propertyListAtom, std::set<const ld::Atom*>& deadAtoms);
+	static uint32_t         size() { return sizeof(Content); }
+
 private:
+	friend class ClassROOverlayAtom<A>;
+
 	typedef typename A::P::uint_t			pint_t;
+
 	static const ld::Atom*	getROData(ld::Internal& state, const ld::Atom* classAtom);
+
+	struct Content {
+		pint_t isa;
+		pint_t superclass;
+		pint_t method_cache;
+		pint_t vtable;
+		pint_t data;
+	};
+
+	struct ROContent {
+		uint32_t flags;
+		uint32_t instanceStart;
+		// Note there is 4-bytes of alignment padding between instanceSize 
+		// and ivarLayout on 64-bit archs, but no padding on 32-bit archs.
+		// This union is a way to model that.
+		union {
+			uint32_t instanceSize;
+			pint_t pad;
+		} instanceSize;
+		pint_t ivarLayout;
+		pint_t name;
+		pint_t baseMethods;
+		pint_t baseProtocols;
+		pint_t ivars;
+		pint_t weakIvarLayout;
+		pint_t baseProperties;
+	};
 };
 
-template <> unsigned int Class<x86_64>::class_ro_header_size() { return 16; }
-template <> unsigned int Class<arm>::class_ro_header_size() { return 12;}
-template <> unsigned int Class<x86>::class_ro_header_size() { return 12; }
+#define GET_FIELD(state, classAtom, field) \
+	ObjCData<A>::getPointerInContent(state, classAtom, offsetof(Content, field))
+#define SET_FIELD(state, classAtom, field, valueAtom) \
+	ObjCData<A>::setPointerInContent(state, classAtom, offsetof(Content, field), valueAtom)
 
+#define GET_RO_FIELD(state, classAtom, field) \
+	ObjCData<A>::getPointerInContent(state, getROData(state, classAtom), offsetof(ROContent, field))
+#define SET_RO_FIELD(state, classROAtom, field, valueAtom) \
+	ObjCData<A>::setPointerInContent(state, getROData(state, classAtom), offsetof(ROContent, field), valueAtom)
+
+template <typename A>
+const ld::Atom*	Class<A>::getMetaClass(ld::Internal& state, const ld::Atom* classAtom)
+{
+    const ld::Atom* metaClassAtom = GET_FIELD(state, classAtom, isa);
+    assert(metaClassAtom != NULL);
+    return metaClassAtom;
+}
 
 template <typename A>
 const ld::Atom*	Class<A>::getROData(ld::Internal& state, const ld::Atom* classAtom)
 {
-	return ObjCData<A>::getPointerInContent(state, classAtom, 4*sizeof(pint_t)); // class_t.data
-
+    const ld::Atom* classROAtom = GET_FIELD(state, classAtom, data);
+    assert(classROAtom != NULL);
+    return classROAtom;
 }
 
 template <typename A>
 const ld::Atom*	Class<A>::getInstanceMethodList(ld::Internal& state, const ld::Atom* classAtom)
 {
-	const ld::Atom* classROAtom = getROData(state, classAtom); // class_t.data
-	assert(classROAtom != NULL);
-	return ObjCData<A>::getPointerInContent(state, classROAtom, class_ro_header_size() + 2*sizeof(pint_t)); // class_ro_t.baseMethods
+	return GET_RO_FIELD(state, classAtom, baseMethods);
 }
 
 template <typename A>
 const ld::Atom*	Class<A>::getInstanceProtocolList(ld::Internal& state, const ld::Atom* classAtom)
 {
-	const ld::Atom* classROAtom = getROData(state, classAtom); // class_t.data
-	assert(classROAtom != NULL);
-	return ObjCData<A>::getPointerInContent(state, classROAtom, class_ro_header_size() + 3*sizeof(pint_t)); // class_ro_t.baseProtocols
+	return GET_RO_FIELD(state, classAtom, baseProtocols);
 }
 
 template <typename A>
 const ld::Atom*	Class<A>::getInstancePropertyList(ld::Internal& state, const ld::Atom* classAtom)
 {
-	const ld::Atom* classROAtom = getROData(state, classAtom); // class_t.data
-	assert(classROAtom != NULL);
-	return ObjCData<A>::getPointerInContent(state, classROAtom, class_ro_header_size() + 6*sizeof(pint_t)); // class_ro_t.baseProperties
+	return GET_RO_FIELD(state, classAtom, baseProperties);
 }
 
 template <typename A>
 const ld::Atom*	Class<A>::getClassMethodList(ld::Internal& state, const ld::Atom* classAtom)
 {
-	const ld::Atom* metaClassAtom = ObjCData<A>::getPointerInContent(state, classAtom, 0); // class_t.isa
-	assert(metaClassAtom != NULL);
-	return Class<A>::getInstanceMethodList(state, metaClassAtom);
+	return Class<A>::getInstanceMethodList(state, getMetaClass(state, classAtom));
+}
+
+template <typename A>
+const ld::Atom*	Class<A>::getClassPropertyList(ld::Internal& state, const ld::Atom* classAtom)
+{
+    return Class<A>::getInstancePropertyList(state, getMetaClass(state, classAtom));
 }
 
 template <typename A>
 const ld::Atom* Class<A>::setInstanceMethodList(ld::Internal& state, const ld::Atom* classAtom, 
 												const ld::Atom* methodListAtom, std::set<const ld::Atom*>& deadAtoms)
 {
-	const ld::Atom* classROAtom = getROData(state, classAtom); // class_t.data
-	assert(classROAtom != NULL);
 	// if the base class does not already have a method list, we need to create an overlay
 	if ( getInstanceMethodList(state, classAtom) == NULL ) {
-		ClassROOverlayAtom<A>* overlay = new ClassROOverlayAtom<A>(classROAtom);
+		const ld::Atom* oldROAtom = getROData(state, classAtom);
+		deadAtoms.insert(oldROAtom);
+		ClassROOverlayAtom<A>* overlay = new ClassROOverlayAtom<A>(oldROAtom);
 		//fprintf(stderr, "replace class RO atom %p with %p for method list in class atom %s\n", classROAtom, overlay, classAtom->name());
 		overlay->addMethodListFixup();
-		ObjCData<A>::setPointerInContent(state, classAtom, 4*sizeof(pint_t), overlay); // class_t.data
-		deadAtoms.insert(classROAtom);
-		ObjCData<A>::setPointerInContent(state, overlay, class_ro_header_size() + 2*sizeof(pint_t), methodListAtom); // class_ro_t.baseMethods
+		SET_FIELD(state, classAtom, data, overlay);
+		SET_RO_FIELD(state, classAtom, baseMethods, methodListAtom);
 		return overlay;
 	}
-	ObjCData<A>::setPointerInContent(state, classROAtom, class_ro_header_size() + 2*sizeof(pint_t), methodListAtom); // class_ro_t.baseMethods
+	SET_RO_FIELD(state, classAtom, baseMethods, methodListAtom);
 	return NULL; // means classRO atom was not replaced
 }
 
@@ -535,20 +600,19 @@ template <typename A>
 const ld::Atom* Class<A>::setInstanceProtocolList(ld::Internal& state, const ld::Atom* classAtom, 
 									const ld::Atom* protocolListAtom, std::set<const ld::Atom*>& deadAtoms)
 {
-	const ld::Atom* classROAtom = getROData(state, classAtom); // class_t.data
-	assert(classROAtom != NULL);
 	// if the base class does not already have a protocol list, we need to create an overlay
 	if ( getInstanceProtocolList(state, classAtom) == NULL ) {
-		ClassROOverlayAtom<A>* overlay = new ClassROOverlayAtom<A>(classROAtom);
+		const ld::Atom* oldROAtom = getROData(state, classAtom);
+		deadAtoms.insert(oldROAtom);
+		ClassROOverlayAtom<A>* overlay = new ClassROOverlayAtom<A>(oldROAtom);
 		//fprintf(stderr, "replace class RO atom %p with %p for protocol list in class atom %s\n", classROAtom, overlay, classAtom->name());
 		overlay->addProtocolListFixup();
-		ObjCData<A>::setPointerInContent(state, classAtom, 4*sizeof(pint_t), overlay); // class_t.data
-		deadAtoms.insert(classROAtom);
-		ObjCData<A>::setPointerInContent(state, overlay, class_ro_header_size() + 3*sizeof(pint_t), protocolListAtom); // class_ro_t.baseProtocols
+		SET_FIELD(state, classAtom, data, overlay);
+		SET_RO_FIELD(state, classAtom, baseProtocols, protocolListAtom);
 		return overlay;
 	}
 	//fprintf(stderr, "set class RO atom %p protocol list in class atom %s\n", classROAtom, classAtom->name());
-	ObjCData<A>::setPointerInContent(state, classROAtom, class_ro_header_size() + 3*sizeof(pint_t), protocolListAtom); // class_ro_t.baseProtocols
+	SET_RO_FIELD(state, classAtom, baseProtocols, protocolListAtom);
 	return NULL;  // means classRO atom was not replaced
 }
 
@@ -557,9 +621,8 @@ const ld::Atom* Class<A>::setClassProtocolList(ld::Internal& state, const ld::At
 									const ld::Atom* protocolListAtom, std::set<const ld::Atom*>& deadAtoms)
 {
 	// meta class also points to same protocol list as class
-	const ld::Atom* metaClassAtom = ObjCData<A>::getPointerInContent(state, classAtom, 0); // class_t.isa
+	const ld::Atom* metaClassAtom = getMetaClass(state, classAtom);
 	//fprintf(stderr, "setClassProtocolList(), classAtom=%p %s, metaClass=%p %s\n", classAtom, classAtom->name(), metaClassAtom, metaClassAtom->name());
-	assert(metaClassAtom != NULL);
 	return setInstanceProtocolList(state, metaClassAtom, protocolListAtom, deadAtoms);
 }
 
@@ -569,19 +632,18 @@ template <typename A>
 const ld::Atom*  Class<A>::setInstancePropertyList(ld::Internal& state, const ld::Atom* classAtom, 
 												const ld::Atom* propertyListAtom, std::set<const ld::Atom*>& deadAtoms)
 {
-	const ld::Atom* classROAtom = getROData(state, classAtom); // class_t.data
-	assert(classROAtom != NULL);
 	// if the base class does not already have a property list, we need to create an overlay
 	if ( getInstancePropertyList(state, classAtom) == NULL ) {
-		ClassROOverlayAtom<A>* overlay = new ClassROOverlayAtom<A>(classROAtom);
+		const ld::Atom* oldROAtom = getROData(state, classAtom);
+		deadAtoms.insert(oldROAtom);
+		ClassROOverlayAtom<A>* overlay = new ClassROOverlayAtom<A>(oldROAtom);
 		//fprintf(stderr, "replace class RO atom %p with %p for property list in class atom %s\n", classROAtom, overlay, classAtom->name());
 		overlay->addPropertyListFixup();
-		ObjCData<A>::setPointerInContent(state, classAtom, 4*sizeof(pint_t), overlay); // class_t.data
-		deadAtoms.insert(classROAtom);
-		ObjCData<A>::setPointerInContent(state, overlay, class_ro_header_size() + 6*sizeof(pint_t), propertyListAtom); // class_ro_t.baseProperties
+		SET_FIELD(state, classAtom, data, overlay);
+		SET_RO_FIELD(state, classAtom, baseProperties, propertyListAtom);
 		return overlay;
 	}
-	ObjCData<A>::setPointerInContent(state, classROAtom, class_ro_header_size() + 6*sizeof(pint_t), propertyListAtom); // class_ro_t.baseProperties
+	SET_RO_FIELD(state, classAtom, baseProperties, propertyListAtom);
 	return NULL;  // means classRO atom was not replaced
 }
 
@@ -590,86 +652,67 @@ const ld::Atom* Class<A>::setClassMethodList(ld::Internal& state, const ld::Atom
 											const ld::Atom* methodListAtom, std::set<const ld::Atom*>& deadAtoms)
 {
 	// class methods is just instance methods of metaClass
-	const ld::Atom* metaClassAtom = ObjCData<A>::getPointerInContent(state, classAtom, 0); // class_t.isa
-	assert(metaClassAtom != NULL);
-	return setInstanceMethodList(state, metaClassAtom, methodListAtom, deadAtoms);
+	return setInstanceMethodList(state, getMetaClass(state, classAtom), methodListAtom, deadAtoms);
+}
+
+template <typename A>
+const ld::Atom* Class<A>::setClassPropertyList(ld::Internal& state, const ld::Atom* classAtom, 
+											const ld::Atom* propertyListAtom, std::set<const ld::Atom*>& deadAtoms)
+{
+	// class properties is just instance properties of metaClass
+	return setInstancePropertyList(state, getMetaClass(state, classAtom), propertyListAtom, deadAtoms);
+}
+
+#undef GET_FIELD
+#undef SET_FIELD
+#undef GET_RO_FIELD
+#undef SET_RO_FIELD
+
+
+template <typename P>
+ld::Fixup::Kind pointerFixupKind();
+
+template <> 
+ld::Fixup::Kind pointerFixupKind<Pointer32<BigEndian>>() { 
+	return ld::Fixup::kindStoreTargetAddressBigEndian32; 
+}
+template <> 
+ld::Fixup::Kind pointerFixupKind<Pointer64<BigEndian>>() { 
+	return ld::Fixup::kindStoreTargetAddressBigEndian64; 
+}
+template <> 
+ld::Fixup::Kind pointerFixupKind<Pointer32<LittleEndian>>() { 
+	return ld::Fixup::kindStoreTargetAddressLittleEndian32; 
+}
+template <> 
+ld::Fixup::Kind pointerFixupKind<Pointer64<LittleEndian>>() { 
+	return ld::Fixup::kindStoreTargetAddressLittleEndian64; 
+}
+
+template <typename A>
+void ClassROOverlayAtom<A>::addFixupAtOffset(uint32_t offset)
+{
+	const ld::Atom* targetAtom = this; // temporary
+	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k1of1, pointerFixupKind<typename A::P>(), targetAtom));
 }
 
 
-
-template <>
-void ClassROOverlayAtom<x86_64>::addMethodListFixup()
+template <typename A>
+void ClassROOverlayAtom<A>::addMethodListFixup()
 {
-	const ld::Atom* targetAtom = this; // temporary
-	uint32_t offset = Class<x86_64>::class_ro_header_size() + 2*8; // class_ro_t.baseMethods
-	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k1of1, ld::Fixup::kindStoreTargetAddressLittleEndian64, targetAtom));
+	addFixupAtOffset(offsetof(typename Class<A>::ROContent, baseMethods));
 }
 
-template <>
-void ClassROOverlayAtom<arm>::addMethodListFixup()
+template <typename A>
+void ClassROOverlayAtom<A>::addProtocolListFixup()
 {
-	const ld::Atom* targetAtom = this; // temporary
-	uint32_t offset = Class<arm>::class_ro_header_size() + 2*4; // class_ro_t.baseMethods
-	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k1of1, ld::Fixup::kindStoreTargetAddressLittleEndian32, targetAtom));
+	addFixupAtOffset(offsetof(typename Class<A>::ROContent, baseProtocols));
 }
 
-template <>
-void ClassROOverlayAtom<x86>::addMethodListFixup()
+template <typename A>
+void ClassROOverlayAtom<A>::addPropertyListFixup()
 {
-	const ld::Atom* targetAtom = this; // temporary
-	uint32_t offset = Class<x86>::class_ro_header_size() + 2*4; // class_ro_t.baseMethods
-	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k1of1, ld::Fixup::kindStoreTargetAddressLittleEndian32, targetAtom));
-}
-
-
-
-template <>
-void ClassROOverlayAtom<x86_64>::addProtocolListFixup()
-{
-	const ld::Atom* targetAtom = this; // temporary
-	uint32_t offset = Class<x86_64>::class_ro_header_size() + 3*8; // class_ro_t.baseProtocols
-	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k1of1, ld::Fixup::kindStoreTargetAddressLittleEndian64, targetAtom));
-}
-
-template <>
-void ClassROOverlayAtom<arm>::addProtocolListFixup()
-{
-	const ld::Atom* targetAtom = this; // temporary
-	uint32_t offset = Class<arm>::class_ro_header_size() + 3*4; // class_ro_t.baseProtocols
-	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k1of1, ld::Fixup::kindStoreTargetAddressLittleEndian32, targetAtom));
-}
-
-template <>
-void ClassROOverlayAtom<x86>::addProtocolListFixup()
-{
-	const ld::Atom* targetAtom = this; // temporary
-	uint32_t offset = Class<x86>::class_ro_header_size() + 3*4; // class_ro_t.baseProtocols
-	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k1of1, ld::Fixup::kindStoreTargetAddressLittleEndian32, targetAtom));
-}
-
-
-template <>
-void ClassROOverlayAtom<x86_64>::addPropertyListFixup()
-{
-	const ld::Atom* targetAtom = this; // temporary
-	uint32_t offset = Class<x86_64>::class_ro_header_size() + 6*8; // class_ro_t.baseProperties
-	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k1of1, ld::Fixup::kindStoreTargetAddressLittleEndian64, targetAtom));
-}
-
-template <>
-void ClassROOverlayAtom<arm>::addPropertyListFixup()
-{
-	const ld::Atom* targetAtom = this; // temporary
-	uint32_t offset = Class<arm>::class_ro_header_size() + 6*4; // class_ro_t.baseProperties
-	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k1of1, ld::Fixup::kindStoreTargetAddressLittleEndian32, targetAtom));
-}
-
-template <>
-void ClassROOverlayAtom<x86>::addPropertyListFixup()
-{
-	const ld::Atom* targetAtom = this; // temporary
-	uint32_t offset = Class<x86>::class_ro_header_size() + 6*4; // class_ro_t.baseProperties
-	_fixups.push_back(ld::Fixup(offset, ld::Fixup::k1of1, ld::Fixup::kindStoreTargetAddressLittleEndian32, targetAtom));
+	addFixupAtOffset(offsetof(typename Class<A>::ROContent, baseProperties));
 }
 
 
@@ -685,8 +728,8 @@ public:
 	static bool				hasInstanceMethods(ld::Internal& state, const std::vector<const ld::Atom*>* categories);
 	static bool				hasClassMethods(ld::Internal& state, const std::vector<const ld::Atom*>* categories);
 	static bool				hasProtocols(ld::Internal& state, const std::vector<const ld::Atom*>* categories);
-	static bool				hasProperties(ld::Internal& state, const std::vector<const ld::Atom*>* categories);
-	
+	static bool				hasInstanceProperties(ld::Internal& state, const std::vector<const ld::Atom*>* categories);
+	static bool				hasClassProperties(ld::Internal& state, const std::vector<const ld::Atom*>* categories);
 	
 	static unsigned int		class_ro_baseMethods_offset();
 private:
@@ -741,11 +784,26 @@ bool OptimizeCategories<A>::hasProtocols(ld::Internal& state, const std::vector<
 
 
 template <typename A>
-bool OptimizeCategories<A>::hasProperties(ld::Internal& state, const std::vector<const ld::Atom*>* categories)
+bool OptimizeCategories<A>::hasInstanceProperties(ld::Internal& state, const std::vector<const ld::Atom*>* categories)
 {
 	for (std::vector<const ld::Atom*>::const_iterator it=categories->begin(); it != categories->end(); ++it) {
 		const ld::Atom* categoryAtom = *it;
-		const ld::Atom* propertyListAtom = Category<A>::getProperties(state, categoryAtom);
+		const ld::Atom* propertyListAtom = Category<A>::getInstanceProperties(state, categoryAtom);
+		if ( propertyListAtom != NULL ) {
+			if ( PropertyList<A>::count(state, propertyListAtom) > 0 )
+				return true;
+		}
+	}
+	return false;
+}
+
+
+template <typename A>
+bool OptimizeCategories<A>::hasClassProperties(ld::Internal& state, const std::vector<const ld::Atom*>* categories)
+{
+	for (std::vector<const ld::Atom*>::const_iterator it=categories->begin(); it != categories->end(); ++it) {
+		const ld::Atom* categoryAtom = *it;
+		const ld::Atom* propertyListAtom = Category<A>::getClassProperties(state, categoryAtom);
 		if ( propertyListAtom != NULL ) {
 			if ( PropertyList<A>::count(state, propertyListAtom) > 0 )
 				return true;
@@ -812,6 +870,7 @@ private:
 	static void sortAtomVector(std::vector<const Atom*> &atoms) {
 		std::sort(atoms.begin(), atoms.end(), AtomSorter());
 	}
+
 
 template <typename A>
 void OptimizeCategories<A>::doit(const Options& opts, ld::Internal& state)
@@ -941,10 +1000,10 @@ void OptimizeCategories<A>::doit(const Options& opts, ld::Internal& state)
 					state.atomToSection[newMetaClassRO] = methodListSection;
 				}
 			}
-			// if any category adds properties, generate new merged property list, and replace
-			if ( OptimizeCategories<A>::hasProperties(state, categories) ) { 
+			// if any category adds instance properties, generate new merged property list, and replace
+			if ( OptimizeCategories<A>::hasInstanceProperties(state, categories) ) { 
 				const ld::Atom* basePropertyListAtom = Class<A>::getInstancePropertyList(state, classAtom); 
-				const ld::Atom* newPropertyListAtom = new PropertyListAtom<A>(state, basePropertyListAtom, categories, deadAtoms);
+				const ld::Atom* newPropertyListAtom = new PropertyListAtom<A>(state, basePropertyListAtom, categories, deadAtoms, PropertyListAtom<A>::PropertyKind::InstanceProperties);
 				const ld::Atom* newClassRO = Class<A>::setInstancePropertyList(state, classAtom, newPropertyListAtom, deadAtoms);
 				// add new property list to final sections
 				methodListSection->atoms.push_back(newPropertyListAtom);
@@ -955,7 +1014,20 @@ void OptimizeCategories<A>::doit(const Options& opts, ld::Internal& state)
 					state.atomToSection[newClassRO] = methodListSection;
 				}
 			}
-		 
+			// if any category adds class properties, generate new merged property list, and replace
+			if ( OptimizeCategories<A>::hasClassProperties(state, categories) ) { 
+				const ld::Atom* basePropertyListAtom = Class<A>::getClassPropertyList(state, classAtom); 
+				const ld::Atom* newPropertyListAtom = new PropertyListAtom<A>(state, basePropertyListAtom, categories, deadAtoms, PropertyListAtom<A>::PropertyKind::ClassProperties);
+				const ld::Atom* newClassRO = Class<A>::setClassPropertyList(state, classAtom, newPropertyListAtom, deadAtoms);
+				// add new property list to final sections
+				methodListSection->atoms.push_back(newPropertyListAtom);
+				state.atomToSection[newPropertyListAtom] = methodListSection;
+				if ( newClassRO != NULL ) {
+					assert(strcmp(newClassRO->section().sectionName(), "__objc_const") == 0);
+					methodListSection->atoms.push_back(newClassRO);
+					state.atomToSection[newClassRO] = methodListSection;
+				}
+			}		 
 		}
 
 		// remove dead atoms
@@ -965,6 +1037,7 @@ void OptimizeCategories<A>::doit(const Options& opts, ld::Internal& state)
 		}
 	}
 }
+
 
 
 template <typename A> 
@@ -1120,7 +1193,7 @@ ProtocolListAtom<A>::ProtocolListAtom(ld::Internal& state, const ld::Atom* baseP
 
 template <typename A> 
 PropertyListAtom<A>::PropertyListAtom(ld::Internal& state, const ld::Atom* basePropertyList, 
-									const std::vector<const ld::Atom*>* categories, std::set<const ld::Atom*>& deadAtoms)
+				      const std::vector<const ld::Atom*>* categories, std::set<const ld::Atom*>& deadAtoms, PropertyKind kind)
   : ld::Atom(_s_section, ld::Atom::definitionRegular, ld::Atom::combineNever,
 			ld::Atom::scopeLinkageUnit, ld::Atom::typeUnclassified, 
 			symbolTableNotIn, false, false, false, ld::Atom::Alignment(3)), _file(NULL), _propertyCount(0) 
@@ -1135,7 +1208,7 @@ PropertyListAtom<A>::PropertyListAtom(ld::Internal& state, const ld::Atom* baseP
 		fixupCount = basePropertyList->fixupsEnd() - basePropertyList->fixupsBegin();
 	}
 	for (std::vector<const ld::Atom*>::const_iterator ait=categories->begin(); ait != categories->end(); ++ait) {
-		const ld::Atom* categoryPropertyListAtom = Category<A>::getProperties(state, *ait);
+		const ld::Atom* categoryPropertyListAtom = kind == PropertyKind::ClassProperties ? Category<A>::getClassProperties(state, *ait) : Category<A>::getInstanceProperties(state, *ait);
 		if ( categoryPropertyListAtom != NULL ) {
 			_propertyCount += PropertyList<A>::count(state, categoryPropertyListAtom);
 			fixupCount += (categoryPropertyListAtom->fixupsEnd() - categoryPropertyListAtom->fixupsBegin());
@@ -1152,7 +1225,7 @@ PropertyListAtom<A>::PropertyListAtom(ld::Internal& state, const ld::Atom* baseP
 	_fixups.reserve(fixupCount);
 	uint32_t slide = 0;
 	for (std::vector<const ld::Atom*>::const_iterator it=categories->begin(); it != categories->end(); ++it) {
-		const ld::Atom* categoryPropertyListAtom = Category<A>::getProperties(state, *it);
+		const ld::Atom* categoryPropertyListAtom = kind == PropertyKind::ClassProperties ? Category<A>::getClassProperties(state, *it) : Category<A>::getInstanceProperties(state, *it);
 		if ( categoryPropertyListAtom != NULL ) {
 			for (ld::Fixup::iterator fit=categoryPropertyListAtom->fixupsBegin(); fit != categoryPropertyListAtom->fixupsEnd(); ++fit) {
 				ld::Fixup fixup = *fit;
@@ -1179,85 +1252,112 @@ PropertyListAtom<A>::PropertyListAtom(ld::Internal& state, const ld::Atom* baseP
 }
 
 
+template <typename A>
+void scanCategories(ld::Internal& state, 
+					bool& haveCategoriesWithNonNullClassProperties, 
+					bool& haveCategoriesWithoutClassPropertyStorage)
+{
+	haveCategoriesWithNonNullClassProperties = false;
+	haveCategoriesWithoutClassPropertyStorage = false;
+	
+	for (std::vector<ld::Internal::FinalSection*>::iterator sit=state.sections.begin(); sit != state.sections.end(); ++sit) {
+		ld::Internal::FinalSection* sect = *sit;
+		if ( sect->type() == ld::Section::typeObjC2CategoryList ) {
+			for (std::vector<const ld::Atom*>::iterator ait=sect->atoms.begin(); ait != sect->atoms.end(); ++ait) {
+				const ld::Atom* categoryListElementAtom = *ait;
+				bool hasAddend;
+				const ld::Atom* categoryAtom = ObjCData<A>::getPointerInContent(state, categoryListElementAtom, 0, &hasAddend);
+				
+				if (Category<A>::getClassProperties(state, categoryAtom)) {
+					haveCategoriesWithNonNullClassProperties = true;
+					// fprintf(stderr, "category in file %s has non-null class properties\n", categoryAtom->file()->path());
+				}
+				
+				if (!categoryAtom->file()->objcHasCategoryClassPropertiesField()) {
+					haveCategoriesWithoutClassPropertyStorage = true;
+					// fprintf(stderr, "category in file %s has no storage for class properties\n", categoryAtom->file()->path());
+				}
+			}
+		}
+	}
+}
+
+
+template <typename A, bool isObjC2>
+void doPass(const Options& opts, ld::Internal& state)
+{
+	// Do nothing if the output has no ObjC content.
+	if ( state.objcObjectConstraint == ld::File::objcConstraintNone ) {
+	 	return;
+	}
+
+	// verify dylibs are GC compatible with object files
+	if ( state.objcObjectConstraint != state.objcDylibConstraint ) {
+		if (   (state.objcDylibConstraint == ld::File::objcConstraintRetainRelease)
+			&& (state.objcObjectConstraint == ld::File::objcConstraintGC) ) {
+				throw "Linked dylibs built for retain/release but object files built for GC-only";
+		}
+		else if (   (state.objcDylibConstraint == ld::File::objcConstraintGC)
+			     && (state.objcObjectConstraint == ld::File::objcConstraintRetainRelease) ) {
+				throw "Linked dylibs built for GC-only but object files built for retain/release";
+		}
+	}
+
+	if ( opts.objcCategoryMerging() ) {
+		// optimize classes defined in this linkage unit by merging in categories also in this linkage unit
+		OptimizeCategories<A>::doit(opts, state);
+	}
+
+	// Search for surviving categories that have a non-null class properties field.
+	// Search for surviving categories that do not have storage for the class properties field.
+	bool haveCategoriesWithNonNullClassProperties;
+	bool haveCategoriesWithoutClassPropertyStorage;
+	scanCategories<A>(state, haveCategoriesWithNonNullClassProperties, haveCategoriesWithoutClassPropertyStorage);
+
+	// Complain about mismatched category ABI.
+	// These can't be combined into a single linkage unit because there is only one size indicator for all categories in the file.
+	// If there is a mismatch then we don't set the HasCategoryClassProperties bit in the output file, 
+	// which has at runtime causes any class property metadata that was present to be ignored.
+	if (haveCategoriesWithNonNullClassProperties  &&  haveCategoriesWithoutClassPropertyStorage) {
+		warning("Some object files have incompatible Objective-C category definitions. Some category metadata may be lost. All files containing Objective-C categories should be built using the same compiler.");
+	}
+
+	// add image info atom
+	// The HasCategoryClassProperties bit is set as often as possible.
+	state.addAtom(*new ObjCImageInfoAtom<A>(state.objcObjectConstraint, opts.objcGcCompaction(), isObjC2,
+											!haveCategoriesWithoutClassPropertyStorage, state.swiftVersion));
+}
 
 
 void doPass(const Options& opts, ld::Internal& state)
-{	
-	// only make image info section if objc was used
-	if ( state.objcObjectConstraint != ld::File::objcConstraintNone ) {
-
-		// verify dylibs are GC compatible with object files
-		if ( state.objcObjectConstraint != state.objcDylibConstraint ) {
-			if (   (state.objcDylibConstraint == ld::File::objcConstraintRetainRelease)
-				&& (state.objcObjectConstraint == ld::File::objcConstraintGC) ) {
-					throw "Linked dylibs built for retain/release but object files built for GC-only";
-			}
-			else if (   (state.objcDylibConstraint == ld::File::objcConstraintGC)
-				     && (state.objcObjectConstraint == ld::File::objcConstraintRetainRelease) ) {
-					throw "Linked dylibs built for GC-only but object files built for retain/release";
-			}
-		}
-	
-		const bool compaction = opts.objcGcCompaction();
-		
-		// add image info atom
-		switch ( opts.architecture() ) {
+{		
+	switch ( opts.architecture() ) {
 #if SUPPORT_ARCH_x86_64
-			case CPU_TYPE_X86_64:
-				state.addAtom(*new ObjCImageInfoAtom<x86_64>(state.objcObjectConstraint, compaction, 
-							  true, state.swiftVersion));
-				break;
+		case CPU_TYPE_X86_64:
+			doPass<x86_64, true>(opts, state);
+			break;
 #endif
 #if SUPPORT_ARCH_i386
-			case CPU_TYPE_I386:
-				state.addAtom(*new ObjCImageInfoAtom<x86>(state.objcObjectConstraint, compaction, 
-							  opts.objCABIVersion2POverride() ? true : false, state.swiftVersion));
-				break;
+		case CPU_TYPE_I386:
+			if (opts.objCABIVersion2POverride()) {
+				doPass<x86, true>(opts, state);
+			} else {
+				doPass<x86, false>(opts, state);
+			}
+			break;
 #endif
 #if SUPPORT_ARCH_arm_any
-			case CPU_TYPE_ARM:
-				state.addAtom(*new ObjCImageInfoAtom<arm>(state.objcObjectConstraint, compaction, 
-							  true, state.swiftVersion));
-				break;
+		case CPU_TYPE_ARM:
+			doPass<arm, true>(opts, state);
+			break;
 #endif
 #if SUPPORT_ARCH_arm64
-			case CPU_TYPE_ARM64:
-				state.addAtom(*new ObjCImageInfoAtom<arm64>(state.objcObjectConstraint, compaction, 
-							  true, state.swiftVersion));
-				break;
+		case CPU_TYPE_ARM64:
+			doPass<arm64, true>(opts, state);
+			break;
 #endif
-			default:
-				assert(0 && "unknown objc arch");
-		}	
-	}
-	
-	if ( opts.objcCategoryMerging() ) {
-		// optimize classes defined in this linkage unit by merging in categories also in this linkage unit
-		switch ( opts.architecture() ) {
-#if SUPPORT_ARCH_x86_64
-			case CPU_TYPE_X86_64:
-				OptimizeCategories<x86_64>::doit(opts, state);
-				break;
-#endif
-#if SUPPORT_ARCH_i386
-			case CPU_TYPE_I386:
-				if ( opts.objCABIVersion2POverride() )
-                    OptimizeCategories<x86>::doit(opts, state);
-				break;
-#endif
-#if SUPPORT_ARCH_arm_any
-			case CPU_TYPE_ARM:
-				OptimizeCategories<arm>::doit(opts, state);
-				break;
-#endif
-#if SUPPORT_ARCH_arm64
-			case CPU_TYPE_ARM64:
-				// disabled until tested
-				break;
-#endif
-			default:
-				assert(0 && "unknown objc arch");
-		}	
+		default:
+			assert(0 && "unknown objc arch");
 	}
 }
 

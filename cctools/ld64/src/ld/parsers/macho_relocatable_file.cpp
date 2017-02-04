@@ -87,7 +87,8 @@ public:
 												_minOSVersion(0),
 												_platform(0),
 												_canScatterAtoms(false),
-												_srcKind(kSourceUnknown) {}
+												_objcHasCategoryClassPropertiesField(false),
+												_srcKind(kSourceUnknown) { }
 	virtual									~File();
 
 	// overrides of ld::File
@@ -99,6 +100,8 @@ public:
 
 	// overrides of ld::relocatable::File 
 	virtual ObjcConstraint								objCConstraint() const			{ return _objConstraint; }
+	virtual bool										objcHasCategoryClassPropertiesField() const 
+    																					{ return _objcHasCategoryClassPropertiesField; }
 	virtual uint32_t									cpuSubType() const				{ return _cpuSubType; }
 	virtual DebugInfoKind								debugInfo() const				{ return _debugInfoKind; }
 	virtual const std::vector<ld::relocatable::File::Stab>*	stabs() const				{ return &_stabs; }
@@ -141,6 +144,7 @@ private:
 	uint32_t								_minOSVersion;
 	uint32_t								_platform;
 	bool									_canScatterAtoms;
+	bool									_objcHasCategoryClassPropertiesField;
 	std::vector<std::vector<const char*> >	_linkerOptions;
 	std::unique_ptr<ld::Bitcode>			_bitcode;
 	SourceKind								_srcKind;
@@ -386,6 +390,10 @@ public:
 						TLVDefsSection(Parser<A>& parser, File<A>& f, const macho_section<typename A::P>* s) :
 							SymboledSection<A>(parser, f, s) { }
 
+	typedef typename A::P::uint_t	pint_t;
+
+	virtual ld::Atom::Alignment		alignmentForAddress(pint_t addr)		{ return ld::Atom::Alignment(log2(sizeof(pint_t))); }
+
 private:
 
 };
@@ -531,6 +539,7 @@ protected:
 	typedef typename A::P::uint_t	pint_t;
 	typedef typename A::P			P;
 
+	virtual void					makeFixups(class Parser<A>& parser, const struct Parser<A>::CFI_CU_InfoArrays&);
 	virtual ld::Atom::ContentType	contentType()							{ return ld::Atom::typeTLVPointer; }
 	virtual ld::Atom::Alignment		alignmentForAddress(pint_t addr)		{ return ld::Atom::Alignment(log2(sizeof(pint_t))); }
 	virtual const char*				unlabeledAtomName(Parser<A>&, pint_t)	{ return "tlv_lazy_ptr"; }
@@ -930,6 +939,7 @@ void Atom<arm64>::verifyAlignment(const macho_section<P>& sect) const
 	}
 }
 #endif
+
 
 template <typename A>
 void Atom<A>::verifyAlignment(const macho_section<P>&) const
@@ -1406,6 +1416,7 @@ const char* Parser<arm64>::fileKind(const uint8_t* fileContent)
 	return "arm64";
 }
 #endif
+
 
 template <typename A>
 bool Parser<A>::hasObjC2Categories(const uint8_t* fileContent)
@@ -2526,6 +2537,7 @@ void Parser<A>::makeSections()
 			// #define OBJC_IMAGE_SUPPORTS_GC   2
 			// #define OBJC_IMAGE_GC_ONLY       4
 			// #define OBJC_IMAGE_IS_SIMULATED  32
+			// #define OBJC_IMAGE_HAS_CATEGORY_CLASS_PROPERTIES  64
 			//
 			const uint32_t* contents = (uint32_t*)(_file->fileContent()+sect->offset());
 			if ( (sect->size() >= 8) && (contents[0] == 0) ) {
@@ -2539,6 +2551,7 @@ void Parser<A>::makeSections()
 				else
 					_file->_objConstraint = ld::File::objcConstraintRetainRelease;
 				_file->_swiftVersion = ((flags >> 8) & 0xFF);
+                _file->_objcHasCategoryClassPropertiesField = (flags & 64);
 				if ( sect->size() > 8 ) {
 					warning("section %s/%s has unexpectedly large size %llu in %s", 
 							sect->segname(), Section<A>::makeSectionName(sect), sect->size(), _file->path());
@@ -3168,10 +3181,10 @@ uint32_t TentativeDefinitionSection<A>::appendAtoms(class Parser<A>& parser, uin
 				alignP2 = 63 - (uint8_t)__builtin_clzll(size);
 				if ( size != (1ULL << alignP2) )
 					++alignP2;
+				// <rdar://problem/24871389> limit default alignment of large commons
+				if ( alignP2 > parser.maxDefaultCommonAlignment() )
+					alignP2 = parser.maxDefaultCommonAlignment();
 			}
-			// limit alignment of extremely large commons to 2^15 bytes (8-page)
-			if ( alignP2 > parser.maxDefaultCommonAlignment() )
-				alignP2 = parser.maxDefaultCommonAlignment();
 			Atom<A>* allocatedSpace = (Atom<A>*)p;
 			new (allocatedSpace) Atom<A>(*this, parser.nameFromSymbol(sym), (pint_t)ULLONG_MAX, size,
 										ld::Atom::definitionTentative,  ld::Atom::combineByName, 
@@ -3271,10 +3284,11 @@ uint32_t Parser<A>::symbolIndexFromIndirectSectionAddress(pint_t addr, const mac
 			break;
 		case S_LAZY_SYMBOL_POINTERS:
 		case S_NON_LAZY_SYMBOL_POINTERS:
+		case S_THREAD_LOCAL_VARIABLE_POINTERS:
 			elementSize = sizeof(pint_t);
 			break;
 		default:
-			throw "section does not use inirect symbol table";
+			throw "section does not use indirect symbol table";
 	}	
 	uint32_t indexInSection = (addr - sect->addr()) / elementSize;
 	uint32_t indexIntoIndirectTable = sect->reserved1() + indexInSection;
@@ -4388,6 +4402,7 @@ bool CFISection<arm64>::needsRelocating()
 	return true;
 }
 
+
 template <typename A>
 bool CFISection<A>::needsRelocating()
 {
@@ -4612,7 +4627,6 @@ template <> bool CFISection<x86>::bigEndian() { return false; }
 template <> bool CFISection<arm>::bigEndian() { return false; }
 template <> bool CFISection<arm64>::bigEndian() { return false; }
 
-
 template <>
 void CFISection<x86_64>::addCiePersonalityFixups(class Parser<x86_64>& parser, const CFI_Atom_Info* cieInfo)
 {
@@ -4683,6 +4697,7 @@ void CFISection<arm64>::addCiePersonalityFixups(class Parser<arm64>& parser, con
 	}
 }
 #endif
+
 
 template <>
 void CFISection<arm>::addCiePersonalityFixups(class Parser<arm>& parser, const CFI_Atom_Info* cieInfo)
@@ -5009,6 +5024,7 @@ const char* CUSection<arm64>::personalityName(class Parser<arm64>& parser, const
 }
 #endif
 
+
 #if SUPPORT_ARCH_arm_any
 template <>
 const char* CUSection<arm>::personalityName(class Parser<arm>& parser, const macho_relocation_info<arm::P>* reloc)
@@ -5072,6 +5088,7 @@ bool CUSection<arm64>::encodingMeansUseDwarf(compact_unwind_encoding_t enc)
 	return ((enc & UNWIND_ARM64_MODE_MASK) == UNWIND_ARM64_MODE_DWARF);
 }
 #endif
+
 
 template <typename A>
 int CUSection<A>::infoSorter(const void* l, const void* r)
@@ -5313,6 +5330,7 @@ ld::Atom::SymbolTableInclusion ImplicitSizeSection<arm64>::symbolTableInclusion(
 {
 	return ld::Atom::symbolTableInWithRandomAutoStripLabel;
 }
+
 
 template <typename A>
 ld::Atom::SymbolTableInclusion ImplicitSizeSection<A>::symbolTableInclusion()
@@ -5752,6 +5770,47 @@ template <typename A>
 ld::Atom::Combine TLVPointerSection<A>::combine(Parser<A>& parser, pint_t addr)
 {
 	return ld::Atom::combineByNameAndReferences;
+}
+
+template <>
+void TLVPointerSection<arm>::makeFixups(class Parser<arm>& parser, const struct Parser<arm>::CFI_CU_InfoArrays&)
+{
+	// add references for each thread local pointer atom based on indirect symbol table
+	const macho_section<P>* sect = this->machoSection();
+	const pint_t endAddr = sect->addr() + sect->size();
+	for (pint_t addr = sect->addr(); addr < endAddr; addr += sizeof(pint_t)) {
+		typename Parser<arm>::SourceLocation	src;
+		typename Parser<arm>::TargetDesc		target;
+		src.atom = this->findAtomByAddress(addr);
+		src.offsetInAtom = 0;
+		uint32_t symIndex = parser.symbolIndexFromIndirectSectionAddress(addr, sect);
+		target.atom = NULL;
+		target.name = NULL;
+		target.weakImport = false;
+		target.addend = 0;
+		if ( symIndex == INDIRECT_SYMBOL_LOCAL ) {
+			throwf("unexpected INDIRECT_SYMBOL_LOCAL in section %s", this->sectionName());
+		}
+		else {
+			const macho_nlist<P>& sym = parser.symbolFromIndex(symIndex);
+			// use direct reference for local symbols
+			if ( ((sym.n_type() & N_TYPE) == N_SECT) && ((sym.n_type() & N_EXT) == 0) ) {
+				throwf("unexpected pointer to local symbol in section %s", this->sectionName());
+			}
+			else {
+				target.name = parser.nameFromSymbol(sym);
+				target.weakImport = parser.weakImportFromSymbol(sym);
+				assert(src.atom->combine() == ld::Atom::combineByNameAndReferences);
+			}
+		}
+		parser.addFixups(src, ld::Fixup::kindStoreLittleEndian32, target);
+	}
+}
+
+template <typename A>
+void TLVPointerSection<A>::makeFixups(class Parser<A>& parser, const struct Parser<A>::CFI_CU_InfoArrays&)
+{
+	assert(0 && "should not have thread-local-pointer sections in .o files");
 }
 
 
@@ -7407,6 +7466,7 @@ bool Section<arm64>::addRelocFixup(class Parser<arm64>& parser, const macho_relo
 }
 #endif
 
+
 template <typename A>
 bool ObjC1ClassSection<A>::addRelocFixup(class Parser<A>& parser, const macho_relocation_info<P>* reloc)
 {
@@ -7557,6 +7617,7 @@ void Section<arm64>::addLOH(class Parser<arm64>& parser, int kind, int count, co
 	parser.addFixup(src, ld::Fixup::k1of1, ld::Fixup::kindLinkerOptimizationHint, extra.addend);
 }
 #endif
+
 
 template <typename A>
 void Section<A>::addLOH(class Parser<A>& parser, int kind, int count, const uint64_t addrs[]) {

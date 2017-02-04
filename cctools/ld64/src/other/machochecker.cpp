@@ -258,11 +258,13 @@ bool MachOChecker<arm64>::validFile(const uint8_t* fileContent)
 }
 #endif
 
+
+template <> uint8_t MachOChecker<ppc>::loadCommandSizeMask()	{ return 0x03; }
+template <> uint8_t MachOChecker<ppc64>::loadCommandSizeMask()	{ return 0x07; }
 template <> uint8_t MachOChecker<x86>::loadCommandSizeMask()	{ return 0x03; }
 template <> uint8_t MachOChecker<x86_64>::loadCommandSizeMask() { return 0x07; }
 template <> uint8_t MachOChecker<arm>::loadCommandSizeMask()	{ return 0x03; }
 template <> uint8_t MachOChecker<arm64>::loadCommandSizeMask()	{ return 0x07; }
-
 
 
 template <>
@@ -287,6 +289,13 @@ template <>
 arm64::P::uint_t MachOChecker<arm64>::getInitialStackPointer(const macho_thread_command<arm64::P>* threadInfo)
 {
 	throw "LC_UNIXTHREAD not supported for arm64";
+}
+
+
+template <>
+ppc::P::uint_t MachOChecker<ppc>::getEntryPoint(const macho_thread_command<ppc::P>* threadInfo)
+{
+	return threadInfo->thread_register(0);
 }
 
 
@@ -341,7 +350,6 @@ const char* MachOChecker<A>::archName()
 	}
 	return "unknown";
 }
-
 
 
 template <typename A>
@@ -661,8 +669,12 @@ void MachOChecker<A>::checkLoadCommands()
 
 	// verify encryption info
 	if ( encryption_info != NULL ) {
-		if ( fHeader->filetype() != MH_EXECUTE )
-			throw "LC_ENCRYPTION_INFO load command is only legal in main executables";
+		switch ( fHeader->filetype() ) {
+			case MH_EXECUTE: case MH_DYLIB: case MH_BUNDLE: 
+				break;  // okay
+			default: 
+				throw "LC_ENCRYPTION_INFO load command is not allowed in this file type";
+		}
 		if ( encryption_info->cryptoff() <  (sizeof(macho_header<P>) + fHeader->sizeofcmds()) )
 			throw "LC_ENCRYPTION_INFO load command has cryptoff covers some load commands";
 		if ( (encryption_info->cryptoff() % 4096) != 0 )
@@ -712,8 +724,6 @@ void MachOChecker<A>::checkLoadCommands()
 						throw "string pool extends beyond __LINKEDIT";
 					if ( (symtab->stroff() % 4) != 0 ) // work around until rdar://problem/4737991 is fixed
 						throw "string pool start not pointer aligned";
-					if ( (symtab->strsize() % sizeof(pint_t)) != 0 )	
-						throw "string pool size not a multiple of pointer size";
 				}
 				break;
 			case LC_DYSYMTAB:
@@ -1131,6 +1141,7 @@ arm64::P::uint_t MachOChecker<arm64>::relocBase()
 	return fFirstWritableSegment->vmaddr();
 }
 
+
 template <typename A>
 bool MachOChecker<A>::addressInWritableSegment(pint_t address)
 {
@@ -1273,6 +1284,7 @@ void MachOChecker<arm64>::checkLocalReloation(const macho_relocation_info<P>* re
   throw "local relocations not used for arm64";
 }
 #endif
+
 
 template <typename A>
 void MachOChecker<A>::checkRelocations()

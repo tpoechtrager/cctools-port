@@ -63,6 +63,9 @@ public:
 	virtual const uint8_t* getUUID() const = 0;
 	virtual bool bitcodeBundleCommand(uint64_t& cmdOffset, uint64_t& cmdEnd,
 									  uint64_t& sectOffset, uint64_t& sectEnd) const = 0;
+	virtual void linkeditCmdInfo(uint64_t& offset, uint64_t& size) const = 0;
+	virtual void symbolTableCmdInfo(uint64_t& offset, uint64_t& size) const = 0;
+
 };
 
 template <typename A>
@@ -85,7 +88,10 @@ public:
 	virtual const uint8_t* getUUID() const                          { return &_uuid[0]; }
 	virtual bool bitcodeBundleCommand(uint64_t& cmdOffset, uint64_t& cmdEnd,
 									  uint64_t& sectOffset, uint64_t& sectEnd) const;
-	
+	virtual void linkeditCmdInfo(uint64_t& offset, uint64_t& size) const;
+	virtual void symbolTableCmdInfo(uint64_t& offset, uint64_t& size) const;
+
+
 private:
 	typedef typename A::P						P;
 	typedef typename A::P::E					E;
@@ -102,9 +108,9 @@ private:
 	uint32_t					commandsCount() const;
 	uint32_t					threadLoadCommandSize() const;
 	uint8_t*					copySingleSegmentLoadCommand(uint8_t* p) const;
-	uint8_t*					copySegmentLoadCommands(uint8_t* p) const;
+	uint8_t*					copySegmentLoadCommands(uint8_t* p, uint8_t* base) const;
 	uint8_t*					copyDyldInfoLoadCommand(uint8_t* p) const;
-	uint8_t*					copySymbolTableLoadCommand(uint8_t* p) const;
+	uint8_t*					copySymbolTableLoadCommand(uint8_t* p, uint8_t* base) const;
 	uint8_t*					copyDynamicSymbolTableLoadCommand(uint8_t* p) const;
 	uint8_t*					copyDyldLoadCommand(uint8_t* p) const;
 	uint8_t*					copyDylibIDLoadCommand(uint8_t* p) const;
@@ -161,6 +167,8 @@ private:
 	std::vector<const char*>	_subUmbrellaNames;
 	uint8_t						_uuid[16];
 	mutable macho_uuid_command<P>*	_uuidCmdInOutputBuffer;
+	mutable uint32_t			_linkeditCmdOffset;
+	mutable uint32_t			_symboltableCmdOffset;
 	std::vector< std::vector<const char*> >	 _linkerOptions;
 	
 	static ld::Section			_s_section;
@@ -180,7 +188,7 @@ HeaderAndLoadCommandsAtom<A>::HeaderAndLoadCommandsAtom(const Options& opts, ld:
 				ld::Atom::scopeTranslationUnit, ld::Atom::typeUnclassified, 
 				ld::Atom::symbolTableNotIn, false, false, false, 
 				(opts.outputKind() == Options::kPreload) ? ld::Atom::Alignment(0) : ld::Atom::Alignment(12) ), 
-		_options(opts), _state(state), _writer(writer), _address(0), _uuidCmdInOutputBuffer(NULL)
+		_options(opts), _state(state), _writer(writer), _address(0), _uuidCmdInOutputBuffer(NULL), _linkeditCmdOffset(0), _symboltableCmdOffset(0)
 {
 	bzero(_uuid, 16);
 	_hasDyldInfoLoadCommand = opts.makeCompressedDyldInfo();
@@ -212,15 +220,13 @@ HeaderAndLoadCommandsAtom<A>::HeaderAndLoadCommandsAtom(const Options& opts, ld:
 					break;
 				}
 			}
-			for (CStringSet::const_iterator it = _state.linkerOptionFrameworks.begin(); it != _state.linkerOptionFrameworks.end(); ++it) {
-				const char* frameWorkName = *it;
+			for (const char* frameworkName : _state.unprocessedLinkerOptionFrameworks) {
 				std::vector<const char*>* lo = new std::vector<const char*>();
 				lo->push_back("-framework");
-				lo->push_back(frameWorkName);
+				lo->push_back(frameworkName);
 				_linkerOptions.push_back(*lo);
 			};
-			for (CStringSet::const_iterator it = _state.linkerOptionLibraries.begin(); it != _state.linkerOptionLibraries.end(); ++it) {
-				const char* libName = *it;
+			for (const char* libName : _state.unprocessedLinkerOptionLibraries) {
 				std::vector<const char*>* lo = new std::vector<const char*>();
 				char * s = new char[strlen(libName)+3];
 				strcpy(s, "-l");
@@ -367,6 +373,21 @@ bool HeaderAndLoadCommandsAtom<A>::bitcodeBundleCommand(uint64_t &cmdOffset, uin
 	}
 	return false;
 }
+
+template <typename A>
+void HeaderAndLoadCommandsAtom<A>::linkeditCmdInfo(uint64_t &offset, uint64_t &size) const
+{
+	offset = _linkeditCmdOffset;
+	size = sizeof(macho_segment_command<P>);
+}
+
+template <typename A>
+void HeaderAndLoadCommandsAtom<A>::symbolTableCmdInfo(uint64_t &offset, uint64_t &size) const
+{
+	offset = _symboltableCmdOffset;
+	size = sizeof(macho_symtab_command<P>);
+}
+
 
 template <typename A>
 uint64_t HeaderAndLoadCommandsAtom<A>::size() const
@@ -646,7 +667,6 @@ template <> uint32_t HeaderAndLoadCommandsAtom<arm>::cpuType() const	{ return CP
 template <> uint32_t HeaderAndLoadCommandsAtom<arm64>::cpuType() const	{ return CPU_TYPE_ARM64; }
 
 
-
 template <>
 uint32_t HeaderAndLoadCommandsAtom<x86>::cpuSubType() const
 {
@@ -905,7 +925,7 @@ bool HeaderAndLoadCommandsAtom<A>::sectionTakesNoDiskSpace(ld::Internal::FinalSe
 
 
 template <typename A>
-uint8_t* HeaderAndLoadCommandsAtom<A>::copySegmentLoadCommands(uint8_t* p) const
+uint8_t* HeaderAndLoadCommandsAtom<A>::copySegmentLoadCommands(uint8_t* p, uint8_t* base) const
 {
 	// group sections into segments
 	std::vector<SegInfo> segs;
@@ -965,7 +985,8 @@ uint8_t* HeaderAndLoadCommandsAtom<A>::copySegmentLoadCommands(uint8_t* p) const
 		segCmd->set_initprot(si.initProt);
 		segCmd->set_nsects(si.nonHiddenSectionCount);
 		segCmd->set_flags(si.nonSectCreateSections ? 0 : SG_NORELOC); // FIXME, really should check all References
-
+		if ( strcmp(segCmd->segname(), "__LINKEDIT") == 0 )
+			_linkeditCmdOffset = p - base;
 		p += sizeof(macho_segment_command<P>);
 		macho_section<P>* msect = (macho_section<P>*)p;
 		for (std::vector<ld::Internal::FinalSection*>::iterator sit = si.sections.begin(); sit != si.sections.end(); ++sit) {
@@ -993,8 +1014,9 @@ uint8_t* HeaderAndLoadCommandsAtom<A>::copySegmentLoadCommands(uint8_t* p) const
 
 
 template <typename A>
-uint8_t* HeaderAndLoadCommandsAtom<A>::copySymbolTableLoadCommand(uint8_t* p) const
+uint8_t* HeaderAndLoadCommandsAtom<A>::copySymbolTableLoadCommand(uint8_t* p, uint8_t* base) const
 {
+	_symboltableCmdOffset = p - base;
 	// build LC_SYMTAB command
 	macho_symtab_command<P>*   symbolTableCmd = (macho_symtab_command<P>*)p;
 	symbolTableCmd->set_cmd(LC_SYMTAB);
@@ -1509,7 +1531,7 @@ void HeaderAndLoadCommandsAtom<A>::copyRawContent(uint8_t buffer[]) const
 	if ( _options.outputKind() == Options::kObjectFile )
 		p = this->copySingleSegmentLoadCommand(p);
 	else
-		p = this->copySegmentLoadCommands(p);
+		p = this->copySegmentLoadCommands(p, buffer);
 	
 	if ( _hasDylibIDLoadCommand )
 		p = this->copyDylibIDLoadCommand(p);
@@ -1518,7 +1540,7 @@ void HeaderAndLoadCommandsAtom<A>::copyRawContent(uint8_t buffer[]) const
 		p = this->copyDyldInfoLoadCommand(p);
 		
 	if ( _hasSymbolTableLoadCommand )
-		p = this->copySymbolTableLoadCommand(p);
+		p = this->copySymbolTableLoadCommand(p, buffer);
 
 	if ( _hasDynamicSymbolTableLoadCommand )
 		p = this->copyDynamicSymbolTableLoadCommand(p);

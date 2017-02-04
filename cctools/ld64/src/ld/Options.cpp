@@ -35,6 +35,7 @@
 #include <spawn.h>
 #include <cxxabi.h>
 #include <Availability.h>
+#include <tapi/tapi.h>
 
 #include <vector>
 #include <map>
@@ -130,6 +131,7 @@ bool Options::FileInfo::checkFileExists(const Options& options, const char *p)
 	}
 	if ( options.dumpDependencyInfo() )
 		options.dumpDependency(Options::depNotFound, p);
+//	fprintf(stderr, "not found: %s\n", p);
     return false;
 }
 
@@ -170,7 +172,7 @@ Options::Options(int argc, const char* argv[])
 	  fSetuidSafe(false), fImplicitlyLinkPublicDylibs(true), fAddCompactUnwindEncoding(true),
 	  fWarnCompactUnwind(false), fRemoveDwarfUnwindIfCompactExists(false),
 	  fAutoOrderInitializers(true), fOptimizeZeroFill(true), fMergeZeroFill(false), fLogObjectFiles(false),
-	  fLogAllFiles(false), fTraceDylibs(false), fTraceIndirectDylibs(false), fTraceArchives(false),
+	  fLogAllFiles(false), fTraceDylibs(false), fTraceIndirectDylibs(false), fTraceArchives(false), fTraceEmitJSON(false),
 	  fOutputSlidable(false), fWarnWeakExports(false), 
 	  fObjcGcCompaction(false), fObjCGc(false), fObjCGcOnly(false), 
 	  fDemangle(false), fTLVSupport(false), 
@@ -190,16 +192,15 @@ Options::Options(int argc, const char* argv[])
 	  fGenerateDtraceDOF(true), fAllowBranchIslands(true), fTraceSymbolLayout(false), 
 	  fMarkAppExtensionSafe(false), fCheckAppExtensionSafe(false), fForceLoadSwiftLibs(false),
 	  fSharedRegionEncodingV2(false), fUseDataConstSegment(false),
-	  fUseDataConstSegmentForceOn(false), fUseDataConstSegmentForceOff(false),
+	  fUseDataConstSegmentForceOn(false), fUseDataConstSegmentForceOff(false), fUseTextExecSegment(false),
 	  fBundleBitcode(false), fHideSymbols(false), fVerifyBitcode(false),
 	  fReverseMapUUIDRename(false), fDeDupe(true), fVerboseDeDupe(false),
 	  fReverseMapPath(NULL), fLTOCodegenOnly(false),
-	  fIgnoreAutoLink(false), fAllowDeadDups(false), fBitcodeKind(kBitcodeProcess),
+	  fIgnoreAutoLink(false), fAllowDeadDups(false), fAllowWeakImports(true), fBitcodeKind(kBitcodeProcess),
 	  fPlatform(kPlatformUnknown), fDebugInfoStripping(kDebugInfoMinimal), fTraceOutputFile(NULL),
-	  fMacVersionMin(ld::macVersionUnset), fIOSVersionMin(ld::iOSVersionUnset), fWatchOSVersionMin(ld::wOSVersionUnset), // ld64-port: added fWatchOSVersionMin(ld::wOSVersionUnset) - https://gist.github.com/tpoechtrager/6537a058dfb4d587fff4
+	  fMacVersionMin(ld::macVersionUnset), fIOSVersionMin(ld::iOSVersionUnset), fWatchOSVersionMin(ld::wOSVersionUnset),
 	  fSaveTempFiles(false), fSnapshotRequested(false), fPipelineFifo(NULL),
-	  fDependencyInfoPath(NULL), fDependencyFileDescriptor(-1), fMaxDefaultCommonAlign(0), fFilePreference(kModTime),
-	  fForceTextBasedStub(false)
+	  fDependencyInfoPath(NULL), fDependencyFileDescriptor(-1), fMaxDefaultCommonAlign(0)
 {
 	this->checkForClassic(argc, argv);
 	this->parsePreCommandLineEnvironmentSettings();
@@ -325,11 +326,14 @@ uint32_t Options::initialSegProtection(const char* segName) const
 			return it->init;
 		}
 	}
-	if ( strcmp(segName, "__PAGEZERO") == 0 ) {
-		return 0;
+	if ( strcmp(segName, "__TEXT") == 0 ) {
+		return ( fUseTextExecSegment ? VM_PROT_READ : (VM_PROT_READ | VM_PROT_EXECUTE) );
 	}
-	else if ( strcmp(segName, "__TEXT") == 0 ) {
+	else if ( strcmp(segName, "__TEXT_EXEC") == 0 ) {
 		return VM_PROT_READ | VM_PROT_EXECUTE;
+	}
+	else if ( strcmp(segName, "__PAGEZERO") == 0 ) {
+		return 0;
 	}
 	else if ( strcmp(segName, "__LINKEDIT") == 0 ) {
 		return VM_PROT_READ;
@@ -397,6 +401,9 @@ bool Options::hasCustomSectionAlignment(const char* segName, const char* sectNam
 		if ( (strcmp(it->segmentName, segName) == 0) && (strcmp(it->sectionName, sectName) == 0) )
 			return true;
 	}
+	if ( fEncryptable && (strcmp(sectName, "__oslogstring") == 0) && (strcmp(segName, "__TEXT") == 0) )
+		return true;
+
 	return false;
 }
 
@@ -406,6 +413,9 @@ uint8_t Options::customSectionAlignment(const char* segName, const char* sectNam
 		if ( (strcmp(it->segmentName, segName) == 0) && (strcmp(it->sectionName, sectName) == 0) )
 			return it->alignment;
 	}
+	if ( fEncryptable && (strcmp(sectName, "__oslogstring") == 0) && (strcmp(segName, "__TEXT") == 0) )
+		return __builtin_ctz(fSegmentAlignment);
+
 	return 0;
 }
 
@@ -610,7 +620,7 @@ void Options::setArchitecture(cpu_type_t type, cpu_subtype_t subtype, Options::P
 			switch ( type ) {
 				case CPU_TYPE_I386:
 				case CPU_TYPE_X86_64:
-					if ( (fPlatform == kPlatformOSX) && (fOutputKind != Options::kObjectFile) ) {
+					if ( (fPlatform == kPlatformOSX) && (fOutputKind != Options::kObjectFile) && (fMacVersionMin == ld::macVersionUnset) ) {
 				#ifdef DEFAULT_MACOSX_MIN_VERSION
 						warning("-macosx_version_min not specified, assuming " DEFAULT_MACOSX_MIN_VERSION);
 						setMacOSXVersionMin(DEFAULT_MACOSX_MIN_VERSION);
@@ -622,7 +632,7 @@ void Options::setArchitecture(cpu_type_t type, cpu_subtype_t subtype, Options::P
 					break;
 				case CPU_TYPE_ARM:
 				case CPU_TYPE_ARM64:
-					if ( (fPlatform == kPlatformiOS) && (fOutputKind != Options::kObjectFile) ) {
+					if ( (fMacVersionMin == ld::macVersionUnset) && (fIOSVersionMin == ld::iOSVersionUnset) && (fOutputKind != Options::kObjectFile) ) {
 				#if defined(DEFAULT_IPHONEOS_MIN_VERSION)
 						warning("-ios_version_min not specified, assuming " DEFAULT_IPHONEOS_MIN_VERSION);
 						setIOSVersionMin(DEFAULT_IPHONEOS_MIN_VERSION);
@@ -822,52 +832,67 @@ bool Options::findFile(const std::string &path, const std::vector<std::string> &
 		bool found = tbdInfo.checkFileExists(*this, newPath.c_str());
 		if ( fTraceDylibSearching )
 			printf("[Logging for XBS]%sfound library: '%s'\n", (found ? " " : " not "), newPath.c_str());
-		if ( found ) {
-			if ( (fFilePreference == kTextBasedStub) || fForceTextBasedStub ) {
-				result = tbdInfo;
-				return true;
-			} else {
-				break;
-			}
-		}
+		if ( found )
+			break;
 	}
 
+	// If we found a text-based stub file, check if it should be used.
+	if ( !tbdInfo.missing() ) {
+		if (tapi::LinkerInterfaceFile::shouldPreferTextBasedStubFile(tbdInfo.path)) {
+			result = tbdInfo;
+			return true;
+		}
+	}
 	FileInfo dylibInfo;
 	{
 		bool found = dylibInfo.checkFileExists(*this, path.c_str());
 		if ( fTraceDylibSearching )
 			printf("[Logging for XBS]%sfound library: '%s'\n", (found ? " " : " not "), path.c_str());
-		if ( found &&  (fFilePreference == kMachO) ) {
-			result = dylibInfo;
-			return true;
-		}
 	}
 
-	if ( !dylibInfo.missing() && tbdInfo.missing() ) {
-		result = dylibInfo;
-		return true;
-	}
-	else if ( dylibInfo.missing() && !tbdInfo.missing() ) {
+	// There is only a text-based stub file.
+	if ( !tbdInfo.missing() && dylibInfo.missing() ) {
 		result = tbdInfo;
 		return true;
 	}
-	else if ( !dylibInfo.missing() && !tbdInfo.missing() ) {
-		if ( dylibInfo.modTime == tbdInfo.modTime ) {
+	// There is only a dynamic library file.
+	else if ( tbdInfo.missing() && !dylibInfo.missing() ) {
+		result = dylibInfo;
+		return true;
+	}
+	// There are both - a text-based stub file and a dynamic library file.
+	else if ( !tbdInfo.missing() && !dylibInfo.missing() ) {
+		// If the files are still in synv we can use and should use the text-based stub file.
+		if (tapi::LinkerInterfaceFile::areEquivalent(tbdInfo.path, dylibInfo.path)) {
 			result = tbdInfo;
-			return true;
 		}
+		// Otherwise issue a warning and fall-back to the dynamic library file.
 		else {
-			// <rdar://problem/24459693> Disable false warning about out-of-sync .tbd files.
-			//warning("text-based stub file %s and library file %s are out of sync. Falling back to library file for linking.", tbdInfo.path, dylibInfo.path);
+			warning("text-based stub file %s and library file %s are out of sync. Falling back to library file for linking.", tbdInfo.path, dylibInfo.path);
 			result = dylibInfo;
-			return true;
+
 		}
+		return true;
 	}
 
 	return false;
 }
 
-Options::FileInfo Options::findFile(const std::string &path) const
+static bool startsWith(const std::string& str, const std::string& prefix)
+{
+	return (str.compare(0, prefix.length(), prefix) == 0);
+}
+
+static std::string getDirPath(const std::string& path)
+{
+	std::string::size_type lastSlashPos = path.find_last_of('/');
+	if ( lastSlashPos == std::string::npos )
+		return "./";
+	else
+		return path.substr(0, lastSlashPos+1);
+}
+
+Options::FileInfo Options::findFile(const std::string &path, const ld::dylib::File* fromDylib) const
 {
 	FileInfo result;
 
@@ -879,35 +904,59 @@ Options::FileInfo Options::findFile(const std::string &path) const
 				return result;
 		}
 	}
+
+	// expand @ variables
+	if ( path[0] == '@' ) {
+		if ( startsWith(path, "@executable_path/") && (fExecutablePath != nullptr) ) {
+			std::string exeBasedPath = getDirPath(fExecutablePath) + &path[17];
+			if ( findFile(exeBasedPath, {".tbd"}, result) )
+				return result;
+		}
+		else if ( startsWith(path, "@loader_path/") && (fromDylib != nullptr) ) {
+			char absPath[PATH_MAX];
+			if ( realpath(fromDylib->path(), absPath) != NULL ) {
+				std::string loaderBasedPath = getDirPath(fromDylib->path()) + &path[13];
+				if ( findFile(loaderBasedPath, {".tbd"}, result) )
+					return result;
+			}
+		}
+		else if ( startsWith(path, "@rpath/") ) {
+			// first search any LC_RPATH supplied by dyld that re-exports dylib to be found
+			if ( fromDylib != nullptr ) {
+				for (const char* rp : fromDylib->rpaths() ) {
+					std::string rpath = rp;
+					// handle dylib that has LC_RPATH = @loader_path/blah
+					if ( startsWith(rpath, "@loader_path/") ) {
+						char absPath[PATH_MAX];
+						if ( realpath(fromDylib->path(), absPath) != NULL )
+							rpath = getDirPath(absPath) + &rpath[13];
+						else
+							rpath = getDirPath(fromDylib->path()) + &rpath[13];
+					}
+					std::string rpathBasedPath = rpath + "/" + &path[6];
+					if ( findFile(rpathBasedPath, {".tbd"}, result) )
+						return result;
+				}
+			}
+		}
+	}
+
 	// try raw path
 	if ( findFile(path, {".tbd"}, result) )
 		return result;
-
-	// try @executable_path substitution
-	if ( (path.find("@executable_path/") == 0) && (fExecutablePath != nullptr) ) {
-		char newPath[strlen(fExecutablePath) + path.size()];
-		strcpy(newPath, fExecutablePath);
-		char* addPoint = strrchr(newPath,'/');
-		if ( addPoint != nullptr )
-			strcpy(&addPoint[1], &path[17]);
-		else
-			strcpy(newPath, &path[17]);
-
-		if ( findFile(newPath, {".tbd"}, result) )
-			return result;
-	}
 
 	// not found
 	throwf("file not found: %s", path.c_str());
 }
 
-Options::FileInfo Options::findFileUsingPaths(const std::string &path) const
+// search for indirect dylib first using -F and -L paths first
+Options::FileInfo Options::findIndirectDylib(const std::string& installName, const ld::dylib::File* fromDylib) const
 {
 	FileInfo result;
 
-	auto lastSlashPos = path.find_last_of('/');
+	auto lastSlashPos = installName.find_last_of('/');
 	auto pos = ( lastSlashPos != std::string::npos ) ? lastSlashPos + 1 : 0;
-	auto leafName = path.substr(pos);
+	auto leafName = installName.substr(pos);
 
 	// Is this in a framework?
 	// /path/Foo.framework/Foo							==> true (Foo)
@@ -916,7 +965,7 @@ Options::FileInfo Options::findFileUsingPaths(const std::string &path) const
 	bool isFramework = false;
 	if ( lastSlashPos != std::string::npos ) {
 		auto frameworkDir = std::string("/").append(leafName).append(".framework/");
-		if ( path.rfind(frameworkDir) != std::string::npos )
+		if ( installName.rfind(frameworkDir) != std::string::npos )
 			isFramework = true;
 	}
 	
@@ -925,9 +974,9 @@ Options::FileInfo Options::findFileUsingPaths(const std::string &path) const
 	// don't need to try variations, just paths. We do need to add the additional bits
 	// onto the framework path though.
 	if ( isFramework ) {
-		auto endPos = path.rfind(".framework");
-		auto beginPos = path.find_last_of('/', endPos);
-		auto leafPath = path.substr(beginPos);
+		auto endPos = installName.rfind(".framework");
+		auto beginPos = installName.find_last_of('/', endPos);
+		auto leafPath = installName.substr(beginPos);
 		for (const auto* dir : fFrameworkSearchPaths) {
 			auto possiblePath = dir + leafPath;
 			if ( findFile(possiblePath, {".tbd"}, result) )
@@ -938,7 +987,7 @@ Options::FileInfo Options::findFileUsingPaths(const std::string &path) const
 		// <rdar://problem/5427952> ld64's re-export cycle detection logic prevents use of X11 libGL on Leopard
 		bool embeddedDylib = ( (leafName.size() > 6)
 					&& (leafName.find(".dylib", leafName.size()-6) != std::string::npos)
-					&& (path.find(".framework/") != std::string::npos) );
+					&& (installName.find(".framework/") != std::string::npos) );
 		if ( !embeddedDylib ) {
 			for (const auto* dir : fLibrarySearchPaths) {
 				//fprintf(stderr,"Finding Library: %s/%s\n", dir, leafName);
@@ -950,7 +999,7 @@ Options::FileInfo Options::findFileUsingPaths(const std::string &path) const
 	}
 
 	// If we didn't find it fall back to findFile.
-	return findFile(path);
+	return findFile(installName, fromDylib);
 }
 
 
@@ -1721,6 +1770,19 @@ void Options::parseOrderFile(const char* path, bool cstring)
 	// order files override auto-ordering
 	fAutoOrderInitializers = false;
 
+	// <rdar://problem/24856050> ld64 should prefer OrderFiles from the SDK over the ones in /
+	for (const char* sdkPath : fSDKPaths) {
+		char fullPath[PATH_MAX];
+		strlcpy(fullPath, sdkPath, PATH_MAX);
+		strlcat(fullPath, "/", PATH_MAX);
+		strlcat(fullPath, path, PATH_MAX);
+		struct stat statBuffer;
+		if ( stat(fullPath, &statBuffer) == 0 ) {
+			path = strdup(fullPath);
+			break;
+		}
+	}
+
 	// read in whole file
 	int fd = ::open(path, O_RDONLY, 0);
 	if ( fd == -1 )
@@ -2363,6 +2425,40 @@ void Options::parse(int argc, const char* argv[])
 				fOverridePathlibLTO = argv[++i];
 				if ( fOverridePathlibLTO == NULL )
 					throw "missing argument to -lto_library";
+			}
+			else if ( strcmp(arg, "-cache_path_lto") == 0 ) {
+				fLtoCachePath = argv[++i];
+				if ( fLtoCachePath == NULL )
+					throw "missing argument to -cache_path_lto";
+			}
+			else if ( strcmp(arg, "-prune_interval_lto") == 0 ) {
+				const char* value = argv[++i];
+				if ( value == NULL )
+					throw "missing argument to -prune_interval_lto";
+				char* endptr;
+				fLtoPruneInterval = strtoul(value, &endptr, 10);
+				if ( *endptr != '\0')
+					throw "invalid argument for -prune_interval_lto";
+			}
+			else if ( strcmp(arg, "-prune_after_lto") == 0 ) {
+				const char* value = argv[++i];
+				if ( value == NULL )
+					throw "missing argument to -prune_after_lto";
+				char* endptr;
+				fLtoPruneAfter = strtoul(value, &endptr, 10);
+				if ( *endptr != '\0')
+					throw "invalid argument for -prune_after_lto";
+			}
+			else if ( strcmp(arg, "-max_relative_cache_size_lto") == 0 ) {
+				const char* value = argv[++i];
+				if ( value == NULL )
+					throw "missing argument to -max_relative_cache_size_lto";
+				char* endptr;
+				fLtoMaxCacheSize = strtoul(value, &endptr, 10);
+				if ( *endptr != '\0')
+					throw "invalid argument for -max_relative_cache_size_lto";
+				if (fLtoMaxCacheSize > 100)
+					throw "Expect a value between 0 and 100 for -max_relative_cache_size_lto";
 			}
 			else if ( (arg[1] == 'l') && (strncmp(arg,"-lazy_",6) !=0) ) {
                 snapshotArgCount = 0;
@@ -3728,6 +3824,14 @@ void Options::parse(int argc, const char* argv[])
 				fUseDataConstSegmentForceOff = true;
 				cannotBeUsedWithBitcode(arg);
 			}
+			else if ( strcmp(arg, "-text_exec") == 0 ) {
+				fUseTextExecSegment = true;
+				cannotBeUsedWithBitcode(arg);
+			}
+			else if ( strcmp(arg, "-add_split_seg_info") == 0) {
+				fSharedRegionEligible = true;
+				cannotBeUsedWithBitcode(arg);
+			}
 			else if ( strcmp(arg, "-no_deduplicate") == 0 ) {
 				fDeDupe = false;
 			}
@@ -3756,14 +3860,8 @@ void Options::parse(int argc, const char* argv[])
 				}
 				fMaxDefaultCommonAlign = alignment;
 			}
-			else if ( strcmp(arg, "-prefer-mod-time-check") == 0 ) {
-				fFilePreference = kModTime;
-			}
-			else if ( strcmp(arg, "-prefer-text-based-stub-file") == 0 ) {
-				fFilePreference = kTextBasedStub;
-			}
-			else if ( strcmp(arg, "-prefer-macho-file") == 0 ) {
-				fFilePreference = kMachO;
+			else if ( strcmp(argv[i], "-no_weak_imports") == 0 ) {
+				fAllowWeakImports = false;
 			}
 			// put this last so that it does not interfer with other options starting with 'i'
 			else if ( strncmp(arg, "-i", 2) == 0 ) {
@@ -3869,6 +3967,7 @@ void Options::buildSearchPaths(int argc, const char* argv[])
 				if ( ltoVers != NULL )
 					fprintf(stderr, "LTO support using: %s\n", ltoVers);
 #endif /* LTO_SUPPORT */
+				fprintf(stderr, "TAPI support using: %s\n", tapi::Version::getFullVersionAsString().c_str());
 				exit(0);
 			}
 		}
@@ -4055,6 +4154,11 @@ void Options::parsePreCommandLineEnvironmentSettings()
 	    fTraceDylibs = true;
 		fTraceIndirectDylibs = true;
 	}
+	
+	if ((getenv("LD_TRACE_DEPENDENTS") != NULL)) {
+		
+		fTraceEmitJSON = true;
+	}
 
 	if (getenv("RC_TRACE_DYLIB_SEARCHING") != NULL) {
 	    fTraceDylibSearching = true;
@@ -4063,7 +4167,7 @@ void Options::parsePreCommandLineEnvironmentSettings()
 	if (getenv("LD_PRINT_OPTIONS") != NULL)
 		fPrintOptions = true;
 
-	if (fTraceDylibs || fTraceArchives)
+	if (fTraceDylibs || fTraceArchives || fTraceEmitJSON)
 		fTraceOutputFile = getenv("LD_TRACE_FILE");
 
 	if (getenv("LD_PRINT_ORDER_FILE_STATISTICS") != NULL)
@@ -4107,10 +4211,6 @@ void Options::parsePreCommandLineEnvironmentSettings()
     if (pipeFdString != NULL) {
 		fPipelineFifo = pipeFdString;
     }
-
-	// Workaround for rdar://problem/24301175
-	if ((getenv("RC_XBS") != NULL) && !(getenv("RC_BUILDIT") != NULL))
-		fForceTextBasedStub = true;
 }
 
 
@@ -4492,7 +4592,7 @@ void Options::reconfigureDefaults()
 
 	// determine if info for shared region should be added
 	if ( fOutputKind == Options::kDynamicLibrary ) {
-		if ( minOS(ld::mac10_5, ld::iOS_3_1) )
+		if ( minOS(ld::mac10_5, ld::iOS_3_1) && !fTargetIOSSimulator )
 			if ( !fPrebind && !fSharedRegionEligibleForceOff )
 				if ( (strncmp(this->installPath(), "/usr/lib/", 9) == 0)
 					|| (strncmp(this->installPath(), "/System/Library/", 16) == 0) )
@@ -4514,6 +4614,12 @@ void Options::reconfigureDefaults()
 	if ( fUseDataConstSegmentForceOn ) {
 		fUseDataConstSegment = true;
 	}
+	// A -kext for iOS 10 ==>  -data_const, -text_exec, -add_split_seg_info
+	if ( (fOutputKind == Options::kKextBundle) && minOS(ld::mac10_Future, ld::iOS_10_0) && (fArchitecture == CPU_TYPE_ARM64) ) {
+		fUseDataConstSegment = true;
+		fUseTextExecSegment = true;
+		fSharedRegionEligible = true;
+	}
 	if ( fUseDataConstSegment ) {
 		addSectionRename("__DATA", "__got",				"__DATA_CONST", "__got");
 		addSectionRename("__DATA", "__la_symbol_ptr",	"__DATA_CONST", "__la_symbol_ptr");
@@ -4530,10 +4636,17 @@ void Options::reconfigureDefaults()
 		addSectionRename("__DATA", "__objc_imageinfo",	"__DATA_CONST", "__objc_imageinfo");
 		addSectionRename("__DATA", "__objc_const",	    "__DATA_CONST", "__objc_const");
 	}
+	if ( fUseTextExecSegment ) {
+		addSectionRename("__TEXT", "__text",				"__TEXT_EXEC", "__text");
+		addSectionRename("__TEXT", "__stubs",				"__TEXT_EXEC", "__stubs");
+	}
 	
 	// Use V2 shared cache info when targetting newer OSs
-	if ( fSharedRegionEligible && minOS(ld::mac10_Future, ld::iOS_9_0)) {
+	if ( fSharedRegionEligible && minOS(ld::mac10_12, ld::iOS_9_0)) {
 		fSharedRegionEncodingV2 = true;
+		// <rdar://problem/24772435> only use v2 for Swift dylibs on Mac OS X
+		if ( (fPlatform == kPlatformOSX) && (strncmp(this->installPath(), "/System/Library/PrivateFrameworks/Swift/", 40) != 0) )
+			fSharedRegionEncodingV2 = false;
 		fIgnoreOptimizationHints = true;
 	}
 
@@ -4625,7 +4738,8 @@ void Options::reconfigureDefaults()
 				fEncryptable = false;
 			break;
 	}
-	if ( (fArchitecture != CPU_TYPE_ARM) && (fArchitecture != CPU_TYPE_ARM64) )
+	if ( (fArchitecture != CPU_TYPE_ARM) && (fArchitecture != CPU_TYPE_ARM64)
+         )
 		fEncryptable = false;
 	if ( fEncryptableForceOn )
 		fEncryptable = true;
@@ -4689,7 +4803,6 @@ void Options::reconfigureDefaults()
 		case CPU_TYPE_I386:
 		case CPU_TYPE_ARM64:
 			fEnforceDylibSubtypesMatch = false;
-			fAllowCpuSubtypeMismatches = true;
 			break;
 	}
 		
@@ -4728,7 +4841,7 @@ void Options::reconfigureDefaults()
 		fCanUseUpwardDylib = true;
 		
 	// MacOSX 10.7 defaults to PIE
-	if ( ((fArchitecture == CPU_TYPE_X86_64) || (fArchitecture == CPU_TYPE_I386))
+	if ( (fArchitecture == CPU_TYPE_I386)
 		&& (fOutputKind == kDynamicExecutable)
 		&& (fMacVersionMin >= ld::mac10_7) ) {
 			fPositionIndependentExecutable = true;
@@ -4742,6 +4855,10 @@ void Options::reconfigureDefaults()
 			fPositionIndependentExecutable = true;
 	}
 
+	// <rdar://problem/24535196> x86_64 defaults PIE (regardless of minOS version)
+	if ( (fArchitecture == CPU_TYPE_X86_64) && (fOutputKind == kDynamicExecutable) && (fMacVersionMin >= ld::mac10_6) )
+		fPositionIndependentExecutable = true;
+
 	// Simulator defaults to PIE
 	if ( fTargetIOSSimulator && (fOutputKind == kDynamicExecutable) )
 		fPositionIndependentExecutable = true;
@@ -4751,8 +4868,12 @@ void Options::reconfigureDefaults()
 		fPositionIndependentExecutable = false;
 
 	// arm64 is always PIE
-	if ( (fArchitecture == CPU_TYPE_ARM64) && (fOutputKind == kDynamicExecutable) ) {
+	if ( ((fArchitecture == CPU_TYPE_ARM64)
+          )
+        && (fOutputKind == kDynamicExecutable) ) {
 		fPositionIndependentExecutable = true;
+		if ( fDisablePositionIndependentExecutable )
+			warning("-no_pie ignored for arm64");
 	}
 
 	// set fOutputSlidable
@@ -4779,7 +4900,9 @@ void Options::reconfigureDefaults()
 	if ( fMacVersionMin >= ld::mac10_7 ) {
 		fTLVSupport = true;
 	}
-	else if ( (fArchitecture == CPU_TYPE_ARM64) && min_iOS(ld::iOS_8_0) ) {
+	else if ( ((fArchitecture == CPU_TYPE_ARM64)
+               )
+             && min_iOS(ld::iOS_8_0) ) {
 		fTLVSupport = true;
 	}
 	else if ( (fArchitecture == CPU_TYPE_ARM) && min_iOS(ld::iOS_9_0) ) {
@@ -4976,7 +5099,8 @@ void Options::reconfigureDefaults()
 			case Options::kDynamicLibrary:
 			case Options::kDynamicBundle:
 			case Options::kDyld:
-				if ( (fArchitecture == CPU_TYPE_ARM64) 
+				if ( ((fArchitecture == CPU_TYPE_ARM64)
+                     )
 				|| ((fArchitecture == CPU_TYPE_ARM) && min_iOS(ld::iOS_7_0)) ) {
 					fSegmentAlignment = 4096*4;
 				}
@@ -4984,7 +5108,9 @@ void Options::reconfigureDefaults()
 			case Options::kStaticExecutable:
 			case Options::kKextBundle:
 				// <rdar://problem/14676611> 16KB segments for arm64 kexts
-				if ( (fArchitecture == CPU_TYPE_ARM64) && min_iOS(ld::iOS_9_0) ) {
+				if ( ((fArchitecture == CPU_TYPE_ARM64)
+                     )
+				    && min_iOS(ld::iOS_9_0) ) {
 					fSegmentAlignment = 4096*4;
 				}
 				break;
@@ -5420,7 +5546,7 @@ void Options::checkIllegalOptionCombinations()
 		// zero page size not specified on command line, set default
 		switch (fArchitecture) {
 			case CPU_TYPE_I386:
-            case CPU_TYPE_ARM:
+			case CPU_TYPE_ARM:
 				// first 4KB for 32-bit architectures
 				fZeroPageSize = 0x1000;
 				break;
@@ -5543,8 +5669,8 @@ void Options::checkIllegalOptionCombinations()
 	if ( (fOutputKind != Options::kDynamicExecutable) && (fDyldEnvironExtras.size() != 0) )
 		throw "-dyld_env can only used used when created main executables";
 
-	// -segment_order can only be used with -preload
-	if ( !fSegmentOrder.empty() && (fOutputKind != Options::kPreload) )
+	// -segment_order can only be used with -preload or -static
+	if ( !fSegmentOrder.empty() && ((fOutputKind != Options::kPreload) && (fOutputKind != kStaticExecutable)) )
 		throw "-segment_order can only used used with -preload output";
 
 	// warn about bitcode option combinations
@@ -5571,6 +5697,12 @@ void Options::checkIllegalOptionCombinations()
 	if ( (fOutputKind == Options::kDynamicLibrary) && (fIOSVersionMin != ld::iOSVersionUnset) && (fDylibInstallName != NULL) ) {
 		if ( !min_iOS(ld::iOS_8_0) && (fDylibInstallName[0] == '@') && !fEncryptableForceOff )
 			warning("embedded dylibs/frameworks only run on iOS 8 or later");
+	}
+
+
+	// produce nicer error when no input
+	if ( fInputFiles.empty() ) {
+		throw "no object files specified";
 	}
 }	
 

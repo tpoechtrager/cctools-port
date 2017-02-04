@@ -37,6 +37,8 @@ extern const char* archName(const uint8_t* fileContent, uint64_t fileLength);
 
 extern bool isObjectFile(const uint8_t* fileContent, uint64_t fileLength, cpu_type_t architecture, cpu_subtype_t subarch);
 
+extern bool hasObjCCategory(const uint8_t* fileContent, uint64_t fileLength);
+
 extern ld::relocatable::File* parse(const uint8_t* fileContent, uint64_t fileLength,
 									const char* path, time_t modTime, ld::File::Ordinal ordinal,
 									cpu_type_t architecture, cpu_subtype_t subarch, bool logAllFiles,
@@ -45,6 +47,10 @@ extern ld::relocatable::File* parse(const uint8_t* fileContent, uint64_t fileLen
 struct OptimizeOptions {
 	const char*							outputFilePath;
 	const char*							tmpObjectFilePath;
+	const char*							ltoCachePath;
+	int									ltoPruneInterval;
+	int									ltoPruneAfter;
+	unsigned							ltoMaxCacheSize;
 	bool								preserveAllGlobals;
 	bool								verbose; 
 	bool								saveTemps; 
@@ -66,6 +72,7 @@ struct OptimizeOptions {
 	cpu_type_t							arch;
 	const char*							mcpu;
 	Options::Platform					platform;
+	uint32_t							minOSVersion;
 	const std::vector<const char*>*		llvmOptions;
 	const std::vector<const char*>*		initialUndefines;
 };

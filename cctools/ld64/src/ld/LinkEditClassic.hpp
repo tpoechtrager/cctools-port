@@ -669,39 +669,18 @@ bool SymbolTableAtom<A>::hasStabs(uint32_t& ssos, uint32_t& ssoe, uint32_t& sos,
 template <typename A>
 void SymbolTableAtom<A>::encode()
 {
-	uint32_t symbolIndex = 0;
+	// Note: We lay out the symbol table so that the strings for the stabs (local) symbols are at the
+	// end of the string pool.  The stabs strings are not used when calculated the UUID for the image.
+	// If the stabs strings were not last, the string offsets for all other symbols may very which would alter the UUID.
 
-	// make nlist entries for all local symbols
-	std::vector<const ld::Atom*>& localAtoms = this->_writer._localAtoms;
-	std::vector<const ld::Atom*>& globalAtoms = this->_writer._exportedAtoms;
-	_locals.reserve(localAtoms.size()+this->_state.stabs.size());
-	this->_writer._localSymbolsStartIndex = 0;
-	// make nlist entries for all debug notes
-	_stabsIndexStart = symbolIndex;
-	_stabsStringsOffsetStart = this->_writer._stringPoolAtom->currentOffset();
-	for (std::vector<ld::relocatable::File::Stab>::const_iterator sit=this->_state.stabs.begin(); sit != this->_state.stabs.end(); ++sit) {
-		macho_nlist<P> entry;
-		entry.set_n_type(sit->type);
-		entry.set_n_sect(sectionIndexForStab(*sit));
-		entry.set_n_desc(sit->desc);
-		entry.set_n_value(valueForStab(*sit));
-		entry.set_n_strx(stringOffsetForStab(*sit, this->_writer._stringPoolAtom));
-		_locals.push_back(entry);
-		++symbolIndex;
-	}
-	_stabsIndexEnd = symbolIndex;
-	_stabsStringsOffsetEnd = this->_writer._stringPoolAtom->currentOffset();
-	for (std::vector<const ld::Atom*>::const_iterator it=localAtoms.begin(); it != localAtoms.end(); ++it) {
-		const ld::Atom* atom = *it;
-		if ( this->addLocal(atom, this->_writer._stringPoolAtom) )
-			this->_writer._atomToSymbolIndex[atom] = symbolIndex++;
-	}
-	this->_writer._localSymbolsCount = symbolIndex;
-	
+	// reserve space for local symbols
+	uint32_t localsCount = _state.stabs.size() + this->_writer._localAtoms.size();
 
 	// make nlist entries for all global symbols
+	std::vector<const ld::Atom*>& globalAtoms = this->_writer._exportedAtoms;
 	_globals.reserve(globalAtoms.size());
-	this->_writer._globalSymbolsStartIndex = symbolIndex;
+	uint32_t symbolIndex = localsCount;
+	this->_writer._globalSymbolsStartIndex = localsCount;
 	for (std::vector<const ld::Atom*>::const_iterator it=globalAtoms.begin(); it != globalAtoms.end(); ++it) {
 		const ld::Atom* atom = *it;
 		this->addGlobal(atom, this->_writer._stringPoolAtom);
@@ -718,6 +697,31 @@ void SymbolTableAtom<A>::encode()
 		this->_writer._atomToSymbolIndex[*it] = symbolIndex++;
 	}
 	this->_writer._importSymbolsCount = symbolIndex - this->_writer._importSymbolsStartIndex;
+
+	// go back to start and make nlist entries for all local symbols
+	std::vector<const ld::Atom*>& localAtoms = this->_writer._localAtoms;
+	_locals.reserve(localsCount);
+	symbolIndex = 0;
+	this->_writer._localSymbolsStartIndex = 0;
+	_stabsIndexStart = 0;
+	_stabsStringsOffsetStart = this->_writer._stringPoolAtom->currentOffset();
+	for (const ld::relocatable::File::Stab& stab : _state.stabs) {
+		macho_nlist<P> entry;
+		entry.set_n_type(stab.type);
+		entry.set_n_sect(sectionIndexForStab(stab));
+		entry.set_n_desc(stab.desc);
+		entry.set_n_value(valueForStab(stab));
+		entry.set_n_strx(stringOffsetForStab(stab, this->_writer._stringPoolAtom));
+		_locals.push_back(entry);
+		++symbolIndex;
+	}
+	_stabsIndexEnd = symbolIndex;
+	_stabsStringsOffsetEnd = this->_writer._stringPoolAtom->currentOffset();
+	for (const ld::Atom* atom : localAtoms) {
+		if ( this->addLocal(atom, this->_writer._stringPoolAtom) )
+			this->_writer._atomToSymbolIndex[atom] = symbolIndex++;
+	}
+	this->_writer._localSymbolsCount = symbolIndex;
 }
 
 template <typename A>

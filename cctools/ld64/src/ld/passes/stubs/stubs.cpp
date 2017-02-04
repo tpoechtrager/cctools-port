@@ -213,7 +213,7 @@ ld::Atom* Pass::makeStub(const ld::Atom& target, bool weakImport)
 				return new ld::passes::stubs::arm::StubPICKextAtom(*this, target);
 			}
 			else if ( usingCompressedLINKEDIT() && !forLazyDylib ) {
-				if ( (_stubCount < 900) && !_mightBeInSharedRegion && !_largeText )
+				if ( (_stubCount < 900) && !_mightBeInSharedRegion && !_largeText && !_options.makeEncryptable() )
 					return new ld::passes::stubs::arm::StubCloseAtom(*this, target, stubToGlobalWeakDef, stubToResolver, weakImport);
 				else if ( _pic )
 					return new ld::passes::stubs::arm::StubPICAtom(*this, target, stubToGlobalWeakDef, stubToResolver, weakImport, usingDataConst);

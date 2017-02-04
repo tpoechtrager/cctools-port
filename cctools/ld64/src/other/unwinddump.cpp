@@ -163,6 +163,7 @@ bool UnwindPrinter<arm64>::validFile(const uint8_t* fileContent)
 }
 #endif
 
+
 template <>
 bool UnwindPrinter<arm>::validFile(const uint8_t* fileContent)
 {	
@@ -756,6 +757,7 @@ void UnwindPrinter<arm64>::decode(uint32_t encoding, const uint8_t* funcStart, c
 }
 #endif
 
+
 template <>
 void UnwindPrinter<arm>::decode(uint32_t encoding, const uint8_t* funcStart, char* str)
 {
@@ -871,6 +873,7 @@ const char* UnwindPrinter<arm64>::personalityName(const macho_relocation_info<ar
 	return &fStrings[sym.n_strx()];
 }
 #endif
+
 
 template <>
 const char* UnwindPrinter<arm>::personalityName(const macho_relocation_info<arm::P>* reloc)
@@ -1138,7 +1141,7 @@ static void dump(const char* path, const std::set<cpu_type_t>& onlyArchs, bool s
 		else if ( UnwindPrinter<arm64>::validFile(p) && onlyArchs.count(CPU_TYPE_ARM64) ) {
 			UnwindPrinter<arm64>::make(p, length, path, showFunctionNames);
 		}
-#endif		
+#endif
 		else if ( UnwindPrinter<arm>::validFile(p) && onlyArchs.count(CPU_TYPE_ARM) ) {
 			UnwindPrinter<arm>::make(p, length, path, showFunctionNames);
 		}

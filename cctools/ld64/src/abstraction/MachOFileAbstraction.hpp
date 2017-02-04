@@ -264,7 +264,6 @@
 	#define CPU_SUBTYPE_ARM64_V8    1
 #endif
 
-
 #define ARM64_RELOC_UNSIGNED            0 // for pointers
 #define ARM64_RELOC_SUBTRACTOR          1 // must be followed by a ARM64_RELOC_UNSIGNED
 #define ARM64_RELOC_BRANCH26            2 // a B/BL instruction with 26-bit displacement

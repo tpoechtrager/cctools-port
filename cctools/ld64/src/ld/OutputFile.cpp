@@ -55,6 +55,8 @@
 #include <algorithm>
 #include <unordered_set>
 #include <utility>
+#include <iostream>
+#include <fstream>
 
 #include <CommonCrypto/CommonDigest.h>
 #include <AvailabilityMacros.h>
@@ -165,6 +167,7 @@ void OutputFile::write(ld::Internal& state)
 	//this->dumpAtomsBySection(state, false);
 	this->writeOutputFile(state);
 	this->writeMapFile(state);
+	this->writeJSONEntry(state);
 }
 
 bool OutputFile::findSegment(ld::Internal& state, uint64_t addr, uint64_t* start, uint64_t* end, uint32_t* index)
@@ -357,6 +360,12 @@ void OutputFile::setLoadCommandsPadding(ld::Internal& state)
 		case Options::kPreload:
 			// mach-o MH_PRELOAD files need no padding between load commands and first section
 			paddingSize = 0;
+		case Options::kKextBundle:
+			if ( _options.useTextExecSegment() ) {
+				paddingSize = 32;
+				break;
+			}
+			// else fall into default case
 		default:
 			// work backwards from end of segment and lay out sections so that extra room goes to padding atom
 			uint64_t addr = 0;
@@ -497,6 +506,30 @@ uint64_t OutputFile::addressOf(const ld::Internal& state, const ld::Fixup* fixup
 	}
 	throw "unexpected binding";
 }
+
+uint64_t OutputFile::addressAndTarget(const ld::Internal& state, const ld::Fixup* fixup, const ld::Atom** target)
+{
+	switch ( fixup->binding ) {
+		case ld::Fixup::bindingNone:
+			throw "unexpected bindingNone";
+		case ld::Fixup::bindingByNameUnbound:
+			throw "unexpected bindingByNameUnbound";
+		case ld::Fixup::bindingByContentBound:
+		case ld::Fixup::bindingDirectlyBound:
+			*target = fixup->u.target;
+			return (*target)->finalAddress();
+		case ld::Fixup::bindingsIndirectlyBound:
+			*target = state.indirectBindingTable[fixup->u.bindingIndex];
+		#ifndef NDEBUG
+			if ( ! (*target)->finalAddressMode() ) {
+				throwf("reference to symbol (which has not been assigned an address) %s", (*target)->name());
+			}
+		#endif
+			return (*target)->finalAddress();
+	}
+	throw "unexpected binding";
+}
+
 
 uint64_t OutputFile::sectionOffsetOf(const ld::Internal& state, const ld::Fixup* fixup)
 {
@@ -2015,7 +2048,7 @@ void OutputFile::applyFixUps(ld::Internal& state, uint64_t mhAddress, const ld::
 				{
 					// GOT entry was optimized away, change LDR instruction to a ADD
 					instruction = get32LE(fixUpLocation);
-					if ( (instruction & 0xFFC00000) != 0xF9400000 )
+					if ( (instruction & 0xBFC00000) != 0xB9400000 )
 						throwf("GOT load reloc does not point to a LDR instruction in %s", atom->name());
 					uint32_t offset = accumulator & 0x00000FFF;
 					uint32_t imm12 = offset << 10;
@@ -2030,7 +2063,7 @@ void OutputFile::applyFixUps(ld::Internal& state, uint64_t mhAddress, const ld::
 				{
 					// TLV thunk in same linkage unit, so LEA it directly, changing LDR instruction to a ADD
 					instruction = get32LE(fixUpLocation);
-					if ( (instruction & 0xFFC00000) != 0xF9400000 )
+					if ( (instruction & 0xBFC00000) != 0xB9400000 )
 						throwf("TLV load reloc does not point to a LDR instruction in %s", atom->name());
 					uint32_t offset = accumulator & 0x00000FFF;
 					uint32_t imm12 = offset << 10;
@@ -2041,7 +2074,7 @@ void OutputFile::applyFixUps(ld::Internal& state, uint64_t mhAddress, const ld::
 			case ld::Fixup::kindStoreARM64PointerToGOT:
 				set64LE(fixUpLocation, accumulator);
 				break;
-            case ld::Fixup::kindStoreARM64PCRelToGOT:
+        case ld::Fixup::kindStoreARM64PCRelToGOT:
 				if ( fit->contentAddendOnly )
 					delta = accumulator;
 				else
@@ -2658,13 +2691,22 @@ void OutputFile::computeContentUUID(ld::Internal& state, uint8_t* wholeBuffer)
 			uint64_t lastStabNlistFileOffset   = symbolTableFileOffset + stabsOffsetEnd;
 			uint64_t firstStabStringFileOffset = stringPoolFileOffset  + stabsStringsOffsetStart;
 			uint64_t lastStabStringFileOffset  = stringPoolFileOffset  + tabsStringsOffsetEnd;
-			if ( log ) fprintf(stderr, "firstStabNlistFileOffset=0x%08llX\n", firstStabNlistFileOffset);
-			if ( log ) fprintf(stderr, "lastStabNlistFileOffset=0x%08llX\n", lastStabNlistFileOffset);
-			if ( log ) fprintf(stderr, "firstStabStringFileOffset=0x%08llX\n", firstStabStringFileOffset);
-			if ( log ) fprintf(stderr, "lastStabStringFileOffset=0x%08llX\n", lastStabStringFileOffset);
+			if ( log ) fprintf(stderr, "stabNlist offset=0x%08llX, size=0x%08llX\n", firstStabNlistFileOffset, lastStabNlistFileOffset-firstStabNlistFileOffset);
+			if ( log ) fprintf(stderr, "stabString offset=0x%08llX, size=0x%08llX\n", firstStabStringFileOffset, lastStabStringFileOffset-firstStabStringFileOffset);
 			assert(firstStabNlistFileOffset <= firstStabStringFileOffset);
 			excludeRegions.emplace_back(std::pair<uint64_t, uint64_t>(firstStabNlistFileOffset, lastStabNlistFileOffset));
 			excludeRegions.emplace_back(std::pair<uint64_t, uint64_t>(firstStabStringFileOffset, lastStabStringFileOffset));
+			// exclude LINKEDIT LC_SEGMENT (size field depends on stabs size)
+			uint64_t linkeditSegCmdOffset;
+			uint64_t linkeditSegCmdSize;
+			_headersAndLoadCommandAtom->linkeditCmdInfo(linkeditSegCmdOffset, linkeditSegCmdSize);
+			excludeRegions.emplace_back(std::pair<uint64_t, uint64_t>(linkeditSegCmdOffset, linkeditSegCmdOffset+linkeditSegCmdSize));
+			if ( log ) fprintf(stderr, "linkedit SegCmdOffset=0x%08llX, size=0x%08llX\n", linkeditSegCmdOffset, linkeditSegCmdSize);
+			uint64_t symbolTableCmdOffset;
+			uint64_t symbolTableCmdSize;
+			_headersAndLoadCommandAtom->symbolTableCmdInfo(symbolTableCmdOffset, symbolTableCmdSize);
+			excludeRegions.emplace_back(std::pair<uint64_t, uint64_t>(symbolTableCmdOffset, symbolTableCmdOffset+symbolTableCmdSize));
+			if ( log ) fprintf(stderr, "linkedit SegCmdOffset=0x%08llX, size=0x%08llX\n", symbolTableCmdOffset, symbolTableCmdSize);
 		}
 		if ( !excludeRegions.empty() ) {
 			CC_MD5_CTX md5state;
@@ -2674,6 +2716,7 @@ void OutputFile::computeContentUUID(ld::Internal& state, uint8_t* wholeBuffer)
 			if ( lastSlash !=  NULL ) {
 				CC_MD5_Update(&md5state, lastSlash, strlen(lastSlash));
 			}
+			std::sort(excludeRegions.begin(), excludeRegions.end());
 			uint64_t checksumStart = 0;
 			for ( auto& region : excludeRegions ) {
 				uint64_t regionStart = region.first;
@@ -2883,12 +2926,23 @@ void OutputFile::writeOutputFile(ld::Internal& state)
 }
 
 struct AtomByNameSorter
-{	
-	 bool operator()(const ld::Atom* left, const ld::Atom* right)
-	 {
-          return (strcmp(left->name(), right->name()) < 0);
-	 }
+{
+	bool operator()(const ld::Atom* left, const ld::Atom* right) const
+	{
+		return (strcmp(left->name(), right->name()) < 0);
+	}
+
+	bool operator()(const ld::Atom* left, const char* right) const
+	{
+		return (strcmp(left->name(), right) < 0);
+	}
+
+	bool operator()(const char* left, const ld::Atom* right) const
+	{
+		return (strcmp(left, right->name()) < 0);
+	}
 };
+
 
 class NotInSet
 {
@@ -2924,7 +2978,9 @@ void OutputFile::buildSymbolTable(ld::Internal& state)
 				
 			// in -r mode, clarify symbolTableNotInFinalLinkedImages
 			if ( _options.outputKind() == Options::kObjectFile ) {
-				if ( (_options.architecture() == CPU_TYPE_X86_64) || (_options.architecture() == CPU_TYPE_ARM64) ) {
+				if ( (_options.architecture() == CPU_TYPE_X86_64)
+				  || (_options.architecture() == CPU_TYPE_ARM64)
+				   ) {
 					// x86_64 .o files need labels on anonymous literal strings
 					if ( (sect->type() == ld::Section::typeCString) && (atom->combine() == ld::Atom::combineByNameAndContent) ) {
 						(const_cast<ld::Atom*>(atom))->setSymbolTableInclusion(ld::Atom::symbolTableIn);
@@ -3075,6 +3131,59 @@ void OutputFile::buildSymbolTable(ld::Internal& state)
 	// sort by name
 	std::sort(_exportedAtoms.begin(), _exportedAtoms.end(), AtomByNameSorter());
 	std::sort(_importedAtoms.begin(), _importedAtoms.end(), AtomByNameSorter());
+
+	std::map<std::string, std::vector<std::string>> addedSymbols;
+	std::map<std::string, std::vector<std::string>> hiddenSymbols;
+	for (const auto *atom : _exportedAtoms) {
+		// The exported symbols have already been sorted. Early exit the loop
+		// once we see a symbol that is lexicographically past the special
+		// linker symbol.
+		if (atom->name()[0] > '$')
+			break;
+
+		std::string name(atom->name());
+		if (name.rfind("$ld$add$", 7) == 0) {
+			auto pos = name.find_first_of('$', 10);
+			if (pos == std::string::npos) {
+				warning("bad special linker symbol '%s'", atom->name());
+				continue;
+			}
+			auto &&symbolName = name.substr(pos+1);
+			auto it = addedSymbols.emplace(symbolName, std::initializer_list<std::string>{name});
+			if (!it.second)
+				it.first->second.emplace_back(name);
+		} else if (name.rfind("$ld$hide$", 8) == 0) {
+			auto pos = name.find_first_of('$', 11);
+			if (pos == std::string::npos) {
+				warning("bad special linker symbol '%s'", atom->name());
+				continue;
+			}
+			auto &&symbolName = name.substr(pos+1);
+			auto it = hiddenSymbols.emplace(symbolName, std::initializer_list<std::string>{name});
+			if (!it.second)
+				it.first->second.emplace_back(name);
+		}
+	}
+
+	for (const auto &it : addedSymbols) {
+		if (!std::binary_search(_exportedAtoms.begin(), _exportedAtoms.end(), it.first.c_str(), AtomByNameSorter()))
+			continue;
+		for (const auto &symbol :  it.second)
+			warning("linker symbol '%s' adds already existing symbol '%s'", symbol.c_str(), it.first.c_str());
+	}
+
+	auto it = hiddenSymbols.begin();
+	while (it != hiddenSymbols.end()) {
+		if (std::binary_search(_exportedAtoms.begin(), _exportedAtoms.end(), it->first.c_str(), AtomByNameSorter()))
+			it = hiddenSymbols.erase(it);
+		else
+			++it;
+	}
+
+	for (const auto &it : hiddenSymbols) {
+		for (const auto &symbol :  it.second)
+			warning("linker symbol '%s' hides a non-existent symbol '%s'", symbol.c_str(), it.first.c_str());
+	}
 }
 
 void OutputFile::addPreloadLinkEdit(ld::Internal& state)
@@ -3201,7 +3310,10 @@ void OutputFile::addLinkEdit(ld::Internal& state)
 				localRelocationsSection = state.addAtom(*_localRelocsAtom);
 			}
 			if  ( _hasSplitSegInfo ) {
-				_splitSegInfoAtom = new SplitSegInfoV1Atom<x86>(_options, state, *this);
+				if ( _options.sharedRegionEncodingV2() )
+					_splitSegInfoAtom = new SplitSegInfoV2Atom<x86>(_options, state, *this);
+				else
+					_splitSegInfoAtom = new SplitSegInfoV1Atom<x86>(_options, state, *this);
 				splitSegInfoSection = state.addAtom(*_splitSegInfoAtom);
 			}
 			if ( _hasFunctionStartsInfo ) {
@@ -3259,7 +3371,10 @@ void OutputFile::addLinkEdit(ld::Internal& state)
 				localRelocationsSection = state.addAtom(*_localRelocsAtom);
 			}
 			if  ( _hasSplitSegInfo ) {
-				_splitSegInfoAtom = new SplitSegInfoV1Atom<x86_64>(_options, state, *this);
+				if ( _options.sharedRegionEncodingV2() )
+					_splitSegInfoAtom = new SplitSegInfoV2Atom<x86_64>(_options, state, *this);
+				else
+					_splitSegInfoAtom = new SplitSegInfoV1Atom<x86_64>(_options, state, *this);
 				splitSegInfoSection = state.addAtom(*_splitSegInfoAtom);
 			}
 			if ( _hasFunctionStartsInfo ) {
@@ -3790,7 +3905,7 @@ void OutputFile::generateLinkEditInfo(ld::Internal& state)
 	for (std::vector<ld::Internal::FinalSection*>::iterator sit = state.sections.begin(); sit != state.sections.end(); ++sit) {
 		ld::Internal::FinalSection* sect = *sit;
 		// record end of last __TEXT section encrypted iPhoneOS apps.
-		if ( _options.makeEncryptable() && (strcmp(sect->segmentName(), "__TEXT") == 0) ) { 
+		if ( _options.makeEncryptable() && (strcmp(sect->segmentName(), "__TEXT") == 0) && (strcmp(sect->sectionName(), "__oslogstring") != 0) ) {
 			_encryptedTEXTendOffset = pageAlign(sect->fileOffset + sect->size);
 		}
 		bool objc1ClassRefSection = ( (sect->type() == ld::Section::typeCStringPointer) 
@@ -3928,14 +4043,17 @@ void OutputFile::noteTextReloc(const ld::Atom* atom, const ld::Atom* target)
 	else if ( _options.positionIndependentExecutable() && (_options.outputKind() == Options::kDynamicExecutable) 
 		&& ((_options.iOSVersionMin() >= ld::iOS_4_3) || (_options.macosxVersionMin() >= ld::mac10_7)) ) {
 		if ( ! this->pieDisabled ) {
+			switch ( _options.architecture()) {
 #if SUPPORT_ARCH_arm64
-			if ( _options.architecture() == CPU_TYPE_ARM64 ) {
+            case CPU_TYPE_ARM64:
+#endif
+#if SUPPORT_ARCH_arm64
+			{
 				const char* demangledName = strdup(_options.demangleSymbol(atom->name()));
 				throwf("Absolute addressing not allowed in arm64 code but used in '%s' referencing '%s'", demangledName, _options.demangleSymbol(target->name()));
 			}
-			else
 #endif
-			 {
+            default:
 				warning("PIE disabled. Absolute addressing (perhaps -mdynamic-no-pic) not allowed in code signed PIE, "
 				"but used in %s from %s. " 
 				"To fix this warning, don't compile with -mdynamic-no-pic or link with -Wl,-no_pie", 
@@ -3982,9 +4100,9 @@ void OutputFile::addDyldInfo(ld::Internal& state,  ld::Internal::FinalSection* s
 				}
 				// Have direct reference to weak-global.  This should be an indrect reference
 				const char* demangledName = strdup(_options.demangleSymbol(atom->name()));
-				warning("direct access in %s to global weak symbol %s means the weak symbol cannot be overridden at runtime. "
+				warning("direct access in function '%s' from file '%s' to global weak symbol '%s' from file '%s' means the weak symbol cannot be overridden at runtime. "
 						"This was likely caused by different translation units being compiled with different visibility settings.",
-						  demangledName, _options.demangleSymbol(target->name()));
+						  demangledName, atom->file()->path(), _options.demangleSymbol(target->name()), target->file()->path());
 			}
 			return;
 		}
@@ -4011,9 +4129,9 @@ void OutputFile::addDyldInfo(ld::Internal& state,  ld::Internal::FinalSection* s
 			}
 			// Have direct reference to weak-global.  This should be an indrect reference
 			const char* demangledName = strdup(_options.demangleSymbol(atom->name()));
-			warning("direct access in %s to global weak symbol %s means the weak symbol cannot be overridden at runtime. "
+			warning("direct access in function '%s' from file '%s' to global weak symbol '%s' from file '%s' means the weak symbol cannot be overridden at runtime. "
 					"This was likely caused by different translation units being compiled with different visibility settings.",
-					 demangledName, _options.demangleSymbol(target->name()));
+					  demangledName, atom->file()->path(), _options.demangleSymbol(target->name()), target->file()->path());
 		}
 		return;
 	}
@@ -4154,7 +4272,8 @@ void OutputFile::addDyldInfo(ld::Internal& state,  ld::Internal::FinalSection* s
 		if ( _options.sharedRegionEligible() ) {
 			// <rdar://problem/13287063> when range checking, ignore high byte of arm64 addends
 			uint64_t checkAddend = addend;
-			if ( _options.architecture() == CPU_TYPE_ARM64 )
+			if ( (_options.architecture() == CPU_TYPE_ARM64)
+			   )
 				checkAddend &= 0x0FFFFFFFFFFFFFFFULL;
 			if ( checkAddend != 0 ) {
 				// make sure the addend does not cause the pointer to point outside the target's segment
@@ -4362,7 +4481,9 @@ void OutputFile::addClassicRelocs(ld::Internal& state, ld::Internal::FinalSectio
 
 bool OutputFile::useExternalSectionReloc(const ld::Atom* atom, const ld::Atom* target, ld::Fixup* fixupWithTarget)
 {
-	if ( (_options.architecture() == CPU_TYPE_X86_64) || (_options.architecture() == CPU_TYPE_ARM64) ) {
+	if ( (_options.architecture() == CPU_TYPE_X86_64)
+	  || (_options.architecture() == CPU_TYPE_ARM64)
+       ) {
 		// x86_64 and ARM64 use external relocations for everthing that has a symbol
 		return ( target->symbolTableInclusion() != ld::Atom::symbolTableNotIn );
 	}
@@ -4448,7 +4569,9 @@ void OutputFile::addSectionRelocs(ld::Internal& state, ld::Internal::FinalSectio
 	bool minusTargetUsesExternalReloc = (minusTarget != NULL) && this->useExternalSectionReloc(atom, minusTarget, fixupWithMinusTarget);
 	
 	// in x86_64 and arm64 .o files an external reloc means the content contains just the addend
-	if ( (_options.architecture() == CPU_TYPE_X86_64) ||(_options.architecture() == CPU_TYPE_ARM64)  ) {
+	if ( (_options.architecture() == CPU_TYPE_X86_64)
+	  || (_options.architecture() == CPU_TYPE_ARM64)
+	   ) {
 		if ( targetUsesExternalReloc ) {
 			fixupWithTarget->contentAddendOnly = true;
 			fixupWithStore->contentAddendOnly = true;
@@ -4512,7 +4635,7 @@ void OutputFile::makeSplitSegInfo(ld::Internal& state)
 				if ( fit->firstInCluster() ) 
 					target = NULL;
 				if ( this->setsTarget(fit->kind) ) {
-					accumulator = addressOf(state, fit, &target);			
+					accumulator = addressOf(state, fit, &target);
 					thumbTarget = targetIsThumb(state, fit);
 					if ( thumbTarget ) 
 						accumulator |= 1;
@@ -4582,7 +4705,7 @@ void OutputFile::makeSplitSegInfo(ld::Internal& state)
 						}
 						break;
 					case ld::Fixup::kindSetTargetImageOffset:
-						accumulator = addressOf(state, fit, &target);			
+						accumulator = addressOf(state, fit, &target);
 						assert(target != NULL);
 						hadSubtract = true;
 						break;
@@ -4623,6 +4746,7 @@ void OutputFile::makeSplitSegInfoV2(ld::Internal& state)
 			for (ld::Fixup::iterator fit = atom->fixupsBegin(), end=atom->fixupsEnd(); fit != end; ++fit) {
 				if ( fit->firstInCluster() ) {
 					target = NULL;
+					hadSubtract = false;
 					fromTarget = NULL;
 					kind = 0;
 					addend = 0;
@@ -4630,7 +4754,7 @@ void OutputFile::makeSplitSegInfoV2(ld::Internal& state)
 					fromOffset = atom->finalAddress() + fit->offsetInAtom - sect->address;
 				}
 				if ( this->setsTarget(fit->kind) ) {
-					accumulator = addressOf(state, fit, &target);			
+					accumulator = addressAndTarget(state, fit, &target);
 					thumbTarget = targetIsThumb(state, fit);
 					if ( thumbTarget ) 
 						accumulator |= 1;
@@ -4644,7 +4768,7 @@ void OutputFile::makeSplitSegInfoV2(ld::Internal& state)
 				}
 				switch ( fit->kind ) {
 					case ld::Fixup::kindSubtractTargetAddress:
-                        accumulator -= addressOf(state, fit, &fromTarget);
+                        accumulator -= addressAndTarget(state, fit, &fromTarget);
 						hadSubtract = true;
 						break;
                     case ld::Fixup::kindAddAddend:
@@ -4749,7 +4873,7 @@ void OutputFile::makeSplitSegInfoV2(ld::Internal& state)
 						break;
 					case ld::Fixup::kindSetTargetImageOffset:
 						kind = DYLD_CACHE_ADJ_V2_IMAGE_OFF_32;
-						accumulator = addressOf(state, fit, &target);			
+						accumulator = addressAndTarget(state, fit, &target);
 						assert(target != NULL);
 						toSectionIndex = target->machoSection();
 						toOffset = accumulator - state.atomToSection[target]->address;
@@ -4801,7 +4925,7 @@ void OutputFile::writeMapFile(ld::Internal& state)
 					continue;
 				for (std::vector<const ld::Atom*>::iterator ait = sect->atoms.begin(); ait != sect->atoms.end(); ++ait) {
 					const ld::Atom* atom = *ait;
-					const ld::File* reader = atom->file();
+					const ld::File* reader = atom->originalFile();
 					if ( reader == NULL )
 						continue;
 					ld::File::Ordinal readerOrdinal = reader->ordinal();
@@ -4810,6 +4934,17 @@ void OutputFile::writeMapFile(ld::Internal& state)
 						readerToOrdinal[reader] = readerOrdinal;
 						ordinalToReader[readerOrdinal] = reader;
 					}
+				}
+			}
+			for (const ld::Atom* atom : state.deadAtoms) {
+				const ld::File* reader = atom->originalFile();
+				if ( reader == NULL )
+					continue;
+				ld::File::Ordinal readerOrdinal = reader->ordinal();
+				std::map<const ld::File*, ld::File::Ordinal>::iterator pos = readerToOrdinal.find(reader);
+				if ( pos == readerToOrdinal.end() ) {
+					readerToOrdinal[reader] = readerOrdinal;
+					ordinalToReader[readerOrdinal] = reader;
 				}
 			}
 			fprintf(mapFile, "# Object files:\n");
@@ -4846,7 +4981,21 @@ void OutputFile::writeMapFile(ld::Internal& state)
 						continue;
 					if ( atom->contentType() == ld::Atom::typeCString ) {
 						strcpy(buffer, "literal string: ");
-						strlcat(buffer, (char*)atom->rawContentPointer(), 4096);
+						const char* s = (char*)atom->rawContentPointer();
+						char* e = &buffer[4094];
+						for (char* b = &buffer[strlen(buffer)]; b < e;) {
+							char c = *s++;
+							if ( c == '\n' ) {
+								*b++ = '\\';
+								*b++ = 'n';
+							}
+							else {
+								*b++ = c;
+							}
+							if ( c == '\0' )
+								break;
+						}
+						buffer[4095] = '\0';
 						name = buffer;
 					}
 					else if ( (atom->contentType() == ld::Atom::typeCFI) && (strcmp(name, "FDE") == 0) ) {
@@ -4878,7 +5027,41 @@ void OutputFile::writeMapFile(ld::Internal& state)
 						name = buffer;
 					}
 					fprintf(mapFile, "0x%08llX\t0x%08llX\t[%3u] %s\n", atom->finalAddress(), atom->size(), 
-							readerToFileOrdinal[atom->file()], name);
+							readerToFileOrdinal[atom->originalFile()], name);
+				}
+			}
+			// preload check is hack until 26613948 is fixed
+			if ( _options.deadCodeStrip() && (_options.outputKind() != Options::kPreload) ) {
+				fprintf(mapFile, "\n");
+				fprintf(mapFile, "# Dead Stripped Symbols:\n");
+				fprintf(mapFile, "#        \tSize    \tFile  Name\n");
+				for (const ld::Atom* atom : state.deadAtoms) {
+					char buffer[4096];
+					const char* name = atom->name();
+					// don't add auto-stripped aliases to .map file
+					if ( (atom->size() == 0) && (atom->symbolTableInclusion() == ld::Atom::symbolTableNotInFinalLinkedImages) )
+						continue;
+					if ( atom->contentType() == ld::Atom::typeCString ) {
+						strcpy(buffer, "literal string: ");
+						const char* s = (char*)atom->rawContentPointer();
+						char* e = &buffer[4094];
+						for (char* b = &buffer[strlen(buffer)]; b < e;) {
+							char c = *s++;
+							if ( c == '\n' ) {
+								*b++ = '\\';
+								*b++ = 'n';
+							}
+							else {
+								*b++ = c;
+							}
+							if ( c == '\0' )
+								break;
+						}
+						buffer[4095] = '\0';
+						name = buffer;
+					}
+					fprintf(mapFile, "<<dead>> \t0x%08llX\t[%3u] %s\n",  atom->size(),
+							readerToFileOrdinal[atom->originalFile()], name);
 				}
 			}
 			fclose(mapFile);
@@ -4889,6 +5072,101 @@ void OutputFile::writeMapFile(ld::Internal& state)
 	}
 }
 
+void OutputFile::writeJSONEntry(ld::Internal& state)
+{
+	if ( _options.traceEmitJSON() && (_options.UUIDMode() != Options::kUUIDNone) && (_options.traceOutputFile() != NULL) ) {
+
+		// Convert the UUID to a string.
+		const uint8_t* uuid = _headersAndLoadCommandAtom->getUUID();
+		uuid_string_t uuidString;
+
+		uuid_unparse(uuid, uuidString);
+		
+		// Enumerate the dylibs.
+		std::vector<const ld::dylib::File*> dynamicList;
+		std::vector<const ld::dylib::File*> upwardList;
+		std::vector<const ld::dylib::File*> reexportList;
+
+		for (const ld::dylib::File* dylib :  _dylibsToLoad) {
+			
+			if (dylib->willBeUpwardDylib()) {
+			
+				upwardList.push_back(dylib);
+			} else if (dylib->willBeReExported()) {
+			 
+				reexportList.push_back(dylib);
+			} else {
+			
+				dynamicList.push_back(dylib);
+			}
+		}
+		
+		/*
+		 * Build the JSON entry.
+		 */
+		
+		std::string	jsonEntry = "{";
+
+		jsonEntry += "\"uuid\":\"" + std::string(uuidString) + "\",";
+
+		// installPath() returns -final_output for non-dylibs
+		const char* lastNameSlash = strrchr(_options.installPath(), '/');
+		const char* leafName = (lastNameSlash != NULL) ? lastNameSlash+1 : _options.outputFilePath();
+		jsonEntry += "\"name\":\"" + std::string(leafName) + "\",";
+
+		jsonEntry += "\"arch\":\"" + std::string(_options.architectureName()) + "\"";
+
+		if (dynamicList.size() > 0) {
+			jsonEntry += ",\"dynamic\":[";
+			for (const ld::dylib::File* dylib :  dynamicList) {
+				jsonEntry += "\"" + std::string(dylib->path()) + "\"";
+				if ((dylib != dynamicList.back())) {
+					jsonEntry += ",";
+				}
+			}
+			jsonEntry += "]";
+		}
+		
+		if (upwardList.size() > 0) {
+			jsonEntry += ",\"upward-dynamic\":[";
+			for (const ld::dylib::File* dylib :  upwardList) {
+				jsonEntry += "\"" + std::string(dylib->path()) + "\"";
+				if ((dylib != upwardList.back())) {
+					jsonEntry += ",";
+				}
+			}
+			jsonEntry += "]";
+		}
+		
+		if (reexportList.size() > 0) {
+			jsonEntry += ",\"re-exports\":[";
+			for (const ld::dylib::File* dylib :  reexportList) {
+				jsonEntry += "\"" + std::string(dylib->path()) + "\"";
+				if ((dylib != reexportList.back())) {
+					jsonEntry += ",";
+				}
+			}
+			jsonEntry += "]";
+		}
+		
+		if (state.archivePaths.size() > 0) {
+			jsonEntry += ",\"archives\":[";
+			for (const std::string& archivePath : state.archivePaths) {
+				jsonEntry += "\"" + std::string(archivePath) + "\"";
+				if ((archivePath != state.archivePaths.back())) {
+					jsonEntry += ",";
+				}
+			}
+			jsonEntry += "]";
+		}
+		jsonEntry += "}\n";
+		
+		// Write the JSON entry to the trace file.
+		std::ofstream out(_options.traceOutputFile(), ios::app);
+		out << jsonEntry;
+	}
+}
+	
 // used to sort atoms with debug notes
 class DebugNoteSorter
 {

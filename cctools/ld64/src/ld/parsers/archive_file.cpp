@@ -45,7 +45,6 @@
 
 namespace archive {
 
-typedef const struct ranlib* ConstRanLibPtr;
 
 // forward reference
 template <typename A> class File;
@@ -114,26 +113,30 @@ private:
 	struct MemberState { ld::relocatable::File* file; const Entry *entry; bool logged; bool loaded; uint32_t index;};
 	bool											loadMember(MemberState& state, ld::File::AtomHandler& handler, const char *format, ...) const;
 
-	typedef std::unordered_map<const char*, const struct ranlib*, ld::CStringHash, ld::CStringEquals> NameToEntryMap;
+	typedef std::unordered_map<const char*, uint64_t, ld::CStringHash, ld::CStringEquals> NameToOffsetMap;
 
 	typedef typename A::P							P;
 	typedef typename A::P::E						E;
 
 	typedef std::map<const class Entry*, MemberState> MemberToStateMap;
 
-	const struct ranlib*							ranlibHashSearch(const char* name) const;
 	MemberState&									makeObjectFileForMember(const Entry* member) const;
 	bool											memberHasObjCCategories(const Entry* member) const;
 	void											dumpTableOfContents();
 	void											buildHashTable();
-
+#ifdef SYMDEF_64
+	void											buildHashTable64();
+#endif
 	const uint8_t*									_archiveFileContent;
 	uint64_t										_archiveFilelength;
 	const struct ranlib*							_tableOfContents;
+#ifdef SYMDEF_64
+	const struct ranlib_64*							_tableOfContents64;
+#endif
 	uint32_t										_tableOfContentCount;
 	const char*										_tableOfContentStrings;
 	mutable MemberToStateMap						_instantiatedEntries;
-	NameToEntryMap									_hashTable;
+	NameToOffsetMap									_hashTable;
 	const bool										_forceLoadAll;
 	const bool										_forceLoadObjC;
 	const bool										_forceLoadThis;
@@ -227,7 +230,6 @@ template <> cpu_type_t File<x86_64>::architecture() { return CPU_TYPE_X86_64; }
 template <> cpu_type_t File<arm>::architecture()    { return CPU_TYPE_ARM; }
 template <> cpu_type_t File<arm64>::architecture()  { return CPU_TYPE_ARM64; }
 
-
 template <typename A>
 bool File<A>::validMachOFile(const uint8_t* fileContent, uint64_t fileLength, const mach_o::relocatable::ParserOptions& opts)
 {	
@@ -260,6 +262,10 @@ bool File<A>::validFile(const uint8_t* fileContent, uint64_t fileLength, const m
 		// skip option table-of-content member
 		if ( (p==start) && ((strcmp(memberName, SYMDEF_SORTED) == 0) || (strcmp(memberName, SYMDEF) == 0)) )
 			continue;
+#ifdef SYMDEF_64
+		if ( (p==start) && ((strcmp(memberName, SYMDEF_64_SORTED) == 0) || (strcmp(memberName, SYMDEF_64) == 0)) )
+			continue;
+#endif
 		// archive is valid if first .o file is valid
 		return (validMachOFile(p->content(), p->contentSize(), opts)
 #ifdef LTO_SUPPORT
@@ -277,7 +283,11 @@ File<A>::File(const uint8_t fileContent[], uint64_t fileLength, const char* pth,
 					ld::File::Ordinal ord, const ParserOptions& opts)
  : ld::archive::File(strdup(pth), modTime, ord),
 	_archiveFileContent(fileContent), _archiveFilelength(fileLength), 
-	_tableOfContents(NULL), _tableOfContentCount(0), _tableOfContentStrings(NULL), 
+	_tableOfContents(NULL),
+#ifdef SYMDEF_64
+	_tableOfContents64(NULL),
+#endif
+	_tableOfContentCount(0), _tableOfContentStrings(NULL),
 	_forceLoadAll(opts.forceLoadAll), _forceLoadObjC(opts.forceLoadObjC), 
 	_forceLoadThis(opts.forceLoadThisArchive), _objc2ABI(opts.objcABI2), _verboseLoad(opts.verboseLoad), 
 	_logAllFiles(opts.logAllFiles), _objOpts(opts.objOpts)
@@ -300,6 +310,19 @@ File<A>::File(const uint8_t fileContent[], uint64_t fileLength, const char* pth,
 				throw "malformed archive, perhaps wrong architecture";
 			this->buildHashTable();
 		}
+#ifdef SYMDEF_64
+		else if ( (strcmp(memberName, SYMDEF_64_SORTED) == 0) || (strcmp(memberName, SYMDEF_64) == 0) ) {
+			const uint8_t* contents = firstMember->content();
+			uint64_t ranlibArrayLen = E::get64(*((uint64_t*)contents));
+			_tableOfContents64 = (const struct ranlib_64*)&contents[8];
+			_tableOfContentCount = ranlibArrayLen / sizeof(struct ranlib_64);
+			_tableOfContentStrings = (const char*)&contents[ranlibArrayLen+16];
+			if ( ((uint8_t*)(&_tableOfContents[_tableOfContentCount]) > &fileContent[fileLength])
+				|| ((uint8_t*)_tableOfContentStrings > &fileContent[fileLength]) )
+				throw "malformed archive, perhaps wrong architecture";
+			this->buildHashTable64();
+		}
+#endif
 		else
 			throw "archive has no table of contents";
 	}
@@ -438,15 +461,19 @@ bool File<A>::forEachAtom(ld::File::AtomHandler& handler) const
 			p->getName(memberName, sizeof(memberName));
 			if ( (p==start) && ((strcmp(memberName, SYMDEF_SORTED) == 0) || (strcmp(memberName, SYMDEF) == 0)) )
 				continue;
+#ifdef SYMDEF_64
+			if ( (p==start) && ((strcmp(memberName, SYMDEF_64_SORTED) == 0) || (strcmp(memberName, SYMDEF_64) == 0)) )
+				continue;
+#endif
 			MemberState& state = this->makeObjectFileForMember(p);
 			didSome |= loadMember(state, handler, "%s forced load of %s(%s)\n", _forceLoadThis ? "-force_load" : "-all_load", this->path(), memberName);
 		}
 	}
 	else if ( _forceLoadObjC ) {
 		// call handler on all .o files in this archive containing objc classes
-		for(typename NameToEntryMap::const_iterator it = _hashTable.begin(); it != _hashTable.end(); ++it) {
-			if ( (strncmp(it->first, ".objc_c", 7) == 0) || (strncmp(it->first, "_OBJC_CLASS_$_", 14) == 0) ) {
-				const Entry* member = (Entry*)&_archiveFileContent[E::get32(it->second->ran_off)];
+		for (const auto& entry : _hashTable) {
+			if ( (strncmp(entry.first, ".objc_c", 7) == 0) || (strncmp(entry.first, "_OBJC_CLASS_$_", 14) == 0) ) {
+				const Entry* member = (Entry*)&_archiveFileContent[entry.second];
 				MemberState& state = this->makeObjectFileForMember(member);
 				char memberName[256];
 				member->getName(memberName, sizeof(memberName));
@@ -462,14 +489,31 @@ bool File<A>::forEachAtom(ld::File::AtomHandler& handler) const
 			// skip table-of-content member
 			if ( (member==start) && ((strcmp(mname, SYMDEF_SORTED) == 0) || (strcmp(mname, SYMDEF) == 0)) )
 				continue;
-			MemberState& state = this->makeObjectFileForMember(member);
-			// only look at files not already loaded
-			if ( ! state.loaded ) {
-				if ( this->memberHasObjCCategories(member) ) {
+#ifdef SYMDEF_64
+			if ( (member==start) && ((strcmp(mname, SYMDEF_64_SORTED) == 0) || (strcmp(mname, SYMDEF_64) == 0)) )
+				continue;
+#endif
+			if ( validMachOFile(member->content(), member->contentSize(), _objOpts) ) {
+				MemberState& state = this->makeObjectFileForMember(member);
+				// only look at files not already loaded
+				if ( ! state.loaded ) {
+					if ( this->memberHasObjCCategories(member) ) {
+						MemberState& state = this->makeObjectFileForMember(member);
+						char memberName[256];
+						member->getName(memberName, sizeof(memberName));
+						didSome |= loadMember(state, handler, "-ObjC forced load of %s(%s)\n", this->path(), memberName);
+					}
+				}
+			}
+			else if ( validLTOFile(member->content(), member->contentSize(), _objOpts) ) {
+				if ( lto::hasObjCCategory(member->content(), member->contentSize()) ) {
 					MemberState& state = this->makeObjectFileForMember(member);
-					char memberName[256];
-					member->getName(memberName, sizeof(memberName));
-					didSome |= loadMember(state, handler, "-ObjC forced load of %s(%s)\n", this->path(), memberName);
+					// only look at files not already loaded
+					if ( ! state.loaded ) {
+						char memberName[256];
+						member->getName(memberName, sizeof(memberName));
+						didSome |= loadMember(state, handler, "-ObjC forced load of %s(%s)\n", this->path(), memberName);
+					}
 				}
 			}
 		}
@@ -485,16 +529,16 @@ bool File<A>::justInTimeforEachAtom(const char* name, ld::File::AtomHandler& han
 		return false;
 	
 	// do a hash search of table of contents looking for requested symbol
-	const struct ranlib* result = ranlibHashSearch(name);
-	if ( result != NULL ) {
-		const Entry* member = (Entry*)&_archiveFileContent[E::get32(result->ran_off)];
-		MemberState& state = this->makeObjectFileForMember(member);
-		char memberName[256];
-		member->getName(memberName, sizeof(memberName));
-		return loadMember(state, handler, "%s forced load of %s(%s)\n", name, this->path(), memberName);
-	}
-	//fprintf(stderr, "%s NOT found in archive %s\n", name, this->path());
-	return false;
+	const auto& pos = _hashTable.find(name);
+	if ( pos == _hashTable.end() )
+		return false;
+
+	// do a hash search of table of contents looking for requested symbol
+	const Entry* member = (Entry*)&_archiveFileContent[pos->second];
+	MemberState& state = this->makeObjectFileForMember(member);
+	char memberName[256];
+	member->getName(memberName, sizeof(memberName));
+	return loadMember(state, handler, "%s forced load of %s(%s)\n", name, this->path(), memberName);
 }
 
 class CheckIsDataSymbolHandler : public ld::File::AtomHandler
@@ -524,36 +568,25 @@ bool File<A>::justInTimeDataOnlyforEachAtom(const char* name, ld::File::AtomHand
 		return false;
 	
 	// do a hash search of table of contents looking for requested symbol
-	const struct ranlib* result = ranlibHashSearch(name);
-	if ( result != NULL ) {
-		const Entry* member = (Entry*)&_archiveFileContent[E::get32(result->ran_off)];
-		MemberState& state = this->makeObjectFileForMember(member);
-		// only call handler for each member once
-		if ( ! state.loaded ) {
-			CheckIsDataSymbolHandler checker(name);
-			state.file->forEachAtom(checker);
-			if ( checker.symbolIsDataDefinition() ) {
-				char memberName[256];
-				member->getName(memberName, sizeof(memberName));
-				return loadMember(state, handler, "%s forced load of %s(%s)\n", name, this->path(), memberName);
-			}
+	const auto& pos = _hashTable.find(name);
+	if ( pos == _hashTable.end() )
+		return false;
+
+	const Entry* member = (Entry*)&_archiveFileContent[pos->second];
+	MemberState& state = this->makeObjectFileForMember(member);
+	// only call handler for each member once
+	if ( ! state.loaded ) {
+		CheckIsDataSymbolHandler checker(name);
+		state.file->forEachAtom(checker);
+		if ( checker.symbolIsDataDefinition() ) {
+			char memberName[256];
+			member->getName(memberName, sizeof(memberName));
+			return loadMember(state, handler, "%s forced load of %s(%s)\n", name, this->path(), memberName);
 		}
 	}
+
 	//fprintf(stderr, "%s NOT found in archive %s\n", name, this->path());
 	return false;
-}
-
-
-typedef const struct ranlib* ConstRanLibPtr;
-
-template <typename A>
-ConstRanLibPtr  File<A>::ranlibHashSearch(const char* name) const
-{
-	typename NameToEntryMap::const_iterator pos = _hashTable.find(name);
-	if ( pos != _hashTable.end() )
-		return pos->second;
-	else
-		return NULL;
 }
 
 template <typename A>
@@ -564,16 +597,38 @@ void File<A>::buildHashTable()
 	for (int i = _tableOfContentCount-1; i >= 0; --i) {
 		const struct ranlib* entry = &_tableOfContents[i];
 		const char* entryName = &_tableOfContentStrings[E::get32(entry->ran_un.ran_strx)];
-		if ( E::get32(entry->ran_off) > _archiveFilelength ) {
+		uint64_t offset = E::get32(entry->ran_off);
+		if ( offset > _archiveFilelength ) {
 			throwf("malformed archive TOC entry for %s, offset %d is beyond end of file %lld\n",
 				entryName, entry->ran_off, _archiveFilelength);
 		}
 		
 		//const Entry* member = (Entry*)&_archiveFileContent[E::get32(entry->ran_off)];
 		//fprintf(stderr, "adding hash %d, %s -> %p\n", i, entryName, entry);
-		_hashTable[entryName] = entry;
+		_hashTable[entryName] = offset;
 	}
 }
+
+#ifdef SYMDEF_64
+template <typename A>
+void File<A>::buildHashTable64()
+{
+	// walk through list backwards, adding/overwriting entries
+	// this assures that with duplicates those earliest in the list will be found
+	for (int i = _tableOfContentCount-1; i >= 0; --i) {
+		const struct ranlib_64* entry = &_tableOfContents64[i];
+		const char* entryName = &_tableOfContentStrings[E::get64(entry->ran_un.ran_strx)];
+		uint64_t offset = E::get64(entry->ran_off);
+		if ( offset > _archiveFilelength ) {
+			throwf("malformed archive TOC entry for %s, offset %lld is beyond end of file %lld\n",
+				entryName, entry->ran_off, _archiveFilelength);
+		}
+
+		//fprintf(stderr, "adding hash %d: %s -> 0x%0llX\n", i, entryName, offset);
+		_hashTable[entryName] = offset;
+	}
+}
+#endif
 
 template <typename A>
 void File<A>::dumpTableOfContents()

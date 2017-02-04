@@ -160,10 +160,10 @@ public:
 		}
 
         // Create an empty FileInfo. The path can be set implicitly by checkFileExists().
-        FileInfo() : path(NULL), fileLen(0), modTime(0), options(), fromFileList(false) {};
+        FileInfo() : path(NULL), fileLen(0), modTime(-1), options(), fromFileList(false) {};
         
         // Create a FileInfo for a specific path, but does not stat the file.
-        FileInfo(const char *_path) : path(strdup(_path)), fileLen(0), modTime(0), options(), fromFileList(false) {};
+        FileInfo(const char *_path) : path(strdup(_path)), fileLen(0), modTime(-1), options(), fromFileList(false) {};
 
         ~FileInfo() { if (path) ::free((void*)path); }
         
@@ -175,7 +175,7 @@ public:
         
         // Returns true if a previous call to checkFileExists() succeeded.
         // Returns false if the file does not exist of checkFileExists() has never been called.
-        bool missing() const { return modTime==0; }
+        bool missing() const { return modTime == -1; }
 	};
 
 	struct ExtraSection {
@@ -292,6 +292,7 @@ public:
 	bool						ignoreOtherArchInputFiles() const { return fIgnoreOtherArchFiles; }
 	bool						traceDylibs() const	{ return fTraceDylibs; }
 	bool						traceArchives() const { return fTraceArchives; }
+	bool						traceEmitJSON() const { return fTraceEmitJSON; }
 	bool						deadCodeStrip()	const	{ return fDeadStrip; }
 	UndefinedTreatment			undefinedTreatment() const { return fUndefinedTreatment; }
 	ld::MacVersionMin			macosxVersionMin() const { return fMacVersionMin; }
@@ -325,7 +326,7 @@ public:
 	CommonsMode					commonsMode() const { return fCommonsMode; }
 	bool						warnCommons() const { return fWarnCommons; }
 	bool						keepRelocations();
-	FileInfo					findFile(const std::string &path) const;
+	FileInfo					findFile(const std::string &path, const ld::dylib::File* fromDylib=nullptr) const;
 	bool						findFile(const std::string &path, const std::vector<std::string> &tbdExtensions, FileInfo& result) const;
 	UUIDMode					UUIDMode() const { return fUUIDMode; }
 	bool						warnStabs();
@@ -356,7 +357,7 @@ public:
 	const std::vector<DylibOverride>&	dylibOverrides() const { return fDylibOverrides; }
 	const char*					generatedMapPath() const { return fMapPath; }
 	bool						positionIndependentExecutable() const { return fPositionIndependentExecutable; }
-	Options::FileInfo			findFileUsingPaths(const std::string &path) const;
+	Options::FileInfo			findIndirectDylib(const std::string& installName, const ld::dylib::File* fromDylib) const;
 	bool						deadStripDylibs() const { return fDeadStripDylibs; }
 	bool						allowedUndefined(const char* name) const { return ( fAllowedUndefined.find(name) != fAllowedUndefined.end() ); }
 	bool						someAllowedUndefines() const { return (fAllowedUndefined.size() != 0); }
@@ -411,6 +412,10 @@ public:
 	bool						addFunctionStarts() const { return fFunctionStartsLoadCommand; }
 	bool						addDataInCodeInfo() const { return fDataInCodeInfoLoadCommand; }
 	bool						canReExportSymbols() const { return fCanReExportSymbols; }
+	const char*					ltoCachePath() const { return fLtoCachePath; }
+	int							ltoPruneInterval() const { return fLtoPruneInterval; }
+	int							ltoPruneAfter() const { return fLtoPruneAfter; }
+	unsigned					ltoMaxCacheSize() const { return fLtoMaxCacheSize; }
 	const char*					tempLtoObjectPath() const { return fTempLtoObjectPath; }
 	const char*					overridePathlibLTO() const { return fOverridePathlibLTO; }
 	const char*					mcpuLTO() const { return fLtoCpu; }
@@ -436,9 +441,11 @@ public:
 	bool						ltoCodegenOnly() const { return fLTOCodegenOnly; }
 	bool						ignoreAutoLink() const { return fIgnoreAutoLink; }
 	bool						allowDeadDuplicates() const { return fAllowDeadDups; }
+	bool						allowWeakImports() const { return fAllowWeakImports; }
 	BitcodeMode					bitcodeKind() const { return fBitcodeKind; }
 	bool						sharedRegionEncodingV2() const { return fSharedRegionEncodingV2; }
 	bool						useDataConstSegment() const { return fUseDataConstSegment; }
+	bool						useTextExecSegment() const { return fUseTextExecSegment; }
 	bool						hasWeakBitTweaks() const;
 	bool						forceWeak(const char* symbolName) const;
 	bool						forceNotWeak(const char* symbolName) const;
@@ -475,6 +482,8 @@ public:
 	std::string					getSDKVersionStr() const;
 	std::string					getPlatformStr() const;
 	uint8_t						maxDefaultCommonAlign() const { return fMaxDefaultCommonAlign; }
+	bool						hasDataSymbolMoves() const { return !fSymbolsMovesData.empty(); }
+	bool						hasCodeSymbolMoves() const { return !fSymbolsMovesCode.empty(); }
 
 	static uint32_t				parseVersionNumber32(const char*);
 
@@ -484,7 +493,6 @@ private:
 	enum ExportMode { kExportDefault, kExportSome, kDontExportSome };
 	enum LibrarySearchMode { kSearchDylibAndArchiveInEachDir, kSearchAllDirsForDylibsThenAllDirsForArchives };
 	enum InterposeMode { kInterposeNone, kInterposeAllExternal, kInterposeSome };
-	enum FilePreference { kModTime, kTextBasedStub, kMachO };
 
 	class SetWithWildcards {
 	public:
@@ -611,6 +619,10 @@ private:
 	const char*							fSegAddrTablePath;
 	const char*							fMapPath;
 	const char*							fDyldInstallPath;
+	const char*							fLtoCachePath;
+	int									fLtoPruneInterval;
+	int									fLtoPruneAfter;
+	unsigned							fLtoMaxCacheSize;
 	const char*							fTempLtoObjectPath;
 	const char*							fOverridePathlibLTO;
 	const char*							fLtoCpu;
@@ -687,6 +699,7 @@ private:
 	bool								fTraceDylibs;
 	bool								fTraceIndirectDylibs;
 	bool								fTraceArchives;
+	bool								fTraceEmitJSON;
 	bool								fOutputSlidable;
 	bool								fWarnWeakExports;
 	bool								fObjcGcCompaction;
@@ -732,6 +745,7 @@ private:
 	bool								fUseDataConstSegment;
 	bool								fUseDataConstSegmentForceOn;
 	bool								fUseDataConstSegmentForceOff;
+	bool								fUseTextExecSegment;
 	bool								fBundleBitcode;
 	bool								fHideSymbols;
 	bool								fVerifyBitcode;
@@ -743,6 +757,7 @@ private:
 	bool								fLTOCodegenOnly;
 	bool								fIgnoreAutoLink;
 	bool								fAllowDeadDups;
+	bool								fAllowWeakImports;
 	BitcodeMode							fBitcodeKind;
 	Platform							fPlatform;
 	DebugInfoStripping					fDebugInfoStripping;
@@ -774,7 +789,6 @@ private:
 	std::vector<SegmentRename>			fSegmentRenames;
 	std::vector<SymbolsMove>			fSymbolsMovesData;
 	std::vector<SymbolsMove>			fSymbolsMovesCode;
-	std::vector<SymbolsMove>			fSymbolsMovesZeroFill;
 	bool								fSaveTempFiles;
     mutable Snapshot					fLinkSnapshot;
     bool								fSnapshotRequested;
@@ -782,8 +796,6 @@ private:
 	const char*							fDependencyInfoPath;
 	mutable int							fDependencyFileDescriptor;
 	uint8_t								fMaxDefaultCommonAlign;
-	FilePreference						fFilePreference;
-	bool								fForceTextBasedStub;
 };
 
 

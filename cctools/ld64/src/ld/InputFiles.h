@@ -60,7 +60,7 @@ public:
 								InputFiles(Options& opts, const char** archName);
 
 	// implementation from ld::dylib::File::DylibHandler
-	virtual ld::dylib::File*	findDylib(const char* installPath, const char* fromPath);
+	virtual ld::dylib::File*	findDylib(const char* installPath, const ld::dylib::File* fromDylib, bool speculative);
 	
 	// iterates all atoms in initial files
 	void						forEachInitialAtom(ld::File::AtomHandler&, ld::Internal& state);
@@ -71,6 +71,8 @@ public:
 	bool						searchWeakDefInDylib(const char* name) const;
 	// copy dylibs to link with in command line order
 	void						dylibs(ld::Internal& state);
+	
+	void						archives(ld::Internal& state);
 	
 	bool						inferredArch() const { return _inferredArch; }
 	
@@ -91,7 +93,7 @@ private:
 	ld::File*					makeFile(const Options::FileInfo& info, bool indirectDylib);
 	ld::File*					addDylib(ld::dylib::File* f,        const Options::FileInfo& info);
 	void						logTraceInfo (const char* format, ...) const;
-	void						logDylib(ld::File*, bool indirect);
+	void						logDylib(ld::File*, bool indirect, bool speculative);
 	void						logArchive(ld::File*) const;
 	void						markExplicitlyLinkedDylibs();
 	void						checkDylibClientRestrictions(ld::dylib::File*);
@@ -113,6 +115,7 @@ private:
 	const Options&				_options;
 	std::vector<ld::File*>		_inputFiles;
 	mutable std::set<class ld::File*>	_archiveFilesLogged;
+	mutable std::vector<std::string>	_archiveFilePaths;
 	InstallNameToDylib			_installPathToDylibs;
 	std::set<ld::dylib::File*>	_allDylibs;
 	ld::dylib::File*			_bundleLoader;

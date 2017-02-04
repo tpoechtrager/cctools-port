@@ -94,7 +94,7 @@ public:
 		
 		Ordinal (uint64_t ordinal) : _ordinal(ordinal) {}
 		
-		enum { kArgListPartition=0, kIndirectDylibPartition=1, kLTOPartition = 2, kLinkerOptionPartition = 2, InvalidParition=0xffff };
+		enum { kArgListPartition=0, kIndirectDylibPartition=1, kLTOPartition = 2, kLinkerOptionPartition = 3, InvalidParition=0xffff };
 		Ordinal(uint16_t partition, uint16_t majorIndex, uint16_t minorIndex, uint16_t counter) {
 			_ordinal = ((uint64_t)partition<<48) | ((uint64_t)majorIndex<<32) | ((uint64_t)minorIndex<<16) | ((uint64_t)counter<<0);
 		}
@@ -103,14 +103,14 @@ public:
 		const uint16_t	majorIndex() const		{ return (_ordinal>>32)&0xffff; }
 		const uint16_t	minorIndex() const		{ return (_ordinal>>16)&0xffff; }
 		const uint16_t	counter() const			{ return (_ordinal>>00)&0xffff; }
-		
+
 		const Ordinal nextMajorIndex()		const { assert(majorIndex() < 0xffff); return Ordinal(_ordinal+((uint64_t)1<<32)); }
 		const Ordinal nextMinorIndex()		const { assert(minorIndex() < 0xffff); return Ordinal(_ordinal+((uint64_t)1<<16)); }
 		const Ordinal nextCounter()		const { assert(counter() < 0xffff); return Ordinal(_ordinal+((uint64_t)1<<0)); }
 		
 	public:
 		Ordinal() : _ordinal(0) {};
-		
+
 		static const Ordinal NullOrdinal()		{ return Ordinal((uint64_t)0); }
 		
 		const bool validOrdinal() const { return _ordinal != 0; }
@@ -127,7 +127,7 @@ public:
 		// Thus, an object pulled in from a .a that was listed in a file list could use all three fields.
 		static const Ordinal makeArgOrdinal(uint16_t argIndex) { return Ordinal(kArgListPartition, argIndex, 0, 0); };
 		const Ordinal nextFileListOrdinal() const { return nextMinorIndex(); }
-		const Ordinal archiveOrdinalWithMemberIndex(uint16_t index) const { return Ordinal(kArgListPartition, majorIndex(), minorIndex(), index); }
+		const Ordinal archiveOrdinalWithMemberIndex(uint16_t memberIndex) const { return Ordinal(partition(), majorIndex(), minorIndex(), memberIndex); }
 		
 		// For indirect libraries the partition is IndirectDylibPartition and the counter is used or order the libraries.
 		static const ld::File::Ordinal indirectDylibBase() { return Ordinal(kIndirectDylibPartition, 0, 0, 0); }
@@ -138,8 +138,8 @@ public:
 
 		// For linker options embedded in object files
 		static const ld::File::Ordinal linkeOptionBase() { return Ordinal(kIndirectDylibPartition, 1, 0, 0); }
-		const Ordinal nextLinkerOptionOrdinal() { nextCounter(); return *this; };
-		
+		const Ordinal nextLinkerOptionOrdinal() { return nextCounter(); };
+
 	};
 	
 	typedef enum { Reloc, Dylib, Archive, Other } Type;
@@ -153,6 +153,7 @@ public:
 	virtual bool						forEachAtom(AtomHandler&) const = 0;
 	virtual bool						justInTimeforEachAtom(const char* name, AtomHandler&) const = 0;
 	virtual ObjcConstraint				objCConstraint() const			{ return objcConstraintNone; }
+    virtual bool						objcHasCategoryClassPropertiesField() const { return false; }
 	virtual uint8_t						swiftVersion() const			{ return 0; }
 	virtual uint32_t					cpuSubType() const		{ return 0; }
 	virtual uint32_t					subFileCount() const	{ return 1; }
@@ -174,11 +175,11 @@ private:
 //
 enum MacVersionMin { macVersionUnset=0, mac10_4=0x000A0400, mac10_5=0x000A0500, 
 						mac10_6=0x000A0600, mac10_7=0x000A0700, mac10_8=0x000A0800,
-						mac10_9=0x000A0900, mac10_Future=0x10000000 };
+						mac10_9=0x000A0900, mac10_12=0x000A0C00, mac10_Future=0x10000000 };
 enum IOSVersionMin { iOSVersionUnset=0, iOS_2_0=0x00020000, iOS_3_1=0x00030100, 
 						iOS_4_2=0x00040200, iOS_4_3=0x00040300, iOS_5_0=0x00050000,
 						iOS_6_0=0x00060000, iOS_7_0=0x00070000, iOS_8_0=0x00080000,
-						iOS_9_0=0x00090000, iOS_Future=0x10000000};
+						iOS_9_0=0x00090000, iOS_10_0=0x000A0000, iOS_Future=0x10000000};
 enum WatchOSVersionMin  { wOSVersionUnset=0, wOS_1_0=0x00010000, wOS_2_0=0x00020000 };
 
 
@@ -243,13 +244,13 @@ namespace dylib {
 		{
 		public:
 			virtual				~DylibHandler()	{}
-			virtual File*		findDylib(const char* installPath, const char* fromPath) = 0;
+			virtual File*		findDylib(const char* installPath, const ld::dylib::File* fromDylib, bool speculative) = 0;
 		};
 			
 											File(const char* pth, time_t modTime, Ordinal ord)
 												: ld::File(pth, modTime, ord, Dylib), _dylibInstallPath(NULL), _frameworkName(NULL),
 												_dylibTimeStamp(0), _dylibCurrentVersion(0), _dylibCompatibilityVersion(0),
-												_explicitlyLinked(false), _implicitlyLinked(false),
+												_explicitlyLinked(false), _implicitlyLinked(false), _speculativelyLoaded(false),
 												_lazyLoadedDylib(false), _forcedWeakLinked(false), _reExported(false),
 												_upward(false), _dead(false) { }
 				const char*					installPath() const			{ return _dylibInstallPath; }
@@ -261,7 +262,9 @@ namespace dylib {
 				bool						explicitlyLinked() const	{ return _explicitlyLinked; }
 				void						setImplicitlyLinked()		{ _implicitlyLinked = true; }
 				bool						implicitlyLinked() const	{ return _implicitlyLinked; }
-				
+				void						setSpeculativelyLoaded()	{ _speculativelyLoaded = true; }
+				bool						speculativelyLoaded() const	{ return _speculativelyLoaded; }
+
 				// attributes of how dylib will be used when linked
 				void						setWillBeLazyLoadedDylb()		{ _lazyLoadedDylib = true; }
 				bool						willBeLazyLoadedDylib() const	{ return _lazyLoadedDylib; }
@@ -279,6 +282,7 @@ namespace dylib {
 		virtual bool						providedExportAtom() const = 0;
 		virtual const char*					parentUmbrella() const = 0;
 		virtual const std::vector<const char*>*	allowableClients() const = 0;
+		virtual const std::vector<const char*>&	rpaths() const = 0;
 		virtual bool						hasWeakExternals() const = 0;
 		virtual bool						deadStrippable() const = 0;
 		virtual bool						hasWeakDefinition(const char* name) const = 0;
@@ -295,6 +299,7 @@ namespace dylib {
 		uint32_t							_dylibCompatibilityVersion;
 		bool								_explicitlyLinked;
 		bool								_implicitlyLinked;
+		bool								_speculativelyLoaded;
 		bool								_lazyLoadedDylib;
 		bool								_forcedWeakLinked;
 		bool								_reExported;
@@ -749,6 +754,9 @@ public:
 	bool									finalAddressMode() const    { return (_mode == modeFinalAddress); }
 #endif
 	virtual const File*						file() const = 0;
+	// Return the original file this atom belongs to, for instance for an LTO atom,
+	// file() would return the LTO MachO file instead of the original bitcode file.
+	virtual const ld::File*				    originalFile() const       { return file(); }
 	virtual const char*						translationUnitSource() const { return NULL; }
 	virtual const char*						name() const = 0;
 	virtual uint64_t						objectAddress() const = 0;
@@ -889,14 +897,16 @@ public:
 
 	std::vector<FinalSection*>					sections;
 	std::vector<ld::dylib::File*>				dylibs;
+	std::vector<std::string>					archivePaths;
 	std::vector<ld::relocatable::File::Stab>	stabs;
 	AtomToSection								atomToSection;		
+	CStringSet									unprocessedLinkerOptionLibraries;
+	CStringSet									unprocessedLinkerOptionFrameworks;
 	CStringSet									linkerOptionLibraries;
 	CStringSet									linkerOptionFrameworks;
-	CStringSet									linkerOptionLibrariesProcessed;
-	CStringSet									linkerOptionFrameworksProcessed;
 	std::vector<const ld::Atom*>				indirectBindingTable;
 	std::vector<const ld::relocatable::File*>	filesWithBitcode;
+	std::vector<const ld::Atom*>				deadAtoms;
 	std::unordered_set<const char*>				allUndefProxies;
 	const ld::dylib::File*						bundleLoader;
 	const Atom*									entryPoint;
@@ -918,7 +928,7 @@ public:
 	bool										someObjectHasOptimizationHints;
 	bool										dropAllBitcode;
 	bool										embedMarkerOnly;
-	std::string									ltoBitcodePath;
+	std::vector<std::string>					ltoBitcodePath;
 };
 
 

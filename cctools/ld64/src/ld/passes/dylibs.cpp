@@ -94,9 +94,11 @@ void doPass(const Options& opts, ld::Internal& state)
 						targetIsWeakImport = fit->weakImport;
 						break;
                     default:
-                        break;   
+                        break;
 				}
 				if ( (target != NULL) && (target->definition() == ld::Atom::definitionProxy) ) {
+					if ( targetIsWeakImport && !opts.allowWeakImports() )
+						throwf("weak import of symbol '%s' not supported because of option: -no_weak_imports", target->name());
 					ld::Atom::WeakImportState curWI = target->weakImportState();
 					if ( curWI == ld::Atom::weakImportUnset ) {
 						// first use of this proxy, set weak-import based on this usage

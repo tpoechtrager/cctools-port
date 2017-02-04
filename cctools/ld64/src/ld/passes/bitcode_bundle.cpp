@@ -666,10 +666,17 @@ void BitcodeBundle::doPass()
                 bh->populateMustPreserveSymbols(obfuscator);
                 handlerMap.emplace(std::string(f->path()), bh);
             } else if ( ld::LLVMBitcode* bitcode = dynamic_cast<ld::LLVMBitcode*>(f->getBitcode()) ) {
-                BitcodeHandler* bitcodeHandler = new BitcodeHandler((char*)bitcode->getContent(), bitcode->getSize());
-                bitcodeHandler->populateMustPreserveSymbols(obfuscator);
+                BitcodeHandler bitcodeHandler((char*)bitcode->getContent(), bitcode->getSize());
+                bitcodeHandler.populateMustPreserveSymbols(obfuscator);
             }
         }
+        // add must preserve symbols from lto input.
+        for ( auto &f : _state.ltoBitcodePath ) {
+            BitcodeTempFile ltoTemp(f.c_str(), false); // Keep the temp file because it needs to be read in later in the pass.
+            BitcodeHandler bitcodeHandler((char*)ltoTemp.getContent(), ltoTemp.getSize());
+            bitcodeHandler.populateMustPreserveSymbols(obfuscator);
+        }
+
         // special symbols supplied by linker
         obfuscator->addMustPreserveSymbols("___dso_handle");
         obfuscator->addMustPreserveSymbols("__mh_execute_header");
@@ -771,26 +778,30 @@ void BitcodeBundle::doPass()
         }
     }
 
-    // Write merged LTO bitcode
+    // Write merged LTO bitcode files
     if ( !_state.ltoBitcodePath.empty() ) {
-        xar_file_t ltoFile = NULL;
-        BitcodeTempFile* ltoTemp = new BitcodeTempFile(_state.ltoBitcodePath.c_str(), !_options.saveTempFiles());
-        if ( _options.hideSymbols() ) {
+        int count = 0;
+        for (auto &path : _state.ltoBitcodePath) {
+          std::string xar_name = "lto.o." + std::to_string(count++);
+          xar_file_t ltoFile = NULL;
+          BitcodeTempFile* ltoTemp = new BitcodeTempFile(path.c_str(), !_options.saveTempFiles());
+          if ( _options.hideSymbols() ) {
             ld::Bitcode ltoBitcode(ltoTemp->getContent(), ltoTemp->getSize());
             char ltoTempFile[PATH_MAX];
             sprintf(ltoTempFile, "%s/lto.bc", tempdir);
-            obfuscator->bitcodeHideSymbols(&ltoBitcode, _state.ltoBitcodePath.c_str(), ltoTempFile);
+            obfuscator->bitcodeHideSymbols(&ltoBitcode, path.c_str(), ltoTempFile);
             BitcodeTempFile* ltoStrip = new BitcodeTempFile(ltoTempFile, !_options.saveTempFiles());
-            ltoFile = xar_add_frombuffer(x, NULL, "lto.o", (char*)ltoStrip->getContent(), ltoStrip->getSize());
+            ltoFile = xar_add_frombuffer(x, NULL, xar_name.c_str(), (char*)ltoStrip->getContent(), ltoStrip->getSize());
             delete ltoStrip;
-        } else {
-            ltoFile = xar_add_frombuffer(x, NULL, "lto.o", (char*)ltoTemp->getContent(), ltoTemp->getSize());
+          } else {
+            ltoFile = xar_add_frombuffer(x, NULL, xar_name.c_str(), (char*)ltoTemp->getContent(), ltoTemp->getSize());
+          }
+          if ( ltoFile == NULL )
+            throwf("could not add lto file %s to bitcode bundle", path.c_str());
+          if ( xar_prop_set(ltoFile, "file-type", "LTO") != 0 )
+            throwf("could not set bitcode property for %s in bitcode bundle", path.c_str());
+          delete ltoTemp;
         }
-        if ( ltoFile == NULL )
-            throwf("could not add lto file %s to bitcode bundle", _state.ltoBitcodePath.c_str());
-        if ( xar_prop_set(ltoFile, "file-type", "LTO") != 0 )
-            throwf("could not set bitcode property for %s in bitcode bundle", _state.ltoBitcodePath.c_str());
-        delete ltoTemp;
     }
 
     // Common LinkOptions

@@ -311,8 +311,10 @@ void Resolver::doLinkerOption(const std::vector<const char*>& linkerOption, cons
 {
 	if ( linkerOption.size() == 1 ) {
 		const char* lo1 = linkerOption.front();
-		if ( strncmp(lo1, "-l", 2) == 0 ) {
-			_internal.linkerOptionLibraries.insert(&lo1[2]);
+		if ( strncmp(lo1, "-l", 2) == 0) {
+			if (_internal.linkerOptionLibraries.count(&lo1[2]) == 0) {
+				_internal.unprocessedLinkerOptionLibraries.insert(&lo1[2]);
+			}
 		}
 		else {
 			warning("unknown linker option from object file ignored: '%s' in %s", lo1, fileName);
@@ -321,8 +323,10 @@ void Resolver::doLinkerOption(const std::vector<const char*>& linkerOption, cons
 	else if ( linkerOption.size() == 2 ) {
 		const char* lo2a = linkerOption[0];
 		const char* lo2b = linkerOption[1];
-		if ( strcmp(lo2a, "-framework") == 0 ) {
-			_internal.linkerOptionFrameworks.insert(lo2b);
+		if ( strcmp(lo2a, "-framework") == 0) {
+			if (_internal.linkerOptionFrameworks.count(lo2b) == 0) {
+				_internal.unprocessedLinkerOptionFrameworks.insert(lo2b);
+			}
 		}
 		else {
 			warning("unknown linker option from object file ignored: '%s' '%s' from %s", lo2a, lo2b, fileName);
@@ -344,6 +348,9 @@ static void userReadableSwiftVersion(uint8_t value, char versionString[64])
 			break;
 		case 3:
 			strcpy(versionString, "2.0");
+			break;
+		case 4:
+			strcpy(versionString, "3.0");
 			break;
 		default:
 			sprintf(versionString, "unknown ABI version 0x%02X", value);
@@ -622,6 +629,28 @@ void Resolver::doFile(const ld::File& file)
 				}
 				break;
 		}
+
+		// <rdar://problem/25680358> verify dylibs use same version of Swift language
+		if ( file.swiftVersion() != 0 ) {
+			if ( _internal.swiftVersion == 0 ) {
+				_internal.swiftVersion = file.swiftVersion();
+			}
+			else if ( file.swiftVersion() != _internal.swiftVersion ) {
+				char fileVersion[64];
+				char otherVersion[64];
+				userReadableSwiftVersion(file.swiftVersion(), fileVersion);
+				userReadableSwiftVersion(_internal.swiftVersion, otherVersion);
+				if ( file.swiftVersion() > _internal.swiftVersion ) {
+					throwf("%s compiled with newer version of Swift language (%s) than previous files (%s)", 
+						   file.path(), fileVersion, otherVersion);
+				}
+				else {
+					throwf("%s compiled with older version of Swift language (%s) than previous files (%s)", 
+					       file.path(), fileVersion, otherVersion);
+				}
+			}
+		}
+
 		if ( _options.checkDylibsAreAppExtensionSafe() && !dylibFile->appExtensionSafe() ) {
 			warning("linking against a dylib which is not safe for use in application extensions: %s", file.path());
 		}
@@ -730,9 +759,14 @@ void Resolver::doAtom(const ld::Atom& atom)
 			const std::vector<Options::AliasPair>& aliases = _options.cmdLineAliases();
 			for (std::vector<Options::AliasPair>::const_iterator it=aliases.begin(); it != aliases.end(); ++it) {
 				if ( strcmp(it->realName, atom.name()) == 0 ) {
-					const AliasAtom* alias = new AliasAtom(atom, it->alias);
-					_aliasesFromCmdLine.push_back(alias);
-					this->doAtom(*alias);
+					if ( strcmp(it->realName, it->alias) == 0 ) {
+						warning("ignoring alias of itself '%s'", it->realName);
+					}
+					else {
+						const AliasAtom* alias = new AliasAtom(atom, it->alias);
+						_aliasesFromCmdLine.push_back(alias);
+						this->doAtom(*alias);
+					}
 				}
 			}
 		}
@@ -1188,11 +1222,13 @@ void Resolver::deadStripOptimize(bool force)
 	}
 	
 	if ( _haveLLVMObjs && !force ) {
+		 std::copy_if(_atoms.begin(), _atoms.end(), std::back_inserter(_internal.deadAtoms), NotLiveLTO() );
 		// <rdar://problem/9777977> don't remove combinable atoms, they may come back in lto output
 		_atoms.erase(std::remove_if(_atoms.begin(), _atoms.end(), NotLiveLTO()), _atoms.end());
 		_symbolTable.removeDeadAtoms();
 	}
 	else {
+		 std::copy_if(_atoms.begin(), _atoms.end(), std::back_inserter(_internal.deadAtoms), NotLive() );
 		_atoms.erase(std::remove_if(_atoms.begin(), _atoms.end(), NotLive()), _atoms.end());
 	}
 
@@ -1698,6 +1734,10 @@ void Resolver::linkTimeOptimize()
 	lto::OptimizeOptions optOpt;
 	optOpt.outputFilePath				= _options.outputFilePath();
 	optOpt.tmpObjectFilePath			= _options.tempLtoObjectPath();
+	optOpt.ltoCachePath					= _options.ltoCachePath();
+	optOpt.ltoPruneInterval				= _options.ltoPruneInterval();
+	optOpt.ltoPruneAfter				= _options.ltoPruneAfter();
+	optOpt.ltoMaxCacheSize				= _options.ltoMaxCacheSize();
 	optOpt.preserveAllGlobals			= _options.allGlobalsAreDeadStripRoots() || _options.hasExportRestrictList();
 	optOpt.verbose						= _options.verbose();
 	optOpt.saveTemps					= _options.saveTempFiles();
@@ -1719,6 +1759,7 @@ void Resolver::linkTimeOptimize()
 	optOpt.arch							= _options.architecture();
 	optOpt.mcpu							= _options.mcpuLTO();
 	optOpt.platform						= _options.platform();
+	optOpt.minOSVersion					= _options.minOSversion();
 	optOpt.llvmOptions					= &_options.llvmOptions();
 	optOpt.initialUndefines				= &_options.initialUndefines();
 	
@@ -1831,6 +1872,12 @@ void Resolver::tweakWeakness()
 	}
 }
 
+void Resolver::buildArchivesList()
+{
+	// Determine which archives were linked and update the internal state.
+	_inputFiles.archives(_internal);
+}
+
 void Resolver::dumpAtoms() 
 {
 	fprintf(stderr, "Resolver all atoms:\n");
@@ -1857,6 +1904,7 @@ void Resolver::resolve()
 	this->fillInInternalState();
 	this->tweakWeakness();
     _symbolTable.checkDuplicateSymbols();
+	this->buildArchivesList();
 }
 
 
