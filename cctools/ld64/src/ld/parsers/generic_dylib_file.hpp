@@ -511,7 +511,7 @@ void File<A>::addSymbol(const char* name, bool weakDef, bool tlv, pint_t address
 							this->_ignoreExports.insert(strdup(symName));
 					}
 					else if ( strncmp(symAction, "install_name$", 13) == 0 ) {
-						this->_dylibInstallPath = symName;
+						this->_dylibInstallPath = strdup(symName); // ld64-port: added strdup()
 						this->_installPathOverride = true;
 						// <rdar://problem/14448206> CoreGraphics redirects to ApplicationServices, but with wrong compat version
 						if ( strcmp(this->_dylibInstallPath, "/System/Library/Frameworks/ApplicationServices.framework/Versions/A/ApplicationServices") == 0 )
