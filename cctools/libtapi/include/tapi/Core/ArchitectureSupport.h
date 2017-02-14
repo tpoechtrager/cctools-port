@@ -18,6 +18,7 @@
 #include "tapi/tapi.h"
 #include "tapi/Core/LLVM.h"
 #include "tapi/PackedVersion32.h"
+#include <limits>
 
 TAPI_NAMESPACE_INTERNAL_BEGIN
 

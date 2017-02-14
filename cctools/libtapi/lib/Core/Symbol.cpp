@@ -9,7 +9,6 @@
 
 #include "tapi/Core/Symbol.h"
 #include "tapi/Core/LLVM.h"
-#include "llvm/Config/config.h"
 #include "llvm/Support/raw_ostream.h"
 
 #if HAVE_CXXABI_H

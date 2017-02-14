@@ -21,7 +21,9 @@ libParsers_la_CXXFLAGS =  \
 	-I$(top_srcdir)/ld64/src/abstraction \
 	-I$(top_srcdir)/ld64/src/ld \
 	-I$(top_srcdir)/ld64/src/3rd \
-	-I$(top_srcdir)/ld64/src
+	-I$(top_srcdir)/ld64/src \
+	-I$(top_srcdir)/libtapi/include \
+	-I../../../../libtapi/include
 
 libParsers_la_SOURCES =  \
 	archive_file.cpp  \

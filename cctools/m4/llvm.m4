@@ -5,12 +5,19 @@ AC_DEFUN([CHECK_LLVM],
                    [enable link time optimization support]),
     [], [enable_lto_support=yes])
 
+    AC_ARG_ENABLE([libtapi],
+    AS_HELP_STRING([--enable-libtapi],
+                   [enable libtapi]),
+    [], [enable_libtapi=yes])
+
+
     AC_ARG_WITH([llvm-config],
     AS_HELP_STRING([--with-llvm-config],
                    [llvm config tool]),
     [LLVM_CONFIG=$with_llvm_config], [LLVM_CONFIG=no])
 
-    if test "x$enable_lto_support" = "xyes"; then
+    if test "x$enable_lto_support" = "xyes" ||
+       test "x$enable_libtapi" = "xyes"; then
         if test "x$LLVM_CONFIG" = "xno"; then
             AC_PATH_PROGS(LLVM_CONFIG,
                 [llvm-config                                              \
@@ -32,19 +39,32 @@ AC_DEFUN([CHECK_LLVM],
             ORIGLDFLAGS=$LDFLAGS
             LDFLAGS="$LDFLAGS -L${LLVM_LIB_DIR}"
 
-            AC_CHECK_LIB([LTO],[lto_get_version],
-             [ LTO_LIB="-L${LLVM_LIB_DIR} -lLTO"
-               if test "x$rpathlink" = "xyes"; then
-                   LTO_RPATH="-Wl,-rpath,$LLVM_LIB_DIR,--enable-new-dtags"
-                   LTO_LIB="$LTO_LIB"
-               fi
-               LTO_DEF=-DLTO_SUPPORT
-               # DO NOT include the LLVM include dir directly,
-               # it may cause the build to fail.
-               cp -f $LLVM_INCLUDE_DIR/llvm-c/lto.h `dirname ${0}`/include/llvm-c/lto.h
-               AC_SUBST([LTO_DEF])
-               AC_SUBST([LTO_RPATH])
-               AC_SUBST([LTO_LIB]) ])
+            if test "x$enable_lto_support" = "xyes"; then
+                AC_CHECK_LIB([LTO],[lto_get_version],
+                 [ LTO_LIB="-L${LLVM_LIB_DIR} -lLTO"
+                   if test "x$rpathlink" = "xyes"; then
+                       LTO_RPATH="-Wl,-rpath,$LLVM_LIB_DIR,--enable-new-dtags"
+                       LTO_LIB="$LTO_LIB"
+                   fi
+                   LTO_DEF=-DLTO_SUPPORT
+                   # DO NOT include the LLVM include dir directly,
+                   # it may cause the build to fail.
+                   cp -f $LLVM_INCLUDE_DIR/llvm-c/lto.h `dirname ${0}`/include/llvm-c/lto.h
+                   AC_SUBST([LTO_DEF])
+                   AC_SUBST([LTO_RPATH])
+                   AC_SUBST([LTO_LIB]) ])
+            fi
+            if test "x$enable_libtapi" = "xyes"; then
+                AM_CONDITIONAL([ENABLE_LIBTAPI], [true])
+                LIBTAPI_CXXFLAGS="`${LLVM_CONFIG} --cxxflags`"
+                LIBTAPI_LIB="`${LLVM_CONFIG} --libs object` `${LLVM_CONFIG} --system-libs`"
+                if test "x$rpathlink" = "xyes"; then
+                    LIBTAPI_RPATH="-Wl,-rpath,$LLVM_LIB_DIR,--enable-new-dtags"
+                fi
+                AC_SUBST([LIBTAPI_CXXFLAGS])
+                AC_SUBST([LIBTAPI_LIB])
+                AC_SUBST([LIBTAPI_RPATH])
+            fi
 
             LDFLAGS=$ORIGLDFLAGS
         else

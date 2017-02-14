@@ -17,6 +17,11 @@
 #include "tapi/Core/InterfaceFile.h"
 #include "llvm/Object/MachOUniversal.h"
 #include "llvm/Support/Endian.h"
+#include "llvm/Config/llvm-config.h"
+
+#if LLVM_VERSION_MAJOR < 3 || (LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR < 9)
+#define expectedToErrorOr(x) (x)
+#endif
 
 using namespace llvm;
 using namespace llvm::object;
@@ -36,7 +41,7 @@ FileType MachODylibReader::getFileType(file_magic magic,
     break;
   }
 
-  auto binaryOrErr = createBinary(bufferRef);
+  auto binaryOrErr = expectedToErrorOr(createBinary(bufferRef));
   if (binaryOrErr.getError())
     return FileType::Invalid;
 
@@ -47,7 +52,7 @@ FileType MachODylibReader::getFileType(file_magic magic,
   FileType fileType = FileType::Invalid;
   // Check if any of the architecture slices are a MachO dylib.
   for (auto OI = UB->begin_objects(), OE = UB->end_objects(); OI != OE; ++OI) {
-    auto objOrErr = OI->getAsObjectFile();
+    auto objOrErr = expectedToErrorOr(OI->getAsObjectFile());
     // Ignore archives.
     if (objOrErr.getError())
       continue;
@@ -227,7 +232,7 @@ void load(MachOObjectFile *object, InterfaceFile *file) {
     auto flags = symbolFlags & BasicSymbolRef::SF_Weak
                      ? SymbolFlags::WeakReferenced
                      : SymbolFlags::None;
-    auto symbolName = symbol.getName();
+    auto symbolName = expectedToErrorOr(symbol.getName());
     if (symbolName.getError())
       continue;
 
@@ -243,7 +248,7 @@ MachODylibReader::readFile(MemoryBufferRef memBuffer) const {
   auto file = std::unique_ptr<InterfaceFile>(new InterfaceFile);
   file->setPath(memBuffer.getBufferIdentifier());
 
-  auto binaryOrErr = createBinary(memBuffer);
+  auto binaryOrErr = expectedToErrorOr(createBinary(memBuffer));
   if (auto ec = binaryOrErr.getError()) {
     file->setErrorCode(ec);
     return std::move(file);
@@ -260,7 +265,7 @@ MachODylibReader::readFile(MemoryBufferRef memBuffer) const {
          "Expected a MachO universal binary.");
   auto *UB = cast<MachOUniversalBinary>(&binary);
   for (auto OI = UB->begin_objects(), OE = UB->end_objects(); OI != OE; ++OI) {
-    auto objOrErr = OI->getAsObjectFile();
+    auto objOrErr = expectedToErrorOr(OI->getAsObjectFile());
 
     // Ignore archives.
     if (objOrErr.getError())

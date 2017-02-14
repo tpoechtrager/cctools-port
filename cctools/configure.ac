@@ -7,6 +7,7 @@ AC_CANONICAL_TARGET
 AC_ARG_PROGRAM
 
 AM_CONDITIONAL([ISDARWIN], [false])
+AM_CONDITIONAL([ENABLE_LIBTAPI], [false])
 
 isdarwin=no
 iscygwin=no
@@ -350,6 +351,7 @@ AC_CONFIG_FILES([as/i386/Makefile])
 AC_CONFIG_FILES([as/x86_64/Makefile])
 AC_CONFIG_FILES([as/ppc/Makefile])
 AC_CONFIG_FILES([as/ppc64/Makefile])
+AC_CONFIG_FILES([libtapi/Makefile])
 #AC_CONFIG_FILES([man/Makefile])
 AC_CONFIG_FILES([misc/Makefile])
 AC_CONFIG_FILES([otool/Makefile])
@@ -366,5 +368,15 @@ AC_CONFIG_FILES([ld64/src/ld/Makefile])
 AC_CONFIG_FILES([ld64/src/ld/parsers/Makefile])
 AC_CONFIG_FILES([ld64/src/ld/passes/Makefile])
 AC_CONFIG_FILES([ld64/src/other/Makefile])
+
+TAPI_VERSION="\"1.30.0\""
+TAPI_VERSION_MAJOR=1
+TAPI_VERSION_MINOR=30
+TAPI_VERSION_PATCH=0
+AC_SUBST(TAPI_VERSION)
+AC_SUBST(TAPI_VERSION_MAJOR)
+AC_SUBST(TAPI_VERSION_MINOR)
+AC_SUBST(TAPI_VERSION_PATCH)
+AC_CONFIG_FILES([libtapi/include/tapi/Version.inc])
 
 AC_OUTPUT

@@ -1,8 +1,11 @@
-if ISDARWIN
-SUBDIRS=libstuff ar as misc otool ld64
-else
-SUBDIRS=libstuff ar as misc libobjc2 otool ld64
+if !ISDARWIN
+LIBOBJC2_SUBDIR=libobjc2
 endif
+if ENABLE_LIBTAPI
+LIBTAPI_SUBDIR=libtapi
+endif
+
+SUBDIRS=libstuff ar as misc $(LIBOBJC2_SUBDIR) $(LIBTAPI_SUBDIR) otool ld64
 
 ACLOCAL_AMFLAGS = -I m4
 
