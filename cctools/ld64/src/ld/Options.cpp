@@ -35,6 +35,7 @@
 #include <spawn.h>
 #include <cxxabi.h>
 #include <Availability.h>
+#include <tapi/tapi.h>
 
 #include <vector>
 #include <map>
@@ -831,7 +832,13 @@ bool Options::findFile(const std::string &path, const std::vector<std::string> &
 		bool found = tbdInfo.checkFileExists(*this, newPath.c_str());
 		if ( fTraceDylibSearching )
 			printf("[Logging for XBS]%sfound library: '%s'\n", (found ? " " : " not "), newPath.c_str());
-		if ( found ) {
+		if ( found )
+			break;
+	}
+
+	// If we found a text-based stub file, check if it should be used.
+	if ( !tbdInfo.missing() ) {
+		if (tapi::LinkerInterfaceFile::shouldPreferTextBasedStubFile(tbdInfo.path)) {
 			result = tbdInfo;
 			return true;
 		}
@@ -841,10 +848,31 @@ bool Options::findFile(const std::string &path, const std::vector<std::string> &
 		bool found = dylibInfo.checkFileExists(*this, path.c_str());
 		if ( fTraceDylibSearching )
 			printf("[Logging for XBS]%sfound library: '%s'\n", (found ? " " : " not "), path.c_str());
-		if ( found ) {
-			result = dylibInfo;
-			return true;
+	}
+
+	// There is only a text-based stub file.
+	if ( !tbdInfo.missing() && dylibInfo.missing() ) {
+		result = tbdInfo;
+		return true;
+	}
+	// There is only a dynamic library file.
+	else if ( tbdInfo.missing() && !dylibInfo.missing() ) {
+		result = dylibInfo;
+		return true;
+	}
+	// There are both - a text-based stub file and a dynamic library file.
+	else if ( !tbdInfo.missing() && !dylibInfo.missing() ) {
+		// If the files are still in synv we can use and should use the text-based stub file.
+		if (tapi::LinkerInterfaceFile::areEquivalent(tbdInfo.path, dylibInfo.path)) {
+			result = tbdInfo;
 		}
+		// Otherwise issue a warning and fall-back to the dynamic library file.
+		else {
+			warning("text-based stub file %s and library file %s are out of sync. Falling back to library file for linking.", tbdInfo.path, dylibInfo.path);
+			result = dylibInfo;
+
+		}
+		return true;
 	}
 
 	return false;
@@ -3939,6 +3967,7 @@ void Options::buildSearchPaths(int argc, const char* argv[])
 				if ( ltoVers != NULL )
 					fprintf(stderr, "LTO support using: %s\n", ltoVers);
 #endif /* LTO_SUPPORT */
+				fprintf(stderr, "TAPI support using: %s\n", tapi::Version::getFullVersionAsString().c_str());
 				exit(0);
 			}
 		}
