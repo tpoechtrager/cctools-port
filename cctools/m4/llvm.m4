@@ -61,6 +61,8 @@ AC_DEFUN([CHECK_LLVM],
                 if test "x$rpathlink" = "xyes"; then
                     LIBTAPI_RPATH="-Wl,-rpath,$LLVM_LIB_DIR,--enable-new-dtags"
                 fi
+                LIBTAPI_DEF=-DENABLE_LIBTAPI
+                AC_SUBST([LIBTAPI_DEF])
                 AC_SUBST([LIBTAPI_CXXFLAGS])
                 AC_SUBST([LIBTAPI_LIB])
                 AC_SUBST([LIBTAPI_RPATH])

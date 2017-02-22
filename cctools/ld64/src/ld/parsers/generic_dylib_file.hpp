@@ -191,6 +191,7 @@ private:
 
 protected:
 	bool						isPublicLocation(const char* path) const;
+	void						addSymbol(const char* name, bool weak = false, bool tlv = false, pint_t address = 0);
 
 private:
 	ld::Section							_importProxySection;
@@ -477,6 +478,68 @@ bool File<A>::isPublicLocation(const char* path) const
 	}
 	
 	return false;
+}
+
+template <typename A>
+void File<A>::addSymbol(const char* name, bool weakDef, bool tlv, pint_t address)
+{
+	// symbols that start with $ld$ are meta-data to the static linker
+	// <rdar://problem/5182537> need way for ld and dyld to see different exported symbols in a dylib
+	if ( strncmp(name, "$ld$", 4) == 0 ) {
+		//    $ld$ <action> $ <condition> $ <symbol-name>
+		const char* symAction = &name[4];
+		const char* symCond = strchr(symAction, '$');
+		if ( symCond != nullptr ) {
+			char curOSVers[16];
+			sprintf(curOSVers, "$os%d.%d$", (this->_linkMinOSVersion >> 16), ((this->_linkMinOSVersion >> 8) & 0xFF));
+			if ( strncmp(symCond, curOSVers, strlen(curOSVers)) == 0 ) {
+				const char* symName = strchr(&symCond[1], '$');
+				if ( symName != nullptr ) {
+					++symName;
+					if ( strncmp(symAction, "hide$", 5) == 0 ) {
+						if ( this->_s_logHashtable )
+							fprintf(stderr, "  adding %s to ignore set for %s\n", symName, this->path());
+						this->_ignoreExports.insert(strdup(symName));
+						return;
+					}
+					else if ( strncmp(symAction, "add$", 4) == 0 ) {
+						this->addSymbol(symName, weakDef);
+						return;
+					}
+					else if ( strncmp(symAction, "weak$", 5) == 0 ) {
+						if ( !this->_allowWeakImports )
+							this->_ignoreExports.insert(strdup(symName));
+					}
+					else if ( strncmp(symAction, "install_name$", 13) == 0 ) {
+						this->_dylibInstallPath = strdup(symName); // ld64-port: added strdup()
+						this->_installPathOverride = true;
+						// <rdar://problem/14448206> CoreGraphics redirects to ApplicationServices, but with wrong compat version
+						if ( strcmp(this->_dylibInstallPath, "/System/Library/Frameworks/ApplicationServices.framework/Versions/A/ApplicationServices") == 0 )
+							this->_dylibCompatibilityVersion = Options::parseVersionNumber32("1.0");
+						return;
+					}
+					else if ( strncmp(symAction, "compatibility_version$", 22) == 0 ) {
+						this->_dylibCompatibilityVersion = Options::parseVersionNumber32(symName);
+						return;
+					}
+					else {
+						warning("bad symbol action: %s in dylib %s", name, this->path());
+					}
+				}
+			}
+		}
+		else {
+			warning("bad symbol condition: %s in dylib %s", name, this->path());
+		}
+	}
+
+	// add symbol as possible export if we are not supposed to ignore it
+	if ( this->_ignoreExports.count(name) == 0 ) {
+		AtomAndWeak bucket = { nullptr, weakDef, tlv, address };
+		if ( this->_s_logHashtable )
+			fprintf(stderr, "  adding %s to hash table for %s\n", name, this->path());
+		this->_atoms[strdup(name)] = bucket;
+	}
 }
 
 // <rdar://problem/5529626> If only weak_import symbols are used, linker should use LD_LOAD_WEAK_DYLIB
