@@ -153,12 +153,14 @@ void load(MachOObjectFile *object, InterfaceFile *file) {
     case MachO::LC_VERSION_MIN_IPHONEOS:
       file->setPlatform(Platform::iOS);
       break;
+#if LLVM_VERSION_MAJOR > 3 || (LLVM_VERSION_MAJOR == 3 && LLVM_VERSION_MINOR >= 8)
     case MachO::LC_VERSION_MIN_WATCHOS:
       file->setPlatform(Platform::watchOS);
       break;
     case MachO::LC_VERSION_MIN_TVOS:
       file->setPlatform(Platform::tvOS);
       break;
+#endif
     default:
       break;
     }
