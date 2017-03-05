@@ -15,13 +15,16 @@ libParsers_la_CXXFLAGS =  \
 	-D__DARWIN_UNIX03 \
 	$(WARNINGS) \
 	$(LTO_DEF) \
+	$(LIBTAPI_DEF) \
 	$(ENDIAN_FLAG) \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/include/foreign \
 	-I$(top_srcdir)/ld64/src/abstraction \
 	-I$(top_srcdir)/ld64/src/ld \
 	-I$(top_srcdir)/ld64/src/3rd \
-	-I$(top_srcdir)/ld64/src
+	-I$(top_srcdir)/ld64/src \
+	-I$(top_srcdir)/libtapi/include \
+	-I../../../../libtapi/include
 
 libParsers_la_SOURCES =  \
 	archive_file.cpp  \

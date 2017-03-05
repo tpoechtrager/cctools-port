@@ -25,7 +25,7 @@
 
 #include <sys/param.h>
 #include <sys/mman.h>
-
+#include <tapi/tapi.h>
 #include <vector>
 #include <memory> // ld64-port
 #include <functional> // ld64-port
@@ -515,40 +515,111 @@ class File final : public generic::dylib::File<A>
 	using Base = generic::dylib::File<A>;
 
 public:
-	static bool		validFile(const uint8_t* fileContent, bool executableOrDylib);
-					File(const uint8_t* fileContent, uint64_t fileLength, const char* path,
+					File(const char* path, const uint8_t* fileContent, uint64_t fileLength,
 						 time_t mTime, ld::File::Ordinal ordinal, bool linkingFlatNamespace,
-						 bool hoistImplicitPublicDylibs, Options::Platform platform,
-						 cpu_type_t cpuType, const char* archName, uint32_t linkMinOSVersion,
-						 bool allowWeakImports, bool allowSimToMacOSX, bool addVers, bool buildingForSimulator,
-						 bool logAllFiles, const char* installPath, bool indirectDylib);
+						 bool linkingMainExecutable, bool hoistImplicitPublicDylibs,
+						 Options::Platform platform, uint32_t linkMinOSVersion, bool allowWeakImports,
+						 cpu_type_t cpuType, cpu_subtype_t cpuSubType, bool enforceDylibSubtypesMatch,
+						 bool allowSimToMacOSX, bool addVers, bool buildingForSimulator,
+						 bool logAllFiles, const char* installPath, bool indirectDylib,
+						 const char* archName); // ld64-port: Added extra parameter
 	virtual			~File() noexcept {}
 
 private:
+#ifdef ENABLE_LIBTAPI
+	void			buildExportHashTable(const tapi::LinkerInterfaceFile* file);
+#else
 	void			buildExportHashTable(const DynamicLibrary &lib);
+#endif
 
-	cpu_type_t		_cpuType;
+	cpu_type_t		_cpuType; // ld64-port: Added extra member variable
 };
 
+static ld::File::ObjcConstraint mapObjCConstraint(tapi::ObjCConstraint constraint) {
+	switch (constraint) {
+	case tapi::ObjCConstraint::None:
+		return ld::File::objcConstraintNone;
+	case tapi::ObjCConstraint::Retain_Release:
+		return ld::File::objcConstraintRetainRelease;
+	case tapi::ObjCConstraint::Retain_Release_For_Simulator:
+		return ld::File::objcConstraintRetainReleaseForSimulator;
+	case tapi::ObjCConstraint::Retain_Release_Or_GC:
+		return ld::File::objcConstraintRetainReleaseOrGC;
+	case tapi::ObjCConstraint::GC:
+		return ld::File::objcConstraintGC;
+	}
+
+	return ld::File::objcConstraintNone;
+}
+
+static Options::Platform mapPlatform(tapi::Platform platform) {
+	switch (platform) {
+	case tapi::Platform::Unknown:
+		return Options::kPlatformUnknown;
+	case tapi::Platform::OSX:
+		return Options::kPlatformOSX;
+	case tapi::Platform::iOS:
+		return Options::kPlatformiOS;
+	case tapi::Platform::watchOS:
+		return Options::kPlatformWatchOS;
+	case tapi::Platform::tvOS:
+		return Options::kPlatform_tvOS;
+	}
+
+	return Options::kPlatformUnknown;
+}
+
 template <typename A>
-File<A>::File(const uint8_t* fileContent, uint64_t fileLength, const char* path, time_t mTime,
-			  ld::File::Ordinal ord, bool linkingFlatNamespace, bool hoistImplicitPublicDylibs,
-			  Options::Platform platform, cpu_type_t cpuType, const char* archName,
-			  uint32_t linkMinOSVersion, bool allowWeakImports, bool allowSimToMacOSX, bool addVers,
+	File<A>::File(const char* path, const uint8_t* fileContent, uint64_t fileLength,
+			  time_t mTime, ld::File::Ordinal ord, bool linkingFlatNamespace,
+			  bool linkingMainExecutable, bool hoistImplicitPublicDylibs, Options::Platform platform,
+			  uint32_t linkMinOSVersion, bool allowWeakImports, cpu_type_t cpuType, cpu_subtype_t cpuSubType,
+				bool enforceDylibSubtypesMatch, bool allowSimToMacOSX, bool addVers,
 			  bool buildingForSimulator, bool logAllFiles, const char* targetInstallPath,
-			  bool indirectDylib)
+			  bool indirectDylib,
+			  const char* archName) // ld64-port: Added extra parameter
 	: Base(strdup(path), mTime, ord, platform, linkMinOSVersion, allowWeakImports, linkingFlatNamespace,
 		   hoistImplicitPublicDylibs, allowSimToMacOSX, addVers),
-	  _cpuType(cpuType)
+	  _cpuType(cpuType) // ld64-port: Added extra member variable
 {
+#ifdef ENABLE_LIBTAPI // ld64-port: added ifdef
+	auto matchingType = enforceDylibSubtypesMatch ?
+			tapi::CpuSubTypeMatching::Exact : tapi::CpuSubTypeMatching::ABI_Compatible;
+
+	std::string errorMessage;
+	auto file = std::unique_ptr<tapi::LinkerInterfaceFile>(
+		tapi::LinkerInterfaceFile::create(path, fileContent, fileLength, cpuType,
+										  cpuSubType, matchingType,
+										  tapi::PackedVersion32(linkMinOSVersion), errorMessage));
+
+	if (file == nullptr)
+		throw strdup(errorMessage.c_str());
+
+	// unmap file - it is no longer needed.
+	munmap((caddr_t)fileContent, fileLength);
+#else
 	this->_bitcode = std::unique_ptr<ld::Bitcode>(new ld::Bitcode(nullptr, 0));
 	// Text stubs are implicit app extension safe.
 	this->_appExtensionSafe = true;
+#endif
 
 	// write out path for -t option
 	if ( logAllFiles )
 		printf("%s\n", path);
 
+#ifdef ENABLE_LIBTAPI // ld64-port: added ifdef
+	this->_bitcode = std::unique_ptr<ld::Bitcode>(new ld::Bitcode(nullptr, 0));
+	this->_noRexports = !file->hasReexportedLibraries();
+	this->_hasWeakExports = file->hasWeakDefinedExports();
+	this->_dylibInstallPath = strdup(file->getInstallName().c_str());
+	this->_installPathOverride = file->isInstallNameVersionSpecific();
+	this->_dylibCurrentVersion = file->getCurrentVersion();
+	this->_dylibCompatibilityVersion = file->getCompatibilityVersion();
+	this->_swiftVersion = file->getSwiftVersion();
+	this->_objcConstraint = mapObjCConstraint(file->getObjCConstraint());
+	this->_parentUmbrella = file->getParentFrameworkName().empty() ? nullptr : strdup(file->getParentFrameworkName().c_str());
+	this->_appExtensionSafe = file->isApplicationExtensionSafe();
+#else
 	TBDFile stub((const char*)fileContent, fileLength);
 	auto lib = stub.parseFileForArch(archName);
 
@@ -560,6 +631,7 @@ File<A>::File(const uint8_t* fileContent, uint64_t fileLength, const char* path,
 	this->_swiftVersion = lib._swiftVersion;
 	this->_objcConstraint = lib._objcConstraint;
 	this->_hasPublicInstallName = this->isPublicLocation(this->_dylibInstallPath);
+#endif
 
 	// if framework, capture framework name
 	const char* lastSlash = strrchr(this->_dylibInstallPath, '/');
@@ -573,31 +645,16 @@ File<A>::File(const uint8_t* fileContent, uint64_t fileLength, const char* path,
 			this->_frameworkName = leafName;
 	}
 
-  // TEMPORARY HACK BEGIN: Support ancient re-export command LC_SUB_FRAMEWORK.
-	// <rdar://problem/23614899> [TAPI] Support LC_SUB_FRAMEWORK as re-export indicator.
-	auto installName = std::string(this->_dylibInstallPath);
+#ifdef ENABLE_LIBTAPI // ld64-port: added ifdef
+	for (auto &client : file->allowableClients())
+		this->_allowableClients.push_back(strdup(client.c_str()));
 
-	// All sub-frameworks of ApplicationServices use LC_SUB_FRAMEWORK.
-	if (installName.find("/System/Library/Frameworks/ApplicationServices.framework/Versions/A/Frameworks/") == 0 &&
-			installName.find(".dylib") == std::string::npos) {
-		this->_parentUmbrella = "ApplicationServices";
-	} else if (installName.find("/System/Library/Frameworks/Carbon.framework/Versions/A/Frameworks/") == 0) {
-		this->_parentUmbrella = "Carbon";
-	} else if (installName.find("/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/") == 0 &&
-					 installName.find(".dylib") == std::string::npos) {
-		this->_parentUmbrella = "CoreServices";
-	} else if (installName.find("/System/Library/Frameworks/Accelerate.framework/Versions/A/Frameworks/vecLib.framework/Versions/A/libLinearAlgebra.dylib") == 0 ||
-					 installName.find("/System/Library/Frameworks/Accelerate.framework/Versions/A/Frameworks/vecLib.framework/Versions/A/libQuadrature.dylib") == 0 ||
-					 installName.find("System/Library/Frameworks/Accelerate.framework/Versions/A/Frameworks/vecLib.framework/Versions/A/libSparseBLAS.dylib") == 0) {
-		this->_parentUmbrella = "vecLib";
-	} else if (installName.find("/System/Library/Frameworks/WebKit.framework/Versions/A/Frameworks/WebCore.framework/Versions/A/WebCore") == 0) {
-		this->_parentUmbrella = "WebKit";
-	} else if (installName.find("/usr/lib/system/") == 0 &&
-			   installName != "/usr/lib/system/libkxld.dylib") {
-		this->_parentUmbrella = "System";
-	}
-	// TEMPORARY HACK END
+	// <rdar://problem/20659505> [TAPI] Don't hoist "public" (in /usr/lib/) dylibs that should not be directly linked
+	this->_hasPublicInstallName = file->hasAllowableClients() ? false : this->isPublicLocation(file->getInstallName().c_str());
 
+	for (const auto &client : file->allowableClients())
+		this->_allowableClients.emplace_back(strdup(client.c_str()));
+#else
 	for (auto &client : lib._allowedClients) {
 		if ((this->_parentUmbrella != nullptr) && (client.str() != this->_parentUmbrella))
 			this->_allowableClients.push_back(strdup(client.str().c_str()));
@@ -606,34 +663,90 @@ File<A>::File(const uint8_t* fileContent, uint64_t fileLength, const char* path,
 	// <rdar://problem/20659505> [TAPI] Don't hoist "public" (in /usr/lib/) dylibs that should not be directly linked
 	if ( !this->_allowableClients.empty() )
 		this->_hasPublicInstallName = false;
+#endif
 
+#ifdef ENABLE_LIBTAPI // ld64-port: added ifdef
+	auto dylibPlatform = mapPlatform(file->getPlatform());
+	if ( (dylibPlatform != platform) && (platform != Options::kPlatformUnknown) ) {
+#else
 	if ( (lib._platform != platform) && (platform != Options::kPlatformUnknown) ) {
+#endif
 		this->_wrongOS = true;
 		if ( this->_addVersionLoadCommand && !indirectDylib ) {
 			if ( buildingForSimulator ) {
 				if ( !this->_allowSimToMacOSXLinking )
 					throwf("building for %s simulator, but linking against dylib built for %s (%s).",
+#ifdef ENABLE_LIBTAPI // ld64-port: added ifdef
+							Options::platformName(platform), Options::platformName(dylibPlatform), path);
+#else
 							Options::platformName(platform), Options::platformName(lib._platform), path);
+#endif
 			} else {
 				throwf("building for %s, but linking against dylib built for %s (%s).",
+#ifdef ENABLE_LIBTAPI // ld64-port: added ifdef
+						Options::platformName(platform), Options::platformName(dylibPlatform), path);
+#else
 						Options::platformName(platform), Options::platformName(lib._platform), path);
+#endif
 			}
 		}
 	}
 
+#ifdef ENABLE_LIBTAPI // ld64-port: added ifdef
+	for (const auto& reexport : file->reexportedLibraries()) {
+		const char *path = strdup(reexport.c_str());
+#else
 	this->_dependentDylibs.reserve(lib._reexportedLibraries.size());
 	for ( const auto& reexport : lib._reexportedLibraries ) {
 		const char *path = strdup(reexport.str().c_str());
+#endif
 		if ( (targetInstallPath == nullptr) || (strcmp(targetInstallPath, path) != 0) )
 			this->_dependentDylibs.emplace_back(path, true);
 	}
 
+#ifdef ENABLE_LIBTAPI // ld64-port: added ifdef
+	for (const auto& symbol : file->ignoreExports())
+		this->_ignoreExports.insert(strdup(symbol.c_str()));
+
+	// if linking flat and this is a flat dylib, create one atom that references all imported symbols.
+	if ( linkingFlatNamespace && linkingMainExecutable && (file->hasTwoLevelNamespace() == false) ) {
+		std::vector<const char*> importNames;
+		importNames.reserve(file->undefineds().size());
+		// We do not need to strdup the name, because that will be done by the
+		// ImportAtom constructor.
+		for (const auto &sym : file->undefineds())
+			importNames.emplace_back(sym.getName().c_str());
+		this->_importAtom = new generic::dylib::ImportAtom<A>(*this, importNames);
+	}
+
+	// build hash table
+	buildExportHashTable(file.get());
+#else
 	// build hash table
 	buildExportHashTable(lib);
 
 	munmap((caddr_t)fileContent, fileLength);
+#endif
 }
 
+#ifdef ENABLE_LIBTAPI // ld64-port: added ifdef
+template <typename A>
+void File<A>::buildExportHashTable(const tapi::LinkerInterfaceFile* file) {
+	if (this->_s_logHashtable )
+		fprintf(stderr, "ld: building hashtable from text-stub info in %s\n", this->path());
+
+	for (const auto &sym : file->exports()) {
+		const char* name = sym.getName().c_str();
+		bool weakDef = sym.isWeakDefined();
+		bool tlv = sym.isThreadLocalValue();
+
+		typename Base::AtomAndWeak bucket = { nullptr, weakDef, tlv, 0 };
+		if ( this->_s_logHashtable )
+			fprintf(stderr, "  adding %s to hash table for %s\n", name, this->path());
+		this->_atoms[strdup(name)] = bucket;
+	}
+}
+#else
 template <typename A>
 void File<A>::buildExportHashTable(const DynamicLibrary& lib) {
 	if (this->_s_logHashtable )
@@ -668,6 +781,7 @@ void File<A>::buildExportHashTable(const DynamicLibrary& lib) {
 	for (auto &sym : lib._tlvSymbols)
 		this->addSymbol(sym.str().c_str(), /*weak=*/false, /*tlv=*/true);
 }
+#endif
 
 template <typename A>
 class Parser
@@ -676,25 +790,29 @@ public:
 	using P = typename A::P;
 
 	static bool				validFile(const uint8_t* fileContent, uint64_t fileLength,
-									  const std::string &path, const char* archName);
-	static ld::dylib::File*	parse(const uint8_t* fileContent, uint64_t fileLength, const char* path,
-								  time_t mTime, ld::File::Ordinal ordinal, const Options& opts,
+									  const std::string &path, const char* archName); // ld64-port: Readded old function
+	static ld::dylib::File*	parse(const char* path, const uint8_t* fileContent,
+								  uint64_t fileLength, time_t mTime,
+								  ld::File::Ordinal ordinal, const Options& opts,
 								  bool indirectDylib)
 	{
-		return new File<A>(fileContent, fileLength, path, mTime, ordinal,
+		return new File<A>(path, fileContent, fileLength,mTime, ordinal,
 						   opts.flatNamespace(),
+						   opts.linkingMainExecutable(),
 						   opts.implicitlyLinkIndirectPublicDylibs(),
 						   opts.platform(),
-						   opts.architecture(),
-						   opts.architectureName(),
 						   opts.minOSversion(),
 						   opts.allowWeakImports(),
+						   opts.architecture(),
+						   opts.subArchitecture(),
+						   opts.enforceDylibSubtypesMatch(),
 						   opts.allowSimulatorToLinkWithMacOSX(),
 						   opts.addVersionLoadCommand(),
 						   opts.targetIOSSimulator(),
 						   opts.logAllFiles(),
 						   opts.installPath(),
-						   indirectDylib);
+						   indirectDylib,
+						   opts.architectureName()); // ld64-port: Added extra parameter
 	}
 };
 
@@ -719,30 +837,43 @@ ld::dylib::File* parse(const uint8_t* fileContent, uint64_t fileLength, const ch
 					   time_t modTime, const Options& opts, ld::File::Ordinal ordinal,
 					   bool bundleLoader, bool indirectDylib)
 {
+
 	switch ( opts.architecture() ) {
 #if SUPPORT_ARCH_x86_64
 		case CPU_TYPE_X86_64:
-			if ( Parser<x86_64>::validFile(fileContent, fileLength, path, opts.architectureName()) )
-				return Parser<x86_64>::parse(fileContent, fileLength, path, modTime, ordinal, opts, indirectDylib);
-			break;
+#ifdef ENABLE_LIBTAPI // ld64-port: added ifdef
+		if (tapi::LinkerInterfaceFile::isSupported(path, fileContent, fileLength))
+#else
+		if ( Parser<x86_64>::validFile(fileContent, fileLength, path, opts.architectureName()) )
+#endif
+			return Parser<x86_64>::parse(path, fileContent, fileLength, modTime, ordinal, opts, indirectDylib);
 #endif
 #if SUPPORT_ARCH_i386
 		case CPU_TYPE_I386:
-			if ( Parser<x86>::validFile(fileContent, fileLength, path, opts.architectureName()) )
-				return Parser<x86>::parse(fileContent, fileLength, path, modTime, ordinal, opts, indirectDylib);
-			break;
+#ifdef ENABLE_LIBTAPI // ld64-port: added ifdef
+		if (tapi::LinkerInterfaceFile::isSupported(path, fileContent, fileLength))
+#else
+		if ( Parser<x86>::validFile(fileContent, fileLength, path, opts.architectureName()) )
+#endif
+			return Parser<x86>::parse(path, fileContent, fileLength, modTime, ordinal, opts, indirectDylib);
 #endif
 #if SUPPORT_ARCH_arm_any
 		case CPU_TYPE_ARM:
-			if ( Parser<arm>::validFile(fileContent, fileLength, path, opts.architectureName()) )
-				return Parser<arm>::parse(fileContent, fileLength, path, modTime, ordinal, opts, indirectDylib);
-			break;
+#ifdef ENABLE_LIBTAPI // ld64-port: added ifdef
+		if (tapi::LinkerInterfaceFile::isSupported(path, fileContent, fileLength))
+#else
+		if ( Parser<arm>::validFile(fileContent, fileLength, path, opts.architectureName()) )
+#endif
+			return Parser<arm>::parse(path, fileContent, fileLength, modTime, ordinal, opts, indirectDylib);
 #endif
 #if SUPPORT_ARCH_arm64
 		case CPU_TYPE_ARM64:
-			if ( Parser<arm64>::validFile(fileContent, fileLength, path, opts.architectureName()) )
-				return Parser<arm64>::parse(fileContent, fileLength, path, modTime, ordinal, opts, indirectDylib);
-			break;
+#ifdef ENABLE_LIBTAPI // ld64-port: added ifdef
+		if (tapi::LinkerInterfaceFile::isSupported(path, fileContent, fileLength))
+#else
+		if ( Parser<arm64>::validFile(fileContent, fileLength, path, opts.architectureName()) )
+#endif
+			return Parser<arm64>::parse(path, fileContent, fileLength, modTime, ordinal, opts, indirectDylib);
 #endif
 	}
 	return nullptr;
