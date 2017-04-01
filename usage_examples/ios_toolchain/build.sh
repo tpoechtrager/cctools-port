@@ -59,14 +59,13 @@ function git_clone_repository
     fi
 
     if [ ! -d $directory ]; then
-        git clone $url --depth 1
+        git clone $url --depth 1 -b $branch
     fi
 
     pushd $directory &>/dev/null
 
     git reset --hard
     git clean -fdx
-    git checkout $branch
     git pull
 
     popd &>/dev/null
@@ -172,7 +171,7 @@ echo "*** building apple-libtapi ***"
 echo ""
 
 pushd tmp &>/dev/null
-git_clone_repository https://github.com/tpoechtrager/apple-libtapi.git master
+git_clone_repository https://github.com/tpoechtrager/apple-libtapi.git 1.30.0
 pushd apple-libtapi &>/dev/null
 INSTALLPREFIX=$TARGETDIR ./build.sh
 ./install.sh
