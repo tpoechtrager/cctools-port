@@ -38,7 +38,7 @@ EXTRAFLAGS=""
 EXTRACXXFLAGS=""
 WARNINGS=""
 
-case $host_os in
+case $build_os in
   darwin* )
     isdarwin=yes
     AM_CONDITIONAL([ISDARWIN], [true])
@@ -58,7 +58,7 @@ case $host_os in
 esac
 
 if test "x$isdarwin" = "xno"; then
-  case $host_cpu in
+  case $build_cpu in
     arm* )
       # clang miscompiles ld64 on arm
       if test "x$isdarwin" = "xno"; then
