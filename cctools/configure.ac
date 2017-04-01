@@ -312,7 +312,6 @@ AC_LINK_IFELSE(
 LDFLAGS=$ORIGLDFLAGS
 
 CHECK_LLVM
-
 LDFLAGS="$LDFLAGS $LTO_RPATH"
 
 ### Check for libxar ###
@@ -322,6 +321,62 @@ if test "x$LLVM_CONFIG" != "xno"; then
 AC_CHECK_LIB([xar],[xar_prop_create],[
   AC_CHECK_HEADERS([xar/xar.h], [XAR_LIB=-lxar])], [])
 AC_SUBST(XAR_LIB)
+
+fi
+
+### Check for Apple TAPI library ###
+
+AC_ARG_ENABLE([tapi-support],
+AS_HELP_STRING([--enable-tapi-support],
+                [enable tapi support]),
+[], [enable_tapi_support=yes])
+
+if test "x$enable_tapi_support" = "xyes"; then
+
+AC_ARG_WITH([libtapi],
+    AS_HELP_STRING([--with-libtapi],
+                   [path to the apple tapi library]),
+    [LIBTAPI_DIR=$with_libtapi], [LIBTAPI_DIRECTORY=no])
+
+if test "x$LIBTAPI_DIR" != "xno"; then
+  CXXFLAGS="$CXXFLAGS -isystem $LIBTAPI_DIR/include"
+  CPPFLAGS="$CPPFLAGS -isystem $LIBTAPI_DIR/include"
+  test -d "$LIBTAPI_DIR/lib" && LDFLAGS="$LDFLAGS -L$LIBTAPI_DIR/lib"
+  test -d "$LIBTAPI_DIR/lib64" && LDFLAGS="$LDFLAGS -L$LIBTAPI_DIR/lib64"
+  test -d "$LIBTAPI_DIR/lib32" && LDFLAGS="$LDFLAGS -L$LIBTAPI_DIR/lib32"
+  if test "x$rpathlink" = "xyes"; then
+    LIBTAPI_RPATH="-Wl,-rpath,$LIBTAPI_DIR/lib,--enable-new-dtags"
+    LIBTAPI_RPATH="$LIBTAPI_RPATH -Wl,-rpath,$LIBTAPI_DIR/lib64,--enable-new-dtags"
+    LIBTAPI_RPATH="$LIBTAPI_RPATH -Wl,-rpath,$LIBTAPI_DIR/lib32,--enable-new-dtags"
+    LDFLAGS="$LDFLAGS $LIBTAPI_RPATH"
+  fi
+  if test "x$isdarwin" = "xyes"; then
+    LIBTAPI_RPATH="-Wl,-rpath,$LIBTAPI_DIR/lib"
+    LDFLAGS="$LDFLAGS $LIBTAPI_RPATH"
+  fi
+fi
+
+TAPI_LIB=""
+
+# This is awful but still better than messing around with C++
+AC_CHECK_LIB([tapi],[_ZN4tapi10APIVersion8getMajorEv],[
+  AC_LANG_PUSH([C++])
+  AC_CHECK_HEADERS([tapi/tapi.h], [TAPI_LIB=-ltapi; TAPI_DEF=-DTAPI_SUPPORT], [])
+  AC_LANG_POP([C++])
+  ], [])
+AC_SUBST(TAPI_LIB)
+AC_SUBST(TAPI_DEF)
+
+if test "x$TAPI_LIB" == "x"; then
+  if test "x$LIBTAPI_DIR" != "x"; then
+    exit 1
+  fi
+  echo ""
+  echo "### Building without TAPI support ###"
+  echo "### See README.md -> DEPENDENCIES ###"
+  echo ""
+  sleep 2
+fi
 
 fi
 

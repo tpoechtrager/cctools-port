@@ -11,45 +11,48 @@ AC_DEFUN([CHECK_LLVM],
     [LLVM_CONFIG=$with_llvm_config], [LLVM_CONFIG=no])
 
     if test "x$enable_lto_support" = "xyes"; then
-        if test "x$LLVM_CONFIG" = "xno"; then
-            AC_PATH_PROGS(LLVM_CONFIG,
-                [llvm-config                                              \
-                 llvm-config-4.0                                          \
-                 llvm-config-3.9 llvm-config-3.8 llvm-config-3.7          \
-                 llvm-config-3.6 llvm-config-3.5 llvm-config-3.4          \
-                 llvm-config-3.3 llvm-config-3.2 llvm-config-3.1          \
-                 llvm-config40                                            \
-                 llvm-config39 llvm-config38 llvm-config37 llvm-config36  \
-                 llvm-config35 llvm-config34 llvm-config33 llvm-config32  \
-                 llvm-config31],
-            no)
-        fi
+      if test "x$LLVM_CONFIG" = "xno"; then
+          AC_PATH_PROGS(LLVM_CONFIG,
+              [llvm-config                                              \
+               llvm-config-5.0 llvm-config-4.0                          \
+               llvm-config-3.9 llvm-config-3.8 llvm-config-3.7          \
+               llvm-config-3.6 llvm-config-3.5 llvm-config-3.4          \
+               llvm-config-3.3 llvm-config-3.2 llvm-config-3.1          \
+               llvm-config50 llvm-config40                              \
+               llvm-config39 llvm-config38 llvm-config37 llvm-config36  \
+               llvm-config35 llvm-config34 llvm-config33 llvm-config32  \
+               llvm-config31],
+          no)
+      fi
 
-        if test "x$LLVM_CONFIG" != "xno"; then
-            LLVM_INCLUDE_DIR="`${LLVM_CONFIG} --includedir`"
-            LLVM_LIB_DIR="`${LLVM_CONFIG} --libdir`"
+      if test "x$LLVM_CONFIG" != "xno"; then
+        LLVM_INCLUDE_DIR="`${LLVM_CONFIG} --includedir`"
+        LLVM_LIB_DIR="`${LLVM_CONFIG} --libdir`"
 
-            ORIGLDFLAGS=$LDFLAGS
-            LDFLAGS="$LDFLAGS -L${LLVM_LIB_DIR}"
+        ORIGLDFLAGS=$LDFLAGS
+        LDFLAGS="$LDFLAGS -L${LLVM_LIB_DIR}"
 
-            AC_CHECK_LIB([LTO],[lto_get_version],
-             [ LTO_LIB="-L${LLVM_LIB_DIR} -lLTO"
-               if test "x$rpathlink" = "xyes"; then
-                   LTO_RPATH="-Wl,-rpath,$LLVM_LIB_DIR,--enable-new-dtags"
-                   LTO_LIB="$LTO_LIB"
-               fi
-               LTO_DEF=-DLTO_SUPPORT
-               # DO NOT include the LLVM include dir directly,
-               # it may cause the build to fail.
-               cp -f $LLVM_INCLUDE_DIR/llvm-c/lto.h `dirname ${0}`/include/llvm-c/lto.h
-               AC_SUBST([LTO_DEF])
-               AC_SUBST([LTO_RPATH])
-               AC_SUBST([LTO_LIB]) ])
+        AC_CHECK_LIB([LTO],[lto_get_version], [
+          LTO_LIB="-L${LLVM_LIB_DIR} -lLTO"
+          if test "x$rpathlink" = "xyes"; then
+            LTO_RPATH="-Wl,-rpath,$LLVM_LIB_DIR,--enable-new-dtags"
+          fi
+          if test "x$isdarwin" = "xyes"; then
+            LTO_RPATH="-Wl,-rpath,$LLVM_LIB_DIR"
+          fi
+          LTO_DEF=-DLTO_SUPPORT
+          # DO NOT include the LLVM include dir directly,
+          # it may cause the build to fail.
+          cp -f $LLVM_INCLUDE_DIR/llvm-c/lto.h `dirname ${0}`/include/llvm-c/lto.h
+          AC_SUBST([LTO_DEF])
+          AC_SUBST([LTO_RPATH])
+          AC_SUBST([LTO_LIB])
+        ])
 
-            LDFLAGS=$ORIGLDFLAGS
-        else
-            AC_MSG_WARN([llvm-config not found, disabling LTO support])
-        fi
+        LDFLAGS=$ORIGLDFLAGS
+      else
+        AC_MSG_WARN([llvm-config not found, disabling LTO support])
+      fi
     fi
 
     AC_SUBST(LLVM_CONFIG)

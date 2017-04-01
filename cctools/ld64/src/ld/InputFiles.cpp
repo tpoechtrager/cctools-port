@@ -350,10 +350,12 @@ ld::File* InputFiles::makeFile(const Options::FileInfo& info, bool indirectDylib
 			if ( dylibResult != NULL ) {
 				return dylibResult;
 			}
+#ifdef TAPI_SUPPORT
 			dylibResult = textstub::dylib::parse(p, len, info.path, info.modTime, _options, info.ordinal, info.options.fBundleLoader, indirectDylib);
 			if ( dylibResult != NULL ) {
 				return dylibResult;
 			}
+#endif /* TAPI_SUPPORT */
 			break;
 		case Options::kStaticExecutable:
 		case Options::kDyld:

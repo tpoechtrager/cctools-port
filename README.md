@@ -20,8 +20,8 @@ aarch64, ppc, ppc64
 
 ## SUPPORTED TARGET ARCHITECTURES ##
 
-armv4t, armv5, armv6, armv7, armv7f, armv7k, armv7s, armv6m  
-armv7m, armv7em, armv8, arm64, arm64v8, i386, x86_64 and x86_64h.
+armv6, armv7, armv7s, arm64, i386, x86_64,  
+x86_64h, armv6m, armv7k, armv7m and armv7em
 
 ## SUPPORTED TARGET OPERATING SYSTEMS ##
 
@@ -29,7 +29,10 @@ Mac OS X, iOS, watchOS (untested) and tvOS (untested)
 
 ## DEPENDENCIES ##
 
-`Clang 3.2+ or gcc/g++/gcc-objc 4.7+`, `automake`, `autogen` and `libtool`.
+`Clang 3.2+ or gcc/g++/gcc-objc 4.8+`
+
+SDKs with .tdb stubs (>= Xcode 7) require the TAPI library to be installed.  
+=> https://github.com/tpoechtrager/apple-libtapi
 
 Optional, but recommended:
 
@@ -42,11 +45,24 @@ Do not install libxar-dev on Ubuntu, it's a different package.
 
 ## INSTALLATION ##
 
-* `cd cctools`
-* `./autogen.sh`
-* `./configure --prefix=<installdir> --target=<target> [--with-llvm-config=...]`
-* `make`
-* `make install`
+### Install Apple's TAPI library:
+This step is only required if you intend to use SDKs with .tdb stubs.
+
+    git clone https://github.com/tpoechtrager/apple-libtapi.git
+    cd apple-libtapi
+    [INSTALLPREFIX=/home/user/cctools] ./build.sh
+    ./install.sh
+
+### Install cctools and ld64:
+    git clone https://github.com/tpoechtrager/cctools-port.git
+    cd cctools-port/cctools
+    ./configure \
+        [--prefix=/home/user/cctools] \
+        [--with-libtapi=/home/user/cctools] \
+        [--target=<target>] \
+        [--with-llvm-config=...]
+    make
+    make install
 
 target = `i386-apple-darwin11`, `x86_64-apple-darwin11`, `arm-apple-darwin11`, ...
 

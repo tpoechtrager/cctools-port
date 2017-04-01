@@ -3149,8 +3149,7 @@ void OutputFile::buildSymbolTable(ld::Internal& state)
 				continue;
 			}
 			auto &&symbolName = name.substr(pos+1);
-			//auto it = addedSymbols.emplace(symbolName, std::initializer_list<std::string>{name});
-			auto it = STD_MAP_EMPLACE(std::string, std::vector<std::string>, addedSymbols, symbolName, std::initializer_list<std::string>{name}); // ld64-port
+			auto it = addedSymbols.emplace(symbolName, std::initializer_list<std::string>{name});
 			if (!it.second)
 				it.first->second.emplace_back(name);
 		} else if (name.rfind("$ld$hide$", 8) == 0) {
@@ -3160,8 +3159,7 @@ void OutputFile::buildSymbolTable(ld::Internal& state)
 				continue;
 			}
 			auto &&symbolName = name.substr(pos+1);
-			//auto it = hiddenSymbols.emplace(symbolName, std::initializer_list<std::string>{name});
-			auto it = STD_MAP_EMPLACE(std::string, std::vector<std::string>, hiddenSymbols, symbolName, std::initializer_list<std::string>{name}); // ld64-port
+			auto it = hiddenSymbols.emplace(symbolName, std::initializer_list<std::string>{name});
 			if (!it.second)
 				it.first->second.emplace_back(name);
 		}

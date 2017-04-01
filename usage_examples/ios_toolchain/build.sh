@@ -43,6 +43,36 @@ function extract()
     esac
 }
 
+function git_clone_repository
+{
+    local url=$1
+    local branch=$2
+    local directory
+
+    directory=$(basename $url)
+    directory=${directory/\.git/}
+
+    if [ -n "$CCTOOLS_IOS_DEV" ]; then
+        rm -rf $directory
+        cp -r $CCTOOLS_IOS_DEV/$directory .
+        return
+    fi
+
+    if [ ! -d $directory ]; then
+        git clone $url --depth 1
+    fi
+
+    pushd $directory &>/dev/null
+
+    git reset --hard
+    git clean -fdx
+    git checkout $branch
+    git pull
+
+    popd &>/dev/null
+}
+
+
 if [ $# -lt 2 ]; then
     echo "usage: $0 iPhoneOS.sdk.tar* <target cpu>" 1>&2
     echo "i.e. $0 /path/to/iPhoneOS.sdk.tar.xz armv7" 1>&2
@@ -67,7 +97,10 @@ echo "*** extracting SDK ***"
 echo ""
 
 pushd $SDKDIR &>/dev/null
-SDK_VERSION=$(echo $1 | grep -P -o "[0-9].[0-9]+" | head -1)
+SDK_VERSION=$(echo $1 | grep -P -o "[0-9][0-9].[0-9]+" | head -1)
+if [ -z "$SDK_VERSION" ]; then
+  SDK_VERSION=$(echo $1 | grep -P -o "[0-9].[0-9]+" | head -1)
+fi
 if [ -z "$SDK_VERSION" ]; then
     echo "iPhoneOS Version must be in the SDK filename!" 1>&2
     exit 1
@@ -78,10 +111,11 @@ if [ -z "$SYSLIB" ]; then
     echo "SDK should contain libSystem{.dylib,.tbd}" 1>&2
     exit 1
 fi
-SYSROOT="$(dirname $SYSLIB)/../.."
-set +e
-mv $SYSROOT/* $SDKDIR 2>/dev/null
-set -e
+WRAPPER_SDKDIR=$(echo iPhoneOS*sdk | head -n1)
+if [ -z "$WRAPPER_SDKDIR" ]; then
+    echo "broken SDK" 1>&2
+    exit 1
+fi
 popd &>/dev/null
 
 echo ""
@@ -95,7 +129,7 @@ which $LLVM_DSYMUTIL &>/dev/null
 if [ $? -eq 0 ]; then
     case $($LLVM_DSYMUTIL --version | \
            grep "LLVM version" | head -1 | awk '{print $3}') in
-        3.8*|3.9*|4.0*) OK=1 ;;
+        3.8*|3.9*|4.0*|5.0*) OK=1 ;;
     esac
 fi
 set -e
@@ -110,6 +144,7 @@ else
 fi
 
 verbose_cmd cc -O2 -Wall -Wextra -pedantic wrapper.c \
+    -DSDK_DIR=\"\\\"$WRAPPER_SDKDIR\\\"\" \
     -DTARGET_CPU=\"\\\"$2\\\"\" \
     -DOS_VER_MIN=\"\\\"$SDK_VERSION\\\"\" \
     -o $TARGETDIR/bin/$TRIPLE-clang
@@ -123,11 +158,24 @@ echo "*** building ldid ***"
 echo ""
 
 rm -rf tmp
+
 mkdir -p tmp
 pushd tmp &>/dev/null
-git clone https://github.com/tpoechtrager/ldid.git
+git_clone_repository https://github.com/tpoechtrager/ldid.git master
 pushd ldid &>/dev/null
 make INSTALLPREFIX=$TARGETDIR -j$JOBS install
+popd &>/dev/null
+popd &>/dev/null
+
+echo ""
+echo "*** building apple-libtapi ***"
+echo ""
+
+pushd tmp &>/dev/null
+git_clone_repository https://github.com/tpoechtrager/apple-libtapi.git master
+pushd apple-libtapi &>/dev/null
+INSTALLPREFIX=$TARGETDIR ./build.sh
+./install.sh
 popd &>/dev/null
 popd &>/dev/null
 
@@ -136,10 +184,16 @@ echo "*** building cctools / ld64 ***"
 echo ""
 
 pushd ../../cctools &>/dev/null
-git clean -fdx . &>/dev/null || true
+git clean -fdx &>/dev/null || true
 ./autogen.sh
-./configure --target=$TRIPLE --prefix=$TARGETDIR
+popd &>/dev/null
+
+pushd tmp &>/dev/null
+mkdir -p cctools
+pushd cctools &>/dev/null
+../../../../cctools/configure --target=$TRIPLE --prefix=$TARGETDIR --with-libtapi=$TARGETDIR
 make -j$JOBS && make install
+popd &>/dev/null
 popd &>/dev/null
 
 echo ""

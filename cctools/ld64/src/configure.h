@@ -20,26 +20,21 @@
 
 #define CPU_SUBTYPE_X86_ALL     ((cpu_subtype_t)3)
 
-#define SUPPORT_ARCH_armv4t 1
-#define SUPPORT_ARCH_armv5 1
 #define SUPPORT_ARCH_armv6 1
 #define SUPPORT_ARCH_armv7 1
-#define SUPPORT_ARCH_armv7f 1
-#define SUPPORT_ARCH_armv7k 1
 #define SUPPORT_ARCH_armv7s 1
-#define SUPPORT_ARCH_armv6m 1
-#define SUPPORT_ARCH_armv7m 1
-#define SUPPORT_ARCH_armv7em 1
-#define SUPPORT_ARCH_armv8 1
 #define SUPPORT_ARCH_arm64 1
-#define SUPPORT_ARCH_arm64v8 1
 #define SUPPORT_ARCH_i386 1
 #define SUPPORT_ARCH_x86_64 1
 #define SUPPORT_ARCH_x86_64h 1
+#define SUPPORT_ARCH_armv6m 1
+#define SUPPORT_ARCH_armv7k 1
+#define SUPPORT_ARCH_armv7m 1
+#define SUPPORT_ARCH_armv7em 1
 
 #define SUPPORT_APPLE_TV 1
 
-#define ALL_SUPPORTED_ARCHS  "armv4t armv5 armv6 armv7 armv7f armv7k armv7s armv6m armv7m armv7em armv8 arm64 arm64v8 i386 x86_64 x86_64h (tvOS)"
+#define ALL_SUPPORTED_ARCHS  "armv6 armv7 armv7s arm64 i386 x86_64 x86_64h armv6m armv7k armv7m armv7em (tvOS)"
 
 #define BITCODE_XAR_VERSION "1.0"
 

@@ -9,7 +9,8 @@ ld_LDADD =  \
 	$(UUID_LIB) \
 	$(LTO_LIB) \
 	$(XAR_LIB) \
-	$(DL_LIB)
+	$(DL_LIB) \
+	$(TAPI_LIB) 
 
 ld_LDFLAGS = $(PTHREAD_FLAGS) $(EXECINFO_LIB)
 
@@ -17,6 +18,7 @@ ld_CXXFLAGS =  \
 	-D__DARWIN_UNIX03 \
 	$(WARNINGS) \
 	$(LTO_DEF) \
+	$(TAPI_DEF) \
 	$(ENDIAN_FLAG) \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/include/foreign \
@@ -34,6 +36,7 @@ ld_CFLAGS =  \
 	-D__DARWIN_UNIX03 \
 	$(WARNINGS) \
 	$(LTO_DEF) \
+	$(TAPI_DEF) \
 	$(ENDIAN_FLAG) \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/include/foreign \

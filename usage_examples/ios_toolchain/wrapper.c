@@ -6,6 +6,10 @@
 #define OS_VER_MIN "4.2"
 #endif
 
+#ifndef SDK_DIR
+#define SDK_DIR ""
+#endif
+
 #define _GNU_SOURCE
 
 #include <stdlib.h>
@@ -57,23 +61,29 @@ char *get_executable_path(char *epath, size_t buflen)
     if (sysctl(mib, 4, argv, &len, NULL, 0) < 0)
         abort();
     comm = argv[0];
-    if (*comm == '/' || *comm == '.') {
+    if (*comm == '/' || *comm == '.')
+    {
         char *rpath;
-        if ((rpath = realpath(comm, NULL))) {
-          strlcpy(epath, rpath, buflen);
-          free(rpath);
-          ok = 1;
+        if ((rpath = realpath(comm, NULL)))
+        {
+            strlcpy(epath, rpath, buflen);
+            free(rpath);
+            ok = 1;
         }
-    } else {
+    }
+    else
+    {
         char *sp;
         char *xpath = strdup(getenv("PATH"));
         char *path = strtok_r(xpath, ":", &sp);
         struct stat st;
         if (!xpath)
             abort();
-        while (path) {
+        while (path)
+        {
             snprintf(epath, buflen, "%s/%s", path, comm);
-            if (!stat(epath, &st) && (st.st_mode & S_IXUSR)) {
+            if (!stat(epath, &st) && (st.st_mode & S_IXUSR))
+	    {
                 ok = 1;
                 break;
             }
@@ -137,7 +147,7 @@ int main(int argc, char *argv[])
 
     target_info(argv, &target, &compiler);
     if (!get_executable_path(execpath, sizeof(execpath))) abort();
-    snprintf(sdkpath, sizeof(sdkpath), "%s/../SDK", execpath);
+    snprintf(sdkpath, sizeof(sdkpath), "%s/../SDK/" SDK_DIR, execpath);
 
     snprintf(codesign_allocate, sizeof(codesign_allocate),
              "%s-codesign_allocate", target);

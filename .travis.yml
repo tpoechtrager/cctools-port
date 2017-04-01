@@ -1,4 +1,6 @@
 language: cpp
+dist: trusty
+sudo: required
 
 os:
   - linux
@@ -8,8 +10,7 @@ compiler:
   - clang
 
 before_install:
-  - if [ $TRAVIS_OS_NAME == linux ]; then sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test; sudo apt-get update -qq && sudo apt-get install -y gcc-4.7 g++-4.7 gobjc-4.7 llvm-dev; fi
-  - if [ $CXX == g++ ]; then export CC=gcc-4.7 && export CXX=g++-4.7; fi
+  - if [ $TRAVIS_OS_NAME == linux ]; then sudo apt-get install -y git gcc g++ gobjc llvm-dev cmake; fi
 
 script:
-  - cd cctools && ./autogen.sh && ./configure && make
+  - mkdir -p tmp && TMP=$PWD/tmp && git clone https://github.com/tpoechtrager/apple-libtapi.git && cd apple-libtapi && INSTALLPREFIX=$TMP ./build.sh && ./install.sh && cd .. && cd cctools && ./configure --with-libtapi=$TMP && make

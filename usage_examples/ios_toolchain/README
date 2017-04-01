@@ -1,6 +1,8 @@
 PREREQUISITES:
 
-See cctools/ld64 README + libssl-dev, git, bash and a jailbroken iOS device
+See cctools/ld64 README + libssl-dev, git, bash, cmake and a jailbroken iOS device
+
+--------------------------------------------------------------------------------
 
 USAGE:
 
@@ -26,3 +28,32 @@ For example:
 export IPHONEOS_DEPLOYMENT_TARGET=5.0
 
 will target iOS 5.0.
+
+--------------------------------------------------------------------------------
+
+ISSUES:
+
+ISSUE: clang: error: invalid version number in '-miphoneos-version-min=10.2'
+SOLUTION: Targeting iOS >= 10.0 requires Clang >= 4.0.
+
+--------------------------------------------------------------------------------
+
+PACKAGING THE SDK:
+
+Ensure you have read and understood the Xcode license terms before continuing.
+=> https://www.apple.com/legal/sla/docs/xcode.pdf
+
+Packaging recents SDKs requires Mac OS Sierra.
+
+Download Xcode 8.2.1 and extract its content. Then issue the following commands:
+
+SDK=$(ls -l Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs | grep " -> iPhoneOS.sdk" | head -n1 | awk '{print $9}')
+cp -r Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk /tmp/$SDK 1>/dev/null
+cp -r Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1 /tmp/$SDK/usr/include/c++ 1>/dev/null
+pushd /tmp
+tar -cvzf $SDK.tar.gz $SDK
+rm -rf $SDK
+mv $SDK.tar.gz ~
+popd
+
+The SDK should be now in your home directory.

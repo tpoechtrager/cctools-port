@@ -15,6 +15,7 @@ libParsers_la_CXXFLAGS =  \
 	-D__DARWIN_UNIX03 \
 	$(WARNINGS) \
 	$(LTO_DEF) \
+	$(TAPI_DEF) \
 	$(ENDIAN_FLAG) \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/include/foreign \
