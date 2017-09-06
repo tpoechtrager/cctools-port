@@ -137,6 +137,43 @@ bool Options::FileInfo::checkFileExists(const Options& options, const char *p)
     return false;
 }
 
+std::vector<std::string> Options::FileInfo::lib_cli_argument() const
+{
+	// fIndirectDylib unused
+	bool special = options.fReExport || options.fLazyLoad || options.fUpward;
+
+	if (options.fBundleLoader) {
+		if (special) throw "internal error; bundle loader cannot have these extra attributes";
+		return {"-bundle-loader", path};
+	} else {
+		std::vector<std::string> args = {};
+		if (options.fReExport) {
+			args.push_back("-reexport_library");
+			args.push_back(path);
+		}
+		else if (options.fLazyLoad) {
+			args.push_back("-lazy_library");
+			args.push_back(path);
+		}
+		else if (options.fUpward) {
+			args.push_back("-upward_library");
+			args.push_back(path);
+		}
+		else {
+			// bare path
+			args.push_back(path);
+		}
+
+		// This one alone can be combined with the others
+		if (options.fWeakImport) {
+			args.push_back("-weak_library");
+			args.push_back(path);
+		}
+
+		return args;
+	}
+}
+
 
 Options::Options(int argc, const char* argv[])
 	: fOutputFile("a.out"), fArchitecture(0), fSubArchitecture(0), fArchitectureName("unknown"), fOutputKind(kDynamicExecutable), 
@@ -202,7 +239,8 @@ Options::Options(int argc, const char* argv[])
 	  fPlatform(kPlatformUnknown), fDebugInfoStripping(kDebugInfoMinimal), fTraceOutputFile(NULL),
 	  fMacVersionMin(ld::macVersionUnset), fIOSVersionMin(ld::iOSVersionUnset), fWatchOSVersionMin(ld::wOSVersionUnset),
 	  fSaveTempFiles(false), fSnapshotRequested(false), fPipelineFifo(NULL),
-	  fDependencyInfoPath(NULL), fDependencyFileDescriptor(-1), fMaxDefaultCommonAlign(0)
+	  fDependencyInfoPath(NULL), fDependencyFileDescriptor(-1), fMaxDefaultCommonAlign(0),
+	  fDumpNormalizedLibArgs(false)
 {
 	this->checkForClassic(argc, argv);
 	this->parsePreCommandLineEnvironmentSettings();
@@ -2378,6 +2416,9 @@ void Options::parse(int argc, const char* argv[])
 					  || (strcmp(arg, "-help") == 0)) {
 				fprintf (stdout, "ld64: For information on command line options please use 'man ld'.\n");
 				exit (0);
+			}
+			else if ( strcmp(arg, "--dump-normalized-lib-args") == 0 ) {
+				fDumpNormalizedLibArgs = true;
 			}
 			else if ( strcmp(arg, "-arch") == 0 ) {
 				parseArch(argv[++i]);

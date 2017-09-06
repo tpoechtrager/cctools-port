@@ -49,6 +49,7 @@
 #include <dlfcn.h>
 #include <AvailabilityMacros.h>
 
+#include <iostream>
 #include <string>
 #include <map>
 #include <set>
@@ -1303,6 +1304,14 @@ int main(int argc, const char* argv[])
 		
 		// create object to track command line arguments
 		Options options(argc, argv);
+		if (options.dumpNormalizedLibArgs()) {
+			for (auto info : options.getInputFiles()) {
+				for (auto arg : info.lib_cli_argument()) {
+					std::cout << arg << '\0';
+				}
+			}
+			exit(0);
+		}
 		InternalState state(options);
 		
 		// allow libLTO to be overridden by command line -lto_library
