@@ -29,8 +29,8 @@ int argc,
 char **argv,
 char **envp)
 {
-    const char *LIB = "../libexec/as/";
-    const char *LOCALLIB = "../local/libexec/as/";
+    const char *LIB = ASLIBEXECDIR;
+    const char *LOCALLIB = ASLIBEXECDIR;
     const char *AS = "/as";
 
     int i, j;
