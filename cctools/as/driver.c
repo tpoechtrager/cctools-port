@@ -29,8 +29,8 @@ int argc,
 char **argv,
 char **envp)
 {
-    const char *LIB = "../libexec/as/";
-    const char *LOCALLIB = "../local/libexec/as/";
+    const char *LIB = ASLIBEXECDIR;
+    const char *LOCALLIB = ASLIBEXECDIR;
     const char *AS = "/as";
 
     int i, j;
@@ -386,7 +386,7 @@ char **envp)
 	/*
 	 * If this assembler exist try to run it else print an error message.
 	 */
-	as = makestr(prefix, LIB, arch_name, AS, NULL);
+	as = makestr(LIB, arch_name, AS, NULL);
 	new_argv = allocate((argc + 1) * sizeof(char *));
 	new_argv[0] = as;
 	j = 1;
@@ -408,7 +408,7 @@ char **envp)
 	    else
 		exit(1);
 	}
-	as_local = makestr(prefix, LOCALLIB, arch_name, AS, NULL);
+	as_local = makestr(LOCALLIB, arch_name, AS, NULL);
 	new_argv[0] = as_local;
 	if(access(as_local, F_OK) == 0){
 	    argv[0] = as_local;
@@ -422,7 +422,7 @@ char **envp)
 	arch_flags = get_arch_flags();
 	count = 0;
 	for(i = 0; arch_flags[i].name != NULL; i++){
-	    as = makestr(prefix, LIB, arch_flags[i].name, AS, NULL);
+	    as = makestr(LIB, arch_flags[i].name, AS, NULL);
 	    if(access(as, F_OK) == 0){
 		if(count == 0)
 		    printf("Installed assemblers are:\n");
@@ -430,7 +430,7 @@ char **envp)
 		count++;
 	    }
 	    else{
-		as_local = makestr(prefix, LOCALLIB, arch_flags[i].name, AS,
+		as_local = makestr(LOCALLIB, arch_flags[i].name, AS,
 				   NULL);
 		if(access(as_local, F_OK) == 0){
 		    if(count == 0)
