@@ -90,6 +90,10 @@ static char hb[sizeof(HDR) + 1];	/* real header */
 
 int archive_opened_for_writing = 0;
 
+#ifndef DEFFILEMODE
+#define DEFFILEMODE S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH
+#endif
+
 int
 open_archive(mode)
 	int mode;

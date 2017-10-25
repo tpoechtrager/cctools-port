@@ -61,6 +61,8 @@
  *	@(#)archive.h	8.3 (Berkeley) 4/2/94
  */
 
+#include <sys/types.h>
+
 /* Ar(1) options. */
 #define	AR_A	0x0001
 #define	AR_B	0x0002
