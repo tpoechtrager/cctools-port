@@ -314,6 +314,12 @@ LDFLAGS=$ORIGLDFLAGS
 CHECK_LLVM
 LDFLAGS="$LDFLAGS $LTO_RPATH"
 
+### Check for libfts (musl) ###
+
+AC_CHECK_LIB([fts],[fts_open],[
+  AC_CHECK_HEADERS([fts.h], [FTS_LIB=-lfts])], [])
+AC_SUBST(FTS_LIB)
+
 ### Check for libxar ###
 
 if test "x$LLVM_CONFIG" != "xno"; then

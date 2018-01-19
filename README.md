@@ -34,6 +34,9 @@ Mac OS X, iOS, watchOS (untested) and tvOS (untested)
 SDKs with .tdb stubs (>= Xcode 7) require the TAPI library to be installed.  
 => https://github.com/tpoechtrager/apple-libtapi
 
+musl-libc based systems require the musl-fts library to be installed.
+=> https://github.com/pullmoll/musl-fts
+
 Optional, but recommended:
 
 `llvm-devel`               (For Link Time Optimization Support)  

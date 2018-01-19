@@ -28,7 +28,8 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/param.h>
-#ifndef __OPENSTEP__
+#if defined(__APPLE__) || defined(__GLIBC__) || defined(__MINGW32__)
+#define HAVE_FTS
 #include <fts.h>
 #endif
 #include <sys/errno.h>
@@ -116,7 +117,7 @@ find_dylib_in_root(
 char *install_name,
 const char *root)
 {
-#ifndef __OPENSTEP__
+#ifdef HAVE_FTS
     char *base_name, start[MAXPATHLEN + 1], *image_file_name;
     char const *paths[2];
     FTS *fts;
