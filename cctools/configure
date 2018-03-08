@@ -17571,11 +17571,14 @@ if test "x$enable_tapi_support" = "xyes"; then
 if test "${with_libtapi+set}" = set; then :
   withval=$with_libtapi; LIBTAPI_DIR=$with_libtapi
 else
-  LIBTAPI_DIRECTORY=no
+  LIBTAPI_DIR=""
 fi
 
 
-if test "x$LIBTAPI_DIR" != "xno"; then
+if test "x$LIBTAPI_DIR" = "xno"; then
+  LIBTAPI_DIR=""
+fi
+if test "x$LIBTAPI_DIR" != "x"; then
   CXXFLAGS="$CXXFLAGS -isystem $LIBTAPI_DIR/include"
   CPPFLAGS="$CPPFLAGS -isystem $LIBTAPI_DIR/include"
   test -d "$LIBTAPI_DIR/lib" && LDFLAGS="$LDFLAGS -L$LIBTAPI_DIR/lib"
@@ -17594,65 +17597,38 @@ if test "x$LIBTAPI_DIR" != "xno"; then
 fi
 
 TAPI_LIB=""
-
-# This is awful but still better than messing around with C++
-
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for _ZN4tapi10APIVersion8getMajorEv in -ltapi" >&5
-$as_echo_n "checking for _ZN4tapi10APIVersion8getMajorEv in -ltapi... " >&6; }
-if ${ac_cv_lib_tapi__ZN4tapi10APIVersion8getMajorEv+:} false; then :
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking tapi/tapi.h and libtapi support" >&5
+$as_echo_n "checking tapi/tapi.h and libtapi support... " >&6; }
+if ${cctools_cv_tapi_support+:} false; then :
   $as_echo_n "(cached) " >&6
 else
-  ac_check_lib_save_LIBS=$LIBS
-LIBS="-ltapi  $LIBS"
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-
-/* Override any GCC internal prototype to avoid an error.
-   Use char because int might match the return type of a GCC
-   builtin and then its argument prototype would still apply.  */
-#ifdef __cplusplus
-extern "C"
-#endif
-char _ZN4tapi10APIVersion8getMajorEv ();
-int
-main ()
-{
-return _ZN4tapi10APIVersion8getMajorEv ();
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_c_try_link "$LINENO"; then :
-  ac_cv_lib_tapi__ZN4tapi10APIVersion8getMajorEv=yes
-else
-  ac_cv_lib_tapi__ZN4tapi10APIVersion8getMajorEv=no
-fi
-rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext conftest.$ac_ext
-LIBS=$ac_check_lib_save_LIBS
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_tapi__ZN4tapi10APIVersion8getMajorEv" >&5
-$as_echo "$ac_cv_lib_tapi__ZN4tapi10APIVersion8getMajorEv" >&6; }
-if test "x$ac_cv_lib_tapi__ZN4tapi10APIVersion8getMajorEv" = xyes; then :
-
   ac_ext=cpp
 ac_cpp='$CXXCPP $CPPFLAGS'
 ac_compile='$CXX -c $CXXFLAGS $CPPFLAGS conftest.$ac_ext >&5'
 ac_link='$CXX -o conftest$ac_exeext $CXXFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
 ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
 
-  for ac_header in tapi/tapi.h
-do :
-  ac_fn_cxx_check_header_mongrel "$LINENO" "tapi/tapi.h" "ac_cv_header_tapi_tapi_h" "$ac_includes_default"
-if test "x$ac_cv_header_tapi_tapi_h" = xyes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_TAPI_TAPI_H 1
+  save_LIBS="$LIBS"
+  LIBS="$LIBS -ltapi"
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include <tapi/tapi.h>
+int
+main ()
+{
+return tapi::APIVersion::getMajor();
+  ;
+  return 0;
+}
 _ACEOF
- TAPI_LIB=-ltapi; TAPI_DEF=-DTAPI_SUPPORT
+if ac_fn_cxx_try_link "$LINENO"; then :
+  cctools_cv_tapi_support=yes
+else
+  cctools_cv_tapi_support=no
 fi
-
-done
-
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+  LIBS="save_$LIBS"
   ac_ext=c
 ac_cpp='$CPP $CPPFLAGS'
 ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
@@ -17661,12 +17637,15 @@ ac_compiler_gnu=$ac_cv_c_compiler_gnu
 
 
 fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $cctools_cv_tapi_support" >&5
+$as_echo "$cctools_cv_tapi_support" >&6; }
 
-
-
-
-if test "x$TAPI_LIB" == "x"; then
+if test $cctools_cv_tapi_support = yes; then
+  TAPI_LIB=-ltapi
+  TAPI_DEF=-DTAPI_SUPPORT
+else
   if test "x$LIBTAPI_DIR" != "x"; then
+    as_fn_error $? "-- ERROR: Failed TAPI checks in $LIBTAPI_DIR" "$LINENO" 5
     exit 1
   fi
   echo ""
@@ -17675,6 +17654,8 @@ if test "x$TAPI_LIB" == "x"; then
   echo ""
   sleep 2
 fi
+
+
 
 fi
 

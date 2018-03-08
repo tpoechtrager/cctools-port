@@ -342,9 +342,12 @@ if test "x$enable_tapi_support" = "xyes"; then
 AC_ARG_WITH([libtapi],
     AS_HELP_STRING([--with-libtapi],
                    [path to the apple tapi library]),
-    [LIBTAPI_DIR=$with_libtapi], [LIBTAPI_DIRECTORY=no])
+    [LIBTAPI_DIR=$with_libtapi], [LIBTAPI_DIR=""])
 
-if test "x$LIBTAPI_DIR" != "xno"; then
+if test "x$LIBTAPI_DIR" = "xno"; then
+  LIBTAPI_DIR=""
+fi
+if test "x$LIBTAPI_DIR" != "x"; then
   CXXFLAGS="$CXXFLAGS -isystem $LIBTAPI_DIR/include"
   CPPFLAGS="$CPPFLAGS -isystem $LIBTAPI_DIR/include"
   test -d "$LIBTAPI_DIR/lib" && LDFLAGS="$LDFLAGS -L$LIBTAPI_DIR/lib"
@@ -363,18 +366,24 @@ if test "x$LIBTAPI_DIR" != "xno"; then
 fi
 
 TAPI_LIB=""
-
-# This is awful but still better than messing around with C++
-AC_CHECK_LIB([tapi],[_ZN4tapi10APIVersion8getMajorEv],[
+AC_CACHE_CHECK([tapi/tapi.h and libtapi support],[cctools_cv_tapi_support],
   AC_LANG_PUSH([C++])
-  AC_CHECK_HEADERS([tapi/tapi.h], [TAPI_LIB=-ltapi; TAPI_DEF=-DTAPI_SUPPORT], [])
+  save_LIBS="$LIBS"
+  LIBS="$LIBS -ltapi"
+  AC_TRY_LINK([#include <tapi/tapi.h>],
+              [return tapi::APIVersion::getMajor();],
+              [cctools_cv_tapi_support=yes],
+              [cctools_cv_tapi_support=no])
+  LIBS="save_$LIBS"
   AC_LANG_POP([C++])
-  ], [])
-AC_SUBST(TAPI_LIB)
-AC_SUBST(TAPI_DEF)
+)
 
-if test "x$TAPI_LIB" == "x"; then
+if test $cctools_cv_tapi_support = yes; then
+  TAPI_LIB=-ltapi
+  TAPI_DEF=-DTAPI_SUPPORT
+else
   if test "x$LIBTAPI_DIR" != "x"; then
+    AC_MSG_ERROR([-- ERROR: Failed TAPI checks in $LIBTAPI_DIR])
     exit 1
   fi
   echo ""
@@ -384,6 +393,8 @@ if test "x$TAPI_LIB" == "x"; then
   sleep 2
 fi
 
+AC_SUBST(TAPI_LIB)
+AC_SUBST(TAPI_DEF)
 fi
 
 ### Check whether we want to use clang as assembler ###
