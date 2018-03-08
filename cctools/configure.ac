@@ -374,7 +374,7 @@ AC_CACHE_CHECK([tapi/tapi.h and libtapi support],[cctools_cv_tapi_support],
               [return tapi::APIVersion::getMajor();],
               [cctools_cv_tapi_support=yes],
               [cctools_cv_tapi_support=no])
-  LIBS="save_$LIBS"
+  LIBS="$save_LIBS"
   AC_LANG_POP([C++])
 )
 
