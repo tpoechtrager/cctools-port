@@ -1,5 +1,5 @@
 language: cpp
-dist: trusty
+dist: xenial
 sudo: required
 
 os:
@@ -10,7 +10,8 @@ compiler:
   - clang
 
 before_install:
-  - if [ $TRAVIS_OS_NAME == linux ]; then sudo apt-get install -y git gcc g++ gobjc llvm-dev cmake; fi
+  - sudo apt-get update
+  - sudo apt-get install -y --allow-unauthenticated git gcc g++ gobjc llvm-dev cmake
 
 script:
-  - mkdir -p tmp && TMP=$PWD/tmp && git clone https://github.com/tpoechtrager/apple-libtapi.git && cd apple-libtapi && INSTALLPREFIX=$TMP ./build.sh && ./install.sh && cd .. && cd cctools && ./configure --with-libtapi=$TMP && make
+  - cd cctools && ./configure && make
