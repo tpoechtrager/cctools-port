@@ -13,4 +13,4 @@ before_install:
   - if [ $TRAVIS_OS_NAME == linux ]; then sudo apt-get install -y git gcc g++ gobjc llvm-dev cmake; fi
 
 script:
-  - mkdir -p tmp && TMP=$PWD/tmp && git clone https://github.com/tpoechtrager/apple-libtapi.git && cd apple-libtapi && INSTALLPREFIX=$TMP ./build.sh && ./install.sh && cd .. && cd cctools && ./configure --with-libtapi=$TMP && make
+  - mkdir -p tmp && TMP=$PWD/tmp && git clone https://github.com/tpoechtrager/apple-libtapi.git && cd apple-libtapi && INSTALLPREFIX=$TMP ./build.sh && ./install.sh && cd .. && cd cctools && ./autogen.sh && ./configure --with-libtapi=$TMP && make
