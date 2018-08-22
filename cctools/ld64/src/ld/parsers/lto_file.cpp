@@ -1424,9 +1424,10 @@ bool Parser::optimize(  const std::vector<const ld::Atom*>&	allAtoms,
 void Parser::AtomSyncer::doAtom(const ld::Atom& machoAtom)
 {
 	static const bool log = false;
+	bool isLocal = machoAtom.scope() == ld::Atom::scopeTranslationUnit;
 	// update proxy atoms to point to real atoms and find new atoms
 	const char* name = machoAtom.name();
-	CStringToAtom::const_iterator pos = _llvmAtoms.find(name);
+	CStringToAtom::const_iterator pos = isLocal ? _llvmAtoms.end() : _llvmAtoms.find(name);
 	if ( pos != _llvmAtoms.end() ) {
 		// turn Atom into a proxy for this mach-o atom
 		pos->second->setCompiledAtom(machoAtom);
@@ -1436,7 +1437,7 @@ void Parser::AtomSyncer::doAtom(const ld::Atom& machoAtom)
 	}
 	else {
 		// an atom of this name was not in the allAtoms list the linker gave us
-		auto llvmAtom = _deadllvmAtoms.find(name);
+		auto llvmAtom = isLocal ? _deadllvmAtoms.end() : _deadllvmAtoms.find(name);
 		if ( llvmAtom != _deadllvmAtoms.end() ) {
 			// this corresponding to an atom that the linker coalesced away or marked not-live
 			if ( _options.linkerDeadStripping ) {
@@ -1481,8 +1482,10 @@ void Parser::AtomSyncer::doAtom(const ld::Atom& machoAtom)
 				// reference is not going through Atom proxy. Fix it here to ensure that all
 				// llvm symbol references always go through Atom proxy.
 				{
-					const char* targetName = fit->u.target->name();
-					CStringToAtom::const_iterator post = _llvmAtoms.find(targetName);
+					const ld::Atom* targetAtom = fit->u.target;
+					const char* targetName = targetAtom->name();
+					bool isLocal = targetAtom->scope() == ld::Atom::scopeTranslationUnit;
+					CStringToAtom::const_iterator post = isLocal ? _llvmAtoms.end() : _llvmAtoms.find(targetName);
 					if ( post != _llvmAtoms.end() ) {
 						const ld::Atom* t = post->second;
 						if (log) fprintf(stderr, "    updating direct reference to %p to be ref to %p: %s\n", fit->u.target, t, targetName);
@@ -1490,7 +1493,8 @@ void Parser::AtomSyncer::doAtom(const ld::Atom& machoAtom)
 					}
 					else {
 						// <rdar://problem/12859831> Don't unbind follow-on reference into by-name reference 
-						if ( (_deadllvmAtoms.find(targetName) != _deadllvmAtoms.end()) && (fit->kind != ld::Fixup::kindNoneFollowOn) && (fit->u.target->scope() != ld::Atom::scopeTranslationUnit) ) {
+						auto llvmAtom = isLocal ? _deadllvmAtoms.end() : _deadllvmAtoms.find(targetName);
+						if ( (llvmAtom != _deadllvmAtoms.end()) && (fit->kind != ld::Fixup::kindNoneFollowOn) && (fit->u.target->scope() != ld::Atom::scopeTranslationUnit) ) {
 							// target was coalesed away and replace by mach-o atom from a non llvm .o file
 							fit->binding = ld::Fixup::bindingByNameUnbound;
 							fit->u.name = targetName;
