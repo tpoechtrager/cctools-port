@@ -422,7 +422,7 @@ AC_CONFIG_FILES([as/i386/Makefile])
 AC_CONFIG_FILES([as/x86_64/Makefile])
 AC_CONFIG_FILES([as/ppc/Makefile])
 AC_CONFIG_FILES([as/ppc64/Makefile])
-#AC_CONFIG_FILES([man/Makefile])
+AC_CONFIG_FILES([man/Makefile])
 AC_CONFIG_FILES([misc/Makefile])
 AC_CONFIG_FILES([otool/Makefile])
 

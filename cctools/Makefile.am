@@ -1,7 +1,7 @@
-if ISDARWIN
-SUBDIRS=libstuff ar as misc otool ld64
-else
-SUBDIRS=libstuff ar as misc libobjc2 otool ld64
+SUBDIRS=libstuff ar as misc otool ld64 man
+
+if !ISDARWIN
+SUBDIRS+=libobjc2
 endif
 
 ACLOCAL_AMFLAGS = -I m4
