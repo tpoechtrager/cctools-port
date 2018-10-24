@@ -1,11 +1,27 @@
+#if defined(__GLIBC__) || defined(__APPLE__)
+
+#include_next <sys/cdefs.h>
+
+#else
+
+#ifdef __cplusplus
+#define __BEGIN_DECLS extern "C" {
+#define __END_DECLS }
+#else
+#define __BEGIN_DECLS
+#define __END_DECLS
+#endif
+
+#define __P(x) x
+
+#endif /* __GLIBC__ || __APPLE__ */
+
+#ifdef __GLIBC__
+
 /*
  * Workaround for a GLIBC bug.
  * https://sourceware.org/bugzilla/show_bug.cgi?id=14952
  */
-
-#include_next <sys/cdefs.h>
-
-#ifdef __GLIBC__
 
 #ifndef __extern_inline
 # define __extern_inline \

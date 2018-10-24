@@ -124,7 +124,7 @@ template <typename A>
 		throw strdup(errorMessage.c_str());
 
 	// unmap file - it is no longer needed.
-	munmap((caddr_t)fileContent, fileLength);
+	munmap((void *)fileContent, fileLength);
 
 	// write out path for -t option
 	if ( logAllFiles )
