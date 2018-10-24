@@ -88,7 +88,6 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
-@ISDARWIN_FALSE@am__append_1 = libobjc2
 subdir = .
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/libtool.m4 \
@@ -161,7 +160,7 @@ am__define_uniq_tagged_files = \
 ETAGS = etags
 CTAGS = ctags
 CSCOPE = cscope
-DIST_SUBDIRS = libstuff ar as misc otool ld64 man libobjc2
+DIST_SUBDIRS = $(SUBDIRS)
 am__DIST_COMMON = $(srcdir)/Makefile.in AUTHORS COPYING ChangeLog \
 	INSTALL NEWS README compile config.guess config.sub install-sh \
 	ltmain.sh missing
@@ -354,7 +353,7 @@ target_vendor = @target_vendor@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-SUBDIRS = libstuff ar as misc otool ld64 man $(am__append_1)
+SUBDIRS = libstuff ar as misc libobjc2 otool ld64 man
 ACLOCAL_AMFLAGS = -I m4
 DSTROOT = 
 RC_OS = macos
