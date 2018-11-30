@@ -59,8 +59,46 @@
 #include <servers/bootstrap.h>
 #endif
 
-/* cctools-port */
+/* cctools-port start */
 int asprintf(char **strp, const char *fmt, ...); 
+
+/*
+ * utimens utility to set file times with sub-second resolution when available.
+ * This is done by using utimensat if available at compile time.
+ *
+ * macOS is special cased: utimensat is only visible at compile time when
+ * building for macOS >= 10.13, but with proper runtime checks we can make
+ * builds targeted at older versions also work with sub-second resolution when
+ * available. This is especially important because APFS introduces sub-second
+ * timestamp resolution.
+ */
+#if defined(__APPLE__) && defined(HAVE_UTIMENSAT)
+#pragma weak utimensat
+#endif
+
+static int utimens(const char *path, const struct timespec times[2])
+{
+#ifdef HAVE_UTIMENSAT
+#ifdef __APPLE__
+    if (utimensat != NULL)
+#endif
+	return utimensat(AT_FDCWD, path, times, 0);
+#endif
+
+    /* Fall back to truncating the timestamp to 1s resolution. */
+#ifndef __OPENSTEP__
+    struct utimbuf timep;
+    timep.actime = times[0].tv_sec;
+    timep.modtime = times[1].tv_sec;
+    return utime(path, &timep);
+#else
+    time_t timep[2];
+    timep[0] = times[0].tv_sec;
+    timep[1] = times[1].tv_sec;
+    return utime(path, timep);
+#endif
+}
+/* cctools-port end */
 
 /*
  * This is used internally to build the table of contents.
@@ -2307,11 +2345,7 @@ struct ofile *ofile)
     struct fat_arch *fat_arch;
     struct fat_arch_64 *fat_arch64;
     int fd;
-#ifndef __OPENSTEP__
-    struct utimbuf timep;
-#else
-    time_t timep[2];
-#endif
+    struct timespec times[2];
     struct stat stat_buf;
     struct ar_hdr toc_ar_hdr;
     enum bool some_tocs, same_toc, different_offsets;
@@ -2881,15 +2915,19 @@ update_toc_ar_dates:
 	 * Now set the modtime of the created library back to it's stat time
 	 * when we first closed it.
 	 */
-#ifndef __OPENSTEP__
-	timep.actime = stat_buf.st_mtime;
-	timep.modtime = stat_buf.st_mtime;
-	if(utime(output, &timep) == -1)
+#ifdef HAVE_STAT_ST_MTIMESPEC
+	times[0] = stat_buf.st_mtimespec;
+	times[1] = stat_buf.st_mtimespec;
+#elif HAVE_STAT_ST_MTIM
+	times[0] = stat_buf.st_mtim;
+	times[1] = stat_buf.st_mtim;
 #else
-	timep[0] = stat_buf.st_mtime;
-	timep[1] = stat_buf.st_mtime;
-	if(utime(output, timep) == -1)
+	times[0].tv_sec = stat_buf.st_mtime;
+	times[0].tv_nsec = 0;
+	times[1].tv_sec = stat_buf.st_mtime;
+	times[0].tv_nsec = 0;
 #endif
+	if(utimens(output, times) == -1)
 	{
 	    system_fatal("can't set the modifiy times in output file: %s",
 			 output);

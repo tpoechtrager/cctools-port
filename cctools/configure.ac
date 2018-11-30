@@ -268,7 +268,32 @@ AC_CHECK_LIB([uuid],[uuid_generate_random],[
   AC_CHECK_HEADERS([uuid/uuid.h], [UUID_LIB=-luuid])], [])
 AC_SUBST(UUID_LIB)
 
-AC_CHECK_FUNCS([strmode])
+AC_CHECK_FUNCS([strmode, utimensat])
+
+### Check how to access struct stat's tv_nsec field.
+AC_MSG_CHECKING(for st_mtimespec.tv_nsec in struct stat)
+AC_COMPILE_IFELSE(
+  [AC_LANG_PROGRAM(
+    [[#include <sys/stat.h>]],
+    [[
+    struct stat st;
+    st.st_mtimespec.tv_nsec = 0;
+    ]])],
+  [AC_DEFINE(HAVE_STAT_ST_MTIMESPEC, 1, [struct stat has st_mtimespec.tv_nsec])
+   AC_MSG_RESULT([yes])],
+  [AC_MSG_RESULT([no])])
+
+AC_MSG_CHECKING(for st_mtim.tv_nsec in struct stat)
+AC_COMPILE_IFELSE(
+  [AC_LANG_PROGRAM(
+    [[#include <sys/stat.h>]],
+    [[
+    struct stat st;
+    st.st_mtim.tv_nsec = 0;
+    ]])],
+  [AC_DEFINE(HAVE_STAT_ST_MTIM, 1, [struct stat has st_mtim.tv_nsec])
+   AC_MSG_RESULT([yes])],
+  [AC_MSG_RESULT([no])])
 
 ### Check for __cxa_demangle in various C++ ABI libs ###
 
