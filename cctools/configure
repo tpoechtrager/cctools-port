@@ -17044,17 +17044,75 @@ fi
 
 
 
-for ac_func in strmode
+for ac_func in strmode, utimensat
 do :
-  ac_fn_c_check_func "$LINENO" "strmode" "ac_cv_func_strmode"
-if test "x$ac_cv_func_strmode" = xyes; then :
+  as_ac_var=`$as_echo "ac_cv_func_$ac_func" | $as_tr_sh`
+ac_fn_c_check_func "$LINENO" "$ac_func" "$as_ac_var"
+if eval test \"x\$"$as_ac_var"\" = x"yes"; then :
   cat >>confdefs.h <<_ACEOF
-#define HAVE_STRMODE 1
+#define `$as_echo "HAVE_$ac_func" | $as_tr_cpp` 1
 _ACEOF
 
 fi
 done
 
+
+### Check how to access struct stat's tv_nsec field.
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for st_mtimespec.tv_nsec in struct stat" >&5
+$as_echo_n "checking for st_mtimespec.tv_nsec in struct stat... " >&6; }
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include <sys/stat.h>
+int
+main ()
+{
+
+    struct stat st;
+    st.st_mtimespec.tv_nsec = 0;
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"; then :
+
+$as_echo "#define HAVE_STAT_ST_MTIMESPEC 1" >>confdefs.h
+
+   { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+$as_echo "yes" >&6; }
+else
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for st_mtim.tv_nsec in struct stat" >&5
+$as_echo_n "checking for st_mtim.tv_nsec in struct stat... " >&6; }
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include <sys/stat.h>
+int
+main ()
+{
+
+    struct stat st;
+    st.st_mtim.tv_nsec = 0;
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"; then :
+
+$as_echo "#define HAVE_STAT_ST_MTIM 1" >>confdefs.h
+
+   { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+$as_echo "yes" >&6; }
+else
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
 
 ### Check for __cxa_demangle in various C++ ABI libs ###
 
