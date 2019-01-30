@@ -2,14 +2,14 @@
  * Copyright (c) 1999 Apple Computer, Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
- * 
+ *
  * This file contains Original Code and/or Modifications of Original Code
  * as defined in and that are subject to the Apple Public Source License
  * Version 2.0 (the 'License'). You may not use this file except in
  * compliance with the License. Please obtain a copy of the License at
  * http://www.opensource.apple.com/apsl/ and read it before using this
  * file.
- * 
+ *
  * The Original Code and all software distributed under the License are
  * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
  * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
@@ -17,7 +17,7 @@
  * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
  * Please see the License for the specific language governing rights and
  * limitations under the License.
- * 
+ *
  * @APPLE_LICENSE_HEADER_END@
  */
 /*	$OpenBSD: strings.c,v 1.2 1996/06/26 05:39:30 deraadt Exp $	*/
@@ -336,11 +336,10 @@ void *cookie)
 	 * to sections.
 	 */
 	if(ofile->object_addr == NULL
-#ifdef LTO_SUPPORT /* cctools-port */
-		|| ofile->member_type == OFILE_LLVM_BITCODE
+#ifdef LTO_SUPPORT
+           || ofile->member_type == OFILE_LLVM_BITCODE
 #endif /* LTO_SUPPORT */
-	  )
-	{
+           ){
 	    if(ofile->file_type == OFILE_FAT && ofile->arch_flag.cputype != 0){
 		if(ofile->fat_header->magic == FAT_MAGIC_64){
 		    addr = ofile->file_addr +
@@ -427,7 +426,7 @@ void *cookie)
 		for(j = 0; j < sg64->nsects; j++){
 		    if(flags->all_sections){
 			if((s64->flags & S_ZEROFILL) != S_ZEROFILL &&
-			   (s64->flags & S_THREAD_LOCAL_ZEROFILL) != 
+			   (s64->flags & S_THREAD_LOCAL_ZEROFILL) !=
 				         S_THREAD_LOCAL_ZEROFILL){
 			    addr = ofile->object_addr + s64->offset;
 			    offset = s64->offset;
@@ -514,19 +513,19 @@ struct flags *flags)
 {
     static char buf[BUFSIZ];
     register char *cp;
-    register int c, cc;
+    register int c, cc, i;
 
-	cp = buf, cc = 0;
-	for (; cnt != 0; cnt--) {
+    cp = buf, cc = 0;
+	for (i = 0; i < cnt; ++i) {
 		c = getc(stdin);
-		if (c == '\n' || dirt(c) || cnt == 0) {
+		if (c == '\n' || dirt(c) || (i + 1) == cnt) {
 			if (cp > buf && cp[-1] == '\n')
 				--cp;
 			*cp++ = 0;
 			if (cp > &buf[flags->minimum_length]) {
 				if (flags->print_offsets == TRUE){
 					printf(flags->offset_format,
-					       ftell(stdin) - cc - 1);
+					       i - cc);
 					printf(" ");
 				}
 				printf("%s\n", buf);

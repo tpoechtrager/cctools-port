@@ -1,9 +1,9 @@
-.TH MTOC 1 "September 12, 2008" "Apple, Inc."
+.TH MTOC 1 "July 21, 2017" "Apple, Inc."
 .SH NAME
 mtoc \- convert a Mach-O file to a PECOFF file
 .SH SYNOPSIS
 .B mtoc
-[ \-subsystem type ] [ \-section_alignment value ] [ \-align value ] [ \-d filename ] input output
+[ \-subsystem type ] [ \-section_alignment value ] [ \-align value ] [ \-version major.minor ] [ \-d filename ] input output
 .SH DESCRIPTION
 .I mtoc
 converts the
@@ -39,6 +39,13 @@ is a hexadecimal number that must be an integral power of 2.
 The default is 400 hex.  This value should match the value used for
 .B "\-segalign"
 when linking the Mach-O file.
+.TP
+.BI "\-version" " major.minor"
+Specifies the PECOFF
+.I major
+and
+.I minor
+versions for the MajorImageVersion and MinorImageVersion fields.
 .TP
 .BI "\-d " filename"
 Specifies the filename to be used to create a debug directory entry with.

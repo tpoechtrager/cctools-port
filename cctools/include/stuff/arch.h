@@ -98,6 +98,14 @@ __private_extern__ const char *get_arch_name_from_types(
     cpu_subtype_t cpusubtype);
 
 /*
+ * get_arch_name_if_known() returns the name of the architecture for the
+ * specified cputype and cpusubtype if known.  If unknown it returns NULL.
+ */
+__private_extern__ const char *get_arch_name_if_known(
+    cpu_type_t cputype,
+    cpu_subtype_t cpusubtype);
+
+/*
  * get_arch_family_from_cputype() returns the family architecture for the
  * specified cputype if known.  If unknown it returns NULL.
  */

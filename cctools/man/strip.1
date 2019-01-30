@@ -1,4 +1,4 @@
-.TH STRIP 1 "February 25, 2016" "Apple, Inc."
+.TH STRIP 1 "January 17, 2018" "Apple Inc."
 .SH NAME
 strip \- remove symbols
 .SH SYNOPSIS
@@ -179,7 +179,9 @@ The source file names listed in
 .I filename
 must be one per line with no other white space in the file except the newlines
 on the end of each line.  And they must be just the base name of the source file
-without any leading directories.
+without any leading directories. This option works only with the
+.IR stab (5)
+debugging format, it has no affect when using the DWARF debugging format.
 .TP
 .B \-A
 Save all global absolute symbols except those with a value of zero, and save
@@ -215,7 +217,14 @@ and other compilers).
 Remove the local symbols whose names begin with `L'.
 .TP
 .B \-T
-Remove the symbols whose names begin with `\_\^\_T'.
+The intent of this flag is to remove Swift symbols.  It removes the
+symbols whose names begin with `\_$S' or `\_$s' only when it finds
+an \_\^\_objc_imageinfo section with and it has a non-zero swift version.
+The future the implementation of this flag may change to match the intent.
+.TP
+.B \-N
+In binaries that use the dynamic linker remove all nlist symbols and the string
+table.  Setting the environment variable STRIP_NLISTS has the same effect.
 .TP 
 .B \-x
 Remove all local symbols (saving only global symbols).

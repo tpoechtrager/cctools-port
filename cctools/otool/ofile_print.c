@@ -672,6 +672,17 @@ cpu_subtype_t cpusubtype)
 	    break;
 	    case CPU_SUBTYPE_ARM64_V8:
 		printf("arm64v8\n");
+	    case CPU_SUBTYPE_ARM64E:
+		printf("arm64e\n");
+	    default:
+		goto print_arch_unknown;
+	    }
+	    break;
+	case CPU_TYPE_ARM64_32:
+	    switch(cpusubtype & ~CPU_SUBTYPE_MASK){
+	    case CPU_SUBTYPE_ARM64_32_V8:
+		printf("arm64_32\n");
+	    break;
 	    default:
 		goto print_arch_unknown;
 	    }
@@ -986,6 +997,20 @@ cpu_subtype_t cpusubtype)
 	    case CPU_SUBTYPE_ARM64_V8:
 		printf("    cputype CPU_TYPE_ARM64\n"
 		       "    cpusubtype CPU_SUBTYPE_ARM64_V8\n");
+	    	break;
+	    case CPU_SUBTYPE_ARM64E:
+		printf("    cputype CPU_TYPE_ARM64\n"
+		       "    cpusubtype CPU_SUBTYPE_ARM64E\n");
+	    	break;
+	    default:
+		goto print_arch_unknown;
+	    }
+	    break;
+	case CPU_TYPE_ARM64_32:
+	    switch(cpusubtype & ~CPU_SUBTYPE_MASK){
+	    case CPU_SUBTYPE_ARM64_32_V8:
+		printf("    cputype CPU_TYPE_ARM64_32\n"
+		       "    cpusubtype CPU_SUBTYPE_ARM64_32_V8\n");
 	    	break;
 	    default:
 		goto print_arch_unknown;
@@ -2029,6 +2054,20 @@ NS32:
 		case CPU_SUBTYPE_ARM64_V8:
 		    printf("         V8");
 		    break;
+		case CPU_SUBTYPE_ARM64E:
+		    printf("          E");
+		    break;
+		default:
+		    printf(" %10d", cpusubtype & ~CPU_SUBTYPE_MASK);
+		    break;
+		}
+		break;
+	    case CPU_TYPE_ARM64_32:
+		printf(" ARM64_32");
+		switch(cpusubtype & ~CPU_SUBTYPE_MASK){
+		case CPU_SUBTYPE_ARM64_32_V8:
+		    printf("        V8");
+		    break;
 		default:
 		    printf(" %10d", cpusubtype & ~CPU_SUBTYPE_MASK);
 		    break;
@@ -2157,17 +2196,25 @@ NS32:
 		printf(" ALLOW_STACK_EXECUTION");
 		f &= ~MH_ALLOW_STACK_EXECUTION;
 	    }
-	    if(f & MH_DEAD_STRIPPABLE_DYLIB){
-		printf(" DEAD_STRIPPABLE_DYLIB");
-		f &= ~MH_DEAD_STRIPPABLE_DYLIB;
+	    if(f & MH_ROOT_SAFE){
+		printf(" ROOT_SAFE");
+		f &= ~MH_ROOT_SAFE;
+	    }
+	    if(f & MH_SETUID_SAFE){
+		printf(" SETUID_SAFE");
+		f &= ~MH_SETUID_SAFE;
+	    }
+	    if(f & MH_NO_REEXPORTED_DYLIBS){
+		printf(" NO_REEXPORTED_DYLIBS");
+		f &= ~MH_NO_REEXPORTED_DYLIBS;
 	    }
 	    if(f & MH_PIE){
 		printf(" PIE");
 		f &= ~MH_PIE;
 	    }
-	    if(f & MH_NO_REEXPORTED_DYLIBS){
-		printf(" NO_REEXPORTED_DYLIBS");
-		f &= ~MH_NO_REEXPORTED_DYLIBS;
+	    if(f & MH_DEAD_STRIPPABLE_DYLIB){
+		printf(" DEAD_STRIPPABLE_DYLIB");
+		f &= ~MH_DEAD_STRIPPABLE_DYLIB;
 	    }
 	    if(f & MH_HAS_TLV_DESCRIPTORS){
 		printf(" MH_HAS_TLV_DESCRIPTORS");
@@ -2180,6 +2227,14 @@ NS32:
 	    if(f & MH_APP_EXTENSION_SAFE){
 		printf(" APP_EXTENSION_SAFE");
 		f &= ~MH_APP_EXTENSION_SAFE;
+	    }
+	    if(f & MH_NLIST_OUTOFSYNC_WITH_DYLDINFO){
+		printf(" NLIST_OUTOFSYNC_WITH_DYLDINFO");
+		f &= ~MH_NLIST_OUTOFSYNC_WITH_DYLDINFO;
+	    }
+	    if(f & MH_SIM_SUPPORT){
+		printf(" SIM_SUPPORT");
+		f &= ~MH_SIM_SUPPORT;
 	    }
 	    if(f != 0 || flags == 0)
 		printf(" 0x%08x", (unsigned int)f);
@@ -2207,7 +2262,7 @@ uint32_t sizeofcmds,
 cpu_type_t cputype,
 uint32_t filetype,
 enum byte_sex load_commands_byte_sex,
-uint32_t object_size,
+uint64_t object_size,
 enum bool verbose,
 enum bool very_verbose)
 {
@@ -2244,8 +2299,11 @@ enum bool very_verbose)
     struct linker_option_command lo;
     struct dyld_info_command dyld_info;
     struct version_min_command vd;
+    struct build_version_command bv;
+    struct build_tool_version btv;
     struct entry_point_command ep;
     struct source_version_command sv;
+    struct note_command nc;
     uint64_t big_load_end;
 
 	host_byte_sex = get_host_byte_sex();
@@ -2655,6 +2713,36 @@ enum bool very_verbose)
 		print_version_min_command(&vd);
 		break;
 
+	    case LC_BUILD_VERSION:
+		memset((char *)&bv, '\0', sizeof(struct build_version_command));
+		size = left < sizeof(struct build_version_command) ?
+		       left : sizeof(struct build_version_command);
+		memcpy((char *)&bv, (char *)lc, size);
+		if(swapped)
+		    swap_build_version_command(&bv, host_byte_sex);
+		print_build_version_command(&bv, verbose);
+		p = (char *)lc + sizeof(struct build_version_command);
+		for(j = 0 ; j < bv.ntools ; j++){
+		    if(p + sizeof(struct build_tool_version) >
+		       (char *)load_commands + sizeofcmds){
+			printf("build_tool_version structure command extends "
+			       "past end of load commands\n");
+		    }
+		    left = sizeofcmds - (p - (char *)load_commands);
+		    memset((char *)&s, '\0', sizeof(struct build_tool_version));
+		    size = left < sizeof(struct build_tool_version) ?
+			   left : sizeof(struct build_tool_version);
+		    memcpy((char *)&btv, p, size);
+		    if(swapped)
+			swap_build_tool_version(&btv, 1, host_byte_sex);
+		    print_build_tool_version(btv.tool, btv.version, verbose);
+		    if(p + sizeof(struct build_tool_version) >
+		       (char *)load_commands + sizeofcmds)
+			return;
+		    p += size;
+		}
+		break;
+
 	    case LC_SOURCE_VERSION:
 		memset((char *)&sv, '\0',sizeof(struct source_version_command));
 		size = left < sizeof(struct source_version_command) ?
@@ -2663,6 +2751,16 @@ enum bool very_verbose)
 		if(swapped)
 		    swap_source_version_command(&sv, host_byte_sex);
 		print_source_version_command(&sv);
+		break;
+
+	    case LC_NOTE:
+		memset((char *)&nc, '\0',sizeof(struct note_command));
+		size = left < sizeof(struct note_command) ?
+		       left : sizeof(struct note_command);
+		memcpy((char *)&nc, (char *)lc, size);
+		if(swapped)
+		    swap_note_command(&nc, host_byte_sex);
+		print_note_command(&nc, object_size);
 		break;
 
 	    case LC_MAIN:
@@ -2855,7 +2953,7 @@ vm_prot_t maxprot,
 vm_prot_t initprot,
 uint32_t nsects,
 uint32_t flags,
-uint32_t object_size,
+uint64_t object_size,
 enum bool verbose)
 {
     uint64_t expected_cmdsize;
@@ -3913,6 +4011,116 @@ struct version_min_command *vd)
 }
 
 /*
+ * print a build_version_command.  The build_version_command structure
+ * specified must be aligned correctly and in the host byte sex.
+ */
+void
+print_build_version_command(
+struct build_version_command *bv,
+enum bool verbose)
+{
+	if(bv->cmd == LC_BUILD_VERSION)
+	    printf("      cmd LC_BUILD_VERSION\n");
+	else
+	    printf("      cmd %u (?)\n", bv->cmd);
+	printf("  cmdsize %u", bv->cmdsize);
+	if(bv->cmdsize != sizeof(struct build_version_command) +
+			  bv->ntools * sizeof(struct build_tool_version))
+	    printf(" Incorrect size\n");
+	else
+	    printf("\n");
+	if(verbose){
+	    printf(" platform ");
+	    switch(bv->platform){
+	    case PLATFORM_MACOS:
+		printf("MACOS\n");
+		break;
+	    case PLATFORM_IOS:
+		printf("IOS\n");
+		break;
+	    case PLATFORM_TVOS:
+		printf("TVOS\n");
+		break;
+	    case PLATFORM_WATCHOS:
+		printf("WATCHOS\n");
+		break;
+	    case PLATFORM_BRIDGEOS:
+		printf("BRIDGEOS\n");
+		break;
+	    case PLATFORM_IOSMAC:
+		printf("IOSMAC\n");
+		break;
+	    case PLATFORM_IOSSIMULATOR:
+		printf("IOSSIMULATOR\n");
+		break;
+	    case PLATFORM_TVOSSIMULATOR:
+		printf("TVOSSIMULATOR\n");
+		break;
+	    case PLATFORM_WATCHOSSIMULATOR:
+		printf("WATCHOSSIMULATOR\n");
+		break;
+	    default:
+	        printf("%u\n", bv->platform);
+		break;
+	    }
+	}
+	else{
+	    printf(" platform %u\n", bv->platform);
+	}
+	if((bv->minos & 0xff) == 0)
+	    printf("    minos %u.%u\n",
+	       bv->minos >> 16,
+	       (bv->minos >> 8) & 0xff);
+	else
+	    printf("    minos %u.%u.%u\n",
+	       bv->minos >> 16,
+	       (bv->minos >> 8) & 0xff,
+	       bv->minos & 0xff);
+	if(bv->sdk == 0)
+	    printf("      sdk n/a\n");
+	else{
+	    if((bv->sdk & 0xff) == 0)
+		printf("      sdk %u.%u\n",
+		   bv->sdk >> 16,
+		   (bv->sdk >> 8) & 0xff);
+	    else
+		printf("      sdk %u.%u.%u\n",
+		   bv->sdk >> 16,
+		   (bv->sdk >> 8) & 0xff,
+		   bv->sdk & 0xff);
+	}
+	printf("   ntools %u\n", bv->ntools);
+}
+
+void
+print_build_tool_version(
+uint32_t tool,
+uint32_t version,
+enum bool verbose)
+{
+    if(verbose){
+        printf("     tool ");
+	switch(tool){
+	case TOOL_CLANG:
+	    printf("CLANG\n");
+	    break;
+	case TOOL_SWIFT:
+	    printf("SWIFT\n");
+	    break;
+	case TOOL_LD:
+	    printf("LD\n");
+	    break;
+	default:
+	    printf("%u\n", tool);
+	    break;
+	}
+    }
+    else
+        printf("     tool %u\n", tool);
+    printf("  version %u\n", version);
+}
+
+/*
  * print a source_version_command.  The source_version_command structure
  * specified must be aligned correctly and in the host byte sex.
  */
@@ -3944,6 +4152,38 @@ struct source_version_command *sv)
 }
 
 /*
+ * print a note_command. The note_command structure specified must aligned and
+ * in the host byte sex.
+ */
+void
+print_note_command(
+struct note_command *nc,
+uint64_t object_size)
+{
+    uint64_t big_size;
+
+	printf("       cmd LC_NOTE\n");
+	printf("   cmdsize %u", nc->cmdsize);
+	if(nc->cmdsize != sizeof(struct note_command))
+	    printf(" Incorrect size\n");
+	else
+	    printf("\n");
+	printf("data_owner %.16s\n", nc->data_owner);
+	printf("    offset %llu", nc->offset);
+	if(nc->offset > object_size)
+	    printf(" (past end of file)\n");
+	else
+	    printf("\n");
+	printf("      size %llu", nc->size);
+	big_size = nc->offset;
+	big_size += nc->size;
+	if(big_size > object_size)
+	    printf(" (past end of file)\n");
+	else
+	    printf("\n");
+}
+
+/*
  * print a entry_point_command.  The entry_point_command structure
  * specified must be aligned correctly and in the host byte sex.
  */
@@ -3953,7 +4193,7 @@ struct entry_point_command *ep)
 {
 	printf("       cmd LC_MAIN\n");
 	printf("   cmdsize %u", ep->cmdsize);
-	if(ep->cmdsize < sizeof(struct entry_point_command))
+	if(ep->cmdsize != sizeof(struct entry_point_command))
 	    printf(" Incorrect size\n");
 	else
 	    printf("\n");
@@ -4000,7 +4240,7 @@ uint32_t object_size)
 
 	printf("          cmd LC_ENCRYPTION_INFO\n");
 	printf("      cmdsize %u", ec->cmdsize);
-	if(ec->cmdsize < sizeof(struct encryption_info_command))
+	if(ec->cmdsize != sizeof(struct encryption_info_command))
 	    printf(" Incorrect size\n");
 	else
 	    printf("\n");
@@ -4032,7 +4272,7 @@ uint32_t object_size)
 
 	printf("          cmd LC_ENCRYPTION_INFO_64\n");
 	printf("      cmdsize %u", ec->cmdsize);
-	if(ec->cmdsize < sizeof(struct encryption_info_command_64))
+	if(ec->cmdsize != sizeof(struct encryption_info_command_64))
 	    printf(" Incorrect size\n");
 	else
 	    printf("\n");
@@ -4114,7 +4354,7 @@ uint32_t object_size)
 	else
 	    printf("            cmd LC_DYLD_INFO_ONLY\n");
 	printf("        cmdsize %u", dc->cmdsize);
-	if(dc->cmdsize < sizeof(struct dyld_info_command))
+	if(dc->cmdsize != sizeof(struct dyld_info_command))
 	    printf(" Incorrect size\n");
 	else
 	    printf("\n");
@@ -6255,8 +6495,9 @@ print_x86_debug_state64:
 		}
 	    }
 	}
-	else if(cputype == CPU_TYPE_ARM64){
+	else if(cputype == CPU_TYPE_ARM64 || cputype == CPU_TYPE_ARM64_32){
 	    arm_thread_state64_t cpu;
+	    arm_exception_state64_t except;
 	    while(begin < end){
 		if(end - begin > (ptrdiff_t)sizeof(uint32_t)){
 		    memcpy((char *)&flavor, begin, sizeof(uint32_t));
@@ -6328,6 +6569,31 @@ print_x86_debug_state64:
 			cpu.__x[24], cpu.__x[25], cpu.__x[26], cpu.__x[27],
 			cpu.__x[28], cpu.__fp, cpu.__lr, cpu.__sp, cpu.__pc,
 			cpu.__cpsr);
+		    break;
+		case ARM_EXCEPTION_STATE64:
+		    printf("     flavor ARM_EXCEPTION_STATE64\n");
+		    if(count == ARM_EXCEPTION_STATE64_COUNT)
+			printf("      count ARM_EXCEPTION_STATE64_COUNT\n");
+		    else
+			printf("      count %u (not ARM_EXCEPTION_STATE64_COUNT"
+			       " %u)\n", count, ARM_EXCEPTION_STATE64_COUNT);
+		    left = end - begin;
+		    if(left >= sizeof(arm_exception_state64_t)){
+		        memcpy((char *)&except, begin,
+			       sizeof(arm_exception_state64_t));
+		        begin += sizeof(arm_exception_state64_t);
+		    }
+		    else{
+		        memset((char *)&except, '\0',
+			       sizeof(arm_exception_state64_t));
+		        memcpy((char *)&except, begin, left);
+		        begin += left;
+		    }
+		    if(swapped)
+			swap_arm_exception_state64_t(&except, host_byte_sex);
+		    printf(
+		       "\t   far  0x%016llx esr 0x%08x exception 0x%08x\n",
+			except.__far, except.__esr, except.__exception);
 		    break;
 		default:
 		    printf("     flavor %u (unknown)\n", flavor);
@@ -7038,7 +7304,8 @@ enum bool verbose)
 				reloc.r_type == ARM_RELOC_PAIR)
 			    printf("other_half = 0x%04x\n",
 				   (unsigned int)reloc.r_address);
-			else if(cputype == CPU_TYPE_ARM64 &&
+			else if((cputype == CPU_TYPE_ARM64 ||
+				 cputype == CPU_TYPE_ARM64_32) &&
 				reloc.r_type == ARM64_RELOC_ADDEND)
 			    printf("addend = 0x%06x\n",
 				   (unsigned int)reloc.r_symbolnum);
@@ -7133,7 +7400,9 @@ static char *arm_r_types[] = {
 static char *arm64_r_types[] = {
 	"UNSIGND ", "SUB     ", "BR26    ", "PAGE21  ", "PAGOF12 ",
 	"GOTLDP  ", "GOTLDPOF", "PTRTGOT ", "TLVLDP  ", "TLVLDPOF", 
-	"ADDEND  ", " 11 (?) ", " 12 (?) ", " 13 (?) ", " 14 (?) ", " 15 (?) "
+	"ADDEND  ",
+        "AUTH    ",
+	" 12 (?) ", " 13 (?) ", " 14 (?) ", " 15 (?) "
 };
 
 static
@@ -7182,6 +7451,7 @@ enum bool predicted)
 	    printf("%s", arm_r_types[r_type]);
 	    break;
 	case CPU_TYPE_ARM64:
+	case CPU_TYPE_ARM64_32:
 	    printf("%s", arm64_r_types[r_type]);
 	    break;
 	default:
@@ -8258,9 +8528,11 @@ uint32_t l3)
 void
 print_literal_pointer_section(
 cpu_type_t cputype,
+cpu_subtype_t cpusubtype,
 struct load_command *load_commands,
 uint32_t ncmds,
 uint32_t sizeofcmds,
+uint32_t filetype,
 enum byte_sex object_byte_sex,
 char *object_addr,
 uint32_t object_size,
@@ -8479,6 +8751,23 @@ enum bool print_addresses)
 		memcpy((char *)&lp, sect + i, sizeof(uint64_t));
 		if(swapped)
 		    lp = SWAP_LONG_LONG(lp);
+		/* Clear out the bits for threaded rebase/bind */
+		if(cputype == CPU_TYPE_ARM64 &&
+		   cpusubtype == CPU_SUBTYPE_ARM64E){
+		    if(filetype == MH_OBJECT){
+			if(lp & 0x8000000000000000ULL){
+			    lp = 0xffffffffULL & lp;
+			    if((lp & 0x80000000ULL) != 0)
+				lp |= 0xffffffff00000000ULL;
+			}
+		    }
+		    else{
+			if(lp & 0x8000000000000000ULL)
+			    lp = 0xffffffffULL & lp;
+			else
+			    lp = 0x0007ffffffffffffULL & lp;
+		    }
+		}
 	    }
 	    else{
 		li = (int32_t)*((int32_t *)(sect + i));
@@ -8619,13 +8908,22 @@ uint64_t sect_addr,
 enum byte_sex object_byte_sex,
 struct symbol *sorted_symbols,
 uint32_t nsorted_symbols,
+struct nlist *symbols,
+struct nlist_64 *symbols64,
+uint32_t nsymbols,
+char *strings,
+uint32_t strings_size,
+struct relocation_info *relocs,
+uint32_t nrelocs,
 enum bool verbose)
 {
     uint32_t i, stride, p;
-    uint64_t q;
+    uint64_t q, lp;
     enum byte_sex host_byte_sex;
     enum bool swapped;
     const char *name;
+    struct relocation_info *reloc;
+    uint32_t n_strx;
 
 	host_byte_sex = get_host_byte_sex();
 	swapped = host_byte_sex != object_byte_sex;
@@ -8654,22 +8952,56 @@ enum bool verbose)
 		else
 		     p = SWAP_INT(p);
 	    }
-	    if(cputype & CPU_ARCH_ABI64)
+	    if(cputype & CPU_ARCH_ABI64){
 		printf("0x%016llx", q);
-	    else
+		lp = q;
+	    } else {
 		printf("0x%08x", p);
+		lp = p;
+	    }
 
 	    if(verbose == TRUE){
-		if(cputype & CPU_ARCH_ABI64)
-		    name = guess_symbol(q, sorted_symbols, nsorted_symbols,
-					verbose);
-		else
-		    name = guess_symbol(p, sorted_symbols, nsorted_symbols,
-					verbose);
-		if(name != NULL)
-		    printf(" %s\n", name);
-		else
-		    printf("\n");
+		/*
+		 * If there is an external relocation entry for this pointer then
+		 * print the symbol and any offset.
+		 */
+		reloc = bsearch(&i, relocs, nrelocs,
+				sizeof(struct relocation_info),
+				(int (*)(const void *, const void *))
+				rel_bsearch);
+		if(reloc != NULL && (reloc->r_address & R_SCATTERED) == 0 &&
+		   reloc->r_extern == 1){
+		    if(reloc->r_symbolnum < nsymbols){
+			if(symbols != NULL)
+			    n_strx = symbols[reloc->r_symbolnum].n_un.n_strx;
+			else
+			    n_strx = symbols64[reloc->r_symbolnum].n_un.n_strx;
+			if(n_strx < strings_size){
+			    if(lp != 0)
+				printf(" %s+0x%llx\n", strings + n_strx, lp);
+			    else
+				printf(" %s\n", strings + n_strx);
+			}
+			else{
+			    printf("bad string index for symbol: %u\n",
+				   reloc->r_symbolnum);
+			}
+		    }
+		    else{
+			printf("bad relocation entry\n");
+		    }
+		} else {
+		    if(cputype & CPU_ARCH_ABI64)
+			name = guess_symbol(q, sorted_symbols, nsorted_symbols,
+					    verbose);
+		    else
+			name = guess_symbol(p, sorted_symbols, nsorted_symbols,
+					    verbose);
+		    if(name != NULL)
+			printf(" %s\n", name);
+		    else
+			printf("\n");
+		}
 	    }
 	    else{
 		printf("\n");

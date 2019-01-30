@@ -34,7 +34,7 @@
 .\"
 .\"     @(#)strings.1	8.1 (Berkeley) 6/6/93
 .\"
-.TH STRINGS 1 "September 11, 2006" "Apple Computer, Inc."
+.TH STRINGS 1 "June 7, 2016" "Apple, Inc."
 .SH NAME
 strings \- find the printable strings in a object, or other binary, file
 .SH SYNOPSIS
@@ -59,9 +59,8 @@ strings \- find the printable strings in a object, or other binary, file
 looks for ASCII strings in a binary file or standard input.
 .I Strings
 is useful for identifying random object files and many other things.
-A string is any
-sequence of 4 (the default) or more printing characters ending with a newline
-or a null.  Unless the
+A string is any sequence of 4 (the default) or more printing characters
+[ending at, but not including, any other character or EOF].  Unless the
 .B \-
 flag is given,
 .I strings

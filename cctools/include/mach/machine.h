@@ -157,9 +157,11 @@ extern vm_offset_t		interrupt_stack[];
 #define CPU_TYPE_MC98000	((cpu_type_t) 18)
 #define CPU_TYPE_POWERPC	((cpu_type_t) 18)
 #define CPU_ARCH_ABI64		 0x1000000
+#define CPU_ARCH_ABI64_32	 0x2000000
 #define CPU_TYPE_POWERPC64	((cpu_type_t)(CPU_TYPE_POWERPC | CPU_ARCH_ABI64))
 #define CPU_TYPE_VEO		((cpu_type_t) 255)
 #define CPU_TYPE_ARM64		((cpu_type_t)(CPU_TYPE_ARM | CPU_ARCH_ABI64))
+#define CPU_TYPE_ARM64_32	((cpu_type_t)(CPU_TYPE_ARM | CPU_ARCH_ABI64_32))
 		
 
 /*
@@ -319,6 +321,9 @@ extern vm_offset_t		interrupt_stack[];
 
 #define	CPU_SUBTYPE_ARM64_ALL		((cpu_subtype_t) 0)
 #define	CPU_SUBTYPE_ARM64_V8		((cpu_subtype_t) 1)
+
+#define	CPU_SUBTYPE_ARM64_32_V8		((cpu_subtype_t) 1)
+#define	CPU_SUBTYPE_ARM64E		((cpu_subtype_t) 2)
 
 /*
  *	MC88000 subtypes

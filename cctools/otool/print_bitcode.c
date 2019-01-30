@@ -79,6 +79,7 @@ enum bool print_xar_header,
 enum bool print_xar_file_headers,
 const char *xar_member_name)
 {
+
     enum byte_sex host_byte_sex;
     uint32_t i, bufsize;
     char *p, *prefix, *xar_path, buf[MAXPATHLEN], resolved_name[PATH_MAX];

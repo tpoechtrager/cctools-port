@@ -2,14 +2,14 @@
  * Copyright (c) 1999 Apple Computer, Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
- * 
+ *
  * This file contains Original Code and/or Modifications of Original Code
  * as defined in and that are subject to the Apple Public Source License
  * Version 2.0 (the 'License'). You may not use this file except in
  * compliance with the License. Please obtain a copy of the License at
  * http://www.opensource.apple.com/apsl/ and read it before using this
  * file.
- * 
+ *
  * The Original Code and all software distributed under the License are
  * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
  * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
@@ -17,7 +17,7 @@
  * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
  * Please see the License for the specific language governing rights and
  * limitations under the License.
- * 
+ *
  * @APPLE_LICENSE_HEADER_END@
  */
 #ifndef RLD
@@ -134,11 +134,19 @@ uint32_t *throttle)
     time_t toc_time;
     enum bool seen_archive;
     kern_return_t r;
-   
-	seen_archive = FALSE;
-	toc_time = time(0);
 
-	writeout_to_mem(archs, narchs, output, (void **)&file, &file_size, 
+	seen_archive = FALSE;
+	/*
+	 * The environment variable ZERO_AR_DATE is used here and other
+	 * places that write archives to allow testing and comparing
+	 * things for exact binary equality.
+	 */
+	if(getenv("ZERO_AR_DATE") == NULL)
+	    toc_time = time(0);
+	else
+	    toc_time = 0;
+
+	writeout_to_mem(archs, narchs, output, (void **)&file, &file_size,
                         sort_toc, commons_in_toc, force_64bit_toc,
 			library_warnings, &seen_archive);
 
@@ -256,12 +264,27 @@ no_throttle:
 	}
 	if(seen_archive == TRUE){
 #ifndef __OPENSTEP__
-	    timep.actime = toc_time - 5;
-	    timep.modtime = toc_time - 5;
+	    /*
+	     * The environment variable ZERO_AR_DATE is used here and other
+	     * places that write archives to allow testing and comparing
+	     * things for exact binary equality.
+	     */
+	    if(getenv("ZERO_AR_DATE") == NULL){
+		timep.actime = toc_time - 5;
+		timep.modtime = toc_time - 5;
+	    }else{
+		timep.actime = time(0);
+		timep.modtime = time(0);
+	    }
 	    if(utime(output, &timep) == -1)
 #else
-	    timep[0] = toc_time - 5;
-	    timep[1] = toc_time - 5;
+	    if(getenv("ZERO_AR_DATE") == NULL){
+		timep[0] = toc_time - 5;
+		timep[1] = toc_time - 5;
+	    }else{
+		timep[0] = time(0);
+		timep[1] = time(0);
+            }
 	    if(utime(output, timep) == -1)
 #endif
 	    {
@@ -279,14 +302,14 @@ cleanup:
 }
 
 /*
- * writeout_to_mem() creates an ofile in memory from the data structure pointed 
+ * writeout_to_mem() creates an ofile in memory from the data structure pointed
  * to by archs (of narchs size).  Upon successful return, *outputbuf will point
- * to a vm_allocate'd buffer representing the ofile which should be 
+ * to a vm_allocate'd buffer representing the ofile which should be
  * vm_deallocated when it is no longer needed.  length will point to the length
  * of the outputbuf buffer.  The filename parameter is used for error reporting
  * - if filename is NULL, a dummy file name is used.  If there are libraries in
- * the data structures a new table of contents is created and is sorted if 
- * sort_toc is TRUE and commons symbols are included in the table of contents 
+ * the data structures a new table of contents is created and is sorted if
+ * sort_toc is TRUE and commons symbols are included in the table of contents
  * if commons_in_toc is TRUE.  The normal use will have sort_toc == TRUE and
  * commons_in_toc == FALSE.  For testing force_64bit_toc can be set to TRUE but
  * it should normally be set to FALSE.  If the output contains archive members
@@ -328,18 +351,26 @@ enum bool *seen_archive)
     uint32_t ncmds;
     enum bool swapped;
 
-	/* 
+	/*
 	 * If filename is NULL, we use a dummy file name.
 	 */
 	if(filename == NULL)
 	    filename = "(file written out to memory)";
-        
+
 	/*
 	 * The time the table of contents' are set to and the time to base the
 	 * modification time of the output file to be set to.
 	 */
 	*seen_archive = FALSE;
-	toc_time = time(0);
+	/*
+	 * The environment variable ZERO_AR_DATE is used here and other
+	 * places that write archives to allow testing and comparing
+	 * things for exact binary equality.
+	 */
+	if(getenv("ZERO_AR_DATE") == NULL)
+	    toc_time = time(0);
+	else
+	    toc_time = 0;
 
 	fat_arch = NULL; /* here to quite compiler maybe warning message */
 	fat_arch64 = NULL;
@@ -701,7 +732,7 @@ enum bool *seen_archive)
 			pad = rnd(size, 8) - size;
 		    }
 		    else{
-			memcpy(p, archs[i].members[j].unknown_addr, 
+			memcpy(p, archs[i].members[j].unknown_addr,
 			       archs[i].members[j].unknown_size);
 			p += archs[i].members[j].unknown_size;
 			pad = rnd(archs[i].members[j].unknown_size, 8) -
@@ -940,6 +971,8 @@ struct object *object)
 	    memcpy(p + *size, object->output_strings,
 		   object->output_strings_size);
 	    *size += object->output_strings_size;
+	    memset(p + *size, '\0', object->output_strings_size_pad);
+	    *size += object->output_strings_size_pad;
 	    if(object->output_code_sig_data_size != 0){
 		*size = rnd(*size, 16);
 		if(object->output_code_sig_data != NULL)
@@ -982,6 +1015,8 @@ struct object *object)
 	    memcpy(p + *size, object->output_strings,
 		   object->output_strings_size);
 	    *size += object->output_strings_size;
+	    memset(p + *size, '\0', object->output_strings_size_pad);
+	    *size += object->output_strings_size_pad;
 	    if(object->output_code_sig_data_size != 0){
 		*size = rnd(*size, 16);
 		if(object->output_code_sig_data != NULL)
@@ -1220,7 +1255,7 @@ enum bool library_warnings)
 			    continue;
 			if(toc_symbol(symbols + j, commons_in_toc,
 			   object->sections) == TRUE){
-			    strcpy(arch->toc_strings + s, 
+			    strcpy(arch->toc_strings + s,
 				   strings + symbols[j].n_un.n_strx);
 			    arch->toc_entries[r].symbol_name =
 							arch->toc_strings + s;
@@ -1235,7 +1270,7 @@ enum bool library_warnings)
 			    continue;
 			if(toc_symbol_64(symbols64 + j, commons_in_toc,
 			   object->sections64) == TRUE){
-			    strcpy(arch->toc_strings + s, 
+			    strcpy(arch->toc_strings + s,
 				   strings + symbols64[j].n_un.n_strx);
 			    arch->toc_entries[r].symbol_name =
 							arch->toc_strings + s;
@@ -1261,7 +1296,7 @@ enum bool library_warnings)
                 nsymbols = lto_get_nsyms(member->lto);
                 for(j = 0; j < nsymbols; j++){
                     if(lto_toc_symbol(member->lto, j, commons_in_toc) == TRUE){
-			strcpy(arch->toc_strings + s, 
+			strcpy(arch->toc_strings + s,
 			       lto_symbol_name(member->lto, j));
 			arch->toc_entries[r].symbol_name =
 						    arch->toc_strings + s;

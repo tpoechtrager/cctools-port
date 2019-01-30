@@ -1,14 +1,13 @@
-.TH PAGESTUFF 1 "November 2, 2010" "Apple, Inc."
+.TH PAGESTUFF 1 "February 10, 2017" "Apple, Inc."
 .SH NAME
 pagestuff \- Mach-O file page analysis tool
 .SH SYNOPSIS
-pagestuff file [-arch arch_flag] [-a] [-p] [pagenumber...]
+pagestuff file [-arch arch_flag] [[-a] [-p] | [pagenumber...]]
 .SH DESCRIPTION
 pagestuff displays information about the specified logical pages of a
 file conforming to the Mach-O executable format.  For each specified
 page of code, symbols (function and static data structure names) are
-displayed.  If no pages are specified, symbols for all pages in the
-__TEXT, __text section are displayed.
+displayed.
 .PP
 The options to
 .IR pagestuff (1)

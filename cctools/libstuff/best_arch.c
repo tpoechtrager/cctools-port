@@ -878,6 +878,8 @@ uint32_t nfat_archs)
 	    }
 	    break;
 
+	/* For CPU_TYPE_ARM64_32 only an exact match is allowed. */
+
 	default:
 	    return(-1);
 	}
@@ -971,6 +973,11 @@ cpu_subtype_t cpusubtype2)
 	if(cputype == CPU_TYPE_I386 || cputype == CPU_TYPE_X86_64)
 	    return(CPU_SUBTYPE_I386_ALL);
 
+	/*
+         * The same cpusubtypes for any cputype returns that cpusubtype. For
+	 * some cputypes like CPU_TYPE_ARM64_32 there is no combining of
+	 * cpusubtypes so there is no code for those cputypes below.
+	 */
 	if((cpusubtype1 & ~CPU_SUBTYPE_MASK) ==
 	   (cpusubtype2 & ~CPU_SUBTYPE_MASK))
 	    return(cpusubtype1);
@@ -1453,12 +1460,30 @@ cpu_subtype_t exec_cpusubtype) /* can be the ALL type */
 	    }
 	    break; /* logically can't get here */
 
+	case CPU_TYPE_ARM64_32:
+	    /*
+	     * For CPU_TYPE_ARM64_32 we only have CPU_SUBTYPE_ARM64_32_V8
+	     * defined.
+	     */
+	    switch (host_cpusubtype){
+	    case CPU_SUBTYPE_ARM64_32_V8:
+		switch(exec_cpusubtype){
+		case CPU_SUBTYPE_ARM64_32_V8:
+		    return(TRUE);
+		default:
+		    return(FALSE);
+		}
+		break;
+	    }
+	    break;
+
 	case CPU_TYPE_ARM64:
 	    switch (host_cpusubtype){
 	    case CPU_SUBTYPE_ARM64_V8:
 		switch(exec_cpusubtype){
 		case CPU_SUBTYPE_ARM64_ALL:
 		case CPU_SUBTYPE_ARM64_V8:
+		case CPU_SUBTYPE_ARM64E:
 		    return(TRUE);
 		default:
 		    break; /* fall through to arm 32-bit types below */

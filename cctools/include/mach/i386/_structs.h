@@ -219,6 +219,7 @@ _STRUCT_XMM_REG
 };
 #endif /* !__DARWIN_UNIX03 */
 
+
 /* 
  * Floating point state.
  */
@@ -311,6 +312,7 @@ _STRUCT_X86_AVX_STATE32
 	_STRUCT_XMM_REG		__fpu_ymmh7;		/* YMMH 7  */
 };
 
+
 #else /* !__DARWIN_UNIX03 */
 #define	_STRUCT_X86_FLOAT_STATE32	struct i386_float_state
 _STRUCT_X86_FLOAT_STATE32
@@ -384,16 +386,17 @@ _STRUCT_X86_AVX_STATE32
 	_STRUCT_XMM_REG		fpu_xmm7;		/* XMM 7  */
 	char			fpu_rsrv4[14*16];	/* reserved */
 	int 			fpu_reserved1;
-	char			__avx_reserved1[64];
-	_STRUCT_XMM_REG		__fpu_ymmh0;		/* YMMH 0  */
-	_STRUCT_XMM_REG		__fpu_ymmh1;		/* YMMH 1  */
-	_STRUCT_XMM_REG		__fpu_ymmh2;		/* YMMH 2  */
-	_STRUCT_XMM_REG		__fpu_ymmh3;		/* YMMH 3  */
-	_STRUCT_XMM_REG		__fpu_ymmh4;		/* YMMH 4  */
-	_STRUCT_XMM_REG		__fpu_ymmh5;		/* YMMH 5  */
-	_STRUCT_XMM_REG		__fpu_ymmh6;		/* YMMH 6  */
-	_STRUCT_XMM_REG		__fpu_ymmh7;		/* YMMH 7  */
+	char			avx_reserved1[64];
+	_STRUCT_XMM_REG		fpu_ymmh0;		/* YMMH 0  */
+	_STRUCT_XMM_REG		fpu_ymmh1;		/* YMMH 1  */
+	_STRUCT_XMM_REG		fpu_ymmh2;		/* YMMH 2  */
+	_STRUCT_XMM_REG		fpu_ymmh3;		/* YMMH 3  */
+	_STRUCT_XMM_REG		fpu_ymmh4;		/* YMMH 4  */
+	_STRUCT_XMM_REG		fpu_ymmh5;		/* YMMH 5  */
+	_STRUCT_XMM_REG		fpu_ymmh6;		/* YMMH 6  */
+	_STRUCT_XMM_REG		fpu_ymmh7;		/* YMMH 7  */
 };
+
 
 #endif /* !__DARWIN_UNIX03 */
 
@@ -624,6 +627,7 @@ _STRUCT_X86_AVX_STATE64
 	_STRUCT_XMM_REG		__fpu_ymmh15;		/* YMMH 15  */
 };
 
+
 #else /* !__DARWIN_UNIX03 */
 #define	_STRUCT_X86_FLOAT_STATE64	struct x86_float_state64
 _STRUCT_X86_FLOAT_STATE64
@@ -725,24 +729,25 @@ _STRUCT_X86_AVX_STATE64
 	_STRUCT_XMM_REG		fpu_xmm15;		/* XMM 15  */
 	char			fpu_rsrv4[6*16];	/* reserved */
 	int 			fpu_reserved1;
-	char			__avx_reserved1[64];
-	_STRUCT_XMM_REG		__fpu_ymmh0;		/* YMMH 0  */
-	_STRUCT_XMM_REG		__fpu_ymmh1;		/* YMMH 1  */
-	_STRUCT_XMM_REG		__fpu_ymmh2;		/* YMMH 2  */
-	_STRUCT_XMM_REG		__fpu_ymmh3;		/* YMMH 3  */
-	_STRUCT_XMM_REG		__fpu_ymmh4;		/* YMMH 4  */
-	_STRUCT_XMM_REG		__fpu_ymmh5;		/* YMMH 5  */
-	_STRUCT_XMM_REG		__fpu_ymmh6;		/* YMMH 6  */
-	_STRUCT_XMM_REG		__fpu_ymmh7;		/* YMMH 7  */
-	_STRUCT_XMM_REG		__fpu_ymmh8;		/* YMMH 8  */
-	_STRUCT_XMM_REG		__fpu_ymmh9;		/* YMMH 9  */
-	_STRUCT_XMM_REG		__fpu_ymmh10;		/* YMMH 10  */
-	_STRUCT_XMM_REG		__fpu_ymmh11;		/* YMMH 11  */
-	_STRUCT_XMM_REG		__fpu_ymmh12;		/* YMMH 12  */
-	_STRUCT_XMM_REG		__fpu_ymmh13;		/* YMMH 13  */
-	_STRUCT_XMM_REG		__fpu_ymmh14;		/* YMMH 14  */
-	_STRUCT_XMM_REG		__fpu_ymmh15;		/* YMMH 15  */
+	char			avx_reserved1[64];
+	_STRUCT_XMM_REG		fpu_ymmh0;		/* YMMH 0  */
+	_STRUCT_XMM_REG		fpu_ymmh1;		/* YMMH 1  */
+	_STRUCT_XMM_REG		fpu_ymmh2;		/* YMMH 2  */
+	_STRUCT_XMM_REG		fpu_ymmh3;		/* YMMH 3  */
+	_STRUCT_XMM_REG		fpu_ymmh4;		/* YMMH 4  */
+	_STRUCT_XMM_REG		fpu_ymmh5;		/* YMMH 5  */
+	_STRUCT_XMM_REG		fpu_ymmh6;		/* YMMH 6  */
+	_STRUCT_XMM_REG		fpu_ymmh7;		/* YMMH 7  */
+	_STRUCT_XMM_REG		fpu_ymmh8;		/* YMMH 8  */
+	_STRUCT_XMM_REG		fpu_ymmh9;		/* YMMH 9  */
+	_STRUCT_XMM_REG		fpu_ymmh10;		/* YMMH 10  */
+	_STRUCT_XMM_REG		fpu_ymmh11;		/* YMMH 11  */
+	_STRUCT_XMM_REG		fpu_ymmh12;		/* YMMH 12  */
+	_STRUCT_XMM_REG		fpu_ymmh13;		/* YMMH 13  */
+	_STRUCT_XMM_REG		fpu_ymmh14;		/* YMMH 14  */
+	_STRUCT_XMM_REG		fpu_ymmh15;		/* YMMH 15  */
 };
+
 
 #endif /* !__DARWIN_UNIX03 */
 

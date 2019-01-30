@@ -98,7 +98,7 @@ extern void print_loadcmds(
     cpu_type_t cputype,
     uint32_t filetype,
     enum byte_sex load_commands_byte_sex,
-    uint32_t object_size,
+    uint64_t object_size,
     enum bool verbose,
     enum bool very_verbose);
 
@@ -221,7 +221,7 @@ extern void print_segment_command(
     vm_prot_t initprot,
     uint32_t nsects,
     uint32_t flags,
-    uint32_t object_size,
+    uint64_t object_size,
     enum bool verbose);
 
 extern void print_section(
@@ -326,8 +326,21 @@ extern void print_linkedit_data_command(
 extern void print_version_min_command(
     struct version_min_command *vd);
 
+extern void print_build_version_command(
+    struct build_version_command *bv,
+    enum bool verbose);
+
+extern void print_build_tool_version(
+    uint32_t tool,
+    uint32_t version,
+    enum bool verbose);
+
 extern void print_source_version_command(
     struct source_version_command *sv);
+
+extern void print_note_command(
+    struct note_command *nc,
+    uint64_t object_size);
 
 extern void print_entry_point_command(
     struct entry_point_command *ep);
@@ -392,9 +405,11 @@ extern void print_literal16_section(
 
 extern void print_literal_pointer_section(
     cpu_type_t cputype,
+    cpu_subtype_t cpusubtype,
     struct load_command *lc,
     uint32_t ncmds,
     uint32_t sizeofcmds,
+    uint32_t filetype,
     enum byte_sex object_byte_sex,
     char *addr,
     uint32_t size,
@@ -418,6 +433,13 @@ extern void print_init_term_pointer_section(
     enum byte_sex object_byte_sex,
     struct symbol *sorted_symbols,
     uint32_t nsorted_symbols,
+    struct nlist *symbols,
+    struct nlist_64 *symbols64,
+    uint32_t nsymbols,
+    char *strings,
+    uint32_t strings_size,
+    struct relocation_info *relocs,
+    uint32_t nrelocs,
     enum bool verbose);
 
 extern void print_shlib_init(
@@ -492,6 +514,7 @@ extern enum bool print_objc_segment(
 
 extern void print_objc2_64bit(
     cpu_type_t cputype,
+    cpu_subtype_t cpusubtype,
     struct load_command *load_commands,
     uint32_t ncmds,
     uint32_t sizeofcmds,
@@ -510,6 +533,7 @@ extern void print_objc2_64bit(
     uint32_t nloc_relocs,
     struct dyld_bind_info *dbi,
     uint64_t ndbi,
+    enum bool ThreadedRebaseBind,
     enum bool verbose,
     enum bool Vflag);
 

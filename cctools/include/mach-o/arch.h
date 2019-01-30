@@ -72,6 +72,36 @@ extern const NXArchInfo *NXGetArchInfoFromName(const char *name);
 extern const NXArchInfo *NXGetArchInfoFromCpuType(cpu_type_t cputype,
 						  cpu_subtype_t cpusubtype);
 
+/* The above interfaces that return pointers to NXArchInfo structs in normal
+ * cases returns a pointer from the array returned in NXGetAllArchInfos().
+ * In some cases when the cputype is CPU_TYPE_I386 or CPU_TYPE_POWERPC it will
+ * retun malloc(3)'ed NXArchInfo struct which contains a string in the
+ * description field also a malloc(3)'ed pointer.  To allow programs not to
+ * leak memory they can call NXFreeArchInfo() on pointers returned from the
+ * above interfaces.  Since this is a new API on older systems can use the
+ * code below.  Going forward the above interfaces will only return pointers
+ * from the array returned in NXGetAllArchInfos().
+ */
+extern void NXFreeArchInfo(const NXArchInfo *x);
+
+/* The code that can be used for NXFreeArchInfo() when it is not available is:
+ *
+ *	static void NXFreeArchInfo(
+ *	const NXArchInfo *x)
+ *	{
+ *	    const NXArchInfo *p;
+ *	
+ *	        p = NXGetAllArchInfos();
+ *	        while(p->name != NULL){
+ *	            if(x == p)
+ *	                return;
+ *	            p++;
+ *	        }
+ *	        free((char *)x->description);
+ *	        free((NXArchInfo *)x);
+ *	}
+ */
+
 /* NXFindBestFatArch() is passed a cputype and cpusubtype and a set of
  * fat_arch structs and selects the best one that matches (if any) and returns
  * a pointer to that fat_arch struct (or NULL).  The fat_arch structs must be
