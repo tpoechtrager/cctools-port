@@ -12,7 +12,7 @@ if [ -z "$LLVM_CONFIG" ]; then
   LLVM_CONFIG=llvm-config
 fi
 
-which $LLVM_CONFIG &>/dev/null
+command -v $LLVM_CONFIG &>/dev/null
 
 if [ $? -ne 0 ]; then
   echo -n "Cannot find $LLVM_CONFIG, you may want to try " 1>&2

@@ -8,11 +8,7 @@
 SUPPORTS_TEXT_BASED_API ?= YES
 $(info SUPPORTS_TEXT_BASED_API=$(SUPPORTS_TEXT_BASED_API))
 
-ifneq "" "$(wildcard /bin/mkdirs)"
-  MKDIRS = /bin/mkdirs
-else
-  MKDIRS = /bin/mkdir -p
-endif
+MKDIRS = mkdir -p
 
 FILES = mach-o/ldsyms.h mach-o/reloc.h \
 	mach-o/nlist.h mach-o/stab.h mach-o/loader.h mach-o/fat.h \
