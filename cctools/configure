@@ -11987,7 +11987,7 @@ $as_echo_n "checking whether a program can dlopen itself... " >&6; }
 if ${lt_cv_dlopen_self+:} false; then :
   $as_echo_n "(cached) " >&6
 else
-  	  if test yes = "$cross_compiling"; then :
+	  if test yes = "$cross_compiling"; then :
   lt_cv_dlopen_self=cross
 else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
@@ -12093,7 +12093,7 @@ $as_echo_n "checking whether a statically linked program can dlopen itself... " 
 if ${lt_cv_dlopen_self_static+:} false; then :
   $as_echo_n "(cached) " >&6
 else
-  	  if test yes = "$cross_compiling"; then :
+	  if test yes = "$cross_compiling"; then :
   lt_cv_dlopen_self_static=cross
 else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
@@ -20328,4 +20328,3 @@ if test -n "$ac_unrecognized_opts" && test "$enable_option_checking" != no; then
   { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: unrecognized options: $ac_unrecognized_opts" >&5
 $as_echo "$as_me: WARNING: unrecognized options: $ac_unrecognized_opts" >&2;}
 fi
-
