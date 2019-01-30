@@ -194,9 +194,11 @@ typedef _STRUCT_X86_AVX_STATE32 x86_avx_state32_t;
 #define x86_AVX_STATE32_COUNT ((mach_msg_type_number_t) \
 		(sizeof(x86_avx_state32_t)/sizeof(unsigned int)))
 
+#if defined(_STRUCT_X86_AVX512_STATE32)
 typedef _STRUCT_X86_AVX512_STATE32 x86_avx512_state32_t;
 #define x86_AVX512_STATE32_COUNT ((mach_msg_type_number_t) \
 		(sizeof(x86_avx512_state32_t)/sizeof(unsigned int)))
+#endif
 
 /*
  * to be deprecated in the future
@@ -229,9 +231,11 @@ typedef _STRUCT_X86_AVX_STATE64 x86_avx_state64_t;
 #define x86_AVX_STATE64_COUNT ((mach_msg_type_number_t) \
 		(sizeof(x86_avx_state64_t)/sizeof(unsigned int)))
 
+#if defined(_STRUCT_X86_AVX512_STATE64)
 typedef _STRUCT_X86_AVX512_STATE64 x86_avx512_state64_t;
 #define x86_AVX512_STATE64_COUNT ((mach_msg_type_number_t) \
 		(sizeof(x86_avx512_state64_t)/sizeof(unsigned int)))
+#endif
 
 typedef _STRUCT_X86_EXCEPTION_STATE64 x86_exception_state64_t;
 #define x86_EXCEPTION_STATE64_COUNT	((mach_msg_type_number_t) \
@@ -288,6 +292,7 @@ struct x86_avx_state {
 	} ufs;
 };
 
+#if defined(_STRUCT_X86_AVX512_STATE64)
 struct x86_avx512_state {
 	x86_state_hdr_t			ash;
 	union {
@@ -295,6 +300,7 @@ struct x86_avx512_state {
 		x86_avx512_state64_t	as64;
 	} ufs;
 };
+#endif
 
 typedef struct x86_thread_state x86_thread_state_t;
 #define x86_THREAD_STATE_COUNT	((mach_msg_type_number_t) \
@@ -316,9 +322,11 @@ typedef struct x86_avx_state x86_avx_state_t;
 #define x86_AVX_STATE_COUNT ((mach_msg_type_number_t) \
 		(sizeof(x86_avx_state_t)/sizeof(unsigned int)))
 
+#if defined(_STRUCT_X86_AVX512_STATE64)
 typedef struct x86_avx512_state x86_avx512_state_t;
 #define x86_AVX512_STATE_COUNT ((mach_msg_type_number_t) \
 		(sizeof(x86_avx512_state_t)/sizeof(unsigned int)))
+#endif
 
 /*
  * Machine-independent way for servers and Mach's exception mechanism to

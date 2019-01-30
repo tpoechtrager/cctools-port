@@ -104,6 +104,7 @@ struct x86_avx_thread_state {
 								/* Offset 832, end */
 }__attribute__ ((packed));
 
+#if defined(_STRUCT_X86_AVX512_STATE64)
 struct x86_avx512_thread_state {
 	struct x86_fx_thread_state	fp;
 	struct xsave_header		_xh; 			/* Offset 512, xsave header */
@@ -118,6 +119,7 @@ struct x86_avx512_thread_state {
 	reg512_t			x_Hi16_ZMM[16];		/* Offset 1664, ZMM16..31[511:0] */
 								/* Offset 2688, end */
 }__attribute__ ((packed));
+#endif
 
 typedef union {
 	struct x86_fx_thread_state	fx;
