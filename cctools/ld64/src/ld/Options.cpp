@@ -3329,6 +3329,11 @@ void Options::parse(int argc, const char* argv[])
 				const char* path = checkForNullArgument(arg, argv[++i]);
 				fRPaths.push_back(path);
 			}
+			else if ( strcmp(arg, "-rpath-link") == 0 ) {
+				const char* path = argv[++i];
+				if ( path == NULL )
+					throw "missing argument to -rpath-link";
+			}
 			else if ( strcmp(arg, "-read_only_stubs") == 0 ) {
 				fReadOnlyx86Stubs = true;
 			}
