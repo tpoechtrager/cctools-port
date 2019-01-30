@@ -215,7 +215,6 @@ void UnwindPrinter<A>::getSymbolTableInfo()
 	const macho_load_command<P>* const cmds = (macho_load_command<P>*)((uint8_t*)fHeader + sizeof(macho_header<P>));
 	const macho_load_command<P>* cmd = cmds;
 	for (uint32_t i = 0; i < cmd_count; ++i) {
-		uint32_t size = cmd->cmdsize();
 		const uint8_t* endOfCmd = ((uint8_t*)cmd)+cmd->cmdsize();
 		if ( endOfCmd > endOfLoadCommands )
 			throwf("load command #%d extends beyond the end of the load commands", i);
@@ -289,7 +288,6 @@ bool UnwindPrinter<A>::findUnwindSection()
 	const macho_load_command<P>* const cmds = (macho_load_command<P>*)((uint8_t*)fHeader + sizeof(macho_header<P>));
 	const macho_load_command<P>* cmd = cmds;
 	for (uint32_t i = 0; i < cmd_count; ++i) {
-		uint32_t size = cmd->cmdsize();
 		const uint8_t* endOfCmd = ((uint8_t*)cmd)+cmd->cmdsize();
 		if ( endOfCmd > endOfLoadCommands )
 			throwf("load command #%d extends beyond the end of the load commands", i);
@@ -437,7 +435,7 @@ void UnwindPrinter<x86_64>::decode(uint32_t encoding, const uint8_t* funcStart, 
 				// renumber registers back to standard numbers
 				int registers[6];
 				bool used[7] = { false, false, false, false, false, false, false };
-				for (uint32_t i=0; i < regCount; ++i) { // ld64-port: int -> uint32_t
+				for (int i=0; i < regCount; ++i) {
 					int renum = 0; 
 					for (int u=1; u < 7; ++u) {
 						if ( !used[u] ) {
@@ -451,7 +449,7 @@ void UnwindPrinter<x86_64>::decode(uint32_t encoding, const uint8_t* funcStart, 
 					}
 				}
 				bool needComma = false;
-				for (uint32_t i=0; i < regCount; ++i) { // ld64-port: int -> uint32_t
+				for (int i=0; i < regCount; ++i) {
 					if ( needComma ) 
 						strcat(str, ",");
 					else
@@ -618,7 +616,7 @@ void UnwindPrinter<x86>::decode(uint32_t encoding, const uint8_t* funcStart, cha
 				// renumber registers back to standard numbers
 				int registers[6];
 				bool used[7] = { false, false, false, false, false, false, false };
-				for (uint32_t i=0; i < regCount; ++i) { // ld64-port: int -> uint32_t
+				for (int i=0; i < regCount; ++i) {
 					int renum = 0; 
 					for (int u=1; u < 7; ++u) {
 						if ( !used[u] ) {
@@ -632,7 +630,7 @@ void UnwindPrinter<x86>::decode(uint32_t encoding, const uint8_t* funcStart, cha
 					}
 				}
 				bool needComma = false;
-				for (uint32_t i=0; i < regCount; ++i) { // ld64-port: int -> uint32_t
+				for (int i=0; i < regCount; ++i) {
 					if ( needComma ) 
 						strcat(str, ",");
 					else

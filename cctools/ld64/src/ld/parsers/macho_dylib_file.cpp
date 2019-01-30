@@ -34,7 +34,6 @@
 #include <set>
 #include <map>
 #include <algorithm>
-#include <memory> // ld64-port (std::unique_ptr)
 
 #include "Architectures.hpp"
 #include "Bitcode.hpp"
@@ -62,11 +61,12 @@ public:
 											File(const uint8_t* fileContent, uint64_t fileLength, const char* path,   
 													time_t mTime, ld::File::Ordinal ordinal, bool linkingFlatNamespace, 
 													bool linkingMainExecutable, bool hoistImplicitPublicDylibs, 
-													Options::Platform platform, uint32_t linkMinOSVersion, bool allowWeakImports,
+												 	const ld::VersionSet& platforms, bool allowWeakImports,
 													bool allowSimToMacOSX, bool addVers,  bool buildingForSimulator,
 													bool logAllFiles, const char* installPath,
 													bool indirectDylib, bool ignoreMismatchPlatform, bool usingBitcode);
 	virtual									~File() noexcept {}
+	virtual const ld::VersionSet&			platforms() const { return this->_platforms; }
 
 private:
 	using P = typename A::P;
@@ -82,6 +82,7 @@ private:
 	void				addSymbol(const char* name, bool weakDef = false, bool tlv = false, pint_t address = 0);
 	static const char*	objCInfoSegmentName();
 	static const char*	objCInfoSectionName();
+	static bool         useSimulatorVariant();
 
 
 	uint64_t  _fileLength;
@@ -97,13 +98,17 @@ template <> const char* File<x86_64>::objCInfoSectionName() { return "__objc_ima
 template <> const char* File<arm>::objCInfoSectionName() { return "__objc_imageinfo"; }
 template <typename A> const char* File<A>::objCInfoSectionName() { return "__image_info"; }
 
+template <> bool File<x86>::useSimulatorVariant() { return true; }
+template <> bool File<x86_64>::useSimulatorVariant() { return true; }
+template <typename A> bool File<A>::useSimulatorVariant() { return false; }
+
 template <typename A>
 File<A>::File(const uint8_t* fileContent, uint64_t fileLength, const char* path, time_t mTime,
 			  ld::File::Ordinal ord, bool linkingFlatNamespace, bool linkingMainExecutable,
-			  bool hoistImplicitPublicDylibs, Options::Platform platform, uint32_t linkMinOSVersion, bool allowWeakImports,
+			  bool hoistImplicitPublicDylibs, const ld::VersionSet& platforms, bool allowWeakImports,
 			  bool allowSimToMacOSX, bool addVers, bool buildingForSimulator, bool logAllFiles,
 			  const char* targetInstallPath, bool indirectDylib, bool ignoreMismatchPlatform, bool usingBitcode)
-	: Base(strdup(path), mTime, ord, platform, linkMinOSVersion, allowWeakImports, linkingFlatNamespace,
+	: Base(strdup(path), mTime, ord, platforms, allowWeakImports, linkingFlatNamespace,
 		   hoistImplicitPublicDylibs, allowSimToMacOSX, addVers), _fileLength(fileLength), _linkeditStartOffset(0)
 {
 	const macho_header<P>* header = (const macho_header<P>*)fileContent;
@@ -139,7 +144,7 @@ File<A>::File(const uint8_t* fileContent, uint64_t fileLength, const char* path,
 	const char*	strings = nullptr;
 	bool compressedLinkEdit = false;
 	uint32_t dependentLibCount = 0;
-	Options::Platform lcPlatform = Options::kPlatformUnknown;
+	ld::VersionSet lcPlatforms;
 	const macho_load_command<P>* cmd = cmds;
 	for (uint32_t i = 0; i < cmd_count; ++i) {
 		macho_dylib_command<P>* dylibID;
@@ -194,12 +199,14 @@ File<A>::File(const uint8_t* fileContent, uint64_t fileLength, const char* path,
 			case LC_VERSION_MIN_MACOSX:
 			case LC_VERSION_MIN_IPHONEOS:
 			case LC_VERSION_MIN_WATCHOS:
-	#if SUPPORT_APPLE_TV
 			case LC_VERSION_MIN_TVOS:
-	#endif
-				this->_minVersionInDylib = (ld::MacVersionMin)((macho_version_min_command<P>*)cmd)->version();
-				this->_platformInDylib = cmd->cmd();
-				lcPlatform = Options::platformForLoadCommand(this->_platformInDylib);
+				lcPlatforms.add({Options::platformForLoadCommand(cmd->cmd(), useSimulatorVariant()), ((macho_version_min_command<P>*)cmd)->version()});
+				break;
+			case LC_BUILD_VERSION:
+				{
+					const macho_build_version_command<P>* buildVersCmd = (macho_build_version_command<P>*)cmd;
+					lcPlatforms.add({(ld::Platform)buildVersCmd->platform(), buildVersCmd->minos()});
+				}
 				break;
 			case LC_CODE_SIGNATURE:
 				break;
@@ -222,14 +229,6 @@ File<A>::File(const uint8_t* fileContent, uint64_t fileLength, const char* path,
 							const uint32_t* contents = (uint32_t*)(&fileContent[sect->offset()]);
 							if ( (sect->size() >= 8) && (contents[0] == 0) ) {
 								uint32_t flags = E::get32(contents[1]);
-								if ( (flags & 4) == 4 )
-									this->_objcConstraint = ld::File::objcConstraintGC;
-								else if ( (flags & 2) == 2 )
-									this->_objcConstraint = ld::File::objcConstraintRetainReleaseOrGC;
-								else if ( (flags & 32) == 32 )
-									this->_objcConstraint = ld::File::objcConstraintRetainReleaseForSimulator;
-								else
-									this->_objcConstraint = ld::File::objcConstraintRetainRelease;
 								this->_swiftVersion = ((flags >> 8) & 0xFF);
 							}
 							else if ( sect->size() > 0 ) {
@@ -255,94 +254,35 @@ File<A>::File(const uint8_t* fileContent, uint64_t fileLength, const char* path,
 	}
 	// arm/arm64 objects are default to ios platform if not set.
 	// rdar://problem/21746314
-	if (lcPlatform == Options::kPlatformUnknown &&
+	if (lcPlatforms.empty() &&
 		(std::is_same<A, arm>::value || std::is_same<A, arm64>::value))
-		lcPlatform = Options::kPlatformiOS;
+		lcPlatforms.add({ld::kPlatform_iOS, 0});
 
 	// check cross-linking
-	if ( lcPlatform != platform ) {
-		this->_wrongOS = true;
-		if ( this->_addVersionLoadCommand && !indirectDylib && !ignoreMismatchPlatform ) {
-			if ( buildingForSimulator ) {
-				if ( !this->_allowSimToMacOSXLinking ) {
-					switch (platform) {
-						case Options::kPlatformOSX:
-						case Options::kPlatformiOS:
-							if ( lcPlatform == Options::kPlatformUnknown )
-								break;
-							// fall through if the Platform is not Unknown
-						case Options::kPlatformWatchOS:
-							// WatchOS errors on cross-linking when building for bitcode
-							if ( usingBitcode )
-								throwf("building for %s simulator, but linking against dylib built for %s,",
-								   Options::platformName(platform),
-								   Options::platformName(lcPlatform));
-							else
-								warning("URGENT: building for %s simulator, but linking against dylib (%s) built for %s. "
-										"Note: This will be an error in the future.",
-										Options::platformName(platform), path,
-										Options::platformName(lcPlatform));
-							break;
-	#if SUPPORT_APPLE_TV
-						case Options::kPlatform_tvOS:
-							// tvOS is a warning temporarily. rdar://problem/21746965
-							if ( usingBitcode )
-								throwf("building for %s simulator, but linking against dylib built for %s,",
-									   Options::platformName(platform),
-									   Options::platformName(lcPlatform));
-							else
-								warning("URGENT: building for %s simulator, but linking against dylib (%s) built for %s. "
-										"Note: This will be an error in the future.",
-										Options::platformName(platform), path,
-										Options::platformName(lcPlatform));
-							break;
-	#endif
-						case Options::kPlatformUnknown:
-							// skip if the target platform is unknown
-							break;
-					}
+	platforms.forEach(^(ld::Platform platform, uint32_t version, bool &stop) {
+		if (!lcPlatforms.contains(platform) ) {
+			this->_wrongOS = true;
+			if ( this->_addVersionLoadCommand && !indirectDylib && !ignoreMismatchPlatform ) {
+				if (buildingForSimulator && !this->_allowSimToMacOSXLinking) {
+					if ( usingBitcode )
+						throwf("building for %s simulator, but linking against dylib built for %s,",
+							   platforms.to_str().c_str(), lcPlatforms.to_str().c_str());
+					else
+						warning("URGENT: building for %s simulator, but linking against dylib (%s) built for %s. "
+								"Note: This will be an error in the future.",
+								platforms.to_str().c_str(), path, lcPlatforms.to_str().c_str());
 				}
-			}
-			else {
-				switch (platform) {
-					case Options::kPlatformOSX:
-					case Options::kPlatformiOS:
-						if ( lcPlatform == Options::kPlatformUnknown )
-							break;
-						// fall through if the Platform is not Unknown
-					case Options::kPlatformWatchOS:
-						// WatchOS errors on cross-linking when building for bitcode
-						if ( usingBitcode )
-							throwf("building for %s, but linking against dylib built for %s,",
-							   Options::platformName(platform),
-							   Options::platformName(lcPlatform));
-						else
-							warning("URGENT: building for %s, but linking against dylib (%s) built for %s. "
-									"Note: This will be an error in the future.",
-									Options::platformName(platform), path,
-									Options::platformName(lcPlatform));
-						break;
-	#if SUPPORT_APPLE_TV
-					case Options::kPlatform_tvOS:
-						// tvOS is a warning temporarily. rdar://problem/21746965
-						if ( usingBitcode )
-							throwf("building for %s, but linking against dylib built for %s,",
-								   Options::platformName(platform),
-								   Options::platformName(lcPlatform));
-						else
-							warning("URGENT: building for %s, but linking against dylib (%s) built for %s. "
-									"Note: This will be an error in the future.",
-									Options::platformName(platform), path,
-									Options::platformName(lcPlatform));
-						break;
-	#endif
-					case Options::kPlatformUnknown:
-						// skip if the target platform is unknown
-						break;
-				}
+			} else {
+				if ( usingBitcode )
+					throwf("building for %s, but linking against dylib built for %s,",
+						   platforms.to_str().c_str(), lcPlatforms.to_str().c_str());
+				else if ( (getenv("RC_XBS") != NULL) && (getenv("RC_BUILDIT") == NULL) ) // FIXME: remove after platform bringup
+					warning("URGENT: building for %s, but linking against dylib (%s) built for %s. "
+							"Note: This will be an error in the future.",
+							platforms.to_str().c_str(), path, lcPlatforms.to_str().c_str());
 			}
 		}
-	}
+	});
 
 	// figure out if we need to examine dependent dylibs
 	// with compressed LINKEDIT format, MH_NO_REEXPORTED_DYLIBS can be trusted
@@ -530,6 +470,17 @@ void File<A>::buildExportHashTableFromExportInfo(const macho_dyld_info_command<P
 template <typename A>
 void File<A>::addSymbol(const char* name, bool weakDef, bool tlv, pint_t address)
 {
+	__block uint32_t linkMinOSVersion = 0;
+
+	this->platforms().forEach(^(ld::Platform platform, uint32_t version, bool &stop) {
+		//FIXME hack to handle symbol versioning in a zippered world.
+		//This will need to be rethought
+		if (linkMinOSVersion == 0)
+			linkMinOSVersion = version;
+		if (platform == ld::kPlatform_macOS)
+			linkMinOSVersion = version;
+	});
+
 	// symbols that start with $ld$ are meta-data to the static linker
 	// <rdar://problem/5182537> need way for ld and dyld to see different exported symbols in a dylib
 	if ( strncmp(name, "$ld$", 4) == 0 ) {
@@ -538,7 +489,7 @@ void File<A>::addSymbol(const char* name, bool weakDef, bool tlv, pint_t address
 		const char* symCond = strchr(symAction, '$');
 		if ( symCond != nullptr ) {
 			char curOSVers[16];
-			sprintf(curOSVers, "$os%d.%d$", (this->_linkMinOSVersion >> 16), ((this->_linkMinOSVersion >> 8) & 0xFF));
+			sprintf(curOSVers, "$os%d.%d$", (linkMinOSVersion >> 16), ((linkMinOSVersion >> 8) & 0xFF));
 			if ( strncmp(symCond, curOSVers, strlen(curOSVers)) == 0 ) {
 				const char* symName = strchr(&symCond[1], '$');
 				if ( symName != nullptr ) {
@@ -558,7 +509,7 @@ void File<A>::addSymbol(const char* name, bool weakDef, bool tlv, pint_t address
 							this->_ignoreExports.insert(strdup(symName));
 					}
 					else if ( strncmp(symAction, "install_name$", 13) == 0 ) {
-						this->_dylibInstallPath = symName;
+						this->_dylibInstallPath = strdup(symName);
 						this->_installPathOverride = true;
 						// <rdar://problem/14448206> CoreGraphics redirects to ApplicationServices, but with wrong compat version
 						if ( strcmp(this->_dylibInstallPath, "/System/Library/Frameworks/ApplicationServices.framework/Versions/A/ApplicationServices") == 0 )
@@ -621,7 +572,7 @@ public:
 	{
 		return new File<A>(fileContent, fileLength, path, mTime, ordinal, opts.flatNamespace(),
 						   opts.linkingMainExecutable(), opts.implicitlyLinkIndirectPublicDylibs(),
-						   opts.platform(), opts.minOSversion(), opts.allowWeakImports(),
+						   opts.platforms(), opts.allowWeakImports(),
 						   opts.allowSimulatorToLinkWithMacOSX(), opts.addVersionLoadCommand(),
 						   opts.targetIOSSimulator(), opts.logAllFiles(), opts.installPath(),
 						   indirectDylib, opts.outputKind() == Options::kPreload, opts.bundleBitcode());
@@ -765,7 +716,8 @@ bool isDylibFile(const uint8_t* fileContent, cpu_type_t* result, cpu_subtype_t* 
 	}
 	if ( Parser<arm64>::validFile(fileContent, false) ) {
 		*result = CPU_TYPE_ARM64;
-		*subResult = CPU_SUBTYPE_ARM64_ALL;
+		const auto* header = reinterpret_cast<const macho_header<Pointer32<LittleEndian>>*>(fileContent);
+		*subResult = header->cpusubtype();
 		return true;
 	}
 	return false;
@@ -838,7 +790,7 @@ const char* archName(const uint8_t* fileContent)
 		return Parser<arm>::fileKind(fileContent);
 	}
 #if SUPPORT_ARCH_arm64
-	if ( Parser<arm64>::validFile(fileContent, false) ) {
+	if ( Parser<arm64>::validFile(fileContent, true) ) {
 		return Parser<arm64>::fileKind(fileContent);
 	}
 #endif
@@ -846,42 +798,63 @@ const char* archName(const uint8_t* fileContent)
 }
 
 
-//
-// main function used by linker to instantiate ld::Files
-//
-ld::dylib::File* parse(const uint8_t* fileContent, uint64_t fileLength, const char* path,
-					   time_t modTime, const Options& opts, ld::File::Ordinal ordinal,
-					   bool bundleLoader, bool indirectDylib)
+static ld::dylib::File* parseAsArchitecture(const uint8_t* fileContent, uint64_t fileLength, const char* path,
+											time_t modTime, const Options& opts, ld::File::Ordinal ordinal,
+											bool bundleLoader, bool indirectDylib,
+											cpu_type_t architecture, cpu_subtype_t subArchitecture)
 {
 	bool subTypeMustMatch = opts.enforceDylibSubtypesMatch();
-	switch ( opts.architecture() ) {
+	switch ( architecture) {
 #if SUPPORT_ARCH_x86_64
 		case CPU_TYPE_X86_64:
-			if ( Parser<x86_64>::validFile(fileContent, bundleLoader, subTypeMustMatch, opts.subArchitecture()) )
+			if ( Parser<x86_64>::validFile(fileContent, bundleLoader, subTypeMustMatch, subArchitecture) )
 				return Parser<x86_64>::parse(fileContent, fileLength, path, modTime, ordinal, opts, indirectDylib);
-			break;
+				break;
 #endif
 #if SUPPORT_ARCH_i386
 		case CPU_TYPE_I386:
-			if ( Parser<x86>::validFile(fileContent, bundleLoader, subTypeMustMatch, opts.subArchitecture()) )
+			if ( Parser<x86>::validFile(fileContent, bundleLoader, subTypeMustMatch, subArchitecture) )
 				return Parser<x86>::parse(fileContent, fileLength, path, modTime, ordinal, opts, indirectDylib);
-			break;
+				break;
 #endif
 #if SUPPORT_ARCH_arm_any
 		case CPU_TYPE_ARM:
-			if ( Parser<arm>::validFile(fileContent, bundleLoader, subTypeMustMatch, opts.subArchitecture()) )
+			if ( Parser<arm>::validFile(fileContent, bundleLoader, subTypeMustMatch, subArchitecture) )
 				return Parser<arm>::parse(fileContent, fileLength, path, modTime, ordinal, opts, indirectDylib);
-			break;
+				break;
 #endif
 #if SUPPORT_ARCH_arm64
 		case CPU_TYPE_ARM64:
-			if ( Parser<arm64>::validFile(fileContent, bundleLoader, subTypeMustMatch, opts.subArchitecture()) )
+			if ( Parser<arm64>::validFile(fileContent, bundleLoader, subTypeMustMatch, subArchitecture) )
 				return Parser<arm64>::parse(fileContent, fileLength, path, modTime, ordinal, opts, indirectDylib);
-			break;
+				break;
 #endif
 	}
 	return nullptr;
 }
+
+//
+// main function used by linker to instantiate ld::Files
+//
+ld::dylib::File* parse(const uint8_t* fileContent, uint64_t fileLength, const char* path,
+					   time_t modtime, const Options& opts, ld::File::Ordinal ordinal,
+					   bool bundleLoader, bool indirectDylib)
+{
+	// First make sure we are even a dylib with a known arch.  If we aren't then there's no point in continuing.
+	if (!archName(fileContent))
+		return nullptr;
+
+	auto file = parseAsArchitecture(fileContent, fileLength, path, modtime, opts, ordinal, bundleLoader, indirectDylib, opts.architecture(), opts.subArchitecture());
+
+	// If we've been provided with an architecture we can fall back to, try to parse the dylib as that instead.
+	if (!file && opts.fallbackArchitecture()) {
+		warning("architecture %s not present in dylib file %s, attempting fallback", opts.architectureName(), path);
+		file = parseAsArchitecture(fileContent, fileLength, path, modtime, opts, ordinal, bundleLoader, indirectDylib, opts.fallbackArchitecture(), opts.fallbackSubArchitecture());
+	}
+		
+	return file;
+}
+	
 
 
 }; // namespace dylib

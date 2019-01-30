@@ -49,7 +49,7 @@ public:
 										DeDupAliasAtom(const ld::Atom* dupOf, const ld::Atom* replacement) :
 											ld::Atom(dupOf->section(), ld::Atom::definitionRegular, ld::Atom::combineNever,
 													dupOf->scope(), dupOf->contentType(), ld::Atom::symbolTableIn,
-													false, false, true, 0),
+													false, false, true, dupOf->alignment()),
 											_dedupOf(dupOf),
 											_fixup(0, ld::Fixup::k1of1, ld::Fixup::kindNoneFollowOn, ld::Fixup::bindingDirectlyBound, replacement) {
                                                 if ( dupOf->autoHide() )
@@ -142,12 +142,21 @@ struct atom_hashing {
 // A helper for std::unordered_map<> that compares functions
 struct atom_equal {
 
-    struct VisitedSet {
-        std::unordered_set<const ld::Atom*> atoms1;
-        std::unordered_set<const ld::Atom*> atoms2;
+    struct BackChain {
+        BackChain*      prev;
+        const Atom*     inCallChain1;
+        const Atom*     inCallChain2;
+
+        bool inCallChain(const Atom* target) {
+            for (BackChain* p = this; p->prev != NULL; p = p->prev) {
+                if ( (p->inCallChain1 == target) || (p->inCallChain2 == target) )
+                     return true;
+            }
+            return false;
+        }
     };
 
-    static bool sameFixups(const ld::Atom* atom1, const ld::Atom* atom2, VisitedSet& visited) {
+    static bool sameFixups(const ld::Atom* atom1, const ld::Atom* atom2, BackChain& backChain) {
         ++sFixupCompareCount;
         //fprintf(stderr, "sameFixups(%s,%s)\n", atom1->name(), atom2->name());
         Fixup::iterator	f1   = atom1->fixupsBegin();
@@ -198,10 +207,16 @@ struct atom_equal {
                     return false;
                 if ( target1->section().type() != ld::Section::typeCode )
                     return false;
-                // to support co-recursive functions, don't call equals() on targets we've already visited
-                if ( ((visited.atoms1.count(target1) == 0) || (visited.atoms2.count(target2) == 0)) && !equal(target1, target2, visited) )
-                    return false;
-              }
+                // to support co-recursive functions, don't recurse into equals() for targets already in the back chain
+                if ( !backChain.inCallChain(target1) || !backChain.inCallChain(target2) ) {
+                    BackChain nextBackChain;
+                    nextBackChain.prev = &backChain;
+                    nextBackChain.inCallChain1 = target1;
+                    nextBackChain.inCallChain2 = target2;
+                    if ( !equal(target1, target2, nextBackChain) )
+                        return false;
+                }
+            }
 
             ++f1;
             ++f2;
@@ -210,17 +225,21 @@ struct atom_equal {
         return true;
     }
 
-    static bool equal(const ld::Atom* atom1, const ld::Atom* atom2, VisitedSet& visited) {
+    static bool equal(const ld::Atom* atom1, const ld::Atom* atom2, BackChain& backChain) {
+        if ( atom1->size() != atom2->size() )
+            return false;
         if ( atom_hashing::hash(atom1) != atom_hashing::hash(atom2) )
             return false;
-        visited.atoms1.insert(atom1);
-        visited.atoms2.insert(atom2);
-        return sameFixups(atom1, atom2, visited);
+        if ( memcmp(atom1->rawContentPointer(), atom2->rawContentPointer(), atom1->size()) != 0 )
+            return false;
+        bool result = sameFixups(atom1, atom2, backChain);
+        //fprintf(stderr, "sameFixups(%s,%s) = %d\n", atom1->name(), atom2->name(), result);
+        return result;
     }
 
     bool operator()(const ld::Atom* atom1, const ld::Atom* atom2) const {
-        VisitedSet visited;
-        return equal(atom1, atom2, visited);
+        BackChain backChain = { NULL, atom1, atom2 };
+        return equal(atom1, atom2, backChain);
     }
 };
 
@@ -309,6 +328,7 @@ void doPass(const Options& opts, ld::Internal& state)
                 textAtoms.insert(pos, aliasAtom);
                 state.atomToSection[aliasAtom] = textSection;
                 replacementMap[dupAtom] = aliasAtom;
+                (const_cast<ld::Atom*>(dupAtom))->setCoalescedAway();
             }
         }
     }
@@ -348,7 +368,7 @@ void doPass(const Options& opts, ld::Internal& state)
     if ( log ) {
         fprintf(stderr, "atoms before pruning:\n");
         for (const ld::Atom* atom : textSection->atoms)
-            fprintf(stderr, "  %p (size=%llu) %sp\n", atom, atom->size(), atom->name());
+            fprintf(stderr, "  %p (size=%llu) %s\n", atom, atom->size(), atom->name());
     }
     // remove replaced atoms from section
 	textSection->atoms.erase(std::remove_if(textSection->atoms.begin(), textSection->atoms.end(),
@@ -363,7 +383,7 @@ void doPass(const Options& opts, ld::Internal& state)
     if ( log ) {
         fprintf(stderr, "atoms after pruning:\n");
         for (const ld::Atom* atom : textSection->atoms)
-            fprintf(stderr, "  %p (size=%llu) %sp\n", atom, atom->size(), atom->name());
+            fprintf(stderr, "  %p (size=%llu) %s\n", atom, atom->size(), atom->name());
     }
 
    //fprintf(stderr, "hash-count=%lu, fixup-compares=%lu, atom-count=%u\n", sHashCount, sFixupCompareCount, atomsBeingComparedCount);

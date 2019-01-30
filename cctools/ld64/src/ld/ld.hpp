@@ -30,7 +30,6 @@
 #include <math.h>
 #include <unistd.h>
 #include <assert.h>
-#include "configure.h"
 
 #include <set>
 #include <map>
@@ -38,9 +37,198 @@
 #include <string>
 #include <unordered_set>
 
-#include "configure.h" // ld64-port
+#include "configure.h"
 
 namespace ld {
+
+//
+// platform
+//
+
+enum Platform {
+	kPlatform_unknown=0,
+	kPlatform_macOS=1,
+	kPlatform_iOS=2,
+	kPlatform_tvOS=3,
+	kPlatform_watchOS=4,
+	kPlatform_bridgeOS=5,
+	kPlatform_iOSMac=6,
+	kPlatform_iOSSimulator=7,
+	kPlatform_tvOSSimulator=8,
+	kPlatform_watchOSSimulator=9
+};
+
+typedef std::set<Platform> PlatformSet;
+
+//
+// minumum OS versions
+//
+
+typedef std::pair<Platform, uint32_t> Version;
+
+struct VersionSet {
+private:
+	std::map<Platform, uint32_t> _versions;
+public:
+	VersionSet() {}
+	VersionSet(const std::map<Platform, uint32_t>& P) : _versions(P) {}
+	void add(ld::Version platformVersion) {
+		_versions.insert(platformVersion);
+	}
+	void erase(const Platform& platform) {
+		_versions.erase(platform);
+	}
+	size_t count() const { return _versions.size(); }
+	size_t empty() const { return _versions.empty(); }
+
+	void forEach(void (^callback)(ld::Platform platform, uint32_t version, bool &stop)) const {
+		bool stop = false;
+		for (const auto& version : _versions) {
+			callback(version.first, version.second, stop);
+			if (stop)
+				return;
+		}
+	}
+
+	bool contains(ld::Platform platform) const { return _versions.count(platform) != 0; }
+	bool contains(ld::PlatformSet platforms) const {
+		__block bool retval = true;
+		forEach(^(ld::Platform platform, uint32_t version, bool &stop) {
+			if (platforms.find(platform) == platforms.end()) {
+				stop = true;
+				retval = false;
+			}
+		});
+		return retval;
+	}
+
+	uint32_t minOS(const ld::Platform& platform) const {
+		for (const auto& version : _versions) {
+			if (basePlatform(version.first) == platform) {
+				return version.second;
+			}
+		}
+		return 0;
+	}
+
+	bool minOS(const Version& version) const {
+		return minOS(version.first) >= version.second;
+	}
+
+	const ld::Platform basePlatform(const ld::Platform& platform) const {
+		switch(platform) {
+			case kPlatform_iOSMac:
+			case kPlatform_iOSSimulator:
+				return kPlatform_iOS;
+			case kPlatform_watchOSSimulator:
+				return kPlatform_watchOS;
+			case kPlatform_tvOSSimulator:
+				return kPlatform_tvOS;
+			default:
+				return platform;
+		}
+	}
+
+	bool minOS(const ld::VersionSet& requiredMinVersions) const {
+		__block bool retval = true;
+		forEach(^(ld::Platform platform, uint32_t version, bool &stop) {
+			if (!requiredMinVersions.contains(basePlatform(platform)))
+				return;
+			if (version < requiredMinVersions.minOS(basePlatform(platform))) {
+				stop = true;
+				retval = false;
+			}
+		});
+		return retval;
+	}
+
+	std::string to_str() const {
+		std::string retval;
+		auto appendPlatform = [&](const std::string& platform) {
+			if (retval.empty()) {
+				retval = platform;
+			} else {
+				retval += "/";
+				retval += platform;
+			}
+		};
+
+		forEach(^(ld::Platform platform, uint32_t version, bool &stop) {
+			switch (platform) {
+				case ld::kPlatform_macOS: 				appendPlatform("macOS"); break;
+				case ld::kPlatform_iOSMac:				appendPlatform("iOSMac"); break;
+				case ld::kPlatform_iOS:					appendPlatform("iOS"); break;
+				case ld::kPlatform_iOSSimulator:		appendPlatform("iOS Simulator"); break;
+				case ld::kPlatform_watchOS:				appendPlatform("watchOS"); break;
+				case ld::kPlatform_watchOSSimulator:	appendPlatform("watchOS Simulator"); break;
+				case ld::kPlatform_tvOS:				appendPlatform("tvOS"); break;
+				case ld::kPlatform_tvOSSimulator:		appendPlatform("tvOS Simulator"); break;
+				case ld::kPlatform_bridgeOS:			appendPlatform("bridgeOS"); break;
+				case ld::kPlatform_unknown:				appendPlatform("Unkown"); break;
+			}
+		});
+
+		return retval;
+	}
+};
+
+static const Version mac10_4		({kPlatform_macOS, 0x000A0400});
+static const Version mac10_5		({kPlatform_macOS, 0x000A0500});
+static const Version mac10_6 		({kPlatform_macOS, 0x000A0600});
+static const Version mac10_7 		({kPlatform_macOS, 0x000A0700});
+static const Version mac10_8 		({kPlatform_macOS, 0x000A0800});
+static const Version mac10_9 		({kPlatform_macOS, 0x000A0900});
+static const Version mac10_12 		({kPlatform_macOS, 0x000A0C00});
+static const Version mac10_14 		({kPlatform_macOS, 0x000A0E00});
+static const Version mac10_Future 	({kPlatform_macOS, 0x10000000});
+
+static const Version iOS_2_0 		({kPlatform_iOS, 0x00020000});
+static const Version iOS_3_1 		({kPlatform_iOS, 0x00030100});
+static const Version iOS_4_2 		({kPlatform_iOS, 0x00040200});
+static const Version iOS_4_3 		({kPlatform_iOS, 0x00040300});
+static const Version iOS_5_0 		({kPlatform_iOS, 0x00050000});
+static const Version iOS_6_0 		({kPlatform_iOS, 0x00060000});
+static const Version iOS_7_0 		({kPlatform_iOS, 0x00070000});
+static const Version iOS_8_0 		({kPlatform_iOS, 0x00080000});
+static const Version iOS_9_0 		({kPlatform_iOS, 0x00090000});
+static const Version iOS_10_0 		({kPlatform_iOS, 0x000A0000});
+static const Version iOS_11_0 		({kPlatform_iOS, 0x000B0000});
+static const Version iOS_12_0 		({kPlatform_iOS, 0x000C0000});
+static const Version iOS_Future 	({kPlatform_iOS, 0x10000000});
+
+static const Version watchOS_1_0 		({kPlatform_watchOS, 0x00010000});
+static const Version watchOS_2_0 		({kPlatform_watchOS, 0x00020000});
+static const Version watchOS_5_0 		({kPlatform_watchOS, 0x00050000});
+static const Version watchOS_Future		({kPlatform_watchOS, 0x10000000});
+
+static const Version tvOS_9_0 			({kPlatform_tvOS, 0x00090000});
+static const Version tvOS_12_0 			({kPlatform_tvOS, 0x000C0000});
+static const Version tvOS_Future		({kPlatform_tvOS, 0x10000000});
+	
+static const Version bridgeOS_1_0 			({kPlatform_bridgeOS, 0x00010000});
+static const Version bridgeOS_Future		({kPlatform_bridgeOS, 0x10000000});
+
+// Platform Sets
+
+static const PlatformSet simulatorPlatforms ( {kPlatform_iOSSimulator, kPlatform_tvOSSimulator, kPlatform_watchOSSimulator} );
+
+//FIXME do we need to add simulatots to these?
+//FIXME Are the dates correct?
+static const VersionSet version2007		({mac10_4, iOS_2_0});
+static const VersionSet version2008 	({mac10_5, iOS_2_0});
+static const VersionSet version2008Fall ({mac10_5, iOS_3_1});
+static const VersionSet version2009 	({mac10_6, iOS_3_1});
+static const VersionSet version2010 	({mac10_7, iOS_4_2});
+static const VersionSet version2010Fall ({mac10_7, iOS_4_3});
+
+static const VersionSet version2012 	({mac10_8, iOS_6_0});
+static const VersionSet version2013 	({mac10_9, iOS_7_0});
+	
+static const VersionSet supportsSplitSegV2 		({mac10_12, iOS_9_0, watchOS_2_0, tvOS_9_0});
+// FIXME: Use the comment out line instead.
+static const VersionSet supportsLCBuildVersion 	({mac10_14, iOS_12_0, watchOS_5_0, tvOS_12_0, bridgeOS_1_0});
+static const VersionSet supportsPIE				({mac10_5, iOS_4_2});
+static const VersionSet supportsTLV  			({mac10_7, iOS_9_0});
 
 // Forward declaration for bitcode support
 class Bitcode;
@@ -59,10 +247,7 @@ class Bitcode;
 class File
 {
 public:
-	enum ObjcConstraint { objcConstraintNone, objcConstraintRetainRelease, 
-							objcConstraintRetainReleaseOrGC, objcConstraintGC,
-							objcConstraintRetainReleaseForSimulator };
-	
+
 	class AtomHandler {
 	public:
 		virtual				~AtomHandler() {}
@@ -152,13 +337,10 @@ public:
 	Ordinal								ordinal() const			{ return _ordinal; }
 	virtual bool						forEachAtom(AtomHandler&) const = 0;
 	virtual bool						justInTimeforEachAtom(const char* name, AtomHandler&) const = 0;
-	virtual ObjcConstraint				objCConstraint() const			{ return objcConstraintNone; }
-    virtual bool						objcHasCategoryClassPropertiesField() const { return false; }
-	virtual uint8_t						swiftVersion() const			{ return 0; }
+	virtual uint8_t						swiftVersion() const	{ return 0; }
 	virtual uint32_t					cpuSubType() const		{ return 0; }
 	virtual uint32_t					subFileCount() const	{ return 1; }
-	virtual uint32_t					minOSVersion() const	{ return 0; }
-	virtual uint32_t					platformLoadCommand() const		{ return 0; }
+	virtual const VersionSet&			platforms() const		{ return _platforms; }
     bool								fileExists() const     { return _modTime != 0; }
 	Type								type() const { return _type; }
 	virtual Bitcode*					getBitcode() const		{ return NULL; }
@@ -167,21 +349,9 @@ private:
 	time_t								_modTime;
 	const Ordinal						_ordinal;
 	const Type							_type;
+	// Note this is just a placeholder as platforms() needs something to return
+	static const VersionSet				_platforms;
 };
-
-
-//
-// minumum OS versions
-//
-enum MacVersionMin { macVersionUnset=0, mac10_4=0x000A0400, mac10_5=0x000A0500, 
-						mac10_6=0x000A0600, mac10_7=0x000A0700, mac10_8=0x000A0800,
-						mac10_9=0x000A0900, mac10_12=0x000A0C00, mac10_Future=0x10000000 };
-enum IOSVersionMin { iOSVersionUnset=0, iOS_2_0=0x00020000, iOS_3_1=0x00030100, 
-						iOS_4_2=0x00040200, iOS_4_3=0x00040300, iOS_5_0=0x00050000,
-						iOS_6_0=0x00060000, iOS_7_0=0x00070000, iOS_8_0=0x00080000,
-						iOS_9_0=0x00090000, iOS_10_0=0x000A0000, iOS_Future=0x10000000};
-enum WatchOSVersionMin  { wOSVersionUnset=0, wOS_1_0=0x00010000, wOS_2_0=0x00020000 };
-
 
 namespace relocatable {
 	//
@@ -214,6 +384,8 @@ namespace relocatable {
 			const char*			string;
 		};
 		typedef const std::vector< std::vector<const char*> > LinkerOptionsList;
+		typedef std::vector<std::pair<uint32_t,uint32_t>> ToolVersionList;
+		struct AstTimeAndPath { uint64_t time; std::string path; };
 
 											File(const char* pth, time_t modTime, Ordinal ord)
 												: ld::File(pth, modTime, ord, Reloc) { }
@@ -224,8 +396,14 @@ namespace relocatable {
 		virtual const std::vector<Stab>*	stabs() const = 0;
 		virtual bool						canScatterAtoms() const = 0;
 		virtual bool						hasLongBranchStubs()		{ return false; }
+		virtual bool						hasllvmProfiling() const    { return false; }
+		virtual bool  						hasObjC() const				{ return false; }
+		virtual bool						objcHasCategoryClassPropertiesField() const { return false; }
 		virtual LinkerOptionsList*			linkerOptions() const = 0;
+		virtual const ToolVersionList&		toolVersions() const = 0;
 		virtual SourceKind					sourceKind() const { return kSourceUnknown; }
+		virtual const uint8_t*				fileContent() const { return nullptr; }
+		virtual const std::vector<AstTimeAndPath>*	astFiles() const { return nullptr; }
 	};
 } // namespace relocatable
 
@@ -338,7 +516,7 @@ public:
 				typeCFI, typeLSDA, typeDtraceDOF, typeUnwindInfo, typeObjCClassRefs, typeObjC2CategoryList,
 				typeZeroFill, typeTentativeDefs, typeLazyPointer, typeStub, typeNonLazyPointer, typeDyldInfo, 
 				typeLazyDylibPointer, typeStubHelper, typeInitializerPointers, typeTerminatorPointers,
-				typeStubClose, typeLazyPointerClose, typeAbsoluteSymbols, 
+				typeStubClose, typeLazyPointerClose, typeAbsoluteSymbols, typeThreadStarts,
 				typeTLVDefs, typeTLVZeroFill, typeTLVInitialValues, typeTLVInitializerPointers, typeTLVPointers,
 				typeFirstSection, typeLastSection, typeDebug, typeSectCreate };
 
@@ -485,13 +663,37 @@ struct Fixup
 					kindStoreTargetAddressARM64TLVPLoadNowLeaPage21,	// kindSetTargetAddress + kindStoreARM64TLVPLoadNowLeaPage21
 					kindStoreTargetAddressARM64TLVPLoadNowLeaPageOff12,	// kindSetTargetAddress + kindStoreARM64TLVPLoadNowLeaPageOff12
 #endif
+#if SUPPORT_ARCH_arm64e
+					kindStoreLittleEndianAuth64,
+					kindStoreTargetAddressLittleEndianAuth64,	// kindSetTargetAddress + kindStoreLittleEndianAuth64
+					kindSetAuthData,
+#endif
 			};
+
+#if SUPPORT_ARCH_arm64e
+	struct AuthData {
+		// clang encodes the combination of the key bits as these values.
+		typedef enum {
+			ptrauth_key_asia = 0,
+			ptrauth_key_asib = 1,
+			ptrauth_key_asda = 2,
+			ptrauth_key_asdb = 3,
+		} ptrauth_key;
+
+		uint16_t discriminator;
+		bool hasAddressDiversity;
+		ptrauth_key key;
+	};
+#endif
 
 	union {
 		const Atom*	target;
 		const char*	name;
 		uint64_t	addend;
 		uint32_t	bindingIndex;
+#if SUPPORT_ARCH_arm64e
+		AuthData	authData;
+#endif
 	} u;
 	uint32_t		offsetInAtom;
 	Kind			kind : 8;
@@ -548,6 +750,14 @@ struct Fixup
 		binding(Fixup::bindingNone),  
 		contentAddendOnly(false), contentDetlaToAddendOnly(false), contentIgnoresAddend(false) 
 			{ u.addend = addend; }
+		
+#if SUPPORT_ARCH_arm64e
+	Fixup(uint32_t off, Cluster c, Kind k, AuthData authData) :
+		offsetInAtom(off), kind(k), clusterSize(c), weakImport(false), 
+		binding(Fixup::bindingNone),  
+		contentAddendOnly(false), contentDetlaToAddendOnly(false), contentIgnoresAddend(false) 
+			{ u.authData = authData; }
+#endif
 			
 	Fixup(Kind k, uint32_t lohKind, uint32_t off1, uint32_t off2) :
 		offsetInAtom(off1), kind(k), clusterSize(k1of1),  
@@ -586,6 +796,146 @@ struct Fixup
 			case k4of4:
 			case k5of5:
 				return true;
+			default:
+				break;
+		}
+		return false;
+	}
+
+	bool isStore() const {
+		switch ( kind ) {
+			case ld::Fixup::kindNone:
+			case ld::Fixup::kindNoneFollowOn:
+			case ld::Fixup::kindNoneGroupSubordinate:
+			case ld::Fixup::kindNoneGroupSubordinateFDE:
+			case ld::Fixup::kindNoneGroupSubordinateLSDA:
+			case ld::Fixup::kindNoneGroupSubordinatePersonality:
+			case ld::Fixup::kindSetTargetAddress:
+			case ld::Fixup::kindSubtractTargetAddress:
+			case ld::Fixup::kindAddAddend:
+			case ld::Fixup::kindSubtractAddend:
+			case ld::Fixup::kindSetTargetImageOffset:
+			case ld::Fixup::kindSetTargetSectionOffset:
+#if SUPPORT_ARCH_arm64e
+			case ld::Fixup::kindSetAuthData:
+#endif
+				return false;
+			default:
+				break;
+		}
+		return true;
+	}
+
+
+	bool setsTarget(bool isObjectFile) const {
+		switch ( kind ) {
+			case ld::Fixup::kindSetTargetAddress:
+			case ld::Fixup::kindLazyTarget:
+			case ld::Fixup::kindStoreTargetAddressLittleEndian32:
+			case ld::Fixup::kindStoreTargetAddressLittleEndian64:
+#if SUPPORT_ARCH_arm64e
+			case ld::Fixup::kindStoreTargetAddressLittleEndianAuth64:
+#endif
+			case ld::Fixup::kindStoreTargetAddressBigEndian32:
+			case ld::Fixup::kindStoreTargetAddressBigEndian64:
+			case ld::Fixup::kindStoreTargetAddressX86PCRel32:
+			case ld::Fixup::kindStoreTargetAddressX86BranchPCRel32:
+			case ld::Fixup::kindStoreTargetAddressX86PCRel32GOTLoad:
+			case ld::Fixup::kindStoreTargetAddressX86PCRel32GOTLoadNowLEA:
+			case ld::Fixup::kindStoreTargetAddressX86PCRel32TLVLoad:
+			case ld::Fixup::kindStoreTargetAddressX86PCRel32TLVLoadNowLEA:
+			case ld::Fixup::kindStoreTargetAddressX86Abs32TLVLoad:
+			case ld::Fixup::kindStoreTargetAddressARMBranch24:
+			case ld::Fixup::kindStoreTargetAddressThumbBranch22:
+			case ld::Fixup::kindStoreTargetAddressARMLoad12:
+#if SUPPORT_ARCH_arm64
+			case ld::Fixup::kindStoreTargetAddressARM64Branch26:
+			case ld::Fixup::kindStoreTargetAddressARM64Page21:
+			case ld::Fixup::kindStoreTargetAddressARM64PageOff12:
+			case ld::Fixup::kindStoreTargetAddressARM64GOTLoadPage21:
+			case ld::Fixup::kindStoreTargetAddressARM64GOTLoadPageOff12:
+			case ld::Fixup::kindStoreTargetAddressARM64GOTLeaPage21:
+			case ld::Fixup::kindStoreTargetAddressARM64GOTLeaPageOff12:
+			case ld::Fixup::kindStoreTargetAddressARM64TLVPLoadPage21:
+			case ld::Fixup::kindStoreTargetAddressARM64TLVPLoadPageOff12:
+			case ld::Fixup::kindStoreTargetAddressARM64TLVPLoadNowLeaPage21:
+			case ld::Fixup::kindStoreTargetAddressARM64TLVPLoadNowLeaPageOff12:
+#endif
+				return true;
+			case ld::Fixup::kindStoreX86DtraceCallSiteNop:
+			case ld::Fixup::kindStoreX86DtraceIsEnableSiteClear:
+			case ld::Fixup::kindStoreARMDtraceCallSiteNop:
+			case ld::Fixup::kindStoreARMDtraceIsEnableSiteClear:
+			case ld::Fixup::kindStoreARM64DtraceCallSiteNop:
+			case ld::Fixup::kindStoreARM64DtraceIsEnableSiteClear:
+			case ld::Fixup::kindStoreThumbDtraceCallSiteNop:
+			case ld::Fixup::kindStoreThumbDtraceIsEnableSiteClear:
+				return isObjectFile;
+			default:
+				break;
+		}
+		return false;
+	}
+
+	bool isPcRelStore(bool isKextBundle) const {
+		switch ( kind ) {
+			case ld::Fixup::kindStoreX86BranchPCRel8:
+			case ld::Fixup::kindStoreX86BranchPCRel32:
+			case ld::Fixup::kindStoreX86PCRel8:
+			case ld::Fixup::kindStoreX86PCRel16:
+			case ld::Fixup::kindStoreX86PCRel32:
+			case ld::Fixup::kindStoreX86PCRel32_1:
+			case ld::Fixup::kindStoreX86PCRel32_2:
+			case ld::Fixup::kindStoreX86PCRel32_4:
+			case ld::Fixup::kindStoreX86PCRel32GOTLoad:
+			case ld::Fixup::kindStoreX86PCRel32GOTLoadNowLEA:
+			case ld::Fixup::kindStoreX86PCRel32GOT:
+			case ld::Fixup::kindStoreX86PCRel32TLVLoad:
+			case ld::Fixup::kindStoreX86PCRel32TLVLoadNowLEA:
+			case ld::Fixup::kindStoreARMBranch24:
+			case ld::Fixup::kindStoreThumbBranch22:
+			case ld::Fixup::kindStoreARMLoad12:
+			case ld::Fixup::kindStoreTargetAddressX86PCRel32:
+			case ld::Fixup::kindStoreTargetAddressX86PCRel32GOTLoad:
+			case ld::Fixup::kindStoreTargetAddressX86PCRel32GOTLoadNowLEA:
+			case ld::Fixup::kindStoreTargetAddressX86PCRel32TLVLoad:
+			case ld::Fixup::kindStoreTargetAddressX86PCRel32TLVLoadNowLEA:
+			case ld::Fixup::kindStoreTargetAddressARMBranch24:
+			case ld::Fixup::kindStoreTargetAddressThumbBranch22:
+			case ld::Fixup::kindStoreTargetAddressARMLoad12:
+#if SUPPORT_ARCH_arm64
+			case ld::Fixup::kindStoreARM64Page21:
+			case ld::Fixup::kindStoreARM64PageOff12:
+			case ld::Fixup::kindStoreARM64GOTLoadPage21:
+			case ld::Fixup::kindStoreARM64GOTLoadPageOff12:
+			case ld::Fixup::kindStoreARM64GOTLeaPage21:
+			case ld::Fixup::kindStoreARM64GOTLeaPageOff12:
+			case ld::Fixup::kindStoreARM64TLVPLoadPage21:
+			case ld::Fixup::kindStoreARM64TLVPLoadPageOff12:
+			case ld::Fixup::kindStoreARM64TLVPLoadNowLeaPage21:
+			case ld::Fixup::kindStoreARM64TLVPLoadNowLeaPageOff12:
+			case ld::Fixup::kindStoreARM64PCRelToGOT:
+			case ld::Fixup::kindStoreTargetAddressARM64Page21:
+			case ld::Fixup::kindStoreTargetAddressARM64PageOff12:
+			case ld::Fixup::kindStoreTargetAddressARM64GOTLoadPage21:
+			case ld::Fixup::kindStoreTargetAddressARM64GOTLoadPageOff12:
+			case ld::Fixup::kindStoreTargetAddressARM64GOTLeaPage21:
+			case ld::Fixup::kindStoreTargetAddressARM64GOTLeaPageOff12:
+			case ld::Fixup::kindStoreTargetAddressARM64TLVPLoadPage21:
+			case ld::Fixup::kindStoreTargetAddressARM64TLVPLoadPageOff12:
+			case ld::Fixup::kindStoreTargetAddressARM64TLVPLoadNowLeaPage21:
+			case ld::Fixup::kindStoreTargetAddressARM64TLVPLoadNowLeaPageOff12:
+#endif
+				return true;
+			case ld::Fixup::kindStoreTargetAddressX86BranchPCRel32:
+#if SUPPORT_ARCH_arm64
+			case ld::Fixup::kindStoreTargetAddressARM64Branch26:
+#endif
+				return !isKextBundle;
+#if SUPPORT_ARCH_arm64
+			case ld::Fixup::kindStoreARM64Branch26:
+#endif
+				return !isKextBundle;
 			default:
 				break;
 		}
@@ -787,6 +1137,7 @@ public:
 													_definition = a._definition;
 													_combine = a._combine;
 													_dontDeadStrip = a._dontDeadStrip;
+													_dontDeadStripIfRefLive = a._dontDeadStripIfRefLive;
 													_thumb = a._thumb;
 													_autoHide = a._autoHide;
 													_contentType = a._contentType;
@@ -797,6 +1148,14 @@ public:
 													_coalescedAway = a._coalescedAway;
 													_weakImportState = a._weakImportState;
 												}
+
+	const char*								safeFilePath() const {
+												const File* f = this->file();
+												if ( f != NULL )
+													return f->path();
+												else
+													return "<internal>";
+											}
 
 protected:
 	enum AddressMode { modeSectionOffset, modeFinalAddress };
@@ -832,7 +1191,7 @@ public:
 };
 
 
-	
+
 // utility classes for using std::unordered_map with c-strings
 struct CStringHash {
 	size_t operator()(const char* __s) const {
@@ -884,16 +1243,17 @@ public:
 										Internal() : bundleLoader(NULL),
 											entryPoint(NULL), classicBindingHelper(NULL),
 											lazyBindingHelper(NULL), compressedFastBinderProxy(NULL),
-											objcObjectConstraint(ld::File::objcConstraintNone), 
-											objcDylibConstraint(ld::File::objcConstraintNone), 
+											hasObjC(false),
 											swiftVersion(0), cpuSubType(0), minOSVersion(0),
 											objectFileFoundWithNoVersion(false),
 											allObjectFilesScatterable(true), 
 											someObjectFileHasDwarf(false), usingHugeSections(false),
+											someObjectFileHasSwift(false), firstSwiftDylibFile(nullptr),
 											hasThreadLocalVariableDefinitions(false),
 											hasWeakExternalSymbols(false),
 											someObjectHasOptimizationHints(false),
-											dropAllBitcode(false), embedMarkerOnly(false)	{ }
+											dropAllBitcode(false), embedMarkerOnly(false),
+											forceLoadCompilerRT(false)	{ }
 
 	std::vector<FinalSection*>					sections;
 	std::vector<ld::dylib::File*>				dylibs;
@@ -904,30 +1264,36 @@ public:
 	CStringSet									unprocessedLinkerOptionFrameworks;
 	CStringSet									linkerOptionLibraries;
 	CStringSet									linkerOptionFrameworks;
+	CStringSet									missingLinkerOptionLibraries;
+	CStringSet									missingLinkerOptionFrameworks;
 	std::vector<const ld::Atom*>				indirectBindingTable;
 	std::vector<const ld::relocatable::File*>	filesWithBitcode;
+	std::vector<const ld::relocatable::File*>	filesFromCompilerRT;
 	std::vector<const ld::Atom*>				deadAtoms;
 	std::unordered_set<const char*>				allUndefProxies;
+	std::unordered_set<uint64_t>				toolsVersions;
 	const ld::dylib::File*						bundleLoader;
 	const Atom*									entryPoint;
 	const Atom*									classicBindingHelper;
 	const Atom*									lazyBindingHelper;
 	const Atom*									compressedFastBinderProxy;
-	ld::File::ObjcConstraint					objcObjectConstraint;
-	ld::File::ObjcConstraint					objcDylibConstraint;
+	bool										hasObjC;
 	uint8_t										swiftVersion;
 	uint32_t									cpuSubType;
 	uint32_t									minOSVersion;
-	uint32_t									derivedPlatformLoadCommand;
+	VersionSet									derivedPlatforms;
 	bool										objectFileFoundWithNoVersion;
 	bool										allObjectFilesScatterable;
 	bool										someObjectFileHasDwarf;
 	bool										usingHugeSections;
+	bool										someObjectFileHasSwift;
+	const ld::dylib::File*						firstSwiftDylibFile;
 	bool										hasThreadLocalVariableDefinitions;
 	bool										hasWeakExternalSymbols;
 	bool										someObjectHasOptimizationHints;
 	bool										dropAllBitcode;
 	bool										embedMarkerOnly;
+	bool										forceLoadCompilerRT;
 	std::vector<std::string>					ltoBitcodePath;
 };
 

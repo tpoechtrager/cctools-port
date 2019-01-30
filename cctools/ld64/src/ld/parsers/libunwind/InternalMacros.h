@@ -46,15 +46,8 @@ struct v128 { unsigned int vec[4]; };
 
 #define EXPORT __attribute__((visibility("default"))) 
 
-#if 0 // ld64-port
 #define COMPILE_TIME_ASSERT( expr )    \
 		extern int compile_time_assert_failed[ ( expr ) ? 1 : -1 ] __attribute__( ( unused ) );
-#endif
-
-// ld64-port start
-#define COMPILE_TIME_ASSERT( expr )    \
-		static_assert(expr, "");
-// ld64-port end
 
 #define ABORT(msg) __assert_rtn(__func__, __FILE__, __LINE__, msg) 
 

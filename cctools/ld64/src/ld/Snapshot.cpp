@@ -8,6 +8,7 @@
 
 #include <string.h>
 #include <unistd.h>
+#include <errno.h>
 #include <stdio.h>
 #include <limits.h>
 #include <fcntl.h>
@@ -29,18 +30,19 @@
 static const char *frameworksString         = "frameworks";         // directory containing framework stubs (mach-o files)
 static const char *dylibsString             = "dylibs";             // directory containing dylib stubs (mach-o files)
 static const char *archiveFilesString       = "archive_files";      // directory containing .a files
-static const char *origCommandLineString    = "orig_command_line";  // text file containing the original command line
-static const char *linkCommandString        = "link_command";       // text file containing the snapshot equivalent command line
-static const char *dataFilesString          = "data_files";         // arbitrary data files referenced on the command line
 static const char *objectsString            = "objects";            // directory containing object files
 static const char *frameworkStubsString     = "framework_stubs";    // directory containing framework stub info (text files)
+static const char *dataFilesString          = "data_files";         // arbitrary data files referenced on the command line
 static const char *dylibStubsString         = "dylib_stubs";        // directory containing dylib stub info (text files)
+static const char *filesString              = "files";              // directory containing files
+static const char *origCommandLineString    = "orig_command_line";  // text file containing the original command line
+static const char *linkCommandString        = "link_command";       // text file containing the snapshot equivalent command line
 static const char *assertFileString         = "assert_info";        // text file containing assertion failure logs
 static const char *compileFileString        = "compile_stubs";      // text file containing compile_stubs script
 
 Snapshot *Snapshot::globalSnapshot = NULL;
 
-Snapshot::Snapshot() : fRecordArgs(false), fRecordObjects(false), fRecordDylibSymbols(false), fRecordArchiveFiles(false), fRecordUmbrellaFiles(false), fRecordDataFiles(false), fFrameworkArgAdded(false), fSnapshotLocation(NULL), fSnapshotName(NULL), fRootDir(NULL), fFilelistFile(-1), fCopiedArchives(NULL) 
+Snapshot::Snapshot(const Options * opts) : fOptions(opts), fRecordArgs(false), fRecordObjects(false), fRecordDylibSymbols(false), fRecordArchiveFiles(false), fRecordUmbrellaFiles(false), fRecordDataFiles(false), fFrameworkArgAdded(false), fRecordKext(false), fSnapshotLocation(NULL), fSnapshotName(NULL), fRootDir(NULL), fFilelistFile(-1), fCopiedArchives(NULL)
 {
     if (globalSnapshot != NULL)
         throw "only one snapshot supported";
@@ -53,7 +55,6 @@ Snapshot::~Snapshot()
     // Lots of things leak under the assumption the linker is about to exit.
 }
 
-#if __has_extension(blocks) // ld64-port
 
 void Snapshot::setSnapshotPath(const char *path) 
 {
@@ -66,18 +67,27 @@ void Snapshot::setSnapshotPath(const char *path)
 void Snapshot::setSnapshotMode(SnapshotMode mode) 
 {
     if (fRootDir == NULL) {
+        // free stuff
+        fRootDir = NULL;
+    }
+
+    if (fRootDir == NULL) {
         fRecordArgs = false;
         fRecordObjects = false;
         fRecordDylibSymbols = false;
         fRecordArchiveFiles = false;
         fRecordUmbrellaFiles = false;
         fRecordDataFiles = false;
-        
+        fRecordKext = false;
+
         switch (mode) {
             case SNAPSHOT_DISABLED:
                 break;
             case SNAPSHOT_DEBUG:
                 fRecordArgs = fRecordObjects = fRecordDylibSymbols = fRecordArchiveFiles = fRecordUmbrellaFiles = fRecordDataFiles = true;
+                break;
+            case SNAPSHOT_KEXT:
+                fRecordKext = fRecordArgs = fRecordObjects = fRecordDylibSymbols = fRecordArchiveFiles = fRecordUmbrellaFiles = fRecordDataFiles = true;
                 break;
             default:
                 break;
@@ -85,16 +95,35 @@ void Snapshot::setSnapshotMode(SnapshotMode mode)
     }
 }
 
-void Snapshot::setSnapshotName(const char *path)
+void Snapshot::setOutputPath(const char *path)
+{
+    fOutputPath = strdup(path);
+}
+
+void Snapshot::setSnapshotName()
 {
     if (fRootDir == NULL) {
-        const char *base = basename((char *)path);
-        time_t now = time(NULL);
-        struct tm t;
-        localtime_r(&now, &t);
-        char buf[PATH_MAX];
-        snprintf(buf, sizeof(buf)-1, "%s-%4.4d-%2.2d-%2.2d-%2.2d%2.2d%2.2d.ld-snapshot", base, t.tm_year+1900, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec);
-        fSnapshotName = strdup(buf);
+        if (fOutputPath == NULL) {
+            fSnapshotName = strdup("ld_snapshot");
+        } else {
+            const char *base = basename((char *)fOutputPath);
+            if (fRecordKext) {
+                const char *kextobjects;
+                if ((kextobjects = fOptions->kextObjectsPath())) {
+                    fSnapshotLocation = strdup(kextobjects);
+                } else {
+                    fSnapshotLocation = strdup(dirname((char *)fOutputPath));
+                }
+                asprintf((char **)&fSnapshotName, "%s.%s.ld", base, fArchString);
+            } else {
+                time_t now = time(NULL);
+                struct tm t;
+                localtime_r(&now, &t);
+                char buf[PATH_MAX];
+                snprintf(buf, sizeof(buf)-1, "%s-%4.4d-%2.2d-%2.2d-%2.2d%2.2d%2.2d.ld-snapshot", base, t.tm_year+1900, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec);
+                fSnapshotName = strdup(buf);
+            }
+        }
     }
 }
 
@@ -112,7 +141,8 @@ void Snapshot::buildPath(char *buf, const char *subdir, const char *file)
     if (subdir) {
         strcat(buf, subdir);
         // implicitly create the subdirectory
-        mkdir(buf, S_IRUSR|S_IWUSR|S_IXUSR);
+        mode_t mode = fRecordKext ? (S_IRUSR|S_IWUSR|S_IXUSR|S_IRGRP|S_IXGRP|S_IROTH|S_IXOTH) : (S_IRUSR|S_IWUSR|S_IXUSR);
+        mkdir(buf, mode);
         strcat(buf, "/");
     }
     if (file != NULL)
@@ -128,7 +158,7 @@ void Snapshot::buildUniquePath(char *buf, const char *subdir, const char *file)
 {
     buildPath(buf, subdir, file);
     struct stat st;
-    if (stat(buf, &st)==0) {
+    if (!fRecordKext && (stat(buf, &st)==0)) {
         // make it unique
         int counter=1;
         char *number = strrchr(buf, 0);
@@ -140,6 +170,13 @@ void Snapshot::buildUniquePath(char *buf, const char *subdir, const char *file)
     }
 }
 
+const char * Snapshot::subdir(const char *subdir)
+{
+    if (fRecordKext) {
+        return filesString;
+    }
+    return subdir;
+}
 
 // Copy a file to the snapshot.
 // sourcePath is the original file
@@ -150,6 +187,23 @@ void Snapshot::copyFileToSnapshot(const char *sourcePath, const char *subdir, ch
 {
     const int copyBufSize=(1<<14); // 16kb buffer
     static void *copyBuf = NULL;
+    bool inSdk;
+
+    if (fRecordKext) {
+        for (const char* sdkPath : fOptions->sdkPaths()) {
+            const char *toolchainPath;
+            inSdk = (!strncmp(sdkPath, sourcePath, strlen(sdkPath)));
+            if (!inSdk && (toolchainPath = fOptions->toolchainPath()))
+                inSdk = (!strncmp(toolchainPath, sourcePath, strlen(toolchainPath)));
+            if (inSdk) {
+                if (path) {
+                    strcpy(path, sourcePath);
+                }
+                return;
+            }
+        }
+    }
+
     if (copyBuf == NULL)
         copyBuf = malloc(copyBufSize);
     
@@ -157,7 +211,8 @@ void Snapshot::copyFileToSnapshot(const char *sourcePath, const char *subdir, ch
     char buf[PATH_MAX];
     if (path == NULL) path = buf;
     buildUniquePath(path, subdir, file);
-    int out_fd = open(path, O_WRONLY|O_CREAT|O_TRUNC, S_IRUSR|S_IWUSR);
+    mode_t mode = fRecordKext ? (S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH) : (S_IRUSR|S_IWUSR);
+    int out_fd = open(path, O_WRONLY|O_CREAT|O_TRUNC, mode);
     int in_fd = open(sourcePath, O_RDONLY);
     int len;
     if (out_fd != -1 && in_fd != -1) {
@@ -168,34 +223,42 @@ void Snapshot::copyFileToSnapshot(const char *sourcePath, const char *subdir, ch
     }
     close(in_fd);
     close(out_fd);
-}
 
+    const char * relPath = snapshotRelativePath(path);
+    memmove(path, relPath, 1+strlen(relPath));
+}
 
 // Create the snapshot root directory.
 void Snapshot::createSnapshot()
 {
     if (fRootDir == NULL) {
+
+        mode_t mask = umask(0);
+
         // provide default name and location
+        setSnapshotName();
         if (fSnapshotLocation == NULL)
             fSnapshotLocation = "/tmp";        
-        if (fSnapshotName == NULL) {
-            setSnapshotName("ld_snapshot");
-        }
-        
+
         char buf[PATH_MAX];
         fRootDir = (char *)fSnapshotLocation;
         buildUniquePath(buf, NULL, fSnapshotName);
         fRootDir = strdup(buf);
-        if (mkdir(fRootDir, S_IRUSR|S_IWUSR|S_IXUSR)!=0) {
+
+        int mkpatherr = mkpath_np(fRootDir, (S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH|S_IXUSR|S_IXGRP|S_IXOTH));
+        if ((mkpatherr!=0) && !(fRecordKext && (mkpatherr==EEXIST))) {
             warning("unable to create link snapshot directory: %s", fRootDir);
             fRootDir = NULL;
             setSnapshotMode(SNAPSHOT_DISABLED); // don't try to write anything if we can't create snapshot dir
         }
-        
-        buildPath(buf, NULL, compileFileString);
-        int compileScript = open(buf, O_WRONLY|O_CREAT|O_TRUNC, S_IXUSR|S_IRUSR|S_IWUSR);
-        write(compileScript, compile_stubs, strlen(compile_stubs));
-        close(compileScript);
+
+        if (!fRecordKext) {
+            buildPath(buf, NULL, compileFileString);
+            mode_t mode = fRecordKext ? (S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH) : (S_IXUSR|S_IRUSR|S_IWUSR);
+            int compileScript = open(buf, O_WRONLY|O_CREAT|O_TRUNC, mode);
+            write(compileScript, compile_stubs, strlen(compile_stubs));
+            close(compileScript);
+        }
 
         SnapshotLog::iterator it;
         for (it = fLog.begin(); it != fLog.end(); it++) {
@@ -206,50 +269,76 @@ void Snapshot::createSnapshot()
         fLog.erase(fLog.begin(), fLog.end());
         
         if (fRecordArgs) {
-            writeCommandLine(fRawArgs, origCommandLineString, true);
-            writeCommandLine(fArgs);
+            writeCommandLine(true);
+            writeCommandLine();
         }
         
 #if STORE_PID_IN_SNAPSHOT
         char path[PATH_MAX];
         buildUniquePath(path, NULL, pidString);
-        int pidfile = open(path, O_WRONLY|O_CREAT|O_TRUNC, S_IRUSR|S_IWUSR);
+        mode = fRecordKext ? (S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH) : (S_IRUSR|S_IWUSR);
+        int pidfile = open(path, O_WRONLY|O_CREAT|O_TRUNC, mode);
         char pid_buf[32];
         sprintf(pid_buf, "%lu\n", (long unsigned)getpid());
         write(pidfile, pid_buf, strlen(pid_buf));
         write(pidfile, "\n", 1);
         close(pidfile);    
 #endif
-        
+        umask(mask);
     }
 }
 
 
 // Write the current command line vector to filename.
-void Snapshot::writeCommandLine(StringVector &args, const char *filename, bool includeCWD) 
+void Snapshot::writeCommandLine(bool rawArgs)
 {
+    StringVector &args = rawArgs ? fRawArgs : fArgs;
+    const char *filename;
+
+    if (rawArgs) {
+        args = fRawArgs;
+        filename = origCommandLineString;
+    } else {
+        args = fArgs;
+        filename = linkCommandString;
+    }
+
     if (!isLazy() && fRecordArgs) {
-        // Figure out the file name and open it.
-        if (filename == NULL)
-            filename = linkCommandString;
+        // Open the file
         char path[PATH_MAX];
         buildPath(path, NULL, filename);
-        int argsFile = open(path, O_WRONLY|O_CREAT|O_TRUNC, S_IXUSR|S_IRUSR|S_IWUSR);
+
+        mode_t mode = fRecordKext ? (S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH) : (S_IXUSR|S_IRUSR|S_IWUSR);
+        int argsFile = open(path, O_WRONLY|O_CREAT|O_TRUNC, mode);
         FILE *argsStream = fdopen(argsFile, "w");
         
-        if (includeCWD)
+        if (rawArgs)
             fprintf(argsStream, "cd %s\n", getcwd(path, sizeof(path)));
 
         // iterate to write args, quoting as needed
-        StringVector::iterator it;
-        for (it = args.begin(); it != args.end(); it++) {
-            const char *arg = *it;
+        unsigned idx;
+        unsigned idxidx;
+        bool inner = false;
+
+        for (idx = idxidx = 0; idx < args.size(); idx++) {
+            const char *arg = args[idx];
             bool needQuotes = false;
+
+            if (fRecordKext && !rawArgs) {
+                if (idx == fArgIndicies[idxidx]) {
+                    idxidx++;
+                    if (idx > 0) {
+                        fprintf(argsStream, "\n");
+                        inner = false;
+                    }
+                }
+            }
             for (const char *c = arg; *c != 0 && !needQuotes; c++) {
                 if (isspace(*c))
                     needQuotes = true;
             }
-            if (it != args.begin()) fprintf(argsStream, " ");
+            if (inner) fprintf(argsStream, " ");
+            inner = true;
             if (needQuotes) fprintf(argsStream, "\"");
             fprintf(argsStream, "%s", arg);
             if (needQuotes) fprintf(argsStream, "\"");
@@ -267,7 +356,9 @@ void Snapshot::recordRawArgs(int argc, const char *argv[])
     for (int i=0; i<argc; i++) {
         fRawArgs.push_back(argv[i]);
     }
+    fArgIndicies.push_back(fArgs.size());
     fArgs.insert(fArgs.begin(), argv[0]);
+    fArgIndicies.push_back(fArgs.size());
     fArgs.insert(fArgs.begin()+1, "-Z"); // don't search standard paths when running in the snapshot
 }
 
@@ -283,14 +374,14 @@ void Snapshot::addSnapshotLinkArg(int argIndex, int argCount, int fileArg)
         fLog.push_back(Block_copy(^{ this->addSnapshotLinkArg(argIndex, argCount, fileArg); }));
     } else {
         char buf[PATH_MAX];
-        const char *subdir = dataFilesString;
+        fArgIndicies.push_back(fArgs.size());
         for (int i=0, arg=argIndex; i<argCount && argIndex+1<(int)fRawArgs.size(); i++, arg++) {
             if (i != fileArg) {
                 fArgs.push_back(fRawArgs[arg]);
             } else {
                 if (fRecordDataFiles) {
-                    copyFileToSnapshot(fRawArgs[arg], subdir, buf);
-                    fArgs.push_back(strdup(snapshotRelativePath(buf)));
+                    copyFileToSnapshot(fRawArgs[arg], subdir(dataFilesString), buf);
+                    fArgs.push_back(strdup(buf));
                 } else {
                     // if we don't copy the file then just record the original path
                     fArgs.push_back(strdup(fRawArgs[arg]));
@@ -307,7 +398,9 @@ void Snapshot::recordArch(const char *arch)
     if (fRawArgs.size() == 0)
         throw "raw args not set";
 
-    // only need to store the arch explicitly if it is not mentioned on the command line
+    fArchString = strdup(arch);
+
+    // only need to add the arch argument explicitly if it is not mentioned on the command line
     bool archInArgs = false;
     StringVector::iterator it;
     for (it = fRawArgs.begin(); it != fRawArgs.end() && !archInArgs; it++) {
@@ -322,7 +415,8 @@ void Snapshot::recordArch(const char *arch)
         } else {
             char path_buf[PATH_MAX];
             buildUniquePath(path_buf, NULL, "arch");
-            int fd=open(path_buf, O_WRONLY|O_CREAT|O_TRUNC, S_IRUSR|S_IWUSR);
+            mode_t mode = fRecordKext ? (S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH) : (S_IRUSR|S_IWUSR);
+            int fd=open(path_buf, O_WRONLY|O_CREAT|O_TRUNC, mode);
             write(fd, arch, strlen(arch));
             close(fd);
         }
@@ -340,21 +434,27 @@ void Snapshot::recordObjectFile(const char *path)
     } else {
         if (fRecordObjects) {
 			char path_buf[PATH_MAX];
-			copyFileToSnapshot(path, objectsString, path_buf);
+			copyFileToSnapshot(path, subdir(objectsString), path_buf);
             
             // lazily open the filelist file
             if (fFilelistFile == -1) {
                 char filelist_path[PATH_MAX];
-                buildUniquePath(filelist_path, objectsString, "filelist");
-                fFilelistFile = open(filelist_path, O_WRONLY|O_CREAT|O_TRUNC, S_IRUSR|S_IWUSR);
-                fArgs.push_back("-filelist");
-                fArgs.push_back(strdup(snapshotRelativePath(filelist_path)));
-                writeCommandLine(fArgs);
+                const char * dir;
+                dir = (fRecordKext ? NULL : subdir(objectsString));
+                buildUniquePath(filelist_path, dir, "filelist");
+                mode_t mode = fRecordKext ? (S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH) : (S_IRUSR|S_IWUSR);
+                fFilelistFile = open(filelist_path, O_WRONLY|O_CREAT|O_TRUNC, mode);
+
+                if (!fRecordKext) {
+                    fArgIndicies.push_back(fArgs.size());
+                    fArgs.push_back("-filelist");
+                    fArgs.push_back(strdup(snapshotRelativePath(filelist_path)));
+                    writeCommandLine();
+                }
             }
             
             // record the snapshot path in the filelist
-            const char *relative_path = snapshotRelativePath(path_buf);
-            write(fFilelistFile, relative_path, strlen(relative_path));
+            write(fFilelistFile, path_buf, strlen(path_buf));
             write(fFilelistFile, "\n", 1);
         }
     }
@@ -370,11 +470,13 @@ void Snapshot::addFrameworkArg(const char *framework)
     if (!found) {
         if (!fFrameworkArgAdded) {
             fFrameworkArgAdded = true;
+            fArgIndicies.push_back(fArgs.size());
             fArgs.push_back("-Fframeworks");
         }
+        fArgIndicies.push_back(fArgs.size());
         fArgs.push_back("-framework");
         fArgs.push_back(strdup(framework));
-        writeCommandLine(fArgs);
+        writeCommandLine();
     }
 }
 
@@ -387,9 +489,10 @@ void Snapshot::addDylibArg(const char *dylib)
     }
     if (!found) {
         char buf[ARG_MAX];
-        sprintf(buf, "%s/%s", dylibsString, dylib);
+        sprintf(buf, "%s/%s", subdir(dylibsString), dylib);
+        fArgIndicies.push_back(fArgs.size());
         fArgs.push_back(strdup(buf));
-        writeCommandLine(fArgs);
+        writeCommandLine();
     }
 }
 
@@ -404,14 +507,17 @@ void Snapshot::recordDylibSymbol(ld::dylib::File* dylibFile, const char *name)
             // find the dylib in the table
             DylibMap::iterator it;
             const char *dylibPath = dylibFile->path();
+
             it = fDylibSymbols.find(dylibPath);
             bool isFramework = (strstr(dylibPath, "framework") != NULL);
             int dylibFd;
             if (it == fDylibSymbols.end()) {
                 // Didn't find a file descriptor for this dylib. Create one and add it to the dylib map.
                 char path_buf[PATH_MAX];
-                buildUniquePath(path_buf, isFramework ? frameworkStubsString : dylibStubsString, dylibPath);
-                dylibFd = open(path_buf, O_WRONLY|O_APPEND|O_CREAT, S_IRUSR|S_IWUSR);
+                buildUniquePath(path_buf, subdir(isFramework ? frameworkStubsString : dylibStubsString), dylibPath);
+
+                mode_t mode = fRecordKext ? (S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH) : (S_IRUSR|S_IWUSR);
+                dylibFd = open(path_buf, O_WRONLY|O_APPEND|O_CREAT, mode);
                 fDylibSymbols.insert(std::pair<const char *, int>(dylibPath, dylibFd));
                 char *base_name = strdup(basename(path_buf));
                 if (isFramework) {
@@ -419,7 +525,7 @@ void Snapshot::recordDylibSymbol(ld::dylib::File* dylibFile, const char *name)
                 } else {
                     addDylibArg(base_name);
                 }
-                writeCommandLine(fArgs);
+                writeCommandLine();
             } else {
                 dylibFd = it->second;
             }
@@ -459,6 +565,7 @@ void Snapshot::recordArchive(const char *archiveFile)
         fLog.push_back(Block_copy(^{ this->recordArchive(archiveFile); ::free((void *)copy); }));
     } else {
         if (fRecordArchiveFiles) {
+
             // lazily create a vector of .a files that have been added
             if (fCopiedArchives == NULL) {
                 fCopiedArchives = new StringVector;
@@ -476,9 +583,15 @@ void Snapshot::recordArchive(const char *archiveFile)
             if (!found) {
                 char path[PATH_MAX];
                 fCopiedArchives->push_back(archiveFile);
-                copyFileToSnapshot(archiveFile, archiveFilesString, path);
-                fArgs.push_back(strdup(snapshotRelativePath(path)));
-                writeCommandLine(fArgs);
+
+                if (fRecordKext) {
+                    recordObjectFile(archiveFile);
+                } else {
+                    copyFileToSnapshot(archiveFile, subdir(archiveFilesString), path);
+                    fArgIndicies.push_back(fArgs.size());
+                    fArgs.push_back(strdup(path));
+                    writeCommandLine();
+                }
             }
         }
     }
@@ -493,7 +606,7 @@ void Snapshot::recordSubUmbrella(const char *frameworkPath)
         if (fRecordUmbrellaFiles) {
             const char *framework = basename((char *)frameworkPath);
             char buf[PATH_MAX], wrapper[PATH_MAX];
-            strcpy(wrapper, frameworksString);
+            strcpy(wrapper, subdir(frameworksString));
             buildPath(buf, wrapper, NULL); // ensure the frameworks directory exists
             strcat(wrapper, "/");
             strcat(wrapper, framework);
@@ -511,7 +624,7 @@ void Snapshot::recordSubLibrary(const char *dylibPath)
         fLog.push_back(Block_copy(^{ this->recordSubLibrary(copy); ::free((void *)copy); }));
     } else {
         if (fRecordUmbrellaFiles) {
-            copyFileToSnapshot(dylibPath, dylibsString);
+            copyFileToSnapshot(dylibPath, subdir(dylibsString));
             addDylibArg(basename((char *)dylibPath));
         }
     }
@@ -530,42 +643,11 @@ void Snapshot::recordAssertionMessage(const char *fmt, ...)
         } else {
             char path[PATH_MAX];
             buildPath(path, NULL, assertFileString);
-            int log = open(path, O_WRONLY|O_APPEND|O_CREAT, S_IRUSR|S_IWUSR);
+            mode_t mode = fRecordKext ? (S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH) : (S_IRUSR|S_IWUSR);
+            int log = open(path, O_WRONLY|O_APPEND|O_CREAT, mode);
             write(log, msg, strlen(msg));
             close(log);
             free(msg);
         }    
     }
 }
-
-#else
-
-
-void Snapshot::setSnapshotPath(const char *path) { }
-
-void Snapshot::setSnapshotMode(SnapshotMode mode)
-{
-  if (mode != SNAPSHOT_DISABLED) {
-      throwf("creating linker snapshots not supported in gcc built ld64");
-  }
-}
-
-void Snapshot::setSnapshotName(const char *path) { }
-void Snapshot::buildPath(char *buf, const char *subdir, const char *file) { }
-void Snapshot::buildUniquePath(char *buf, const char *subdir, const char *file) { }
-void Snapshot::copyFileToSnapshot(const char *sourcePath, const char *subdir, char *path) { }
-void Snapshot::createSnapshot() { }
-void Snapshot::writeCommandLine(StringVector &args, const char *filename, bool includeCWD) { }
-void Snapshot::recordRawArgs(int argc, const char *argv[]) { }
-void Snapshot::addSnapshotLinkArg(int argIndex, int argCount, int fileArg) { }
-void Snapshot::recordArch(const char *arch) { }
-void Snapshot::recordObjectFile(const char *path)  { }
-void Snapshot::addFrameworkArg(const char *framework) { }
-void Snapshot::addDylibArg(const char *dylib) { }
-void Snapshot::recordDylibSymbol(ld::dylib::File* dylibFile, const char *name) { }
-void Snapshot::recordArchive(const char *archiveFile) { }
-void Snapshot::recordSubUmbrella(const char *frameworkPath) { }
-void Snapshot::recordSubLibrary(const char *dylibPath) { }
-void Snapshot::recordAssertionMessage(const char *fmt, ...) { }
-
-#endif // __has_extension(blocks)

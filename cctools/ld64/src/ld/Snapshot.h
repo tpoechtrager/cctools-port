@@ -26,9 +26,10 @@ public:
     typedef enum { 
         SNAPSHOT_DISABLED, // nothing is recorded
         SNAPSHOT_DEBUG, // records: .o, .dylib, .framework, .a, and other data files
+        SNAPSHOT_KEXT, // records: .o, .a, and other data files
     } SnapshotMode;
     
-    Snapshot();
+    Snapshot(const Options * opts);
     ~Snapshot();
     
     // Control the data captured in the snapshot
@@ -36,7 +37,7 @@ public:
     
     // Use the basename of path to construct the snapshot name.
     // Must be called prior to createSnapshot().
-    void setSnapshotName(const char *path);
+    void setOutputPath(const char *path);
     
     // Set the directory in which the snapshot will be created.
     // Must be called prior to createSnapshot().
@@ -87,21 +88,27 @@ public:
 private:
 
     friend class SnapshotArchiveFileLog;
-#if __has_extension(blocks) // ld64-port
+    
     typedef std::vector<void(^)(void)> SnapshotLog;    
-#endif
+
     struct strcompclass {
         bool operator() (const char *a, const char *b) const { return ::strcmp(a, b) < 0; }
     };
     typedef std::vector<const char *> StringVector;
     typedef std::map<const char *, int, strcompclass > DylibMap;
     typedef std::map<const char *, const char *, strcompclass> PathMap;
-
+    typedef std::vector<unsigned> IntVector;
     
     // Write the current contents of the args vector to a file in the snapshot.
     // If filename is NULL then "link_command" is used.
     // This is used to write both the original and the "cooked" versions of the link command
-    void writeCommandLine(StringVector &args, const char *filename=NULL, bool includeCWD=false);
+    void writeCommandLine(bool rawArgs=false);
+
+    //
+    void setSnapshotName();
+
+    //
+    const char * subdir(const char *subdir);
 
     // Construct a path in the snapshot.
     // buf is a sring buffer in which the path is constructed
@@ -127,9 +134,9 @@ private:
 
     void addFrameworkArg(const char *framework);
     void addDylibArg(const char *dylib);
-#if __has_extension(blocks)     // ld64-port
+
+    const Options * fOptions;
     SnapshotLog fLog;           // log of events that recorded data in a snapshot prior to createSnapshot()
-#endif
     bool fRecordArgs;           // record command line 
     bool fRecordObjects;        // record .o files 
     bool fRecordDylibSymbols;   // record referenced dylib/framework symbols
@@ -137,14 +144,18 @@ private:
     bool fRecordUmbrellaFiles;  // record re-exported sub frameworks/dylibs
     bool fRecordDataFiles;      // record other data files
     bool fFrameworkArgAdded;
+    bool fRecordKext;
 
     const char *fSnapshotLocation; // parent directory of frootDir
     const char *fSnapshotName;    // a string to use in constructing the snapshot name
+    const char *fOutputPath;    // -o path
     char *fRootDir;             // root directory of the snapshot
+    const char *fArchString;
     int fFilelistFile;          // file descriptor to the open text file used for the -filelist
 
     StringVector fRawArgs;      // stores the raw command line args
     StringVector fArgs;         // stores the "cooked" command line args
+    IntVector fArgIndicies;     // where args start in fArgs
     PathMap fPathMap;           // mapping of original paths->snapshot paths for copied files
     
     DylibMap fDylibSymbols;    // map of dylib names to string vector containing referenced symbol names

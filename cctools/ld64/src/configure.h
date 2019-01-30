@@ -38,6 +38,8 @@
 
 #define BITCODE_XAR_VERSION "1.0"
 
+#define LD64_VERSION_NUM 0
+
 #ifndef HW_NCPU
 #define HW_NCPU 3
 #endif

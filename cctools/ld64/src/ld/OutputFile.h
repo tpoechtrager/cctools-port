@@ -89,6 +89,7 @@ public:
 	ld::Internal::FinalSection*	externalRelocationsSection;
 	ld::Internal::FinalSection*	sectionRelocationsSection;
 	ld::Internal::FinalSection*	indirectSymbolTableSection;
+	ld::Internal::FinalSection*	threadedPageStartsSection;
 	
 	struct RebaseInfo {
 						RebaseInfo(uint8_t t, uint64_t addr) : _type(t), _address(addr) {}
@@ -105,13 +106,15 @@ public:
 
 	struct BindingInfo {
 						BindingInfo(uint8_t t, int ord, const char* sym, bool weak_import, uint64_t addr, int64_t add) 
-							: _type(t), _flags(weak_import ? BIND_SYMBOL_FLAGS_WEAK_IMPORT : 0 ), _libraryOrdinal(ord), 
+							: _type(t), _flags(weak_import ? BIND_SYMBOL_FLAGS_WEAK_IMPORT : 0 ),
+								_threadedBindOrdinal(0), _libraryOrdinal(ord),
 								_symbolName(sym), _address(addr), _addend(add) {}
 						BindingInfo(uint8_t t, const char* sym, bool non_weak_definition, uint64_t addr, int64_t add) 
 							: _type(t), _flags(non_weak_definition ? BIND_SYMBOL_FLAGS_NON_WEAK_DEFINITION : 0 ), 
-							 _libraryOrdinal(0), _symbolName(sym), _address(addr), _addend(add) {}
+							 _threadedBindOrdinal(0), _libraryOrdinal(0), _symbolName(sym), _address(addr), _addend(add) {}
 		uint8_t			_type;
 		uint8_t			_flags;
+		uint16_t		_threadedBindOrdinal;
 		int				_libraryOrdinal;
 		const char*		_symbolName;
 		uint64_t		_address;
@@ -164,6 +167,9 @@ private:
 												const ld::Atom* atom, ld::Fixup* fixupWithTarget, 
 												ld::Fixup* fixupWithMinusTarget, ld::Fixup* fixupWithAddend,
 												 ld::Fixup* fixupWithStore,
+#if SUPPORT_ARCH_arm64e
+												 ld::Fixup* fixupWithAuthData,
+#endif
 												const ld::Atom* target, const ld::Atom* minusTarget, 
 												uint64_t targetAddend, uint64_t minusTargetAddend);
 	void						addDyldInfo(ld::Internal& state, ld::Internal::FinalSection* sect,  
@@ -171,6 +177,11 @@ private:
 												ld::Fixup* fixupWithMinusTarget, ld::Fixup* fixupWithStore,
 												const ld::Atom* target, const ld::Atom* minusTarget, 
 												uint64_t targetAddend, uint64_t minusTargetAddend);
+	void						addThreadedRebaseInfo(ld::Internal& state, ld::Internal::FinalSection* sect,
+													  const ld::Atom* atom, ld::Fixup* fixupWithTarget,
+													  ld::Fixup* fixupWithMinusTarget, ld::Fixup* fixupWithStore,
+													  const ld::Atom* target, const ld::Atom* minusTarget,
+													  uint64_t targetAddend, uint64_t minusTargetAddend);
 	void						addClassicRelocs(ld::Internal& state, ld::Internal::FinalSection* sect,  
 												const ld::Atom* atom, ld::Fixup* fixupWithTarget, 
 												ld::Fixup* fixupWithMinusTarget, ld::Fixup* fixupWithStore,
@@ -195,10 +206,10 @@ private:
 	void						copyNoOps(uint8_t* from, uint8_t* to, bool thumb);
 	bool						isPointerToTarget(ld::Fixup::Kind kind);
 	bool						isPointerFromTarget(ld::Fixup::Kind kind);
-	bool						isPcRelStore(ld::Fixup::Kind kind);
+	bool						isPcRelStore(const ld::Fixup* fixup);
 	bool						isStore(ld::Fixup::Kind kind);
 	bool						storeAddendOnly(const ld::Atom* inAtom, const ld::Atom* target, bool pcRel=false);
-	bool						setsTarget(ld::Fixup::Kind kind);
+	bool						setsTarget(const ld::Fixup &fixup);
 	void						addFixupOutInfo(ld::Internal& state);
 	void						makeRelocations(ld::Internal& state);
 	void						makeSectionRelocations(ld::Internal& state);
@@ -279,6 +290,7 @@ private:
 	std::vector<const ld::dylib::File*>		_dylibsToLoad;
 	std::vector<const char*>				_dylibOrdinalPaths;
 	const bool								_hasDyldInfo;
+	const bool								_hasThreadedPageStarts;
 	const bool								_hasSymbolTable;
 	const bool								_hasSectionRelocations;
 	const bool								_hasSplitSegInfo;
@@ -307,6 +319,12 @@ public:
 	std::vector<BindingInfo>				_bindingInfo;
 	std::vector<BindingInfo>				_lazyBindingInfo;
 	std::vector<BindingInfo>				_weakBindingInfo;
+	bool									_hasUnalignedFixup = false;
+	// Note, <= 0 values are indices in to rebases, > 0 are binds.
+	std::vector<int64_t>					_threadedRebaseBindIndices;
+#if SUPPORT_ARCH_arm64e
+	std::map<uintptr_t, std::pair<Fixup::AuthData, uint64_t>> _authenticatedFixupData;
+#endif
 	std::vector<SplitSegInfoEntry>			_splitSegInfos;
 	std::vector<SplitSegInfoV2Entry>		_splitSegV2Infos;
 	class HeaderAndLoadCommandsAbtract*		_headersAndLoadCommandAtom;

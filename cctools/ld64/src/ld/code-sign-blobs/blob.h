@@ -46,7 +46,6 @@
 #include "memutils.h"
 #include <errno.h>
 #include <cstdio>
-#include <cstring> // ld64-port
 
 namespace Security {
 

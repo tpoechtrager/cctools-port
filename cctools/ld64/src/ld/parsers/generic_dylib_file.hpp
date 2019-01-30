@@ -123,22 +123,19 @@ template <typename A>
 class File : public ld::dylib::File
 {
 public:
-	File(const char* path, time_t mTime, ld::File::Ordinal ordinal, Options::Platform platform,
-		 uint32_t linkMinOSVersion, bool allowWeakImports, bool linkingFlatNamespace, bool hoistImplicitPublicDylibs,
+	File(const char* path, time_t mTime, ld::File::Ordinal ordinal, const ld::VersionSet& platforms,
+		 bool allowWeakImports, bool linkingFlatNamespace, bool hoistImplicitPublicDylibs,
 		 bool allowSimToMacOSX, bool addVers);
 
 	// overrides of ld::File
 	virtual bool							forEachAtom(ld::File::AtomHandler&) const override final;
 	virtual bool							justInTimeforEachAtom(const char* name, ld::File::AtomHandler&) const override final;
-	virtual ld::File::ObjcConstraint		objCConstraint() const override final { return _objcConstraint; }
 	virtual uint8_t							swiftVersion() const override final { return _swiftVersion; }
-	virtual uint32_t						minOSVersion() const override final { return _minVersionInDylib; }
-	virtual uint32_t						platformLoadCommand() const	override final { return _platformInDylib; }
 	virtual ld::Bitcode*					getBitcode() const override final { return _bitcode.get(); }
 
 
 	// overrides of ld::dylib::File
-	virtual void							processIndirectLibraries(ld::dylib::File::DylibHandler*, bool addImplicitDylibs) override final;
+	virtual void							processIndirectLibraries(ld::dylib::File::DylibHandler*, bool addImplicitDylibs) override;
 	virtual bool							providedExportAtom() const	override final { return _providedAtom; }
 	virtual const char*						parentUmbrella() const override final { return _parentUmbrella; }
 	virtual const std::vector<const char*>*	allowableClients() const override final { return _allowableClients.empty() ? nullptr : &_allowableClients; }
@@ -207,11 +204,7 @@ protected:
 	std::vector<const char*>   			_rpaths;
 	const char*							_parentUmbrella;
 	std::unique_ptr<ld::Bitcode>		_bitcode;
-	const Options::Platform				_platform;
-	ld::File::ObjcConstraint			_objcConstraint;
-	const uint32_t						_linkMinOSVersion;
-	uint32_t							_minVersionInDylib;
-	uint32_t							_platformInDylib;
+	ld::VersionSet                      _platforms;
 	uint8_t								_swiftVersion;
 	bool								_wrongOS;
 	bool								_linkingFlat;
@@ -223,7 +216,7 @@ protected:
 	bool								_deadStrippable;
 	bool								_hasPublicInstallName;
 	bool								_appExtensionSafe;
-    const bool                          _allowWeakImports;
+  const bool              _allowWeakImports;
 	const bool							_allowSimToMacOSXLinking;
 	const bool							_addVersionLoadCommand;
 
@@ -234,8 +227,8 @@ template <typename A>
 bool File<A>::_s_logHashtable = false;
 
 template <typename A>
-File<A>::File(const char* path, time_t mTime, ld::File::Ordinal ord,  Options::Platform platform,
-			  uint32_t linkMinOSVersion, bool allowWeakImports, bool linkingFlatNamespace,
+File<A>::File(const char* path, time_t mTime, ld::File::Ordinal ord, const ld::VersionSet& platforms,
+			  bool allowWeakImports, bool linkingFlatNamespace,
 			  bool hoistImplicitPublicDylibs,
 			  bool allowSimToMacOSX, bool addVers)
 	: ld::dylib::File(path, mTime, ord),
@@ -245,11 +238,7 @@ File<A>::File(const char* path, time_t mTime, ld::File::Ordinal ord,  Options::P
 	  _indirectDylibsProcessed(false),
 	  _importAtom(nullptr),
 	  _parentUmbrella(nullptr),
-	  _platform(platform),
-	  _objcConstraint(ld::File::objcConstraintNone),
-	  _linkMinOSVersion(linkMinOSVersion),
-	  _minVersionInDylib(0),
-	  _platformInDylib(Options::kPlatformUnknown),
+    _platforms(platforms),
 	  _swiftVersion(0),
 	  _wrongOS(false),
 	  _linkingFlat(linkingFlatNamespace),
@@ -261,7 +250,7 @@ File<A>::File(const char* path, time_t mTime, ld::File::Ordinal ord,  Options::P
 	  _deadStrippable(false),
 	  _hasPublicInstallName(false),
 	  _appExtensionSafe(false),
-      _allowWeakImports(allowWeakImports),
+    _allowWeakImports(allowWeakImports),
 	  _allowSimToMacOSXLinking(allowSimToMacOSX),
 	  _addVersionLoadCommand(addVers)
 {

@@ -328,6 +328,89 @@ private:
 ld::Section StubAtom::_s_section("__TEXT", "__symbol_stub", ld::Section::typeStub);
 
 
+class NonLazyPointerAtom : public ld::Atom {
+public:
+	NonLazyPointerAtom(ld::passes::stubs::Pass& pass, const ld::Atom& target,
+					   bool weakImport)
+				: ld::Atom(_s_section, ld::Atom::definitionRegular, 
+							ld::Atom::combineNever, ld::Atom::scopeLinkageUnit, ld::Atom::typeNonLazyPointer, 
+							symbolTableNotIn, false, false, false, ld::Atom::Alignment(2)),
+				_target(target),
+				_fixup1(0, ld::Fixup::k1of1, ld::Fixup::kindStoreTargetAddressLittleEndian32, &target) {
+					_fixup1.weakImport = weakImport;
+					pass.addAtom(*this);
+				}
+
+	virtual const ld::File*					file() const					{ return _target.file(); }
+	virtual const char*						name() const					{ return _target.name(); }
+	virtual uint64_t						size() const					{ return 4; }
+	virtual uint64_t						objectAddress() const			{ return 0; }
+	virtual void							copyRawContent(uint8_t buffer[]) const { }
+	virtual void							setScope(Scope)					{ }
+	virtual ld::Fixup::iterator				fixupsBegin() const				{ return (ld::Fixup*)&_fixup1; }
+	virtual ld::Fixup::iterator				fixupsEnd()	const 				{ return &((ld::Fixup*)&_fixup1)[1]; }
+
+private:
+	const ld::Atom&							_target;
+	ld::Fixup								_fixup1;
+	
+	static ld::Section						_s_section;
+};
+
+ld::Section NonLazyPointerAtom::_s_section("__DATA", "__got", ld::Section::typeNonLazyPointer);
+
+
+class NonLazyStubAtom : public ld::Atom {
+public:
+	NonLazyStubAtom(ld::passes::stubs::Pass& pass, const ld::Atom& target,
+					bool weakImport)
+				: ld::Atom(_s_section, ld::Atom::definitionRegular, ld::Atom::combineNever,
+							ld::Atom::scopeLinkageUnit, ld::Atom::typeStub, 
+							symbolTableNotIn, false, false, false, ld::Atom::Alignment(1)), 
+				_target(target),
+				_nonlazyPointer(pass, target, weakImport),
+				_fixup1(8, ld::Fixup::k1of4, ld::Fixup::kindSetTargetAddress, &_nonlazyPointer),
+				_fixup2(8, ld::Fixup::k2of4, ld::Fixup::kindSubtractTargetAddress, this),
+				_fixup3(8, ld::Fixup::k3of4, ld::Fixup::kindSubtractAddend, 5),
+				_fixup4(8, ld::Fixup::k4of4, ld::Fixup::kindStoreLittleEndian32) { pass.addAtom(*this); }
+
+	virtual const ld::File*					file() const					{ return _target.file(); }
+	virtual const char*						name() const					{ return _target.name(); }
+	virtual uint64_t						size() const					{ return 14; }
+	virtual uint64_t						objectAddress() const			{ return 0; }
+	virtual void							copyRawContent(uint8_t buffer[]) const {
+			buffer[0]  = 0xE8;		// call next instruction (picbase)
+			buffer[1]  = 0x00;
+			buffer[2]  = 0x00;
+			buffer[3]  = 0x00;
+			buffer[4]  = 0x00;
+			buffer[5]  = 0x58;		// pop eax
+			buffer[6]  = 0x8D;		// lea foo$nonlazy_pointer-picbase(eax),eax
+			buffer[7]  = 0x80;
+			buffer[8]  = 0x00;
+			buffer[9]  = 0x00;
+			buffer[10] = 0x00;
+			buffer[11] = 0x00;
+			buffer[12] = 0xFF;		// jmp *(eax)
+			buffer[13] = 0x20;
+	}
+	virtual void							setScope(Scope)					{ }
+	virtual ld::Fixup::iterator				fixupsBegin() const				{ return &_fixup1; }
+	virtual ld::Fixup::iterator				fixupsEnd()	const 				{ return &((ld::Fixup*)&_fixup4)[1]; }
+
+private:
+	const ld::Atom&							_target;
+	NonLazyPointerAtom						_nonlazyPointer;
+	mutable ld::Fixup						_fixup1;
+	ld::Fixup								_fixup2;
+	ld::Fixup								_fixup3;
+	ld::Fixup								_fixup4;
+
+	static ld::Section						_s_section;
+};
+
+ld::Section NonLazyStubAtom::_s_section("__TEXT", "__symbol_stub", ld::Section::typeStub);
+
 
 } // namespace x86
 
