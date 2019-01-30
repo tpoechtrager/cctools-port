@@ -5654,7 +5654,8 @@ void Options::checkIllegalOptionCombinations()
 		throw "-r and -dead_strip cannot be used together";
 
 	// can't use -rpath unless targeting 10.5 or later
-	if ( fRPaths.size() > 0 ) {
+	/* cctools-port */
+	/* if ( fRPaths.size() > 0 ) {
 		if ( !platforms().minOS(ld::version2008) )
 			throw "-rpath can only be used when targeting Mac OS X 10.5 or later";
 		switch ( fOutputKind ) {
@@ -5669,7 +5670,7 @@ void Options::checkIllegalOptionCombinations()
 			case Options::kKextBundle:
 				throw "-rpath can only be used when creating a dynamic final linked image";
 		}
-	}
+	}*/
 
 	if ( fPositionIndependentExecutable ) {
 		switch ( fOutputKind ) {
@@ -5840,7 +5841,7 @@ void Options::checkForClassic(int argc, const char* argv[])
 	bool rFound = false;
 	bool creatingMachKernel = false;
 	bool newLinker = false;
-	
+
 	// build command line buffer in case ld crashes
 #if __MAC_OS_X_VERSION_MIN_REQUIRED >= 1070 && HAVE_CRASHREPORTER_HEADER // ld64-port: added && HAVE_CRASHREPORTER_HEADER
 	CRSetCrashLogMessage(crashreporterBuffer);
