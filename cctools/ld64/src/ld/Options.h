@@ -870,7 +870,7 @@ private:
 	uint8_t								fMaxDefaultCommonAlign;
 	UnalignedPointerTreatment			fUnalignedPointerTreatment;
 	mutable std::vector<DependencyEntry> fDependencies;
-#ifdef TAPI_SUPPOTR
+#ifdef TAPI_SUPPORT
 	mutable std::vector<Options::TAPIInterface> fTAPIFiles;
 #endif
 

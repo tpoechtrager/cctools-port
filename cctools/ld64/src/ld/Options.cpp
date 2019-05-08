@@ -4695,9 +4695,11 @@ void Options::reconfigureDefaults()
 		case Options::kDynamicBundle:
 			break;
 		case Options::kDyld:
+#ifdef CPU_SUBTYPE_ARM64_E
 			// arm64e has support for compressed LINKEDIT.
 			if ( (fArchitecture == CPU_TYPE_ARM64) && (fSubArchitecture == CPU_SUBTYPE_ARM64_E) )
 				break;
+#endif
 		case Options::kPreload:
 		case Options::kStaticExecutable:
 		case Options::kObjectFile:
@@ -5769,9 +5771,12 @@ void Options::checkIllegalOptionCombinations()
 	if (platforms().count() > 2) {
 		throw "Illegal platform count.  Only 2 platforms at a maximum can be specified";
 	}
-
+#ifdef CPU_TYPE_X86
 	// Convert from -ios_version_min to -ios_simulator_version_min for now until clang has been updated
 	if (architecture() == CPU_TYPE_X86_64 || architecture() == CPU_TYPE_X86) {
+#else
+	if (architecture() == CPU_TYPE_X86_64) {
+#endif
 		if (platforms().contains(ld::kPlatform_iOS)) {
 			uint32_t version = platforms().minOS(ld::kPlatform_iOS);
 			fPlatforms.erase(ld::kPlatform_iOS);
