@@ -22,6 +22,7 @@
  * @APPLE_LICENSE_HEADER_END@
  */
 
+#ifdef TAPI_SUPPORT
 
 #include <sys/param.h>
 #include <sys/mman.h>
@@ -490,3 +491,5 @@ ld::dylib::File *parse(const char *path, tapi::LinkerInterfaceFile* file, time_t
 
 } // namespace dylib
 } // namespace textstub
+
+#endif

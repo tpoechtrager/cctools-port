@@ -237,7 +237,11 @@ bool File<A>::validMachOFile(const uint8_t* fileContent, uint64_t fileLength, co
 template <typename A>
 bool File<A>::validLTOFile(const uint8_t* fileContent, uint64_t fileLength, const mach_o::relocatable::ParserOptions& opts)
 {
+#ifdef LTO_SUPPORT
 	return lto::isObjectFile(fileContent, fileLength, opts.architecture, opts.subType);
+#else
+	return false;
+#endif
 }
 
 
@@ -401,10 +405,12 @@ typename File<A>::MemberState& File<A>::makeObjectFileForMember(const Entry* mem
 			_instantiatedEntries[member] = state;
 			return _instantiatedEntries[member];
 		}
+#ifdef LTO_SUPPORT
 		// see if member is llvm bitcode file
 		result = lto::parse(member->content(), member->contentSize(), 
 								mPath, member->modificationTime(), ordinal, 
 								_objOpts.architecture, _objOpts.subType, _logAllFiles, _objOpts.verboseOptimizationHints);
+#endif
 		if ( result != NULL ) {
 			MemberState state = {result, member, false, false, memberIndex};
 			_instantiatedEntries[member] = state;
@@ -495,6 +501,7 @@ bool File<A>::forEachAtom(ld::File::AtomHandler& handler) const
 					}
 				}
 			}
+#ifdef LTO_SUPPORT
 			else if ( validLTOFile(member->content(), member->contentSize(), _objOpts) ) {
 				if ( lto::hasObjCCategory(member->content(), member->contentSize()) ) {
 					MemberState& state = this->makeObjectFileForMember(member);
@@ -506,6 +513,7 @@ bool File<A>::forEachAtom(ld::File::AtomHandler& handler) const
 					}
 				}
 			}
+#endif
 		}
 	}
 	return didSome;

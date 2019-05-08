@@ -5560,6 +5560,7 @@ static std::string realPathString(const char* path)
 
 void OutputFile::writeJSONEntry(ld::Internal& state)
 {
+#ifdef HAVE_UUID_UUID_H // ld64-port
 	if ( _options.traceEmitJSON() && (_options.UUIDMode() != Options::kUUIDNone) && (_options.traceOutputFile() != NULL) ) {
 
 		// Convert the UUID to a string.
@@ -5656,6 +5657,7 @@ void OutputFile::writeJSONEntry(ld::Internal& state)
 		// Write the JSON entry to the trace file.
 		_options.writeToTraceFile(jsonEntry.c_str(), jsonEntry.size());
 	}
+#endif
 }
 
 // used to sort atoms with debug notes

@@ -1779,10 +1779,12 @@ void Resolver::linkTimeOptimize()
 	
 	std::vector<const ld::Atom*>		newAtoms;
 	std::vector<const char*>			additionalUndefines; 
+#ifdef LTO_SUPPORT
 	if ( ! lto::optimize(_atoms, _internal, optOpt, *this, newAtoms, additionalUndefines) )
 		return; // if nothing done
 	_ltoCodeGenFinished = true;
 	
+#endif
 	// add all newly created atoms to _atoms and update symbol table
 	for(std::vector<const ld::Atom*>::iterator it = newAtoms.begin(); it != newAtoms.end(); ++it)
 		this->doAtom(**it);

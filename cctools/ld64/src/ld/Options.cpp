@@ -851,6 +851,7 @@ static std::string replace_extension(const std::string &path, const std::string 
 	return result;
 }
 
+#ifdef TAPI_SUPPORT
 void Options::addTAPIInterface(tapi::LinkerInterfaceFile* interface, const char *path) const {
 #if ((TAPI_API_VERSION_MAJOR == 1 &&  TAPI_API_VERSION_MINOR >= 3) || (TAPI_API_VERSION_MAJOR > 1))
 	if (tapi::APIVersion::isAtLeast(1, 3)) {
@@ -860,6 +861,7 @@ void Options::addTAPIInterface(tapi::LinkerInterfaceFile* interface, const char 
 	}
 #endif
 }
+#endif
 
 bool Options::findFile(const std::string &path, const std::vector<std::string> &tbdExtensions, FileInfo& result) const
 {
@@ -979,6 +981,7 @@ Options::FileInfo Options::findFile(const std::string &path, const ld::dylib::Fi
 		}
 	}
 
+#ifdef TAPI_SUPPORT
 	// find inlined TBD file before raw path.
 	// rdar://problem/35864452
 	if (hasInlinedTAPIFile(path)) {
@@ -986,6 +989,7 @@ Options::FileInfo Options::findFile(const std::string &path, const ld::dylib::Fi
 		inlinedFile.isInlined = true;
 		return inlinedFile;
 	}
+#endif
 
 	// try raw path
 	if ( findFile(path, {".tbd"}, result) )
@@ -995,6 +999,7 @@ Options::FileInfo Options::findFile(const std::string &path, const ld::dylib::Fi
 	throwf("file not found: %s", path.c_str());
 }
 
+#ifdef TAPI_SUPPORT
 bool Options::hasInlinedTAPIFile(const std::string &path) const {
 	for (const auto &dylib : fTAPIFiles) {
 		if (dylib.getInstallName() == path)
@@ -1059,6 +1064,7 @@ tapi::LinkerInterfaceFile* Options::findTAPIFile(const std::string &path) const
 	return nullptr;
 #endif
 }
+#endif
 
 // search for indirect dylib first using -F and -L paths first
 Options::FileInfo Options::findIndirectDylib(const std::string& installName, const ld::dylib::File* fromDylib) const

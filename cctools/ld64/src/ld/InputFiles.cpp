@@ -225,6 +225,7 @@ const char* InputFiles::fileArch(const uint8_t* p, unsigned len)
 
 ld::File* InputFiles::makeFile(const Options::FileInfo& info, bool indirectDylib)
 {
+#ifdef LTO_SUPPORT
 	// handle inlined framework first.
 	if (info.isInlined) {
 		auto interface = _options.findTAPIFile(info.path);
@@ -235,6 +236,7 @@ ld::File* InputFiles::makeFile(const Options::FileInfo& info, bool indirectDylib
 			throwf("could not parse inlined dylib file: %s(%s)", interface->getInstallName().c_str(), info.path);
 		return file;
 	}
+#endif
 	// map in whole file
 	struct stat stat_buf;
 	int fd = ::open(info.path, O_RDONLY, 0);

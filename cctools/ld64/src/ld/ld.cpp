@@ -1371,7 +1371,9 @@ int main(int argc, const char* argv[])
 		ld::passes::branch_island::doPass(options, state);	// must be after stubs and order pass
 		ld::passes::dtrace::doPass(options, state);
 		ld::passes::compact_unwind::doPass(options, state);  // must be after order pass
+#if defined(HAVE_XAR_XAR_H) && defined(LTO_SUPPORT)
 		ld::passes::bitcode_bundle::doPass(options, state);  // must be after dylib
+#endif
 
 		// Sort again so that we get the segments in order.
 		state.sortSections();
