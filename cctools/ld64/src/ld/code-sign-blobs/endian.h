@@ -30,6 +30,7 @@
 
 #include <machine/endian.h>
 #include <libkern/OSByteOrder.h>
+#include <arpa/inet.h>
 //#include <security_utilities/utilities.h>
 #include "memutils.h"
 

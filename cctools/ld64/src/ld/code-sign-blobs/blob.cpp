@@ -22,6 +22,7 @@
  */
 
 #include <unistd.h>
+#include <string.h>
 
 //
 // blob - generic extensible binary blob frame

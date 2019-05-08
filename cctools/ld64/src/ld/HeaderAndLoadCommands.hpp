@@ -28,6 +28,7 @@
 #include <stdlib.h>
 #include <limits.h>
 #include <unistd.h>
+#include <mutex>
 #include <mach-o/loader.h>
 
 #include <vector>
