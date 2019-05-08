@@ -23,7 +23,7 @@ if test "x$OBJCFLAGS" = "x"; then
   OBJCFLAGS="-O3"
 fi
 
-CXXFLAGS="$CXXFLAGS -std=c++0x"
+CXXFLAGS="$CXXFLAGS -std=c++11"
 
 if test "x$build" = "x$host"; then
   CFLAGS="$CFLAGS -isystem /usr/local/include -isystem /usr/pkg/include"
