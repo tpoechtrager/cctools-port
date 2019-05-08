@@ -456,6 +456,7 @@ if test "x$isdarwin" != "xyes"; then
 fi
 
 AC_CONFIG_FILES([ld64/Makefile])
+AC_CONFIG_FILES([ld64/doc/man/Makefile])
 AC_CONFIG_FILES([ld64/src/Makefile])
 AC_CONFIG_FILES([ld64/src/3rd/Makefile])
 AC_CONFIG_FILES([ld64/src/3rd/BlocksRuntime/Makefile])
