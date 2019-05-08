@@ -17956,6 +17956,8 @@ fi
 
 ac_config_files="$ac_config_files ld64/Makefile"
 
+ac_config_files="$ac_config_files ld64/doc/man/Makefile"
+
 ac_config_files="$ac_config_files ld64/src/Makefile"
 
 ac_config_files="$ac_config_files ld64/src/3rd/Makefile"
@@ -19112,6 +19114,7 @@ do
     "otool/Makefile") CONFIG_FILES="$CONFIG_FILES otool/Makefile" ;;
     "libobjc2/Makefile") CONFIG_FILES="$CONFIG_FILES libobjc2/Makefile" ;;
     "ld64/Makefile") CONFIG_FILES="$CONFIG_FILES ld64/Makefile" ;;
+    "ld64/doc/man/Makefile") CONFIG_FILES="$CONFIG_FILES ld64/doc/man/Makefile" ;;
     "ld64/src/Makefile") CONFIG_FILES="$CONFIG_FILES ld64/src/Makefile" ;;
     "ld64/src/3rd/Makefile") CONFIG_FILES="$CONFIG_FILES ld64/src/3rd/Makefile" ;;
     "ld64/src/3rd/BlocksRuntime/Makefile") CONFIG_FILES="$CONFIG_FILES ld64/src/3rd/BlocksRuntime/Makefile" ;;
