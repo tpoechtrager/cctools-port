@@ -52,6 +52,8 @@ static const struct arch_flag arch_flags[] = {
     { "arm64",     CPU_TYPE_ARM64,     CPU_SUBTYPE_ARM64_ALL },
     /* specific architecture implementations */
     { "ppc970-64", CPU_TYPE_POWERPC64, CPU_SUBTYPE_POWERPC_970 },
+    { "arm64_32",  CPU_TYPE_ARM64_32,  CPU_SUBTYPE_ARM64_32_V8 },
+    { "arm64e",    CPU_TYPE_ARM64,  CPU_SUBTYPE_ARM64E },
 
 /* 32-bit Mach-O architectures */
 
@@ -159,8 +161,37 @@ get_arch_name_from_types(
 cpu_type_t cputype,
 cpu_subtype_t cpusubtype)
 {
-    uint32_t i;
+    const char *s;
     char *p;
+
+	s = get_arch_name_if_known(cputype, cpusubtype);
+	if (s == NULL) {
+#ifndef RLD
+	    p = savestr("cputype 1234567890 cpusubtype 1234567890");
+	    if(p != NULL)
+		sprintf(p, "cputype %u cpusubtype %u", cputype,
+			cpusubtype & ~CPU_SUBTYPE_MASK);
+#else
+	    /* there is no sprintf() in the rld kernel API's */
+	    p = savestr("cputype ?? cpusubtype ??");
+#endif
+	    s = p;
+	}
+
+	return(s);
+}
+
+/*
+ * get_arch_name_if_known() returns the name of the architecture for the
+ * specified cputype and cpusubtype if known.  If unknown it returns NULL.
+ */
+__private_extern__
+const char *
+get_arch_name_if_known(
+cpu_type_t cputype,
+cpu_subtype_t cpusubtype)
+{
+    uint32_t i;
 
 	for(i = 0; arch_flags[i].name != NULL; i++){
 	    if(arch_flags[i].cputype == cputype &&
@@ -168,16 +199,8 @@ cpu_subtype_t cpusubtype)
 	       (cpusubtype & ~CPU_SUBTYPE_MASK))
 		return(arch_flags[i].name);
 	}
-#ifndef RLD
-	p = savestr("cputype 1234567890 cpusubtype 1234567890");
-	if(p != NULL)
-	    sprintf(p, "cputype %u cpusubtype %u", cputype,
-		    cpusubtype & ~CPU_SUBTYPE_MASK);
-#else
-	/* there is no sprintf() in the rld kernel API's */
-	p = savestr("cputype ?? cpusubtype ??");
-#endif
-	return(p);
+
+	return(NULL);
 }
 
 /*
@@ -191,6 +214,9 @@ cpu_type_t cputype)
 {
     uint32_t i;
 
+	/* arm64 is not to match a family but the specific arm64 arch */
+	if(cputype == CPU_TYPE_ARM64)
+	    return(NULL);
 	for(i = 0; arch_flags[i].name != NULL; i++){
 	    if(arch_flags[i].cputype == cputype)
 		return(arch_flags + i);
@@ -222,6 +248,7 @@ const struct arch_flag *flag)
     else if(flag->cputype == CPU_TYPE_I386 ||
 	    flag->cputype == CPU_TYPE_X86_64 ||
 	    flag->cputype == CPU_TYPE_ARM64 ||
+	    flag->cputype == CPU_TYPE_ARM64_32 ||
 	    flag->cputype == CPU_TYPE_ARM)
         return LITTLE_ENDIAN_BYTE_SEX;
     else
@@ -322,7 +349,8 @@ get_segalign_from_flag(
 const struct arch_flag *flag)
 {
         if(flag->cputype == CPU_TYPE_ARM ||
-           flag->cputype == CPU_TYPE_ARM64)
+	   flag->cputype == CPU_TYPE_ARM64 ||
+	   flag->cputype == CPU_TYPE_ARM64_32)
 	    return(0x4000); /* 16K */
 
 	if(flag->cputype == CPU_TYPE_POWERPC ||

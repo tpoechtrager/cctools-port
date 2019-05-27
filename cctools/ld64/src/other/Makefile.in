@@ -112,6 +112,7 @@ ObjectDump_OBJECTS = $(am_ObjectDump_OBJECTS)
 am__DEPENDENCIES_1 =
 ObjectDump_DEPENDENCIES =  \
 	$(top_builddir)/ld64/src/ld/parsers/libParsers.la \
+	$(top_builddir)/ld64/src/3rd/BlocksRuntime/libBlocksRuntime.la \
 	$(am__DEPENDENCIES_1)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -392,6 +393,7 @@ ObjectDump_SOURCES = \
 
 ObjectDump_LDADD = \
 	$(top_builddir)/ld64/src/ld/parsers/libParsers.la \
+        $(top_builddir)/ld64/src/3rd/BlocksRuntime/libBlocksRuntime.la  \
 	$(LTO_LIB)
 
 dyldinfo_SOURCES = dyldinfo.cpp

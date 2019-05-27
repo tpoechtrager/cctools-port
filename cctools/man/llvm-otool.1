@@ -1,6 +1,6 @@
-.TH LLVM-OTOOL 1 "January 13, 2016" "Apple Inc."
+.TH LLVM-OTOOL 1 "July 31, 2018" "Apple Inc."
 .SH NAME
-llvm-otool \- the temporary command line shim for otool to objdump command line translation
+llvm-otool \- the otool-compatible command line parser for llvm-objdump
 .SH SYNOPSIS
 .B llvm-otool
 [ 
@@ -9,21 +9,24 @@ llvm-otool \- the temporary command line shim for otool to objdump command line 
 .I "file \&..."
 ] 
 .SH DESCRIPTION
-The temporary command line shim
+The command line shim
 .I llvm-otool
-takes all the same options as the command
+takes all the same options as the original
 .IR otool (1)
-and executes an equivalent
+command and executes an equivalent
 .IR objdump (1)
 command.  Its use is to ease the change over
-of the use of
+of the original use of
 .IR otool (1)
-which will be obsoleted, to the llvm based open source
+to the llvm based open source
 .IR objdump (1)
-command with the similar functionality.  It is a temporary tool that will
-removed when the
+command with the similar functionality.
+.PP
+The original implementation of
 .IR otool (1)
-command line tool is removed.
+can now be found as
+.IR otool-classic (1)
+and typically will be run by using "xcrun otool-classic".
 .TP
 .B \-show-objdump-command
 Print the
@@ -31,21 +34,16 @@ Print the
 command that
 .IR llvm-otool (1)
 will execute.
-
 .SH "NOTES FOR SPECIFIC OPTIONS"
 .TP
 .B \-l
-This also always implies the
+This always implies the
 .B \-h
 option, as the
 .IR objdump (1)
-option used is
+option
 .B \-private-headers
 prints both the mach header and load commands.
-.TP
-.B \-r
-The format for the printing of the relocation information is different with
-.IR objdump (1).
 .TP
 .B \-S
 To display the contents of the `\_\^\_.SYMDEF' archive file, use
@@ -53,11 +51,11 @@ To display the contents of the `\_\^\_.SYMDEF' archive file, use
 with the 
 .B \-print-armap
 option.
-
 .SH "GENERAL NOTES"
-.PP
-Many of the older options in otool(1) are obsolete as they print parts of the
-object file that are no longer in use.  When used with
+Many of the older options in 
+.IR otool(1)
+are obsolete as they print parts of the object file that are no longer in use.
+When used with
 .IR llvm-otool (1)
 a line is printed that states the option and the functionality is obsolete.  If
 no valid equivalent options are given then usage message from
@@ -87,9 +85,7 @@ commands in some cases.  As the
 command is not meant to produce the exact same output as
 .IR otool (1)
 in all cases where the functionality is very similar.
-
 .SH "SPECIFIC TRANSLATIONS OF OPTIONS"
-.PP
 Below is the list of
 .IR otool (1)
 options and the specific
@@ -219,8 +215,19 @@ The
 .IR objdump (1)
 option to display the relocation entries is
 .BR \-r .
-The format for the printing of the relocation information is different with
-.IR objdump (1).
+Note that the default relocation entry format is different between
+.IR objdump (1)
+and
+.IR otool (1).
+When 
+.BR \-r
+is combined with the
+.BR \-macho
+option,
+.IR objdump (1)
+will display the relocation entries in the classic 
+.IR otool (1)
+format.
 .TP
 .B \-I
 The
@@ -309,7 +316,6 @@ version information and the
 version information is
 .BR \-version
 (with one leading dash).
-
 .SH "OBSOLETE OPTIONS"
 .TP
 .B \-c
@@ -375,3 +381,6 @@ syntax as that is the default.  And the
 .I archive(member)
 syntax is not supported as file arguments with
 .IR objdump (1).
+.SH "SEE ALSO"
+.IR otool-classic (1),
+.IR llvm-objdump (1)

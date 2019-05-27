@@ -269,7 +269,8 @@ struct object *object)
 		 */
 		dyld_order(arch, member, object);
 	    }
-	    else if(flags & MH_DYLDLINK){
+	    else if(flags & MH_DYLDLINK ||
+		    object->mh_filetype == MH_KEXT_BUNDLE){
 		/*
 		 * This is a file for the dynamic linker (output of ld(1) with
 		 * -output_for_dyld .  That is the relocation entries are split

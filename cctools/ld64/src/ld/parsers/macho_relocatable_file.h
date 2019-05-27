@@ -43,9 +43,11 @@ struct ParserOptions {
 	bool			armUsesZeroCostExceptions;
 	bool			simulator;
 	bool			ignoreMismatchPlatform;
+#if SUPPORT_ARCH_arm64e
+	bool			supportsAuthenticatedPointers;
+#endif
 	uint32_t		subType;
-	Options::Platform platform;
-	uint32_t		minOSVersion;
+	ld::VersionSet  platforms;
 	ld::relocatable::File::SourceKind	srcKind;
 	bool			treateBitcodeAsData;
 	bool			usingBitcode;
@@ -58,7 +60,7 @@ extern ld::relocatable::File* parse(const uint8_t* fileContent, uint64_t fileLen
 									
 extern bool isObjectFile(const uint8_t* fileContent, uint64_t fileLength, const ParserOptions& opts);
 
-extern bool isObjectFile(const uint8_t* fileContent, cpu_type_t* result, cpu_subtype_t* subResult, Options::Platform* platform);
+extern bool isObjectFile(const uint8_t* fileContent, cpu_type_t* result, cpu_subtype_t* subResult, ld::Platform* platform, uint32_t* minOsVers);
 
 extern bool hasObjC2Categories(const uint8_t* fileContent);					
 

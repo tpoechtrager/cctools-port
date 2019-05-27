@@ -112,7 +112,7 @@ am_libPasses_la_OBJECTS = libPasses_la-branch_island.lo \
 	libPasses_la-got.lo libPasses_la-huge.lo libPasses_la-objc.lo \
 	libPasses_la-order.lo libPasses_la-tlvp.lo \
 	stubs/libPasses_la-stubs.lo libPasses_la-bitcode_bundle.lo \
-	libPasses_la-code_dedup.lo
+	libPasses_la-code_dedup.lo libPasses_la-thread_starts.lo
 libPasses_la_OBJECTS = $(am_libPasses_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -371,7 +371,8 @@ libPasses_la_SOURCES = \
 	tlvp.cpp \
 	stubs/stubs.cpp \
 	bitcode_bundle.cpp \
-	code_dedup.cpp
+	code_dedup.cpp \
+	thread_starts.cpp
 
 all: all-am
 
@@ -480,6 +481,9 @@ libPasses_la-bitcode_bundle.lo: bitcode_bundle.cpp
 
 libPasses_la-code_dedup.lo: code_dedup.cpp
 	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libPasses_la_CXXFLAGS) $(CXXFLAGS) -c -o libPasses_la-code_dedup.lo `test -f 'code_dedup.cpp' || echo '$(srcdir)/'`code_dedup.cpp
+
+libPasses_la-thread_starts.lo: thread_starts.cpp
+	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libPasses_la_CXXFLAGS) $(CXXFLAGS) -c -o libPasses_la-thread_starts.lo `test -f 'thread_starts.cpp' || echo '$(srcdir)/'`thread_starts.cpp
 
 mostlyclean-libtool:
 	-rm -f *.lo

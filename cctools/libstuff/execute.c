@@ -83,7 +83,7 @@ int verbose)
 #else
 	    termsig = waitstatus.w_termsig;
 #endif
-	    if(termsig != 0 && termsig != SIGINT)
+	    if(termsig != 0 && termsig != SIGINT && termsig != SIGPIPE)
 		fatal("fatal error in %s", name);
 	    return(
 #ifndef __OPENSTEP__

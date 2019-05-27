@@ -75,7 +75,8 @@ static void strip_bitcode_from_load_commands(
 
 static void leave_only_bitcode_load_commands(
     struct arch *arch,
-    struct object *object);
+    struct object *object,
+    enum bool keeping_plist);
 
 static void reset_pointers_for_object_load_commands(
     struct arch *arch,
@@ -980,7 +981,9 @@ static char fake_string_table[8];
  * leave_just_bitcode_segment() is only called when there is a bitcode segment,
  * and removes everything but that segment contents but leaving the load
  * commands intact but zeros out the sizes and counts to make the resulting
- * Mach-O file valid.
+ * Mach-O file valid.  With the exception of if there is an
+ * (__TEXT,__info_plist) section then that is kept which is a hack to make
+ * code signing work.
  */
 static
 void
@@ -989,12 +992,12 @@ struct arch *arch,
 struct member *member,
 struct object *object)
 {
-    uint32_t i, start_offset, offset, sect_offset;
+    uint32_t i, j, start_offset, offset, sect_offset;
     struct load_command *lc;
-    struct segment_command *sg;
-    struct segment_command_64 *sg64;
-    struct section *s;
-    struct section_64 *s64;
+    struct segment_command *sg, *text;
+    struct segment_command_64 *sg64, *text64;
+    struct section *s, *plist;
+    struct section_64 *s64, *plist64;
 
 	/*
 	 * For MH_OBJECT files, .o files there is no static link editor
@@ -1016,7 +1019,8 @@ struct object *object)
 	 * Which is just the size of the old load commands.
 	 *
 	 * To get the bit code segment into the output file we use the
-	 * output_new_content and output_new_content_size.
+	 * output_new_content and output_new_content_size.  And we also use
+	 * this if we have a (__TEXT,__info_plist) section.
 	 *
 	 * Lastly to fake up the output symbolic information will have a 8-byte
 	 * string table of zeros and set the size of all the counts to zero
@@ -1024,8 +1028,13 @@ struct object *object)
 	 *
 	 * Also adjust the file offset of the link edit information which is
 	 * where the new fake output symbolic information will start in the
-	 * output file. Which will be right after the load commands.
+	 * output file. Which will be right after the load commands or right
+	 * after the (__TEXT,__info_plist) section.
 	 */
+	text = NULL;
+	text64 = NULL;
+	plist = NULL;
+	plist64 = NULL;
 	if(object->mh != NULL){
 	    start_offset = 0;
 	    lc = object->load_commands;
@@ -1035,8 +1044,18 @@ struct object *object)
 		    if(sg->filesize != 0 && sg->fileoff == 0){
 			s = (struct section *)((char *)sg +
 					       sizeof(struct segment_command));
-			if(sg->nsects > 0)
+			if(sg->nsects > 0){
 			    start_offset = s->offset;
+			    for(j = 0; j < sg->nsects; j++){
+				if(strcmp(s->segname, SEG_TEXT) == 0 &&
+				   strcmp(s->sectname, "__info_plist") == 0 &&
+				   s->size != 0 && plist == NULL){
+				    plist = s;
+				    text = sg;
+				}
+				s++;
+			    }
+			}
 		    }
 		}
 		lc = (struct load_command *)((char *)lc + lc->cmdsize);
@@ -1048,9 +1067,29 @@ struct object *object)
 	    object->object_size -= (object->seg_linkedit->fileoff -
 				    start_offset);
 
-	    object->output_new_content = object->object_addr +
-					 object->seg_bitcode->fileoff;
-	    object->output_new_content_size = object->seg_bitcode->filesize;
+	    if(plist != NULL) {
+		object->output_new_content = object->object_addr +
+					     object->seg_bitcode->fileoff;
+		object->output_new_content_size =
+		    object->seg_bitcode->filesize + plist->size;
+		object->output_new_content =
+		    allocate(object->output_new_content_size);
+		memcpy(object->output_new_content,
+		       object->object_addr + plist->offset,
+		       plist->size);
+		memcpy(object->output_new_content + plist->size,
+		       object->object_addr + object->seg_bitcode->fileoff,
+		       object->seg_bitcode->filesize);
+		plist->offset = start_offset;
+		text->fileoff = plist->offset;
+		text->filesize = plist->size;
+		start_offset += plist->size;
+	    }
+	    else {
+		object->output_new_content = object->object_addr +
+					     object->seg_bitcode->fileoff;
+		object->output_new_content_size = object->seg_bitcode->filesize;
+	    }
 
 	    object->seg_bitcode->fileoff = start_offset;
 	    sect_offset = object->seg_bitcode->fileoff;
@@ -1075,8 +1114,18 @@ struct object *object)
 		    if(sg64->filesize != 0 && sg64->fileoff == 0){
 			s64 = (struct section_64 *)((char *)sg64 +
 					    sizeof(struct segment_command_64));
-			if(sg64->nsects > 0)
+			if(sg64->nsects > 0){
 			    start_offset = s64->offset;
+			    for(j = 0; j < sg64->nsects; j++){
+				if(strcmp(s64->segname, SEG_TEXT) == 0 &&
+				   strcmp(s64->sectname, "__info_plist") == 0 &&
+				   s64->size != 0 && plist64 == NULL){
+				    plist64 = s64;
+				    text64 = sg64;
+				}
+				s64++;
+			    }
+			}
 		    }
 		}
 		lc = (struct load_command *)((char *)lc + lc->cmdsize);
@@ -1088,9 +1137,30 @@ struct object *object)
 	    object->object_size -= (object->seg_linkedit64->fileoff -
 				    start_offset);
 
-	    object->output_new_content = object->object_addr +
-					 object->seg_bitcode64->fileoff;
-	    object->output_new_content_size = object->seg_bitcode64->filesize;
+	    if(plist64 != NULL) {
+		object->output_new_content = object->object_addr +
+					     object->seg_bitcode64->fileoff;
+		object->output_new_content_size =
+		    object->seg_bitcode64->filesize + plist64->size;
+		object->output_new_content =
+		    allocate(object->output_new_content_size);
+		memcpy(object->output_new_content,
+		       object->object_addr + plist64->offset,
+		       plist64->size);
+		memcpy(object->output_new_content + plist64->size,
+		       object->object_addr + object->seg_bitcode64->fileoff,
+		       object->seg_bitcode64->filesize);
+		plist64->offset = start_offset;
+		text64->fileoff = plist64->offset;
+		text64->filesize = plist64->size;
+		start_offset += plist64->size;
+	    }
+	    else {
+		object->output_new_content = object->object_addr +
+					     object->seg_bitcode64->fileoff;
+		object->output_new_content_size =
+		    object->seg_bitcode64->filesize;
+	    }
 
 	    object->seg_bitcode64->fileoff = start_offset;
 	    sect_offset = object->seg_bitcode64->fileoff;
@@ -1248,7 +1318,8 @@ struct object *object)
 	else
 	    object->seg_linkedit64->filesize = object->output_sym_info_size;
 
-	leave_only_bitcode_load_commands(arch, object);
+	leave_only_bitcode_load_commands(arch, object,
+					 plist != NULL || plist64 != NULL);
 }
 
 /*
@@ -1363,13 +1434,17 @@ struct object *object)
  * the LC_SEGMENT or LC_SEGMENT_64 load command from the object's load commands
  * for the bitcode segment.  It only removes the LC_CODE_SIGNATURE and 
  * LC_DYLIB_CODE_SIGN_DRS load commands.  And zeros out all the fields of
- * other load commands to make them valid in the Mach-O file.
+ * other load commands to make them valid in the Mach-O file.  If keeping_plist
+ * is TRUE, then the (__TEXT,__info_plist) section is kept and the caller has
+ * adjusted the __TEXT segment's values and the __info_plist section values,
+ * so they are not changed here.
  */
 static
 void
 leave_only_bitcode_load_commands(
 struct arch *arch,
-struct object *object)
+struct object *object,
+enum bool keeping_plist)
 {
     uint32_t i, j, mh_ncmds, new_ncmds, mh_sizeofcmds, new_sizeofcmds;
     struct load_command *lc1, *lc2, *new_load_commands;
@@ -1378,6 +1453,8 @@ struct object *object)
     struct section *s;
     struct section_64 *s64;
     struct entry_point_command *ep;
+    struct encryption_info_command *encrypt_info;
+    struct encryption_info_command_64 *encrypt_info64;
 
 	/*
 	 * Allocate space for the new load commands and zero it out so any holes
@@ -1408,19 +1485,26 @@ struct object *object)
 		sg = (struct segment_command *)lc1;
 		if(strcmp(sg->segname, "__LLVM") != 0 &&
 		   strcmp(sg->segname, SEG_LINKEDIT) != 0){
-		    sg->vmaddr = 0;
-		    sg->vmsize = 0;
-		    sg->fileoff = 0;
-		    sg->filesize = 0;
+		    if(keeping_plist == FALSE ||
+		       strcmp(sg->segname, SEG_TEXT) != 0){
+			sg->vmaddr = 0;
+			sg->vmsize = 0;
+			sg->fileoff = 0;
+			sg->filesize = 0;
+		    }
 		    s = (struct section *)((char *)sg +
 					   sizeof(struct segment_command));
 		    for(j = 0; j < sg->nsects; j++){
-			s->addr = 0;
-			s->size = 0;
-			s->offset = 0;
-			s->reloff = 0;
-			s->nreloc = 0;
-			s->reserved1 = 0;
+			if(keeping_plist == FALSE ||
+			   strcmp(s->segname, SEG_TEXT) != 0 ||
+			   strcmp(s->sectname, "__info_plist") != 0){
+			    s->addr = 0;
+			    s->size = 0;
+			    s->offset = 0;
+			    s->reloff = 0;
+			    s->nreloc = 0;
+			    s->reserved1 = 0;
+			}
 			s++;
 		    }
 		}
@@ -1433,19 +1517,26 @@ struct object *object)
 		sg64 = (struct segment_command_64 *)lc1;
 		if(strcmp(sg64->segname, "__LLVM") != 0 &&
 		   strcmp(sg64->segname, SEG_LINKEDIT) != 0){
-		    sg64->vmaddr = 0;
-		    sg64->vmsize = 0;
-		    sg64->fileoff = 0;
-		    sg64->filesize = 0;
+		    if(keeping_plist == FALSE ||
+		       strcmp(sg64->segname, SEG_TEXT) != 0){
+			sg64->vmaddr = 0;
+			sg64->vmsize = 0;
+			sg64->fileoff = 0;
+			sg64->filesize = 0;
+		    }
 		    s64 = (struct section_64 *)((char *)sg64 +
 					    sizeof(struct segment_command_64));
 		    for(j = 0; j < sg64->nsects; j++){
-			s64->addr = 0;
-			s64->size = 0;
-			s64->offset = 0;
-			s64->reloff = 0;
-			s64->nreloc = 0;
-			s64->reserved1 = 0;
+			if(keeping_plist == FALSE ||
+			   strcmp(s64->segname, SEG_TEXT) != 0 ||
+			   strcmp(s64->sectname, "__info_plist") != 0){
+			    s64->addr = 0;
+			    s64->size = 0;
+			    s64->offset = 0;
+			    s64->reloff = 0;
+			    s64->nreloc = 0;
+			    s64->reserved1 = 0;
+			}
 			s64++;
 		    }
 		}
@@ -1459,6 +1550,16 @@ struct object *object)
 		if(lc1->cmd == LC_MAIN){
 		    ep = (struct entry_point_command *)lc1;
 		    ep->entryoff = 0;
+		}
+		else if(lc1->cmd == LC_ENCRYPTION_INFO){
+		    encrypt_info = (struct encryption_info_command *)lc1;
+		    encrypt_info->cryptoff = 0;
+		    encrypt_info->cryptsize = 0;
+		}
+		else if(lc1->cmd == LC_ENCRYPTION_INFO_64){
+		    encrypt_info64 = (struct encryption_info_command_64 *)lc1;
+		    encrypt_info64->cryptoff = 0;
+		    encrypt_info64->cryptsize = 0;
 		}
 		memcpy(lc2, lc1, lc1->cmdsize);
 		new_ncmds++;

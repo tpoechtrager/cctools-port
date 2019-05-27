@@ -275,6 +275,10 @@ const char* DwarfInstructions<A,R>::parseCFIs(A& addressSpace, pint_t ehSectionS
 				  break;
 				}
 			}
+            if ( pcRange == 0 ) {
+                warn(ref, pcStart, "FDE found for zero size function");
+                break;
+            }
 			//fprintf(stderr, "FDE for func at 0x%08X, alreadyHaveCU=%d\n", (uint32_t)entry->u.fdeInfo.function.targetAddress, alreadyHaveCU);
 			if ( alreadyHaveCU && !forceDwarfConversion ) {
 				if ( keepDwarfWhichHasCU )

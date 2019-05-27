@@ -2391,6 +2391,16 @@ enum byte_sex target_byte_sex)
 	cpu->__cpsr = SWAP_INT(cpu->__cpsr);
 }
 
+void
+swap_arm_exception_state64_t(
+arm_exception_state64_t *except,
+enum byte_sex target_byte_sex)
+{
+	except->__far = SWAP_LONG_LONG(except->__far);
+	except->__esr = SWAP_INT(except->__esr);
+	except->__exception = SWAP_INT(except->__exception);
+}
+
 __private_extern__
 void
 swap_ident_command(
@@ -2569,6 +2579,35 @@ enum byte_sex target_byte_sex)
 }
 
 __private_extern__
+void
+swap_build_version_command(
+struct build_version_command *bv,
+enum byte_sex target_byte_sex)
+{
+	bv->cmd = SWAP_INT(bv->cmd);
+	bv->cmdsize = SWAP_INT(bv->cmdsize);
+	bv->platform = SWAP_INT(bv->platform);
+	bv->minos = SWAP_INT(bv->minos);
+	bv->sdk = SWAP_INT(bv->sdk);
+	bv->ntools = SWAP_INT(bv->ntools);
+}
+
+__private_extern__
+void
+swap_build_tool_version(
+struct build_tool_version *btv,
+uint32_t ntools,
+enum byte_sex target_byte_sex)
+{
+    uint32_t i;
+
+	for(i = 0; i < ntools; i++){
+	    btv[i].tool = SWAP_INT(btv[i].tool);
+	    btv[i].version = SWAP_INT(btv[i].version);
+	}
+}
+
+__private_extern__
 void swap_rpath_command(
 struct rpath_command *rpath_cmd,
 enum byte_sex target_byte_sex)
@@ -2657,6 +2696,18 @@ enum byte_sex target_byte_sex)
 	sv->cmd = SWAP_INT(sv->cmd);
 	sv->cmdsize = SWAP_INT(sv->cmdsize);
 	sv->version = SWAP_LONG_LONG(sv->version);
+}
+
+__private_extern__
+void
+swap_note_command(
+struct note_command *nc,
+enum byte_sex target_byte_sex)
+{
+	nc->cmd = SWAP_INT(nc->cmd);
+	nc->cmdsize = SWAP_INT(nc->cmdsize);
+	nc->offset = SWAP_LONG_LONG(nc->offset);
+	nc->size = SWAP_LONG_LONG(nc->size);
 }
 
 __private_extern__

@@ -74,9 +74,10 @@ cpu_type_t cputype)
 	    return(ARM_RELOC_PAIR);
 	    break;
 	case CPU_TYPE_ARM64:
+	case CPU_TYPE_ARM64_32:
 	    /*
-	     * We should never hit this case for arm64, so drop down to the
-	     * fatal error below.
+	     * We should never hit this case for arm64 or arm64_32, so drop down
+	     * to the fatal error below.
 	     */
 	    break;
 	}
@@ -160,6 +161,7 @@ uint32_t r_type)
 		return(TRUE);
 	    break;
 	case CPU_TYPE_ARM64:
+	case CPU_TYPE_ARM64_32:
 	    return(FALSE);
 	default:
 	    fatal("internal error: reloc_has_pair() called with unknown "
@@ -226,7 +228,8 @@ uint32_t r_type)
 		return(TRUE);
 	    break;
 	case CPU_TYPE_ARM64:
-		/* No sectdiff relocs for arm64. */
+	case CPU_TYPE_ARM64_32:
+		/* No sectdiff relocs for arm64 or arm64_32. */
 		return(FALSE);
 		break;
 	default:

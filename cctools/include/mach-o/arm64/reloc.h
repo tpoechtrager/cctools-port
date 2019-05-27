@@ -20,6 +20,10 @@
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
+
+#ifndef _MACHO_ARM64_RELOC_H_
+#define _MACHO_ARM64_RELOC_H_
+
 /*
  * Relocation types used in the arm64 implementation.
  */
@@ -37,5 +41,28 @@ enum reloc_type_arm64
     ARM64_RELOC_TLVP_LOAD_PAGE21, // pc-rel distance to page of TLVP slot
     ARM64_RELOC_TLVP_LOAD_PAGEOFF12, // offset within page of TLVP slot,
                                      //  scaled by r_length
-    ARM64_RELOC_ADDEND		  // must be followed by PAGE21 or PAGEOFF12
+    ARM64_RELOC_ADDEND,		  // must be followed by PAGE21 or PAGEOFF12
+
+    // An arm64e authenticated pointer.
+    //
+    // Represents a pointer to a symbol (like ARM64_RELOC_UNSIGNED).
+    // Additionally, the resulting pointer is signed.  The signature is
+    // specified in the target location: the addend is restricted to the lower
+    // 32 bits (instead of the full 64 bits for ARM64_RELOC_UNSIGNED):
+    //
+    //   |63|62|61-51|50-49|  48  |47     -     32|31  -  0|
+    //   | 1| 0|  0  | key | addr | discriminator | addend |
+    //
+    // The key is one of:
+    //   IA: 00 IB: 01
+    //   DA: 10 DB: 11
+    //
+    // The discriminator field is used as extra signature diversification.
+    //
+    // The addr field indicates whether the target address should be blended
+    // into the discriminator.
+    //
+    ARM64_RELOC_AUTHENTICATED_POINTER,
 };
+
+#endif /* #ifndef _MACHO_ARM64_RELOC_H_ */

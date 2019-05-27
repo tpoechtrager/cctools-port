@@ -2228,6 +2228,11 @@ struct ofile *ofile)
 	ofile->mh = NULL;
 	ofile->mh64 = NULL;
 	ofile->load_commands = NULL;
+#ifdef LTO_SUPPORT
+	ofile->lto = NULL;
+	ofile->lto_cputype = 0;
+	ofile->lto_cpusubtype = 0;
+#endif /* LTO_SUPPORT */
 
 	host_byte_sex = get_host_byte_sex();
 
@@ -2410,6 +2415,11 @@ struct ofile *ofile)
 	ofile->mh = NULL;
 	ofile->mh64 = NULL;
 	ofile->load_commands = NULL;
+#ifdef LTO_SUPPORT
+	ofile->lto = NULL;
+	ofile->lto_cputype = 0;
+	ofile->lto_cpusubtype = 0;
+#endif /* LTO_SUPPORT */
 
 	/*
 	 * Get the address and size of the archive.
@@ -3327,9 +3337,6 @@ check_archive(
 struct ofile *ofile,
 enum bool archives_with_fat_objects)
 {
-#ifdef OTOOL
-	return(CHECK_GOOD);
-#else /* !defined OTOOL */
     char *addr;
     uint64_t size, offset;
     uint64_t big_size;
@@ -3420,6 +3427,7 @@ enum bool archives_with_fat_objects)
 		ofile->member_addr += ar_name_size;
 		ofile->member_size -= ar_name_size;
 	    }
+#ifndef OTOOL
 	    big_size = rnd(ofile->member_size, sizeof(short));
 	    big_size += offset;
 	    if(big_size > size){
@@ -3427,10 +3435,11 @@ enum bool archives_with_fat_objects)
 			      "member extends past the end of the file)");
 		return(CHECK_BAD);
 	    }
+#endif /* !defined(OTOOL) */
 	    if(size - offset > sizeof(uint32_t)){
 		memcpy(&magic, addr + offset, sizeof(uint32_t));
 #ifdef __BIG_ENDIAN__
-		if(magic == FAT_MAGIC || (magic == FAT_MAGIC_64)
+		if(magic == FAT_MAGIC || magic == FAT_MAGIC_64)
 #endif /* __BIG_ENDIAN__ */
 #ifdef __LITTLE_ENDIAN__
 		if(magic == SWAP_INT(FAT_MAGIC) ||
@@ -3472,28 +3481,41 @@ enum bool archives_with_fat_objects)
 			    ofile->archive_cputype = mh.cputype;
 			    ofile->archive_cpusubtype = mh.cpusubtype;
 			}
+#ifndef OTOOL
 			else if(ofile->archive_cputype != mh.cputype){
 			    archive_member_error(ofile, "cputype (%d) does not "
 				"match previous archive members cputype (%d) "
 				"(all members must match)", mh.cputype,
 				ofile->archive_cputype);
 			}
+#endif /* !defined(OTOOL) */
 		    }
 		    else if(magic == MH_MAGIC_64){
 			if(ofile->archive_cputype == 0){
 			    ofile->archive_cputype = mh64.cputype;
 			    ofile->archive_cpusubtype = mh64.cpusubtype;
 			}
+#ifndef OTOOL
 			else if(ofile->archive_cputype != mh64.cputype){
 			    archive_member_error(ofile, "cputype (%d) does not "
 				"match previous archive members cputype (%d) "
 				"(all members must match)", mh64.cputype,
 				ofile->archive_cputype);
 			}
+#endif /* !defined(OTOOL) */
 		    }
 		}
 	    }
+#ifdef OTOOL
+	    big_size = rnd(ofile->member_size, sizeof(short));
+	    big_size += offset;
+	    if(big_size > size)
+		offset = size;
+	    else
+                offset += rnd(ofile->member_size, sizeof(short));
+#else
 	    offset += rnd(ofile->member_size, sizeof(short));
+#endif /* !defined(OTOOL) */
 	}
 	ofile->member_offset = 0;
 	ofile->member_addr = NULL;
@@ -3502,7 +3524,6 @@ enum bool archives_with_fat_objects)
 	ofile->member_name = NULL;
 	ofile->member_name_size = 0;
 	return(CHECK_GOOD);
-#endif /* OTOOL */
 }
 
 /*
@@ -3849,6 +3870,7 @@ struct ofile *ofile)
     enum bool swapped;
     struct mach_header *mh;
     struct mach_header_64 *mh64;
+    uint32_t mh_flags;
     struct load_command *load_commands, *lc, l;
     struct segment_command *sg;
     struct segment_command_64 *sg64;
@@ -3874,6 +3896,8 @@ struct ofile *ofile)
 			     *data_in_code, *code_sign_drs, *linkedit_data;
     struct linkedit_data_command *link_opt_hint;
     struct version_min_command *vers;
+    struct build_version_command *bv, *bv1, *bv2;
+    struct build_tool_version *btv;
     struct prebind_cksum_command *cs;
     struct encryption_info_command *encrypt_info;
     struct encryption_info_command_64 *encrypt_info64;
@@ -3883,6 +3907,7 @@ struct ofile *ofile)
     struct rpath_command *rpath;
     struct entry_point_command *ep;
     struct source_version_command *sv;
+    struct note_command *nc;
     uint32_t flavor, count, nflavor;
     char *p, *state;
     uint32_t sizeof_nlist, sizeof_dylib_module;
@@ -3921,6 +3946,7 @@ struct ofile *ofile)
 	    ncmds = mh->ncmds;
 	    sizeofcmds = mh->sizeofcmds;
 	    cputype = mh->cputype;
+	    mh_flags = mh->flags;
 	    load_command_multiple = 4;
 	    sizeof_nlist = sizeof(struct nlist);
 	    struct_nlist_name = "struct nlist";
@@ -3944,6 +3970,7 @@ struct ofile *ofile)
 	    ncmds = mh64->ncmds;
 	    sizeofcmds = mh64->sizeofcmds;
 	    cputype = mh64->cputype;
+	    mh_flags = mh64->flags;
 	    load_command_multiple = 8;
 	    sizeof_nlist = sizeof(struct nlist_64);
 	    struct_nlist_name = "struct nlist_64";
@@ -3986,6 +4013,9 @@ struct ofile *ofile)
 	encrypt_info = NULL;
 	dyld_info = NULL;
 	vers = NULL;
+	bv = NULL;
+	bv1 = NULL;
+	bv2 = NULL;
 	big_load_end = 0;
 	for(i = 0, lc = load_commands; i < ncmds; i++){
 	    if(big_load_end + sizeof(struct load_command) > sizeofcmds){
@@ -4666,8 +4696,9 @@ check_linkedit_data_command:
 		}
 		if(vers != NULL){
 		    Mach_O_error(ofile, "malformed object (more than one "
-			"LC_VERSION_MIN_IPHONEOS or LC_VERSION_MIN_MACOSX "
-			"command)");
+			"LC_VERSION_MIN_MACOSX, LC_VERSION_MIN_IPHONEOS, "
+			"LC_VERSION_MIN_TVOS or LC_VERSION_MIN_WATCHOS "
+			"load command)");
 		    goto return_bad;
 		}
 		vers = (struct version_min_command *)lc;
@@ -4688,8 +4719,9 @@ check_linkedit_data_command:
 		}
 		if(vers != NULL){
 		    Mach_O_error(ofile, "malformed object (more than one "
-			"LC_VERSION_MIN_IPHONEOS or LC_VERSION_MIN_MACOSX "
-			"command)");
+			"LC_VERSION_MIN_MACOSX, LC_VERSION_MIN_IPHONEOS, "
+			"LC_VERSION_MIN_TVOS or LC_VERSION_MIN_WATCHOS "
+			"load command)");
 		    goto return_bad;
 		}
 		vers = (struct version_min_command *)lc;
@@ -4704,20 +4736,22 @@ check_linkedit_data_command:
 
 	    case LC_VERSION_MIN_TVOS:
 		if(l.cmdsize < sizeof(struct version_min_command)){
-		    Mach_O_error(ofile, "malformed object (LC_VERSION_MIN_"
+		    Mach_O_error(ofile, "malformed object (LC_VERSION_MIN_TVOS"
 				 " cmdsize too small) in command %u",i);
 		    goto return_bad;
 		}
 		if(vers != NULL){
 		    Mach_O_error(ofile, "malformed object (more than one "
-			"LC_VERSION_MIN_ command)");
+			"LC_VERSION_MIN_MACOSX, LC_VERSION_MIN_IPHONEOS, "
+			"LC_VERSION_MIN_TVOS or LC_VERSION_MIN_WATCHOS "
+			"load command)");
 		    goto return_bad;
 		}
 		vers = (struct version_min_command *)lc;
 		if(swapped)
 		    swap_version_min_command(vers, host_byte_sex);
 		if(vers->cmdsize < sizeof(struct version_min_command)){
-		    Mach_O_error(ofile, "malformed object (LC_VERSION_MIN_"
+		    Mach_O_error(ofile, "malformed object (LC_VERSION_MIN_TVOS"
 			" command %u has too small cmdsize field)", i);
 		    goto return_bad;
 		}
@@ -4731,8 +4765,9 @@ check_linkedit_data_command:
 		}
 		if(vers != NULL){
 		    Mach_O_error(ofile, "malformed object (more than one "
-			"LC_VERSION_MIN_IPHONEOS, LC_VERSION_MIN_MACOSX or "
-			"LC_VERSION_MIN_WATCHOS command)");
+			"LC_VERSION_MIN_MACOSX, LC_VERSION_MIN_IPHONEOS, "
+			"LC_VERSION_MIN_TVOS or LC_VERSION_MIN_WATCHOS "
+			"command)");
 		    goto return_bad;
 		}
 		vers = (struct version_min_command *)lc;
@@ -4742,6 +4777,77 @@ check_linkedit_data_command:
 		    Mach_O_error(ofile, "malformed object (LC_VERSION_MIN_"
 			"WATCHOS command %u has too small cmdsize field)", i);
 		    goto return_bad;
+		}
+		break;
+
+	    case LC_BUILD_VERSION:
+		if(l.cmdsize < sizeof(struct build_version_command)){
+		    Mach_O_error(ofile, "malformed object (LC_BUILD_VERSION"
+				 "cmdsize too small) in command %u",i);
+		    goto return_bad;
+		}
+		if(vers != NULL && ((mh_flags & MH_SIM_SUPPORT) == 0 ||
+		   vers->cmd != LC_VERSION_MIN_MACOSX)){
+		    Mach_O_error(ofile, "malformed object (LC_BUILD_VERSION "
+			"and some LC_VERSION_MIN load command also found)");
+		    goto return_bad;
+		}
+		if(bv1 != NULL && bv2 != NULL &&
+		   (mh_flags & MH_SIM_SUPPORT) == 0){
+		    Mach_O_error(ofile, "malformed object (more than two "
+			"LC_BUILD_VERSION load commands)");
+		}
+		bv = (struct build_version_command *)lc;
+		if(swapped)
+		    swap_build_version_command(bv, host_byte_sex);
+		if(bv->cmdsize < sizeof(struct build_version_command) +
+				bv->ntools * sizeof(struct build_tool_version)){
+		    Mach_O_error(ofile, "malformed object (LC_BUILD_VERSION"
+			"command %u has too small cmdsize field)", i);
+		    goto return_bad;
+		}
+		btv = (struct build_tool_version *)
+		      ((char *)bv + sizeof(struct build_version_command));
+		if(swapped)
+		    swap_build_tool_version(btv, bv->ntools, host_byte_sex);
+		if(bv1 == NULL) {
+		    bv1 = bv;
+		    if (((mh_flags & MH_SIM_SUPPORT) != 0) &&
+			(bv1->platform != PLATFORM_MACOS &&
+			 bv1->platform != PLATFORM_IOSMAC &&
+			 bv1->platform != PLATFORM_IOSSIMULATOR &&
+			 bv1->platform != PLATFORM_TVOSSIMULATOR &&
+			 bv1->platform != PLATFORM_WATCHOSSIMULATOR))
+			Mach_O_error(ofile, "malformed object (the "
+			    "LC_BUILD_VERSION, command %u, platform value is "
+			    "not allowed when the mach header flag "
+			    "MH_SIM_SUPPORT is set)", i);
+		}
+		else {
+		    bv2 = bv;
+		    if ((bv1->platform != PLATFORM_MACOS &&
+			 bv1->platform != PLATFORM_IOSMAC) ||
+                        ((bv1->platform == PLATFORM_MACOS &&
+			  bv2->platform != PLATFORM_IOSMAC) ||
+			 (bv1->platform == PLATFORM_IOSMAC &&
+			  bv2->platform != PLATFORM_MACOS))) {
+			if ((mh_flags & MH_SIM_SUPPORT) == 0) {
+			    Mach_O_error(ofile, "malformed object (the two "
+				"LC_BUILD_VERSION load commands are not for "
+				"MACOS and IOSMAC)");
+			}
+			else{
+			    if(bv2->platform != PLATFORM_MACOS &&
+			       bv2->platform != PLATFORM_IOSMAC &&
+			       bv2->platform != PLATFORM_IOSSIMULATOR &&
+			       bv2->platform != PLATFORM_TVOSSIMULATOR &&
+			       bv2->platform != PLATFORM_WATCHOSSIMULATOR)
+			    Mach_O_error(ofile, "malformed object (the "
+			        "LC_BUILD_VERSION, command %u, platform value "
+			        "is not allowed when the mach header flag "
+			        "MH_SIM_SUPPORT is set)", i);
+			}
+		    }
 		}
 		break;
 
@@ -4840,7 +4946,7 @@ check_linkedit_data_command:
 		    swap_dyld_info_command(dyld_info, host_byte_sex);
 		if(dyld_info->cmdsize !=
 		   sizeof(struct dyld_info_command)){
-		    Mach_O_error(ofile, "malformed object (LC_DYLD_INFO"
+		    Mach_O_error(ofile, "malformed object (LC_DYLD_INFO "
 				 "command %u has incorrect cmdsize)", i);
 		    goto return_bad;
 		}
@@ -6374,7 +6480,7 @@ check_dylinker_command:
 		    }
 		    break;
 		}
-	    	if(cputype == CPU_TYPE_ARM64){
+	    	if(cputype == CPU_TYPE_ARM64 || cputype == CPU_TYPE_ARM64_32){
 		    arm_thread_state64_t *cpu;
 
 		    nflavor = 0;
@@ -6514,6 +6620,31 @@ check_dylinker_command:
 		    Mach_O_error(ofile, "truncated or malformed object (path."
 			"offset field of LC_RPATH command %u extends past the "
 			"end of the file)", i);
+		    goto return_bad;
+		}
+		break;
+	    case LC_NOTE:
+		if(l.cmdsize != sizeof(struct note_command)){
+		    Mach_O_error(ofile, "malformed object (LC_NOTE: cmdsize "
+			         "incorrect) in command %u", i);
+		    goto return_bad;
+		}
+		nc = (struct note_command *)lc;
+		if(swapped)
+		    swap_note_command(nc, host_byte_sex);
+		if(nc->offset > size){
+		    Mach_O_error(ofile, "truncated or malformed object ("
+				 "LC_NOTE command %u offset field "
+				 "extends past the end of the file)", i);
+		    goto return_bad;
+		}
+		big_size = nc->offset;
+		big_size += nc->size;
+		if(big_size > size){
+		    Mach_O_error(ofile, "truncated or malformed object ("
+				 "LC_NOTE command %u offset field "
+				 "plus size field extends past the end of "
+				 "the file)", i);
 		    goto return_bad;
 		}
 		break;

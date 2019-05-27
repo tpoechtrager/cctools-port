@@ -101,6 +101,9 @@ struct load_command *load_commands)
     struct linker_option_command *lo;
     struct dyld_info_command *dc;
     struct version_min_command *vc;
+    struct build_version_command *bv;
+    struct build_tool_version *btv;
+    struct note_command *nc;
     uint32_t flavor, count;
     unsigned long nflavor;
     char *p, *state, *cmd_name;
@@ -1031,6 +1034,18 @@ check_dylinker_command:
 		}
 		break;
 
+	    case LC_NOTE:
+		nc = (struct note_command *)lc;
+		if((char *)nc + nc->cmdsize >
+		   (char *)load_commands + sizeofcmds){
+		    error("in swap_object_headers(): truncated or malformed "
+			"load commands (cmdsize field of LC_NOTE "
+			"command %lu extends past the end of the load "
+			"commands)", i);
+		    return(FALSE);
+		}
+		break;
+
 	    case LC_IDENT:
 		id = (struct ident_command *)lc;
 		if((char *)id + id->cmdsize >
@@ -1186,6 +1201,17 @@ check_dylinker_command:
 		if(vc->cmdsize != sizeof(struct version_min_command)){
 		    error("in swap_object_headers(): malformed load commands "
 			  "(LC_VERSION_MIN_WATCHOS command %lu has incorrect "
+			  "cmdsize", i);
+		    return(FALSE);
+		}
+		break;
+
+	    case LC_BUILD_VERSION:
+		bv = (struct build_version_command *)lc;
+		if(bv->cmdsize != sizeof(struct build_version_command) +
+				bv->ntools * sizeof(struct build_tool_version)){
+		    error("in swap_object_headers(): malformed load commands "
+			  "(LC_BUILD_VERSION command %lu has incorrect "
 			  "cmdsize", i);
 		    return(FALSE);
 		}
@@ -1700,6 +1726,11 @@ check_dylinker_command:
 		swap_source_version_command(sv, target_byte_sex);
 		break;
 
+	    case LC_NOTE:
+		nc = (struct note_command *)lc;
+		swap_note_command(nc, target_byte_sex);
+		break;
+
 	    case LC_IDENT:
 		id = (struct ident_command *)lc;
 		swap_ident_command(id, target_byte_sex);
@@ -1773,6 +1804,13 @@ check_dylinker_command:
 		vc = (struct version_min_command *)lc;
 		swap_version_min_command(vc, target_byte_sex);
 		break;
+
+	    case LC_BUILD_VERSION:
+		bv = (struct build_version_command *)lc;
+		btv = (struct build_tool_version *)
+		      ((char *)bv + sizeof(struct build_version_command));
+		swap_build_tool_version(btv, bv->ntools, target_byte_sex);
+		swap_build_version_command(bv, target_byte_sex);
 	    }
 
 	    lc = (struct load_command *)((char *)lc + l.cmdsize);

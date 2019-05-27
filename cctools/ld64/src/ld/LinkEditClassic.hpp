@@ -491,10 +491,7 @@ void SymbolTableAtom<A>::addImport(const ld::Atom* atom, StringPoolAtom* pool)
 			entry.set_n_type(N_UNDF | N_EXT);
 	}
 	else {
-		if ( this->_options.prebind() )
-			entry.set_n_type(N_PBUD | N_EXT);
-		else 
-			entry.set_n_type(N_UNDF | N_EXT);
+		entry.set_n_type(N_UNDF | N_EXT);
 	}
 
 	// set n_sect
@@ -760,6 +757,9 @@ public:
 	virtual	void							addSectionReloc(ld::Internal::FinalSection*	sect, ld::Fixup::Kind, 
 															const ld::Atom* inAtom, uint32_t offsetInAtom, 
 															bool toTargetUsesExternalReloc ,bool fromTargetExternalReloc,
+#if SUPPORT_ARCH_arm64e
+															ld::Fixup* fixupWithAuthData,
+#endif
 															const ld::Atom* toTarget, uint64_t toAddend, 
 															const ld::Atom* fromTarget, uint64_t fromAddend) = 0;
 protected:
@@ -804,6 +804,9 @@ public:
 	virtual	void								addSectionReloc(ld::Internal::FinalSection*	sect, ld::Fixup::Kind, 
 															const ld::Atom* inAtom, uint32_t offsetInAtom, 
 															bool toTargetUsesExternalReloc ,bool fromTargetExternalReloc,
+#if SUPPORT_ARCH_arm64e
+																ld::Fixup* fixupWithAuthData,
+#endif
 															const ld::Atom* toTarget, uint64_t toAddend, 
 															const ld::Atom* fromTarget, uint64_t fromAddend) { }
 
@@ -901,6 +904,9 @@ public:
 	virtual	void								addSectionReloc(ld::Internal::FinalSection*	sect, ld::Fixup::Kind, 
 															const ld::Atom* inAtom, uint32_t offsetInAtom, 
 															bool toTargetUsesExternalReloc ,bool fromTargetExternalReloc,
+#if SUPPORT_ARCH_arm64e
+																ld::Fixup* fixupWithAuthData,
+#endif
 															const ld::Atom* toTarget, uint64_t toAddend, 
 															const ld::Atom* fromTarget, uint64_t fromAddend) { }
 	
@@ -1060,6 +1066,9 @@ public:
 	virtual	void								addSectionReloc(ld::Internal::FinalSection*	sect, ld::Fixup::Kind, 
 															const ld::Atom* inAtom, uint32_t offsetInAtom, 
 															bool toTargetUsesExternalReloc ,bool fromTargetExternalReloc,
+#if SUPPORT_ARCH_arm64e
+																ld::Fixup* fixupWithAuthData,
+#endif
 															const ld::Atom* toTarget, uint64_t toAddend, 
 															const ld::Atom* fromTarget, uint64_t fromAddend);
 		
@@ -1079,6 +1088,10 @@ private:
 		uint64_t					toAddend; 
 		const ld::Atom* 			fromTarget; 
 		uint64_t					fromAddend;
+#if SUPPORT_ARCH_arm64e
+		bool 						hasAuthData;
+		ld::Fixup::AuthData			authData;
+#endif
 	};
 	uint32_t									sectSymNum(bool external, const ld::Atom* target);
 	void										encodeSectionReloc(ld::Internal::FinalSection* sect, 
@@ -1824,6 +1837,27 @@ void SectionRelocationsAtom<arm64>::encodeSectionReloc(ld::Internal::FinalSectio
 			relocs.push_back(reloc1);
 			break;
 
+		case ld::Fixup::kindStoreARM64TLVPLoadPageOff12:
+		case ld::Fixup::kindStoreTargetAddressARM64TLVPLoadPageOff12:
+			reloc1.set_r_address(address);
+			reloc1.set_r_symbolnum(symbolNum);
+			reloc1.set_r_pcrel(false);
+			reloc1.set_r_length(2);
+			reloc1.set_r_extern(external);
+			reloc1.set_r_type(ARM64_RELOC_TLVP_LOAD_PAGEOFF12);
+			relocs.push_back(reloc1);
+			break;
+
+		case ld::Fixup::kindStoreARM64TLVPLoadPage21:
+		case ld::Fixup::kindStoreTargetAddressARM64TLVPLoadPage21:
+			reloc1.set_r_address(address);
+			reloc1.set_r_symbolnum(symbolNum);
+			reloc1.set_r_pcrel(true);
+			reloc1.set_r_length(2);
+			reloc1.set_r_extern(external);
+			reloc1.set_r_type(ARM64_RELOC_TLVP_LOAD_PAGE21);
+			relocs.push_back(reloc1);
+			break;
 
 		case ld::Fixup::kindStoreLittleEndian64:
 		case ld::Fixup::kindStoreTargetAddressLittleEndian64:
@@ -1907,6 +1941,33 @@ void SectionRelocationsAtom<arm64>::encodeSectionReloc(ld::Internal::FinalSectio
             relocs.push_back(reloc1);
             break;
 
+#if SUPPORT_ARCH_arm64e
+		case ld::Fixup::kindStoreLittleEndianAuth64:
+		case ld::Fixup::kindStoreTargetAddressLittleEndianAuth64: {
+			assert(entry.fromTarget == NULL);
+			assert(entry.hasAuthData);
+
+			// An authenticated pointer is:
+			// {
+			//	 int32_t addend;
+			//	 uint16_t diversityData;
+			//	 uint16_t hasAddressDiversity : 1;
+			//	 uint16_t key : 2;
+			//	 uint16_t zeroes : 11;
+			//	 uint16_t zero : 1;
+			//	 uint16_t authenticated : 1;
+			// }
+			reloc1.set_r_address(address);
+			reloc1.set_r_symbolnum(symbolNum);
+			reloc1.set_r_pcrel(false);
+			reloc1.set_r_length(3);
+			reloc1.set_r_extern(external);
+			reloc1.set_r_type(ARM64_RELOC_AUTHENTICATED_POINTER);
+			relocs.push_back(reloc1);
+		}
+		break;
+#endif
+
 		default:
 			assert(0 && "need to handle arm64 -r reloc");
 		
@@ -1920,6 +1981,9 @@ template <typename A>
 void SectionRelocationsAtom<A>::addSectionReloc(ld::Internal::FinalSection*	sect, ld::Fixup::Kind kind, 
 												const ld::Atom* inAtom, uint32_t offsetInAtom,  
 												bool toTargetUsesExternalReloc ,bool fromTargetExternalReloc,
+#if SUPPORT_ARCH_arm64e
+												ld::Fixup* fixupWithAuthData,
+#endif
 												const ld::Atom* toTarget, uint64_t toAddend, 
 												const ld::Atom* fromTarget, uint64_t fromAddend)
 {
@@ -1933,6 +1997,14 @@ void SectionRelocationsAtom<A>::addSectionReloc(ld::Internal::FinalSection*	sect
 	entry.toAddend = toAddend;
 	entry.fromTarget = fromTarget;
 	entry.fromAddend = fromAddend;
+#if SUPPORT_ARCH_arm64e
+	if (fixupWithAuthData) {
+		entry.hasAuthData = true;
+		entry.authData = fixupWithAuthData->u.authData;
+	} else {
+		entry.hasAuthData = false;
+	}
+#endif
 	
 	static ld::Internal::FinalSection* lastSection = NULL;
 	static SectionAndEntries* lastSectionAndEntries = NULL;
@@ -2051,10 +2123,20 @@ uint32_t IndirectSymbolTableAtom<A>::symIndexOfStubAtom(const ld::Atom* stubAtom
 template <typename A>
 uint32_t IndirectSymbolTableAtom<A>::symIndexOfLazyPointerAtom(const ld::Atom* lpAtom)
 {
-	for (ld::Fixup::iterator fit = lpAtom->fixupsBegin(); fit != lpAtom->fixupsEnd(); ++fit) {
-		if ( fit->kind == ld::Fixup::kindLazyTarget ) {
-			assert(fit->binding == ld::Fixup::bindingDirectlyBound);
-			return symbolIndex(fit->u.target);
+	if ( lpAtom->contentType() == ld::Atom::typeLazyPointer || lpAtom->contentType() == ld::Atom::typeLazyDylibPointer ) {
+		for (ld::Fixup::iterator fit = lpAtom->fixupsBegin(); fit != lpAtom->fixupsEnd(); ++fit) {
+			if ( fit->kind == ld::Fixup::kindLazyTarget ) {
+				assert(fit->binding == ld::Fixup::bindingDirectlyBound);
+				return symbolIndex(fit->u.target);
+			}
+		}
+	}
+	else if ( lpAtom->contentType() == ld::Atom::typeNonLazyPointer ) {
+		for (ld::Fixup::iterator fit = lpAtom->fixupsBegin(); fit != lpAtom->fixupsEnd(); ++fit) {
+			if ( (fit->kind == ld::Fixup::kindStoreTargetAddressLittleEndian32) || (fit->kind == ld::Fixup::kindStoreTargetAddressLittleEndian64) ) {
+				assert(fit->binding == ld::Fixup::bindingDirectlyBound);
+				return symbolIndex(fit->u.target);
+			}
 		}
 	}
 	throw "internal error: lazy pointer missing fixupLazyTarget fixup";
@@ -2065,9 +2147,18 @@ uint32_t IndirectSymbolTableAtom<A>::symIndexOfNonLazyPointerAtom(const ld::Atom
 {
 	//fprintf(stderr, "symIndexOfNonLazyPointerAtom(%p) %s\n", nlpAtom, nlpAtom->name());
 	for (ld::Fixup::iterator fit = nlpAtom->fixupsBegin(); fit != nlpAtom->fixupsEnd(); ++fit) {
-		// non-lazy-pointer to a stripped symbol => no symbol index
-		if ( fit->clusterSize != ld::Fixup::k1of1 )
-			return INDIRECT_SYMBOL_LOCAL;
+#if SUPPORT_ARCH_arm64e
+		// Skip authentication fixups
+		if ( fit->clusterSize == ld::Fixup::k1of2 ) {
+			if ( fit->kind != ld::Fixup::kindSetAuthData )
+				break;
+			++fit;
+		} else
+#endif
+		{
+			if ( fit->clusterSize != ld::Fixup::k1of1 )
+				return INDIRECT_SYMBOL_LOCAL;
+		}
 		const ld::Atom* target;
 		switch ( fit->binding ) {
 			case ld::Fixup::bindingDirectlyBound:
