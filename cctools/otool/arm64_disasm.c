@@ -28,7 +28,8 @@ struct disassemble_info {
   struct dyld_bind_info *dbi;
   uint64_t ndbi;
   /* Symbol table.  */
-  struct nlist_64 *symbols;
+  struct nlist *symbols;
+  struct nlist_64 *symbols64;
   uint32_t nsymbols;
   /* Symbols sorted by address.  */
   struct symbol *sorted_symbols;
@@ -43,6 +44,7 @@ struct disassemble_info {
   enum byte_sex object_byte_sex;
   uint32_t *indirect_symbols;
   uint32_t nindirect_symbols;
+  cpu_type_t cputype;
   char *sect;
   uint32_t left;
   uint32_t addr;
@@ -55,6 +57,7 @@ struct disassemble_info {
   const char *selector_name;
   char *method;
   char *demangled_name;
+  enum bool ThreadedRebaseBind;
 } dis_info;
 
 /*
@@ -81,7 +84,10 @@ struct LLVMOpInfo1 *op_info)
 
 	if(r_symbolnum >= dis_info->nsymbols)
 	    return(0);
-	n_strx = dis_info->symbols[r_symbolnum].n_un.n_strx;
+	if(dis_info->cputype == CPU_TYPE_ARM64)
+	    n_strx = dis_info->symbols64[r_symbolnum].n_un.n_strx;
+	else
+	    n_strx = dis_info->symbols[r_symbolnum].n_un.n_strx;
 	if(n_strx <= 0 || n_strx >= dis_info->strings_size)
 	    return(0);
 	op_info->AddSymbol.Present = 1;
@@ -230,12 +236,14 @@ enum bool *cfstring)
 {
     enum byte_sex host_byte_sex;
     enum bool swapped;
-    uint32_t i, j, section_type;
-    uint64_t sect_offset, object_offset, pointer_value;
+    uint32_t i, j, section_type, pointer_value;
+    uint64_t sect_offset, object_offset, pointer_value64;
     const struct load_command *lc;
     struct load_command l;
     struct segment_command_64 sg64;
     struct section_64 s64;
+    struct segment_command sg;
+    struct section s;
     char *p;
     uint64_t big_load_end;
 
@@ -279,10 +287,10 @@ enum bool *cfstring)
 			sect_offset = value - s64.addr;
 			object_offset = s64.offset + sect_offset;
 			if(object_offset < object_size){
-			    memcpy(&pointer_value, object_addr + object_offset,
+			    memcpy(&pointer_value64, object_addr + object_offset,
 				   sizeof(uint64_t));
 			    if(swapped)
-				pointer_value = SWAP_LONG_LONG(pointer_value);
+				pointer_value64 = SWAP_LONG_LONG(pointer_value64);
 			    if(strncmp(s64.sectname,
 				       "__objc_selrefs", 16) == 0)
 				*selref = TRUE; 
@@ -295,14 +303,68 @@ enum bool *cfstring)
 				       "__objc_msgrefs", 16) == 0 &&
 			     value + 8 < s64.addr + s64.size){
 				*msgref = TRUE; 
-				memcpy(&pointer_value,
+				memcpy(&pointer_value64,
 				       object_addr + object_offset + 8,
 				       sizeof(uint64_t));
 				if(swapped)
-				    pointer_value =
-					SWAP_LONG_LONG(pointer_value);
+				    pointer_value64 =
+					SWAP_LONG_LONG(pointer_value64);
 			    }
 			    else if(strncmp(s64.sectname,
+				       "__cfstring", 16) == 0)
+				*cfstring = TRUE; 
+			    return(pointer_value64);
+			}
+			else
+			    return(0);
+		    }
+		}
+		break;
+	    case LC_SEGMENT:
+		memcpy((char *)&sg, (char *)lc,
+		       sizeof(struct segment_command));
+		if(swapped)
+		    swap_segment_command(&sg, host_byte_sex);
+		p = (char *)lc + sizeof(struct segment_command);
+		for(j = 0 ; j < sg.nsects ; j++){
+		    memcpy((char *)&s, p, sizeof(struct section));
+		    p += sizeof(struct section);
+		    if(swapped)
+			swap_section(&s, 1, host_byte_sex);
+		    section_type = s.flags & SECTION_TYPE;
+		    if((strncmp(s.sectname, "__objc_selrefs", 16) == 0 ||
+		        strncmp(s.sectname, "__objc_classrefs", 16) == 0 ||
+		        strncmp(s.sectname, "__objc_superrefs", 16) == 0 ||
+			strncmp(s.sectname, "__objc_msgrefs", 16) == 0 ||
+			strncmp(s.sectname, "__cfstring", 16) == 0) &&
+		       value >= s.addr && value < s.addr + s.size){
+			sect_offset = value - s.addr;
+			object_offset = s.offset + sect_offset;
+			if(object_offset < object_size){
+			    memcpy(&pointer_value, object_addr + object_offset,
+				   sizeof(uint32_t));
+			    if(swapped)
+				pointer_value = SWAP_INT(pointer_value);
+			    if(strncmp(s.sectname,
+				       "__objc_selrefs", 16) == 0)
+				*selref = TRUE; 
+			    else if(strncmp(s.sectname,
+				       "__objc_classrefs", 16) == 0 ||
+			            strncmp(s.sectname,
+				       "__objc_superrefs", 16) == 0)
+				*classref = TRUE; 
+			    else if(strncmp(s.sectname,
+				       "__objc_msgrefs", 16) == 0 &&
+			     value + 4 < s.addr + s.size){
+				*msgref = TRUE; 
+				memcpy(&pointer_value,
+				       object_addr + object_offset + 4,
+				       sizeof(uint32_t));
+				if(swapped)
+				    pointer_value =
+					SWAP_INT(pointer_value);
+			    }
+			    else if(strncmp(s.sectname,
 				       "__cfstring", 16) == 0)
 				*cfstring = TRUE; 
 			    return(pointer_value);
@@ -440,7 +502,9 @@ struct disassemble_info *info)
 	     * And the pointer_value in that section is typically zero as it
 	     * will be set by dyld as part of the "bind information".
 	     */
-	    name = get_dyld_bind_info_symbolname(value, info->dbi, info->ndbi);
+	    name = get_dyld_bind_info_symbolname(value, info->dbi, info->ndbi,
+						 info->ThreadedRebaseBind,
+						 NULL);
 	    if(name != NULL){
 		*reference_type =
 		    LLVMDisassembler_ReferenceType_Out_Objc_Class_Ref;
@@ -455,28 +519,36 @@ struct disassemble_info *info)
 	if(classref == TRUE){
 	    *reference_type =
 		LLVMDisassembler_ReferenceType_Out_Objc_Class_Ref;
-	    name = get_objc2_64bit_class_name(pointer_value, value,
-			info->load_commands, info->ncmds, info->sizeofcmds,
-			info->object_byte_sex, info->object_addr,
-			info->object_size, info->symbols, info->nsymbols,
-			info->strings, info->strings_size, CPU_TYPE_ARM64);
-	    if(name != NULL)
-		info->class_name = name;
-	    else
-	        name = "bad class ref";
+	    if(info->cputype == CPU_TYPE_ARM64){
+		name = get_objc2_64bit_class_name(pointer_value, value,
+			    info->load_commands, info->ncmds, info->sizeofcmds,
+			    info->object_byte_sex, info->object_addr,
+			    info->object_size, info->symbols64, info->nsymbols,
+			    info->strings, info->strings_size, CPU_TYPE_ARM64);
+		if(name != NULL)
+		    info->class_name = name;
+		else
+		    name = "bad class ref";
+	    } else {
+		name = "TODO: arm64_32 get_objc2_64_32bit_class_name()";
+	    }
 	    return(name);
 	}
 
 	if(cfstring == TRUE){
 	    *reference_type =
 		LLVMDisassembler_ReferenceType_Out_Objc_CFString_Ref;
-	    name = get_objc2_64bit_cfstring_name(value,
-			info->load_commands, info->ncmds, info->sizeofcmds,
-			info->object_byte_sex, info->object_addr,
-			info->object_size, info->symbols, info->nsymbols,
-			info->strings, info->strings_size, CPU_TYPE_ARM64);
-	    if(name == NULL)
-	        name = "bad cfstring ref";
+	    if(info->cputype == CPU_TYPE_ARM64){
+		name = get_objc2_64bit_cfstring_name(value,
+			    info->load_commands, info->ncmds, info->sizeofcmds,
+			    info->object_byte_sex, info->object_addr,
+			    info->object_size, info->symbols64, info->nsymbols,
+			    info->strings, info->strings_size, CPU_TYPE_ARM64);
+		if(name == NULL)
+		    name = "bad cfstring ref";
+	    } else {
+		name = "TODO: arm64_32 get_objc2_64_32bit_cfstring_name()";
+	    }
 	    return(name);
 	}
 
@@ -508,7 +580,7 @@ struct disassemble_info *info)
 
 	name = guess_indirect_symbol(value, ncmds, sizeofcmds, load_commands,
 		object_byte_sex, info->indirect_symbols,info->nindirect_symbols,
-		NULL, info->symbols, info->nsymbols, info->strings,
+		info->symbols, info->symbols64, info->nsymbols, info->strings,
 		info->strings_size);
 	if(name != NULL){
 	    *reference_type =
@@ -614,7 +686,7 @@ const char **ReferenceName)
 	    indirect_symbol_name = guess_indirect_symbol(SymbolValue,
 		    info->ncmds, info->sizeofcmds, info->load_commands,
 		    info->object_byte_sex, info->indirect_symbols,
-		    info->nindirect_symbols, NULL, info->symbols,
+		    info->nindirect_symbols, info->symbols, info->symbols64,
 		    info->nsymbols, info->strings, info->strings_size);
 	    if(indirect_symbol_name != NULL){
 		*ReferenceName = indirect_symbol_name;
@@ -761,6 +833,10 @@ cpu_subtype_t cpusubtype)
 	    if(*mcpu_default == '\0')
 		mcpu_default = "cyclone";
 	    break;
+	case CPU_SUBTYPE_ARM64E:
+	    if(*mcpu_default == '\0')
+		mcpu_default = "vortex";
+	    break;
 	}
 
 	dc = 
@@ -801,7 +877,9 @@ struct relocation_info *loc_relocs,
 uint32_t nloc_relocs,
 struct dyld_bind_info *dbi,
 uint64_t ndbi,
-struct nlist_64 *symbols,
+enum bool ThreadedRebaseBind,
+struct nlist *symbols,
+struct nlist_64 *symbols64,
 uint32_t nsymbols,
 struct symbol *sorted_symbols,
 uint32_t nsorted_symbols,
@@ -809,6 +887,7 @@ char *strings,
 uint32_t strings_size,
 uint32_t *indirect_symbols,
 uint32_t nindirect_symbols,
+cpu_type_t cputype,
 struct load_command *load_commands,
 uint32_t ncmds,
 uint32_t sizeofcmds,
@@ -855,6 +934,7 @@ LLVMDisasmContextRef dc)
 	dis_info.dbi = dbi;
 	dis_info.ndbi = ndbi;
 	dis_info.symbols = symbols;
+	dis_info.symbols64 = symbols64;
 	dis_info.nsymbols = nsymbols;
 	dis_info.sorted_symbols = sorted_symbols;
 	dis_info.nsorted_symbols = nsorted_symbols;
@@ -864,6 +944,7 @@ LLVMDisasmContextRef dc)
 	dis_info.object_byte_sex = object_byte_sex;
 	dis_info.indirect_symbols = indirect_symbols;
 	dis_info.nindirect_symbols = nindirect_symbols;
+	dis_info.cputype = cputype;
 	dis_info.ncmds = ncmds;
 	dis_info.sizeofcmds = sizeofcmds;
 	dis_info.object_addr = object_addr;
@@ -874,6 +955,7 @@ LLVMDisasmContextRef dc)
 	dis_info.sect_addr = sect_addr;
 	dis_info.method = NULL;
 	dis_info.demangled_name = NULL;
+	dis_info.ThreadedRebaseBind = ThreadedRebaseBind;
 
 	dst[4095] = '\0';
 	if(llvm_disasm_instruction(dc, (uint8_t *)sect, 4, addr, dst, 4095) != 0)

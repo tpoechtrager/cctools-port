@@ -293,12 +293,14 @@ ld::Section LazyPointerAtom::_s_sectionWeak("__DATA", "__la_weak_ptr", ld::Secti
 
 class NonLazyPointerAtom : public ld::Atom {
 public:
-											NonLazyPointerAtom(ld::passes::stubs::Pass& pass, const ld::Atom& stubTo)
+	NonLazyPointerAtom(ld::passes::stubs::Pass& pass, const ld::Atom& stubTo,
+					   bool weakImport)
 				: ld::Atom(_s_section, ld::Atom::definitionRegular, 
 							ld::Atom::combineNever, ld::Atom::scopeLinkageUnit, ld::Atom::typeLazyPointer, 
 							symbolTableNotIn, false, false, false, ld::Atom::Alignment(2)), 
 				_stubTo(stubTo),
 				_fixup1(0, ld::Fixup::k1of1, ld::Fixup::kindStoreTargetAddressLittleEndian32, &stubTo) {
+					_fixup1.weakImport = weakImport;
 					pass.addAtom(*this);
 				}
 
@@ -324,12 +326,13 @@ ld::Section NonLazyPointerAtom::_s_section("__DATA", "__nl_symbol_ptr", ld::Sect
 
 class StubPICKextAtom : public ld::Atom {
 public:
-											StubPICKextAtom(ld::passes::stubs::Pass& pass, const ld::Atom& stubTo)
+	StubPICKextAtom(ld::passes::stubs::Pass& pass, const ld::Atom& stubTo,
+					bool weakImport)
 				: ld::Atom(_s_section, ld::Atom::definitionRegular, ld::Atom::combineNever,
 							ld::Atom::scopeLinkageUnit, ld::Atom::typeStub, 
-							symbolTableIn, false, true, false, ld::Atom::Alignment(2)), 
+							symbolTableNotIn, false, true, false, ld::Atom::Alignment(2)),
 				_stubTo(stubTo), 
-				_nonLazyPointer(pass, stubTo),
+				_nonLazyPointer(pass, stubTo, weakImport),
 				_fixup1(0, ld::Fixup::k1of4, ld::Fixup::kindSetTargetAddress, &_nonLazyPointer),
 				_fixup2(0, ld::Fixup::k2of4, ld::Fixup::kindSubtractTargetAddress, this),
 				_fixup3(0, ld::Fixup::k3of4, ld::Fixup::kindSubtractAddend, 12),
@@ -338,8 +341,8 @@ public:
 				_fixup6(4, ld::Fixup::k2of4, ld::Fixup::kindSubtractTargetAddress, this),
 				_fixup7(4, ld::Fixup::k3of4, ld::Fixup::kindSubtractAddend, 12),
 				_fixup8(4, ld::Fixup::k4of4, ld::Fixup::kindStoreThumbHigh16) {
-					pass.addAtom(*this); 
 					asprintf((char**)&_name, "%s.stub", _stubTo.name());
+					pass.addAtom(*this);
 				}
   
 	virtual const ld::File*					file() const					{ return _stubTo.file(); }

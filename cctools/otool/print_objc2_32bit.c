@@ -477,6 +477,9 @@ enum bool verbose)
 	if(s == NULL)
 	    s = get_section_32(info.sections, info.nsections,
 				"__DATA_CONST", "__objc_classlist");
+	if(s == NULL)
+	    s = get_section_32(info.sections, info.nsections,
+				"__DATA_DIRTY", "__objc_classlist");
 	walk_pointer_list("class", s, &info, print_class_t);
 
 	s = get_section_32(info.sections, info.nsections,
@@ -487,6 +490,9 @@ enum bool verbose)
 	if(s == NULL)
 	    s = get_section_32(info.sections, info.nsections,
 				"__DATA_CONST", "__objc_classrefs");
+	if(s == NULL)
+	    s = get_section_32(info.sections, info.nsections,
+				"__DATA_DIRTY", "__objc_classrefs");
 	walk_pointer_list("class refs", s, &info, NULL);
 
 	s = get_section_32(info.sections, info.nsections,
@@ -497,6 +503,9 @@ enum bool verbose)
 	if(s == NULL)
 	    s = get_section_32(info.sections, info.nsections,
 				"__DATA_CONST", "__objc_superrefs");
+	if(s == NULL)
+	    s = get_section_32(info.sections, info.nsections,
+				"__DATA_DIRTY", "__objc_superrefs");
 	walk_pointer_list("super refs", s, &info, NULL);
 
 	s = get_section_32(info.sections, info.nsections,
@@ -507,6 +516,9 @@ enum bool verbose)
 	if(s == NULL)
 	    s = get_section_32(info.sections, info.nsections,
 				"__DATA_CONST", "__objc_catlist");
+	if(s == NULL)
+	    s = get_section_32(info.sections, info.nsections,
+				"__DATA_DIRTY", "__objc_catlist");
 	walk_pointer_list("category", s, &info, print_category_t);
 
 	s = get_section_32(info.sections, info.nsections,
@@ -517,6 +529,9 @@ enum bool verbose)
 	if(s == NULL)
 	    s = get_section_32(info.sections, info.nsections,
 				"__DATA_CONST", "__objc_protolist");
+	if(s == NULL)
+	    s = get_section_32(info.sections, info.nsections,
+				"__DATA_DIRTY", "__objc_protolist");
 	walk_pointer_list("protocol", s, &info, NULL);
 
 	s = get_section_32(info.sections, info.nsections,
@@ -527,6 +542,9 @@ enum bool verbose)
 	if(s == NULL)
 	    s = get_section_32(info.sections, info.nsections,
 				"__DATA_CONST", "__objc_msgrefs");
+	if(s == NULL)
+	    s = get_section_32(info.sections, info.nsections,
+				"__DATA_DIRTY", "__objc_msgrefs");
 	print_message_refs(s, &info);
 
 	s = get_section_32(info.sections, info.nsections,
@@ -537,6 +555,9 @@ enum bool verbose)
 	if(s == NULL)
 	    s = get_section_32(info.sections, info.nsections,
 				"__DATA_CONST", "__objc_imageinfo");
+	if(s == NULL)
+	    s = get_section_32(info.sections, info.nsections,
+				"__DATA_DIRTY", "__objc_imageinfo");
 	print_image_info(s, &info);
 }
 
@@ -1096,10 +1117,16 @@ struct info *info)
 	name = get_symbol_32(offset + offsetof(struct category_t, name),
 			     s->addr - info->database, c.name, s->relocs,
 			     s->nrelocs, info);
-	if(name != NULL)
-	    printf(" %s\n", name);
-	else
-	    printf("\n");
+	if(name != NULL){
+	    printf(" %s", name);
+	}
+	else{
+	    name = get_pointer_32(c.name, NULL, &left, NULL, info->sections,
+				  info->nsections);
+	    if(name != NULL)
+		printf(" %.*s", (int)left, name);
+	}
+	printf("\n");
 	printf("               cls 0x%x\n", c.cls);
 	if(c.cls != 0)
 	    print_class_t(c.cls, info);
@@ -1209,6 +1236,14 @@ struct info *info)
 		printf(" Swift 1.0");
 	    else if(swift_version == 2)
 		printf(" Swift 1.1");
+	    else if(swift_version == 3)
+		printf(" Swift 2.0");
+	    else if(swift_version == 4)
+		printf(" Swift 3.0");
+	    else if(swift_version == 5)
+		printf(" Swift 4.0");
+	    else if(swift_version == 6)
+		printf(" Swift 4.1");
 	    else
 		printf(" unknown future Swift version (%d)", swift_version);
 	}

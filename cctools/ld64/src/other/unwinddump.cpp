@@ -215,7 +215,6 @@ void UnwindPrinter<A>::getSymbolTableInfo()
 	const macho_load_command<P>* const cmds = (macho_load_command<P>*)((uint8_t*)fHeader + sizeof(macho_header<P>));
 	const macho_load_command<P>* cmd = cmds;
 	for (uint32_t i = 0; i < cmd_count; ++i) {
-		uint32_t size = cmd->cmdsize();
 		const uint8_t* endOfCmd = ((uint8_t*)cmd)+cmd->cmdsize();
 		if ( endOfCmd > endOfLoadCommands )
 			throwf("load command #%d extends beyond the end of the load commands", i);
@@ -289,7 +288,6 @@ bool UnwindPrinter<A>::findUnwindSection()
 	const macho_load_command<P>* const cmds = (macho_load_command<P>*)((uint8_t*)fHeader + sizeof(macho_header<P>));
 	const macho_load_command<P>* cmd = cmds;
 	for (uint32_t i = 0; i < cmd_count; ++i) {
-		uint32_t size = cmd->cmdsize();
 		const uint8_t* endOfCmd = ((uint8_t*)cmd)+cmd->cmdsize();
 		if ( endOfCmd > endOfLoadCommands )
 			throwf("load command #%d extends beyond the end of the load commands", i);

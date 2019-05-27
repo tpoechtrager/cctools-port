@@ -548,6 +548,12 @@ projects that assume they are built and run on the same OS version.
 Don't run deduplication pass in linker
 .It Fl verbose_deduplicate
 Prints names of functions that are eliminated by deduplication and total code savings size.
+.It Fl no_inits
+Error if the output contains any static initializers
+.It Fl no_warn_inits
+Do not warn if the output contains any static initializers
+.It Fl debug_variant
+Do not warn about issues that are only problems for binaries shipping to customers.
 .It Fl dirty_data_list Ar filename
 Specifies a file containing the names of data symbols likely to be dirtied.
 If the linker is creating a __DATA_DIRTY segment, those symbols will be moved
@@ -614,6 +620,9 @@ by a 32-bit value in the __unwind_info section.  The option issues a warning for
 any function whose FDE cannot be expressed in the compact unwind format.
 .It Fl warn_weak_exports
 Issue a warning if the resulting final linked image contains weak external symbols. Such
+symbols require dyld to do extra work at launch time to coalesce those symbols.
+.It Fl no_weak_exports
+Issue an erro if the resulting final linked image contains weak external symbols. Such
 symbols require dyld to do extra work at launch time to coalesce those symbols.
 .It Fl objc_gc_compaction
 Marks the Objective-C image info in the final linked image with the bit that says that the
@@ -760,9 +769,6 @@ interposable then if _malloc was interposed at runtime, calls to malloc from wit
 .It Fl no_function_starts
 By default the linker creates a compress table of function start addresses in the LINKEDIT of
 final linked image.  This option disables that behavior.
-.It Fl no_version_load_command
-By default the linker creates a load command in final linked images that contains the -macosx_version_min.
-This option disables that behavior.
 .It Fl no_objc_category_merging
 By default when producing final linked image, the linker will optimize Objective-C classes by merging
 any categories on a class into the class.  Both the class and its categories must be defined in the image
@@ -780,7 +786,8 @@ to load instead.
 .It Fl cache_path_lto Ar path
 When performing Incremental Link Time Optimization (LTO), use this directory as a cache for incremental rebuild.
 .It Fl prune_interval_lto Ar seconds
-When performing Incremental Link Time Optimization (LTO), the cache will pruned after the specified interval.
+When performing Incremental Link Time Optimization (LTO), the cache will pruned after the specified interval. A value 0
+will force pruning to occur and a value of -1 will disable pruning.
 .It Fl prune_after_lto Ar seconds
 When pruning the cache for Incremental Link Time Optimization (LTO), the cache entries are removed after the
 specificied interval.

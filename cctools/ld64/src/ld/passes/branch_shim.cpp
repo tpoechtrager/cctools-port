@@ -348,7 +348,7 @@ void doPass(const Options& opts, ld::Internal& state)
 								break;
 							fixUpLocation += fit->offsetInAtom;
 							uint32_t instruction = *((uint32_t*)fixUpLocation);
-							bool is_b = ((instruction & 0x0F000000) == 0x0A000000) && ((instruction & 0xF0000000) != 0xF0000000);
+							bool is_b = ((instruction & 0x0E000000) == 0x0A000000) && ((instruction & 0xF0000000) != 0xF0000000);
 							// need shim for branch from arm to thumb, or for call to function outside kext
 							if ( is_b || (targetIsProxy && makingKextBundle) ) {
 								if ( _s_log ) fprintf(stderr, "need to add arm->thumb instr=0x%08X shim to %s for %s\n", instruction, target->name(), atom->name()); 

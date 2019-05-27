@@ -127,7 +127,8 @@ public:
 	byNameIterator		begin()								{ return byNameIterator(_byNameTable.begin(),_indirectBindingTable); }
 	byNameIterator		end()								{ return byNameIterator(_byNameTable.end(),_indirectBindingTable); }
 	void				printStatistics();
-	
+	void				removeDeadUndefs(std::vector<const ld::Atom *>& allAtoms, const std::unordered_set<const ld::Atom*>& keep);
+
 	// from ld::IndirectBindingTable
 	virtual const char*			indirectName(IndirectBindingSlot slot) const;
 	virtual const ld::Atom*		indirectAtom(IndirectBindingSlot slot) const;

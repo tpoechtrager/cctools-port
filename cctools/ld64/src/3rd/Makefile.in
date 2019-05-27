@@ -108,7 +108,7 @@ libhelper_la_LIBADD =
 am_libhelper_la_OBJECTS = libhelper_la-helper.lo \
 	libhelper_la-qsort_r.lo libhelper_la-strlcat.lo \
 	libhelper_la-strlcpy.lo libhelper_la-eprintf.lo \
-	libhelper_la-md5.lo
+	libhelper_la-md5.lo libhelper_la-mkpath_np.lo
 libhelper_la_OBJECTS = $(am_libhelper_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -370,7 +370,7 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 SUBDIRS = BlocksRuntime
 noinst_LTLIBRARIES = libhelper.la
-noinst_HEADERS = helper.h strlcat.h strlcpy.h qsort_r.h
+noinst_HEADERS = helper.h strlcat.h strlcpy.h qsort_r.h md5.h mkpath_np.h
 libhelper_la_CFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/include/foreign $(ENDIAN_FLAG) $(WARNINGS)
 libhelper_la_SOURCES = \
 	helper.c  \
@@ -378,7 +378,8 @@ libhelper_la_SOURCES = \
 	strlcat.c  \
 	strlcpy.c \
 	eprintf.c \
-	md5.c
+	md5.c \
+	mkpath_np.c
 
 all: all-recursive
 
@@ -460,6 +461,9 @@ libhelper_la-eprintf.lo: eprintf.c
 
 libhelper_la-md5.lo: md5.c
 	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libhelper_la_CFLAGS) $(CFLAGS) -c -o libhelper_la-md5.lo `test -f 'md5.c' || echo '$(srcdir)/'`md5.c
+
+libhelper_la-mkpath_np.lo: mkpath_np.c
+	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libhelper_la_CFLAGS) $(CFLAGS) -c -o libhelper_la-mkpath_np.lo `test -f 'mkpath_np.c' || echo '$(srcdir)/'`mkpath_np.c
 
 mostlyclean-libtool:
 	-rm -f *.lo

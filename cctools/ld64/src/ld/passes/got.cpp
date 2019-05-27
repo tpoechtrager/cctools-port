@@ -74,10 +74,48 @@ private:
 ld::Section GOTEntryAtom::_s_section("__DATA", "__got", ld::Section::typeNonLazyPointer);
 ld::Section GOTEntryAtom::_s_sectionWeak("__DATA", "__got_weak", ld::Section::typeNonLazyPointer);
 
+#if SUPPORT_ARCH_arm64e
 
-static bool gotFixup(const Options& opts, ld::Internal& internal, const ld::Atom* targetOfGOT, const ld::Fixup* fixup, bool* optimizable, bool* targetIsExternalWeakDef)
+class GOTAuthEntryAtom : public ld::Atom {
+public:
+											GOTAuthEntryAtom(ld::Internal& internal, const ld::Atom* target, bool weakImport, bool weakDef)
+				: ld::Atom(weakDef ? _s_sectionWeak : _s_section, ld::Atom::definitionRegular, ld::Atom::combineNever,
+							ld::Atom::scopeLinkageUnit, ld::Atom::typeNonLazyPointer,
+							symbolTableNotIn, false, false, false, ld::Atom::Alignment(3)),
+				_fixup1(0, ld::Fixup::k1of2, ld::Fixup::kindSetAuthData, (ld::Fixup::AuthData){ 0, true, ld::Fixup::AuthData::ptrauth_key_asia }),
+				_fixup2(0, ld::Fixup::k2of2, ld::Fixup::kindStoreTargetAddressLittleEndianAuth64, target),
+				_target(target)
+					{ _fixup2.weakImport = weakImport; internal.addAtom(*this); }
+
+	virtual const ld::File*					file() const					{ return NULL; }
+	virtual const char*						name() const					{ return _target->name(); }
+	virtual uint64_t						size() const					{ return 8; }
+	virtual uint64_t						objectAddress() const			{ return 0; }
+	virtual void							copyRawContent(uint8_t buffer[]) const { }
+	virtual void							setScope(Scope)					{ }
+	virtual ld::Fixup::iterator				fixupsBegin() const				{ return (ld::Fixup*)&_fixup1; }
+	virtual ld::Fixup::iterator				fixupsEnd()	const 				{ return &((ld::Fixup*)&_fixup2)[1]; }
+
+private:
+	mutable ld::Fixup						_fixup1;
+	mutable ld::Fixup						_fixup2;
+	const ld::Atom*							_target;
+
+	static ld::Section						_s_section;
+	static ld::Section						_s_sectionWeak;
+};
+
+ld::Section GOTAuthEntryAtom::_s_section("__DATA", "__got", ld::Section::typeNonLazyPointer);
+ld::Section GOTAuthEntryAtom::_s_sectionWeak("__DATA", "__got_weak", ld::Section::typeNonLazyPointer);
+
+#endif
+
+
+static bool gotFixup(const Options& opts, ld::Internal& internal, const ld::Atom* targetOfGOT, const ld::Atom* fixupAtom,
+					 const ld::Fixup* fixup, bool* optimizable, bool* targetIsExternalWeakDef, bool* targetIsPersonalityFn)
 {
 	*targetIsExternalWeakDef = false;
+	*targetIsPersonalityFn = false;
 	switch (fixup->kind) {
 		case ld::Fixup::kindStoreTargetAddressX86PCRel32GOTLoad:
 #if SUPPORT_ARCH_arm64
@@ -137,10 +175,22 @@ static bool gotFixup(const Options& opts, ld::Internal& internal, const ld::Atom
 #if SUPPORT_ARCH_arm64
 		case ld::Fixup::kindStoreARM64PCRelToGOT:
 #endif
+#if SUPPORT_ARCH_arm64e
+			// Note, this handles identifying DWARF unwind info personality functions
+			if (opts.supportsAuthenticatedPointers()) {
+				if (fixupAtom->section().type() == ld::Section::typeCFI)
+					*targetIsPersonalityFn = true;
+			}
+#endif
 			*optimizable = false;
 			return true;
 		case ld::Fixup::kindNoneGroupSubordinatePersonality:
 			*optimizable = false;
+#if SUPPORT_ARCH_arm64e
+			// Note, this is a compact unwind info personality function
+			if (opts.supportsAuthenticatedPointers())
+				*targetIsPersonalityFn = true;
+#endif
 			return true;
 		default:
 			break;
@@ -157,6 +207,17 @@ struct AtomByNameSorter
 	 }
 };
 
+struct GotMapEntry {
+	const ld::Atom* atom;
+	bool isPersonalityFn;
+
+	bool operator<(const GotMapEntry& other) const {
+		if (atom != other.atom)
+			return atom < other.atom;
+		return (int)isPersonalityFn < (int)other.isPersonalityFn;
+	}
+};
+
 void doPass(const Options& opts, ld::Internal& internal)
 {
 	const bool log = false;
@@ -166,7 +227,7 @@ void doPass(const Options& opts, ld::Internal& internal)
 		return;
 
 	// pre-fill gotMap with existing non-lazy pointers
-	std::map<const ld::Atom*, const ld::Atom*> gotMap;
+	std::map<GotMapEntry, const ld::Atom*> gotMap;
 	for (ld::Internal::FinalSection* sect : internal.sections) {
 		if ( sect->type() != ld::Section::typeNonLazyPointer )
 			continue;
@@ -194,7 +255,7 @@ void doPass(const Options& opts, ld::Internal& internal)
 			}
 			if ( target != NULL ) {
 				if (log) fprintf(stderr, "found existing got entry to %s\n", target->name());
-				gotMap[target] = atom;
+				gotMap[{ target, false }] = atom;
 			}
 		}
 	}
@@ -229,7 +290,8 @@ void doPass(const Options& opts, ld::Internal& internal)
 				}
 				bool optimizable;
 				bool targetIsExternalWeakDef;
-				if ( !gotFixup(opts, internal, targetOfGOT, fit, &optimizable, &targetIsExternalWeakDef) )
+				bool targetIsPersonalityFn;
+				if ( !gotFixup(opts, internal, targetOfGOT, atom, fit, &optimizable, &targetIsExternalWeakDef, &targetIsPersonalityFn) )
 					continue;
 				if ( optimizable ) {
 					// change from load of GOT entry to lea of target
@@ -268,8 +330,8 @@ void doPass(const Options& opts, ld::Internal& internal)
 						atomsReferencingGOT.push_back(atom);
 						atomUsesGOT = true;
 					}
-					if ( gotMap.count(targetOfGOT) == 0 )
-						gotMap[targetOfGOT] = NULL;
+					if ( gotMap.count({ targetOfGOT, targetIsPersonalityFn }) == 0 )
+						gotMap[{ targetOfGOT, targetIsPersonalityFn }] = NULL;
 					// record if target is weak def
 					weakDefMap[targetOfGOT] = targetIsExternalWeakDef;
 					// record weak_import attribute
@@ -327,8 +389,15 @@ void doPass(const Options& opts, ld::Internal& internal)
 	// make GOT entries
 	for (auto& entry : gotMap) {
 		if ( entry.second == NULL ) {
-			entry.second = new GOTEntryAtom(internal, entry.first, weakImportMap[entry.first], opts.useDataConstSegment() && weakDefMap[entry.first], is64);
-			if (log) fprintf(stderr, "making new GOT slot for %s, gotMap[%p] = %p\n", entry.first->name(), entry.first, entry.second);
+#if SUPPORT_ARCH_arm64e
+			if ( entry.first.isPersonalityFn && (opts.supportsAuthenticatedPointers()) ) {
+				entry.second = new GOTAuthEntryAtom(internal, entry.first.atom, weakImportMap[entry.first.atom], opts.useDataConstSegment() && weakDefMap[entry.first.atom]);
+				if (log) fprintf(stderr, "making new GOT slot for %s, gotMap[%p] = %p\n", entry.first.atom->name(), entry.first.atom, entry.second);
+				continue;
+			}
+#endif
+			entry.second = new GOTEntryAtom(internal, entry.first.atom, weakImportMap[entry.first.atom], opts.useDataConstSegment() && weakDefMap[entry.first.atom], is64);
+			if (log) fprintf(stderr, "making new GOT slot for %s, gotMap[%p] = %p\n", entry.first.atom->name(), entry.first.atom, entry.second);
 		}
 	}
 
@@ -357,7 +426,9 @@ void doPass(const Options& opts, ld::Internal& internal)
 			}
 			bool optimizable;
 			bool targetIsExternalWeakDef;
-			if ( (targetOfGOT == NULL) || !gotFixup(opts, internal, targetOfGOT, fit, &optimizable, &targetIsExternalWeakDef) )
+			bool targetIsPersonalityFn;
+			if ( (targetOfGOT == NULL) || !gotFixup(opts, internal, targetOfGOT, atom, fit,
+													&optimizable, &targetIsExternalWeakDef, &targetIsPersonalityFn) )
 				continue;
 			if ( !optimizable ) {
 				// GOT use not optimized away, update to bind to GOT entry
@@ -367,7 +438,7 @@ void doPass(const Options& opts, ld::Internal& internal)
 					case ld::Fixup::bindingDirectlyBound:
 						if ( log ) fprintf(stderr, "updating GOT use in %s to %s\n", atom->name(), targetOfGOT->name());
 						fitThatSetTarget->binding = ld::Fixup::bindingDirectlyBound;
-						fitThatSetTarget->u.target = gotMap[targetOfGOT];
+						fitThatSetTarget->u.target = gotMap[{ targetOfGOT, targetIsPersonalityFn }];
 						break;
 					default:
 						assert(0 && "unsupported GOT reference");

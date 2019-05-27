@@ -59,7 +59,9 @@ function git_clone_repository
     fi
 
     if [ ! -d $directory ]; then
-        git clone $url --depth 1
+        local args=""
+        test "$branch" = "master" && args="--depth 1"
+        git clone $url $args
     fi
 
     pushd $directory &>/dev/null
@@ -129,7 +131,7 @@ which $LLVM_DSYMUTIL &>/dev/null
 if [ $? -eq 0 ]; then
     case $($LLVM_DSYMUTIL --version | \
            grep "LLVM version" | head -1 | awk '{print $3}') in
-        3.8*|3.9*|4.0*|5.0*) OK=1 ;;
+        3.8*|3.9*|4.0*|5.0*|6.0*|7.0*|8.0*|9.0*) OK=1 ;;
     esac
 fi
 set -e
@@ -172,7 +174,7 @@ echo "*** building apple-libtapi ***"
 echo ""
 
 pushd tmp &>/dev/null
-git_clone_repository https://github.com/tpoechtrager/apple-libtapi.git master
+git_clone_repository https://github.com/tpoechtrager/apple-libtapi.git 2.0.0
 pushd apple-libtapi &>/dev/null
 INSTALLPREFIX=$TARGETDIR ./build.sh
 ./install.sh

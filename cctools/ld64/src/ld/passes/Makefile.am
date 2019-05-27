@@ -40,5 +40,6 @@ libPasses_la_SOURCES =  \
 	tlvp.cpp \
 	stubs/stubs.cpp \
 	bitcode_bundle.cpp \
-	code_dedup.cpp
+	code_dedup.cpp \
+	thread_starts.cpp
 

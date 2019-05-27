@@ -31,6 +31,10 @@ namespace lto {
 
 extern const char* version();
 
+extern unsigned int runtime_api_version();
+
+extern unsigned int static_api_version();
+
 extern bool libLTOisLoaded();
 
 extern const char* archName(const uint8_t* fileContent, uint64_t fileLength);
@@ -51,6 +55,7 @@ struct OptimizeOptions {
 	int									ltoPruneInterval;
 	int									ltoPruneAfter;
 	unsigned							ltoMaxCacheSize;
+	bool								ltoPruneIntervalOverwrite;
 	bool								preserveAllGlobals;
 	bool								verbose; 
 	bool								saveTemps; 
@@ -58,6 +63,7 @@ struct OptimizeOptions {
 	bool								pie; 
 	bool								mainExecutable; 
 	bool								staticExecutable; 
+	bool								preload;
 	bool								relocatable;
 	bool								allowTextRelocs; 
 	bool								linkerDeadStripping; 
@@ -67,12 +73,14 @@ struct OptimizeOptions {
 	bool								armUsesZeroCostExceptions;
 	bool								simulator;
 	bool								ignoreMismatchPlatform;
+#if SUPPORT_ARCH_arm64e
+	bool								supportsAuthenticatedPointers;
+#endif
 	bool								bitcodeBundle;
 	uint8_t								maxDefaultCommonAlignment;
 	cpu_type_t							arch;
 	const char*							mcpu;
-	Options::Platform					platform;
-	uint32_t							minOSVersion;
+	ld::VersionSet						platforms;
 	const std::vector<const char*>*		llvmOptions;
 	const std::vector<const char*>*		initialUndefines;
 };

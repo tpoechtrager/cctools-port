@@ -1,10 +1,11 @@
-.Dd March 11, 2016
+.Dd June 8, 2016
 .Dt ARCH 3
 .Sh NAME
 .Nm NXGetAllArchInfos ,
 .Nm NXGetLocalArchInfo ,
 .Nm NXGetArchInfoFromName ,
 .Nm NXGetArchInfoFromCpuType ,
+.Nm NXFreeArchInfo ,
 .Nm NXFindBestFatArch ,
 .Nm NXCombineCpuSubtypes
 .Nd get architecture information
@@ -18,6 +19,8 @@
 .Fn NXGetArchInfoFromName "const char *name"
 .Ft extern const NXArchInfo *
 .Fn NXGetArchInfoFromCpuType "cpu_type_t cputype" "cpu_subtype_t cpusubtype"
+.Ft extern void
+.Fn NXFreeArchInfo "NXArchInfo *x"
 .Ft extern struct fat_arch *
 .Fn NXFindBestFatArch "cpu_type_t cputype" "cpu_subtype_t cpusubtype" "struct fat_arch *fat_archs" "uint32_t nfat_archs"
 .Ft extern struct fat_arch_64 *
@@ -56,6 +59,8 @@ The currently known architectures are:
 .It i386 Ta CPU_TYPE_I386 Ta CPU_SUBTYPE_I386_ALL Ta Intel 80x86
 .It arm Ta CPU_TYPE_ARM Ta CPU_SUBTYPE_ARM_ALL Ta ARM
 .It arm64 Ta CPU_TYPE_ARM64 Ta CPU_SUBTYPE_ARM64_ALL Ta ARM64
+.It arm64e Ta CPU_TYPE_ARM64 Ta CPU_SUBTYPE_ARM64E Ta ARM64E
+.It arm64_32 Ta CPU_TYPE_ARM64_32 Ta CPU_SUBTYPE_ARM64_32_V8 Ta ARM64_32
 .It ppc Ta CPU_TYPE_POWERPC Ta CPU_SUBTYPE_POWERPC_ALL Ta PowerPC
 .It ppc64 Ta CPU_TYPE_POWERPC64 Ta CPU_SUBTYPE_POWERPC64_ALL Ta PowerPC 64-bit
 .It m68k Ta CPU_TYPE_MC680x0 Ta CPU_SUBTYPE_MC680x0_ALL Ta Motorola 68K
@@ -117,6 +122,43 @@ combination.
 A CPU subtype of CPU_SUBTYPE_MULTIPLE can be used to request the most general
 NXArchInfo known for the given CPU type.
 NULL is returned if no matching NXArchInfo can be found.
+.Pp
+.Fn NXFreeArchInfo
+is passed a pointer to an NXArchInfo returned by the above interfaces and if
+not in the array returned in
+.Fn NXGetAllArchInfos
+will
+.Xr free 3
+the description field and then the NXArchInfo pointer.
+.Pp
+The above interfaces that return pointers to NXArchInfo structs in normal
+cases returns a pointer from the array returned in
+.Fn NXGetAllArchInfos .
+In some cases when the cputype is CPU_TYPE_I386 or CPU_TYPE_POWERPC it will
+return a malloc(3)'ed NXArchInfo struct which contains a string in the
+description field also a malloc(3)'ed pointer.  To allow programs not to
+leak memory they can call 
+.Fn NXFreeArchInfo
+on pointers returned from the above interfaces.  Since this is a new API on
+older systems can use the code below.  Going forward the above interfaces will
+only return pointers from the array returned in
+.Fn NXGetAllArchInfos .
+.Bd -literal -offset indent
+static void NXFreeArchInfo(
+const NXArchInfo *x) 
+{
+	const NXArchInfo *p;
+
+	p = NXGetAllArchInfos();
+	while(p->name != NULL){
+		if(x == p)
+			return;
+		p++;
+	}
+	free((char *)x->description);
+	free((NXArchInfo *)x);
+}
+.Ed
 .Pp
 .Fn NXFindBestFatArch
 is passed a CPU type and CPU subtype and a set of fat_arch structs.

@@ -1,6 +1,6 @@
 /* -*- mode: C++; c-basic-offset: 4; tab-width: 4 -*-
  *
- * Copyright (c) 2015 Apple Inc. All rights reserved.
+ * Copyright (c) 2009 Apple Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  *
@@ -22,28 +22,24 @@
  * @APPLE_LICENSE_HEADER_END@
  */
 
-#ifndef __TEXTSTUB_DYLIB_FILE_H__
-#define __TEXTSTUB_DYLIB_FILE_H__
 
-#ifdef TAPI_SUPPORT
+#ifndef __THREAD_STARTS_H__
+#define __THREAD_STARTS_H__
 
-#include "ld.hpp"
 #include "Options.h"
-
-namespace textstub {
-namespace dylib {
+#include "ld.hpp"
 
 
-extern ld::dylib::File* parse(const uint8_t* fileContent, uint64_t fileLength, const char* path,
-							  time_t modTime, const Options& opts, ld::File::Ordinal ordinal,
-							  bool bundleLoader, bool indirectDylib);
+namespace ld {
+namespace passes {
+namespace thread_starts {
 
-extern ld::dylib::File *parse(const char *path, tapi::LinkerInterfaceFile* file, time_t modTime,
-                              ld::File::Ordinal ordinal, const Options& opts, bool indirectDylib);
+// called by linker to generate a thread starts section
+extern void doPass(const Options& opts, ld::Internal& internal);
 
-} // namespace dylib
-} // namespace textstub
 
-#endif /* TAPI_SUPPORT */
+} // namespace thread_starts
+} // namespace passes 
+} // namespace ld 
 
-#endif // __TEXTSTUB_DYLIB_FILE_H__
+#endif // __THREAD_STARTS_H__

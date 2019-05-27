@@ -110,9 +110,14 @@
 #define x86_DEBUG_STATE64		11
 #define x86_DEBUG_STATE			12
 #define THREAD_STATE_NONE		13
-/* 15 and 16 are used for the internal x86_SAVED_STATE flavours */
+/* 14 and 15 are used for the internal x86_SAVED_STATE flavours */
+/* Arrange for flavors to take sequential values, 32-bit, 64-bit, non-specific */
 #define x86_AVX_STATE32			16
-#define x86_AVX_STATE64			17
+#define x86_AVX_STATE64			(x86_AVX_STATE32 + 1)
+#define x86_AVX_STATE			(x86_AVX_STATE32 + 2)
+#define x86_AVX512_STATE32		19
+#define x86_AVX512_STATE64		(x86_AVX512_STATE32 + 1)
+#define x86_AVX512_STATE		(x86_AVX512_STATE32 + 2)
 
 
 /*
@@ -142,11 +147,15 @@
 	  (x == x86_DEBUG_STATE)	|| \
 	  (x == x86_AVX_STATE32)	|| \
 	  (x == x86_AVX_STATE64)	|| \
+	  (x == x86_AVX_STATE)		|| \
+	  (x == x86_AVX512_STATE32)	|| \
+	  (x == x86_AVX512_STATE64)	|| \
+	  (x == x86_AVX512_STATE)	|| \
 	  (x == THREAD_STATE_NONE))
 
 struct x86_state_hdr {
-	int	flavor;
-	int	count;
+	uint32_t	flavor;
+	uint32_t	count;
 };
 typedef struct x86_state_hdr x86_state_hdr_t;
 
@@ -185,6 +194,10 @@ typedef _STRUCT_X86_AVX_STATE32 x86_avx_state32_t;
 #define x86_AVX_STATE32_COUNT ((mach_msg_type_number_t) \
 		(sizeof(x86_avx_state32_t)/sizeof(unsigned int)))
 
+typedef _STRUCT_X86_AVX512_STATE32 x86_avx512_state32_t;
+#define x86_AVX512_STATE32_COUNT ((mach_msg_type_number_t) \
+		(sizeof(x86_avx512_state32_t)/sizeof(unsigned int)))
+
 /*
  * to be deprecated in the future
  */
@@ -215,6 +228,10 @@ typedef _STRUCT_X86_FLOAT_STATE64 x86_float_state64_t;
 typedef _STRUCT_X86_AVX_STATE64 x86_avx_state64_t;
 #define x86_AVX_STATE64_COUNT ((mach_msg_type_number_t) \
 		(sizeof(x86_avx_state64_t)/sizeof(unsigned int)))
+
+typedef _STRUCT_X86_AVX512_STATE64 x86_avx512_state64_t;
+#define x86_AVX512_STATE64_COUNT ((mach_msg_type_number_t) \
+		(sizeof(x86_avx512_state64_t)/sizeof(unsigned int)))
 
 typedef _STRUCT_X86_EXCEPTION_STATE64 x86_exception_state64_t;
 #define x86_EXCEPTION_STATE64_COUNT	((mach_msg_type_number_t) \
@@ -263,6 +280,22 @@ struct x86_debug_state {
 	} uds;
 };
 
+struct x86_avx_state {
+	x86_state_hdr_t			ash;
+	union {
+		x86_avx_state32_t	as32;
+		x86_avx_state64_t	as64;
+	} ufs;
+};
+
+struct x86_avx512_state {
+	x86_state_hdr_t			ash;
+	union {
+		x86_avx512_state32_t	as32;
+		x86_avx512_state64_t	as64;
+	} ufs;
+};
+
 typedef struct x86_thread_state x86_thread_state_t;
 #define x86_THREAD_STATE_COUNT	((mach_msg_type_number_t) \
 		( sizeof (x86_thread_state_t) / sizeof (int) ))
@@ -279,6 +312,14 @@ typedef struct x86_debug_state x86_debug_state_t;
 #define x86_DEBUG_STATE_COUNT ((mach_msg_type_number_t) \
 		(sizeof(x86_debug_state_t)/sizeof(unsigned int)))
 
+typedef struct x86_avx_state x86_avx_state_t;
+#define x86_AVX_STATE_COUNT ((mach_msg_type_number_t) \
+		(sizeof(x86_avx_state_t)/sizeof(unsigned int)))
+
+typedef struct x86_avx512_state x86_avx512_state_t;
+#define x86_AVX512_STATE_COUNT ((mach_msg_type_number_t) \
+		(sizeof(x86_avx512_state_t)/sizeof(unsigned int)))
+
 /*
  * Machine-independent way for servers and Mach's exception mechanism to
  * choose the most efficient state flavor for exception RPC's:
@@ -286,5 +327,142 @@ typedef struct x86_debug_state x86_debug_state_t;
 #define MACHINE_THREAD_STATE		x86_THREAD_STATE
 #define MACHINE_THREAD_STATE_COUNT	x86_THREAD_STATE_COUNT
 
+#ifdef XNU_KERNEL_PRIVATE
+
+#define x86_SAVED_STATE32		THREAD_STATE_NONE + 1
+#define x86_SAVED_STATE64		THREAD_STATE_NONE + 2
+
+/*
+ * The format in which thread state is saved by Mach on this machine.  This
+ * state flavor is most efficient for exception RPC's to kernel-loaded
+ * servers, because copying can be avoided:
+ */
+struct x86_saved_state32 {
+	uint32_t	gs;
+	uint32_t	fs;
+	uint32_t	es;
+	uint32_t	ds;
+	uint32_t	edi;
+	uint32_t	esi;
+	uint32_t	ebp;
+	uint32_t	cr2;	/* kernel esp stored by pusha - we save cr2 here later */
+	uint32_t	ebx;
+	uint32_t	edx;
+	uint32_t	ecx;
+	uint32_t	eax;
+	uint16_t	trapno;
+	uint16_t	cpu;
+	uint32_t	err;
+	uint32_t	eip;
+	uint32_t	cs;
+	uint32_t	efl;
+	uint32_t	uesp;
+	uint32_t	ss;
+};
+typedef struct x86_saved_state32 x86_saved_state32_t;
+
+#define x86_SAVED_STATE32_COUNT	((mach_msg_type_number_t) \
+	(sizeof (x86_saved_state32_t)/sizeof(unsigned int)))
+
+#pragma pack(4)
+
+/*
+ * This is the state pushed onto the 64-bit interrupt stack
+ * on any exception/trap/interrupt.
+ */
+struct x86_64_intr_stack_frame {
+	uint16_t	trapno;
+	uint16_t	cpu;
+	uint32_t 	_pad;
+	uint64_t	trapfn;
+	uint64_t	err;
+	uint64_t	rip;
+	uint64_t	cs;
+	uint64_t	rflags;
+	uint64_t	rsp;
+	uint64_t	ss;
+};
+typedef struct x86_64_intr_stack_frame x86_64_intr_stack_frame_t;
+_Static_assert((sizeof(x86_64_intr_stack_frame_t) % 16) == 0,
+	"interrupt stack frame size must be a multiple of 16 bytes");
+
+/*
+ * thread state format for task running in 64bit long mode
+ * in long mode, the same hardware frame is always pushed regardless
+ * of whether there was a change in privilege level... therefore, there
+ * is no need for an x86_saved_state64_from_kernel variant
+ */
+struct x86_saved_state64 {
+	uint64_t	rdi;		/* arg0 for system call */
+	uint64_t	rsi;
+	uint64_t	rdx;
+	uint64_t	r10;		/* R10 := RCX prior to syscall trap */
+	uint64_t	r8;
+	uint64_t	r9;		/* arg5 for system call */
+
+        uint64_t	cr2;
+        uint64_t	r15;
+        uint64_t	r14;
+        uint64_t	r13;
+        uint64_t	r12;
+        uint64_t	r11;
+	uint64_t	rbp;
+	uint64_t	rbx;
+	uint64_t	rcx;
+	uint64_t	rax;
+
+	uint32_t	gs;
+	uint32_t	fs;
+
+	uint64_t 	_pad;
+
+	struct	x86_64_intr_stack_frame	isf;
+};
+typedef struct x86_saved_state64 x86_saved_state64_t;
+#define x86_SAVED_STATE64_COUNT	((mach_msg_type_number_t) \
+	(sizeof (struct x86_saved_state64)/sizeof(unsigned int)))
+
+extern uint32_t get_eflags_exportmask(void);
+
+/*
+ * Unified, tagged saved state:
+ */
+typedef struct {
+	uint32_t			flavor;
+	uint32_t			_pad_for_16byte_alignment[3];
+	union {
+		x86_saved_state32_t	ss_32;
+		x86_saved_state64_t	ss_64;
+	} uss;
+} x86_saved_state_t;
+#define	ss_32	uss.ss_32
+#define	ss_64	uss.ss_64
+#pragma pack()
+
+static inline boolean_t
+is_saved_state64(x86_saved_state_t *iss)
+{
+	return (iss->flavor == x86_SAVED_STATE64);
+}
+
+static inline boolean_t
+is_saved_state32(x86_saved_state_t *iss)
+{
+	return (iss->flavor == x86_SAVED_STATE32);
+}
+
+static inline x86_saved_state32_t *
+saved_state32(x86_saved_state_t *iss)
+{
+	return &iss->ss_32; 
+}
+
+static inline x86_saved_state64_t *
+saved_state64(x86_saved_state_t *iss)
+{
+	return &iss->ss_64; 
+}
+
+#endif /* XNU_KERNEL_PRIVATE */
 
 #endif	/* _MACH_I386_THREAD_STATUS_H_ */

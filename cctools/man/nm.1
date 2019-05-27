@@ -1,8 +1,24 @@
-.TH NM 1 "May 27, 2015" "Apple, Inc."
+.TH NM 1 "May 23, 2017" "Apple, Inc."
 .SH NAME
 nm \- display name list (symbol table)
 .SH SYNOPSIS
-.B nm
+.B llvm-nm
+[
+.B \-agnoprumxjlPA
+] [
+.B \-
+] [
+.BI \-t " format"
+] [[
+.BI \-arch " arch_flag
+]...] [
+.IR file " ... ]"
+[
+.B \-s 
+.I segname sectname
+]
+
+.B nm-classic
 [
 .B \-agnoprumxjlfPA
 [
@@ -18,10 +34,32 @@ nm \- display name list (symbol table)
 ]...] [
 .IR file " ... ]"
 .SH DESCRIPTION
+As of Xcode 8.0 the default
+.IR nm (1)
+tool is 
+.IR llvm-nm (1).
+They for the most part have the same options except for
+.B \-f
+and
+.B \-s
+which the differences are noted below.  More help on options for
+.IR llvm-nm (1)
+is provided when running it with the
+.B \-\-help
+option.
+
 .I Nm
-displays the name list (symbol table) of each object
+displays the name list (symbol table of nlist structures) of each object
 .I file
-in the argument list.  If an argument is an archive, a listing for each object
+in the argument list.  In some cases, as with an object that has had
+.IR strip (1)
+with its
+.B \-T
+option used on the object, that can be different than the dyld information.
+For that information use
+.IR dyldinfo (1).
+
+If an argument is an archive, a listing for each object
 file in the archive will be produced.  
 .I File
 can be of the form libx.a(x.o), in which case only symbols from that member of the
@@ -138,6 +176,9 @@ Just display the symbol names (no value or type).
 .BI \-s " segname sectname"
 List only those symbols in the section
 .I (segname,sectname).
+For
+.IR llvm-nm (1)
+this option must be last on the command line, and after the files.
 .TP
 .B \-l
 List a pseudo symbol
@@ -164,9 +205,17 @@ if the file contains it;
 otherwise, symbols for all architectures in the file
 are displayed.
 .TP
+.B \-f " format"
+For
+.IR llvm-nm (1)
+this specifies the output format.  Where format can be bsd, sysv, posix or
+darwin.
+.TP
 .B \-f
-Display the symbol table of a dynamic library flat (as one file not separate
-modules).
+For
+.IR nm-classic (1)
+this displays the symbol table of a dynamic library flat (as one file not separate modules).  This is obsolete and not supported with
+.IR llvm-nm(1).
 .TP
 .B \-A
 Write the pathname or library name of an object on each line.
@@ -195,7 +244,7 @@ section if present instead of the object's symbol table.  This is the default
 if the object has no symbol table and there is an (\_\^\_LLVM,\_\^\_bundle)
 section.
 .SH SEE ALSO
-ar(1), ar(5), Mach-O(5), stab(5), nlist(3)
+ar(1), ar(5), Mach-O(5), stab(5), nlist(3), dyldinfo(1)
 .SH BUGS
 Displaying Mach-O symbols with
 .B \-m

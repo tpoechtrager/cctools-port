@@ -227,6 +227,25 @@ private:
     ld::Internal&                           _state;
 };
 
+#if LTO_API_VERSION >= 7
+static void ltoDiagnosticHandler(lto_codegen_diagnostic_severity_t severity, const char* message, void*)
+{
+    switch ( severity ) {
+#if LTO_API_VERSION >= 10
+        case LTO_DS_REMARK:
+#endif
+        case LTO_DS_NOTE:
+            break; // ignore remarks and notes
+        case LTO_DS_WARNING:
+            warning("%s", message);
+            break;
+        case LTO_DS_ERROR:
+            throwf("%s", message);
+    }
+}
+#endif
+
+
 BitcodeAtom::BitcodeAtom()
 : ld::Atom(bitcodeBundleSection,
            ld::Atom::definitionRegular, ld::Atom::combineNever,
@@ -294,6 +313,11 @@ BitcodeObfuscator::BitcodeObfuscator()
         _lto_get_asm_symbol_num == NULL || _lto_get_asm_symbol_name == NULL || ::lto_api_version() < 14 )
         throwf("loaded libLTO doesn't support -bitcode_hide_symbols: %s", ::lto_get_version());
     _obfuscator = ::lto_codegen_create_in_local_context();
+
+#if LTO_API_VERSION >= 7
+    lto_codegen_set_diagnostic_handler(_obfuscator, ltoDiagnosticHandler, NULL);
+#endif
+
   #if LTO_API_VERSION >= 14
     lto_codegen_set_should_internalize(_obfuscator, false);
   #endif
@@ -464,6 +488,7 @@ void BundleHandler::copyXARProp(xar_file_t src, xar_file_t dst)
              strcmp(key, "hide-symbols") == 0 ||
              strcmp(key, "platform") == 0 ||
              strcmp(key, "sdkversion") == 0 ||
+             strcmp(key, "swift-version") == 0 ||
              strcmp(key, "dylibs/lib") == 0 ||
              strcmp(key, "link-options/option") == 0 ) {
             xar_prop_create(dst, key, val);
@@ -675,6 +700,14 @@ void BitcodeBundle::doPass()
             BitcodeTempFile ltoTemp(f.c_str(), false); // Keep the temp file because it needs to be read in later in the pass.
             BitcodeHandler bitcodeHandler((char*)ltoTemp.getContent(), ltoTemp.getSize());
             bitcodeHandler.populateMustPreserveSymbols(obfuscator);
+        }
+        // add must preserve symbols from compiler_rt input.
+        for ( auto &f : _state.filesFromCompilerRT ) {
+            std::vector<const char*> symbols;
+            if ( f->fileContent() && mach_o::relocatable::getNonLocalSymbols(f->fileContent(), symbols) ) {
+                for ( auto &sym : symbols)
+                    obfuscator->addMustPreserveSymbols(sym);
+            }
         }
 
         // special symbols supplied by linker
@@ -962,10 +995,18 @@ void BitcodeBundle::doPass()
     // Write SDK version
     if ( _options.sdkPaths().size() > 1 )
         throwf("only one -syslibroot is accepted for bitcode bundle");
-    if ( xar_prop_create((xar_file_t)linkXML, "platform", _options.getPlatformStr().c_str()) != 0 )
+    if ( xar_prop_create((xar_file_t)linkXML, "platform", _options.platforms().to_str().c_str()) != 0 )
         throwf("could not add platform name to bitcode bundle");
     if ( xar_prop_create((xar_file_t)linkXML, "sdkversion", _options.getSDKVersionStr().c_str()) != 0 )
         throwf("could not add SDK version to bitcode bundle");
+
+    // Write swift version into header
+    if (_state.swiftVersion != 0) {
+        char swiftVersion[64];
+        Options::userReadableSwiftVersion(_state.swiftVersion, swiftVersion);
+        if ( xar_prop_create((xar_file_t)linkXML, "swift-version", swiftVersion) )
+            throwf("could not add swift version to bitcode bundle");
+    }
 
     // Write dylibs
     char sdkRoot[PATH_MAX];
@@ -1000,6 +1041,12 @@ void BitcodeBundle::doPass()
                     throwf("could not add dylib options to bitcode bundle");
             }
         }
+    }
+
+    // Write if compiler_rt is force loaded
+    if (_state.forceLoadCompilerRT) {
+        if ( xar_prop_create((xar_file_t)linkXML, "rt-forceload", "1") != 0 )
+            throwf("could not add compiler_rt force_load info to bitcode bundle");
     }
 
     // Write link-line into archive

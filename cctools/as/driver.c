@@ -241,6 +241,7 @@ char **envp)
 	   (arch_flag.cputype == CPU_TYPE_X86_64 ||
 	    arch_flag.cputype == CPU_TYPE_I386 ||
 	    arch_flag.cputype == CPU_TYPE_ARM64 ||
+	    arch_flag.cputype == CPU_TYPE_ARM64_32 ||
 	    arch_flag.cputype == CPU_TYPE_ARM)){
 	    qflag = TRUE;
 	}
@@ -248,6 +249,7 @@ char **envp)
 	   (arch_flag.cputype != CPU_TYPE_X86_64 &&
 	    arch_flag.cputype != CPU_TYPE_I386 &&
 	    arch_flag.cputype != CPU_TYPE_ARM64 &&
+	    arch_flag.cputype != CPU_TYPE_ARM64_32 &&
 	    arch_flag.cputype != CPU_TYPE_ARM)){
 	    printf("%s: can't specifiy -q with -arch %s\n", progname,
 		   arch_flag.name);
@@ -264,9 +266,11 @@ char **envp)
  	 * in the usual place as the other target assemblers this use of clang
 	 * will be removed.
 	 */ 
-	if(arch_flag.cputype == CPU_TYPE_ARM64){
+	if(arch_flag.cputype == CPU_TYPE_ARM64 ||
+           arch_flag.cputype == CPU_TYPE_ARM64_32){
 	    if(Qflag == TRUE){
-		printf("%s: can't specifiy -Q with -arch arm64\n", progname);
+		printf("%s: can't specifiy -Q with -arch %s\n", progname, 
+                       arch_flag.cputype == CPU_TYPE_ARM64 ? "arm64" : "arm64_32");
 		exit(1);
 	    }
 	    run_clang = 1;
@@ -295,6 +299,7 @@ char **envp)
 	   (arch_flag.cputype == CPU_TYPE_X86_64 ||
 	    arch_flag.cputype == CPU_TYPE_I386 ||
 	    arch_flag.cputype == CPU_TYPE_ARM64 ||
+	    arch_flag.cputype == CPU_TYPE_ARM64_32 ||
 	    arch_flag.cputype == CPU_TYPE_ARM)){
 #if 0 /* cctools port */
 	    as = makestr(prefix, CLANG, NULL);

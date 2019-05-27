@@ -501,7 +501,7 @@ struct ofile *ofile,
 char *arch_name,
 void *cookie)
 {
-    uint32_t ncmds, mh_flags;
+    uint32_t ncmds, mh_flags, mh_filetype;
     struct cmd_flags *cmd_flags;
     struct process_flags process_flags;
     uint32_t i, j, k;
@@ -562,10 +562,12 @@ void *cookie)
 	if(ofile->mh != NULL){
 	    ncmds = ofile->mh->ncmds;
 	    mh_flags = ofile->mh->flags;
+	    mh_filetype = ofile->mh->filetype;
 	}
 	else{
 	    ncmds = ofile->mh64->ncmds;
 	    mh_flags = ofile->mh64->flags;
+	    mh_filetype = ofile->mh64->filetype;
 	}
 	for(i = 0; i < ncmds; i++){
 	    if(st == NULL && lc->cmd == LC_SYMTAB){
@@ -669,6 +671,10 @@ void *cookie)
 		    for(j = 0; j < sg64->nsects; j++){
 			if(strcmp((s64 + j)->sectname, SECT_TEXT) == 0 &&
 			   strcmp((s64 + j)->segname, SEG_TEXT) == 0)
+			    process_flags.text_nsect = k + 1;
+			else if(mh_filetype == MH_KEXT_BUNDLE &&
+			   strcmp((s64 + j)->sectname, SECT_TEXT) == 0 &&
+			   strcmp((s64 + j)->segname, "__TEXT_EXEC") == 0)
 			    process_flags.text_nsect = k + 1;
 			else if(strcmp((s64 + j)->sectname, SECT_DATA) == 0 &&
 				strcmp((s64 + j)->segname, SEG_DATA) == 0)
@@ -1873,7 +1879,7 @@ struct value_diff *value_diffs)
 		    else{
 			printf(" (indirect for ");
 			printf(ta_xfmt, symbols[i].nl.n_value);
-			printf(" %s)\n", symbols[i].indr_name);
+			printf(" %s)\n", symbols[i].nl.n_value + strings);
 		    }
 		}
 		else

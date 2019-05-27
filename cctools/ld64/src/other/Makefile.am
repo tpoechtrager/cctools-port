@@ -43,6 +43,7 @@ ObjectDump_SOURCES = \
 	$(top_srcdir)/ld64/src/ld/debugline.c 
 ObjectDump_LDADD =  \
 	$(top_builddir)/ld64/src/ld/parsers/libParsers.la \
+        $(top_builddir)/ld64/src/3rd/BlocksRuntime/libBlocksRuntime.la  \
 	$(LTO_LIB)
 
 dyldinfo_SOURCES = dyldinfo.cpp

@@ -351,12 +351,14 @@ ld::Section StubAtom::_s_section("__TEXT", "__stubs", ld::Section::typeStub);
 
 class NonLazyPointerAtom : public ld::Atom {
 public:
-											NonLazyPointerAtom(ld::passes::stubs::Pass& pass, const ld::Atom& stubTo)
+	NonLazyPointerAtom(ld::passes::stubs::Pass& pass, const ld::Atom& stubTo,
+					   bool weakImport)
 				: ld::Atom(_s_section, ld::Atom::definitionRegular, 
 							ld::Atom::combineNever, ld::Atom::scopeLinkageUnit, ld::Atom::typeNonLazyPointer, 
 							symbolTableNotIn, false, false, false, ld::Atom::Alignment(3)), 
 				_stubTo(stubTo),
 				_fixup1(0, ld::Fixup::k1of1, ld::Fixup::kindStoreTargetAddressLittleEndian64, &stubTo) {
+					_fixup1.weakImport = weakImport;
 					pass.addAtom(*this);
 				}
 
@@ -380,14 +382,15 @@ ld::Section NonLazyPointerAtom::_s_section("__DATA", "__got", ld::Section::typeN
 
 
 
-class KextStubAtom : public ld::Atom {
+class NonLazyStubAtom : public ld::Atom {
 public:
-											KextStubAtom(ld::passes::stubs::Pass& pass, const ld::Atom& stubTo)
+	NonLazyStubAtom(ld::passes::stubs::Pass& pass, const ld::Atom& stubTo,
+					bool weakImport)
 				: ld::Atom(_s_section, ld::Atom::definitionRegular, ld::Atom::combineNever,
 							ld::Atom::scopeLinkageUnit, ld::Atom::typeStub, 
 							symbolTableNotIn, false, false, false, ld::Atom::Alignment(1)), 
 				_stubTo(stubTo), 
-				_nonLazyPointer(pass, stubTo),
+				_nonLazyPointer(pass, stubTo, weakImport),
 				_fixup(2, ld::Fixup::k1of1, ld::Fixup::kindStoreTargetAddressX86PCRel32, &_nonLazyPointer) { pass.addAtom(*this); }
 
 	virtual const ld::File*					file() const					{ return _stubTo.file(); }
@@ -414,7 +417,7 @@ private:
 	static ld::Section						_s_section;
 };
 
-ld::Section KextStubAtom::_s_section("__TEXT", "__stubs", ld::Section::typeStub);
+ld::Section NonLazyStubAtom::_s_section("__TEXT", "__stubs", ld::Section::typeStub);
 
 
 } // namespace x86_64 

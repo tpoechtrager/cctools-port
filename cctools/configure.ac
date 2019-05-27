@@ -1,4 +1,4 @@
-AC_INIT([cctools], [895], [t.poechtrager@gmail.com])
+AC_INIT([cctools], [921], [t.poechtrager@gmail.com])
 
 AC_CANONICAL_BUILD
 AC_CANONICAL_HOST
@@ -9,7 +9,6 @@ AC_ARG_PROGRAM
 AM_CONDITIONAL([ISDARWIN], [false])
 
 isdarwin=no
-iscygwin=no
 
 if test "x$CFLAGS" = "x"; then
   CFLAGS="-O3"
@@ -43,69 +42,25 @@ case $host_os in
     isdarwin=yes
     AM_CONDITIONAL([ISDARWIN], [true])
   ;;
-  openbsd* )
-    XCC="egcc"
-    XCXX="eg++"
-  ;;
   cygwin* )
-    iscygwin=yes
-    # https://github.com/tpoechtrager/osxcross/issues/87
-    EXTRAFLAGS="-D__LARGE64_FILES -D_GNU_SOURCE -fno-PIC"
-    WARNINGS="-Wno-attributes"
-    XCC="gcc"
-    XCXX="g++"
+    echo "Cygwin is no longer supported." 1>&2
+    exit 1
   ;;
 esac
 
-if test "x$isdarwin" = "xno"; then
-  case $host_cpu in
-    arm* )
-      # clang miscompiles ld64 on arm
-      if test "x$isdarwin" = "xno"; then
-        XCC="gcc"
-        XCXX="g++"
-      fi
-    ;;
-  esac
-fi
-
-if test "x$XCC" = "x"; then
-  XCC="clang"
-fi
-
-if test "x$XCXX" = "x"; then
-  XCXX="clang++"
-fi
-
 if test "x$CC" = "x"; then
   if test "x$build" != "x$host"; then
-    CC="${host_alias}-${XCC}"
-    which $CC 2>/dev/null 1>&2
-    if test $? -ne 0; then
-      CC="${host_alias}-gcc"
-    fi
+    CC="${host_alias}-clang"
    else
-    CC=$XCC
-    which $CC 2>/dev/null 1>&2
-    if test $? -ne 0; then
-      CC="gcc"
-    fi
+    CC=clang
   fi
 fi
 
 if test "x$CXX" = "x"; then
   if test "x$build" != "x$host"; then
-    CXX="${host_alias}-${XCXX}"
-    which $CXX 2>/dev/null 1>&2
-    if test $? -ne 0; then
-      CXX="${host_alias}-g++"
-    fi
+    CXX="${host_alias}-clang++"
   else
-    CXX=$XCXX
-    which $CXX 2>/dev/null 1>&2
-    if test $? -ne 0; then
-      CXX="g++"
-    fi
+    CXX=clang++
   fi
 fi
 
@@ -120,12 +75,8 @@ case "$CCVERSION" in
     OBJCWARNINGS="-Wall -Wno-objc-root-class -Wno-deprecated-objc-isa-usage"
   ;;
   * )
-    WARNINGS="$WARNINGS -Wall -Wno-format -Wno-enum-compare -Wno-unused-result -Wno-unused-variable"
-    WARNINGS="$WARNINGS -Wno-unused-but-set-variable -Wno-deprecated -Wno-deprecated-declarations"
-    WARNINGS="$WARNINGS -Wno-char-subscripts -Wno-strict-aliasing"
-    OBJCWARNINGS="-Wall"
-    CFLAGS="$CFLAGS -std=gnu99 -D__private_extern__="
-    CXXFLAGS="$CXXFLAGS -D__private_extern__="
+    echo "You must compile this project with clang. Other compilers are no longer supported." 2>&1
+    exit 1
   ;;
 esac
 
@@ -134,12 +85,7 @@ case "$CXXVERSION" in
     if test "x$isdarwin" = "xyes"; then
       CXXFLAGS="$CXXFLAGS -stdlib=libc++"
     fi
-    # can't use -fblocks on cyggwin due to a clang driver bug
-    if test "x$iscygwin" = "xno"; then
-      EXTRACXXFLAGS="$EXTRACXXFLAGS -fblocks"
-    else
-      EXTRAFLAGS="$EXTRAFLAGS -integrated-as"
-    fi
+    EXTRACXXFLAGS="$EXTRACXXFLAGS -fblocks"
   ;;
 esac
 
@@ -159,12 +105,6 @@ case $host_cpu in
         echo "" >&2
         echo "clang is known to miscompile ld64 on arm platforms:" >&2
         echo "https://github.com/tpoechtrager/cctools-port/issues/1#issuecomment-59118615" >&2
-        if test "x$isdarwin" = "xno"; then
-          echo "" >&2
-          echo "please use gcc instead;  CC=gcc CXX=g++ ./configure" >&2
-          echo "" >&2
-          exit 1
-        fi
         echo "" >&2
         sleep 2
       ;;
@@ -425,11 +365,7 @@ AC_CONFIG_FILES([as/ppc64/Makefile])
 AC_CONFIG_FILES([man/Makefile])
 AC_CONFIG_FILES([misc/Makefile])
 AC_CONFIG_FILES([otool/Makefile])
-
-if test "x$isdarwin" != "xyes"; then
-  AC_CONFIG_FILES([libobjc2/Makefile])
-fi
-
+AC_CONFIG_FILES([libobjc2/Makefile])
 AC_CONFIG_FILES([ld64/Makefile])
 AC_CONFIG_FILES([ld64/src/Makefile])
 AC_CONFIG_FILES([ld64/src/3rd/Makefile])

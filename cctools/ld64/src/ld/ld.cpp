@@ -79,6 +79,7 @@
 #include "passes/compact_unwind.h"
 #include "passes/order.h"
 #include "passes/branch_island.h"
+#include "passes/thread_starts.h"
 #include "passes/branch_shim.h"
 #include "passes/objc.h"
 #include "passes/dylibs.h"
@@ -91,6 +92,7 @@
 #include "parsers/lto_file.h"
 #include "parsers/opaque_section_file.h"
 
+const ld::VersionSet ld::File::_platforms;
 
 struct PerformanceStatistics {
 	uint64_t						startTool;
@@ -128,7 +130,6 @@ private:
 	{
 	public:
 									FinalSection(const ld::Section& sect, uint32_t sectionsSeen, const Options&);
-		static int					sectionComparer(const void* l, const void* r);
 		static const ld::Section&	outputSection(const ld::Section& sect, bool mergeZeroFill);
 		static const ld::Section&	objectOutputSection(const ld::Section& sect, const Options&);
 	private:
@@ -366,6 +367,8 @@ uint32_t InternalState::FinalSection::sectionOrder(const ld::Section& sect, uint
 				return 12;
 			case ld::Section::typeStubHelper:
 				return 13;
+			case ld::Section::typeThreadStarts:
+				return INT_MAX-5;
 			case ld::Section::typeLSDA:
 				return INT_MAX-4;
 			case ld::Section::typeUnwindInfo:
@@ -438,6 +441,8 @@ uint32_t InternalState::FinalSection::sectionOrder(const ld::Section& sect, uint
 					return 32;
 				else if ( strcmp(sect.sectionName(), "__objc_data") == 0 ) 
 					return 33;
+				else if ( strcmp(sect.sectionName(), "__objc_const_ax") == 0 )
+					return 34;
 				else
 					return sectionsSeen+40;
 		}
@@ -666,6 +671,7 @@ ld::Internal::FinalSection* InternalState::addAtom(const ld::Atom& atom)
 			if ( (sectType != ld::Section::typeZeroFill) 
 			  && (sectType != ld::Section::typeUnclassified) 
 			  && (sectType != ld::Section::typeTentativeDefs)
+			  && (sectType != ld::Section::typeTLVDefs)
 			  && (sectType != ld::Section::typeDyldInfo) ) {
 				if ( !wildCardMatch )
 					warning("cannot move symbol '%s' from file %s to segment '%s' because symbol is not data (is %d)", atom.name(), path, dstSeg, sectType);
@@ -691,6 +697,26 @@ ld::Internal::FinalSection* InternalState::addAtom(const ld::Atom& atom)
 			}
 		}
 	}
+	else if ( atom.symbolTableInclusion() == ld::Atom::symbolTableNotInFinalLinkedImages ) {
+		const char* symName = atom.name();
+		if ( strncmp(symName, "l_OBJC_$_INSTANCE_METHODS_", 26) == 0 ) {
+			if ( _options.moveAXMethodList(&symName[26]) ) {
+				curSectName  = "__objc_const_ax";
+				fs = this->getFinalSection(curSegName, curSectName, sectType);
+				if ( _options.traceSymbolLayout() )
+					printf("symbol '%s', .axsymbol mapped it to %s/%s\n", atom.name(), curSegName, curSectName);
+			}
+		}
+		else if ( strncmp(symName, "l_OBJC_$_CLASS_METHODS_", 23) == 0 ) {
+			if ( _options.moveAXMethodList(&symName[23]) ) {
+				curSectName  = "__objc_const_ax";
+				fs = this->getFinalSection(curSegName, curSectName, sectType);
+				if ( _options.traceSymbolLayout() )
+					printf("symbol '%s', .axsymbol mapped it to %s/%s\n", atom.name(), curSegName, curSectName);
+			}
+		}
+	}
+
 	// support for -rename_section and -rename_segment
 	for (const Options::SectionRename& rename : _options.sectionRenames()) {
 		if ( (strcmp(curSectName, rename.fromSection) == 0) && (strcmp(curSegName, rename.fromSegment) == 0) ) {
@@ -823,22 +849,19 @@ ld::Internal::FinalSection* InternalState::getFinalSection(const ld::Section& in
 }
 
 
-int InternalState::FinalSection::sectionComparer(const void* l, const void* r)
-{
-	const FinalSection* left  = *(FinalSection**)l;
-	const FinalSection* right = *(FinalSection**)r;
-	if ( left->_segmentOrder != right->_segmentOrder )
-		return (left->_segmentOrder - right->_segmentOrder);
-	return (left->_sectionOrder - right->_sectionOrder);
-}
-
 void InternalState::sortSections()
 {
 	//fprintf(stderr, "UNSORTED final sections:\n");
 	//for (std::vector<ld::Internal::FinalSection*>::iterator it = sections.begin(); it != sections.end(); ++it) {
 	//	fprintf(stderr, "final section %p %s/%s\n", (*it), (*it)->segmentName(), (*it)->sectionName());
 	//}
-	qsort(&sections[0], sections.size(), sizeof(FinalSection*), &InternalState::FinalSection::sectionComparer);
+	std::stable_sort(sections.begin(), sections.end(), [](const ld::Internal::FinalSection* l, const ld::Internal::FinalSection* r) {
+		const FinalSection* left = (FinalSection*)l;
+		const FinalSection* right = (FinalSection*)r;
+		if ( left->_segmentOrder != right->_segmentOrder )
+			return (left->_segmentOrder < right->_segmentOrder);
+		return (left->_sectionOrder < right->_sectionOrder);
+	});
 	//fprintf(stderr, "SORTED final sections:\n");
 	//for (std::vector<ld::Internal::FinalSection*>::iterator it = sections.begin(); it != sections.end(); ++it) {
 	//	fprintf(stderr, "final section %p %s/%s\n", (*it), (*it)->segmentName(), (*it)->sectionName());
@@ -948,6 +971,8 @@ void InternalState::setSectionSizesAndAlignments()
 						this->hasWeakExternalSymbols = true;
 						if ( _options.warnWeakExports()	) 
 							warning("weak external symbol: %s", atom->name());
+						else if ( _options.noWeakExports()	)
+							throwf("weak external symbol: %s", atom->name());
 				}
 			}
 			sect->size = offset;
@@ -1361,8 +1386,14 @@ int main(int argc, const char* argv[])
 		ld::passes::bitcode_bundle::doPass(options, state);  // must be after dylib
 #endif // HAVE_XAR_XAR_H && LTO_SUPPORT
 
+		// Sort again so that we get the segments in order.
+		state.sortSections();
+		ld::passes::thread_starts::doPass(options, state);  // must be after dylib
+
 		// sort final sections
 		state.sortSections();
+
+		options.writeDependencyInfo();
 
 		// write output file
 		statistics.startOutput = mach_absolute_time();

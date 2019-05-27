@@ -1,4 +1,4 @@
-.TH LIPO 1 "September 12, 2006" "Apple Computer, Inc."
+.TH LIPO 1 "July 5, 2018" "Apple Computer, Inc."
 .SH NAME
 lipo \- create or operate on universal files
 .SH SYNOPSIS
@@ -72,8 +72,14 @@ arguments may be any of the supported architecture names listed in the man page
 .SH OPTIONS
 .TP 
 .BI \-info
-Briefly list the architecture types in the input universal file 
-(just the names of each architecture).
+Display a brief description of each input file along with the names of each
+architecture type in that input file.
+.TP
+.BI \-archs
+Display only the architecture names present in a single input file. Each
+architecture name is a single word, making this option suitable for shell
+scripting. Unknown architectures will be represented by "unknown" along with
+the numeric CPU type and CPU subtype values as a single word.
 .TP
 .BI \-detailed_info
 Display a detailed list of the architecture types in the input universal file 

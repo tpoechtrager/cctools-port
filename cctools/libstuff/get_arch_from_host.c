@@ -515,6 +515,26 @@ struct arch_flag *specific_arch_flag)
 		if(specific_arch_flag != NULL)
 		    specific_arch_flag->name = "arm64v8";
 		return(1);
+	    case CPU_SUBTYPE_ARM64E:
+		if(family_arch_flag != NULL){
+		    family_arch_flag->name = "arm64";
+		    family_arch_flag->cpusubtype = CPU_SUBTYPE_ARM64_ALL;
+		}
+		if(specific_arch_flag != NULL)
+		    specific_arch_flag->name = "arm64e";
+		return(1);
+	    }
+	    break;
+	case CPU_TYPE_ARM64_32:
+	    switch(host_basic_info.cpu_subtype){
+	    case CPU_SUBTYPE_ARM64_32_V8:
+		if(family_arch_flag != NULL){
+		    family_arch_flag->name = "arm64_32";
+		    family_arch_flag->cpusubtype = CPU_SUBTYPE_ARM64_32_V8;
+		}
+		if(specific_arch_flag != NULL)
+		    specific_arch_flag->name = "arm64_32";
+		return(1);
 	    }
 	    break;
 	}

@@ -65,8 +65,7 @@ struct objc_image_info  {
 template <typename A>
 class ObjCImageInfoAtom : public ld::Atom {
 public:
-											ObjCImageInfoAtom(ld::File::ObjcConstraint objcConstraint, 
-															  bool compaction, bool abi2, bool hasCategoryClassProperties, uint8_t swiftVersion);
+											ObjCImageInfoAtom(bool abi2, bool hasCategoryClassProperties, uint8_t swiftVersion);
 
 	virtual const ld::File*					file() const					{ return NULL; }
 	virtual const char*						name() const					{ return "objc image info"; }
@@ -89,35 +88,13 @@ template <typename A> ld::Section ObjCImageInfoAtom<A>::_s_sectionABI2("__DATA",
 
 
 template <typename A>
-ObjCImageInfoAtom<A>::ObjCImageInfoAtom(ld::File::ObjcConstraint objcConstraint, bool compaction, 
-										bool abi2, bool hasCategoryClassProperties, uint8_t swiftVersion)
+ObjCImageInfoAtom<A>::ObjCImageInfoAtom(bool abi2, bool hasCategoryClassProperties, uint8_t swiftVersion)
 	: ld::Atom(abi2 ? _s_sectionABI2 : _s_sectionABI1, ld::Atom::definitionRegular, ld::Atom::combineNever,
 							ld::Atom::scopeLinkageUnit, ld::Atom::typeUnclassified, 
 							symbolTableNotIn, false, false, false, ld::Atom::Alignment(2))
 {  
 	
 	uint32_t value = 0;
-	switch ( objcConstraint ) {
-		case ld::File::objcConstraintNone:
-		case ld::File::objcConstraintRetainRelease:
-			if ( compaction ) 
-				warning("ignoring -objc_gc_compaction because code not compiled for ObjC garbage collection");
-			break;
-		case ld::File::objcConstraintRetainReleaseOrGC:
-			value |= OBJC_IMAGE_SUPPORTS_GC;
-		if ( compaction ) 
-			value |= OBJC_IMAGE_SUPPORTS_COMPACTION;
-			break;
-		case ld::File::objcConstraintGC:
-			value |= OBJC_IMAGE_SUPPORTS_GC | OBJC_IMAGE_REQUIRES_GC;
-			if ( compaction ) 
-				value |= OBJC_IMAGE_SUPPORTS_COMPACTION;
-			break;
-		case ld::File::objcConstraintRetainReleaseForSimulator:
-				value |= OBJC_IMAGE_IS_SIMULATED;
-			break;
-	}
-
 	if ( hasCategoryClassProperties ) {
 		value |= OBJC_IMAGE_HAS_CATEGORY_CLASS_PROPERTIES;
 	}
@@ -421,9 +398,12 @@ template <typename A>
 const ld::Atom*	Category<A>::getClassProperties(ld::Internal& state, const ld::Atom* contentAtom)
 {
 	// Only specially-marked files have this field.
-	if (!contentAtom->file()->objcHasCategoryClassPropertiesField()) return NULL;
-
-	return ObjCData<A>::getPointerInContent(state, contentAtom, 6*sizeof(pint_t)); // category_t.classProperties
+	if ( const ld::relocatable::File* objFile = dynamic_cast<const ld::relocatable::File*>(contentAtom->file()) ) {
+		if ( objFile->objcHasCategoryClassPropertiesField() ) {
+			return ObjCData<A>::getPointerInContent(state, contentAtom, 6*sizeof(pint_t)); // category_t.classProperties
+		}
+	}
+	return NULL;
 }
 
 
@@ -1110,12 +1090,12 @@ MethodListAtom<A>::MethodListAtom(ld::Internal& state, const ld::Atom* baseMetho
 					if ( baseMethodListMethodNameAtoms.count(target) != 0 ) {
 						warning("%s method '%s' in category from %s overrides method from class in %s", 
 							(meta ? "meta" : "instance"), target->rawContentPointer(),
-							categoryMethodListAtom->file()->path(), baseMethodList->file()->path() );
+							categoryMethodListAtom->safeFilePath(), baseMethodList->safeFilePath() );
 					}
 					if ( categoryMethodNameAtoms.count(target) != 0 ) {
 						warning("%s method '%s' in category from %s conflicts with same method from another category", 
 							(meta ? "meta" : "instance"), target->rawContentPointer(),
-							categoryMethodListAtom->file()->path());
+							categoryMethodListAtom->safeFilePath());
 					}
 					categoryMethodNameAtoms.insert(target);
 				}
@@ -1270,12 +1250,14 @@ void scanCategories(ld::Internal& state,
 				
 				if (Category<A>::getClassProperties(state, categoryAtom)) {
 					haveCategoriesWithNonNullClassProperties = true;
-					// fprintf(stderr, "category in file %s has non-null class properties\n", categoryAtom->file()->path());
+					// fprintf(stderr, "category in file %s has non-null class properties\n", categoryAtom->safeFilePath());
 				}
-				
-				if (!categoryAtom->file()->objcHasCategoryClassPropertiesField()) {
-					haveCategoriesWithoutClassPropertyStorage = true;
-					// fprintf(stderr, "category in file %s has no storage for class properties\n", categoryAtom->file()->path());
+
+				if ( const ld::relocatable::File* objFile = dynamic_cast<const ld::relocatable::File*>(categoryAtom->file()) ) {
+					if ( !objFile->objcHasCategoryClassPropertiesField() ) {
+						haveCategoriesWithoutClassPropertyStorage = true;
+						// fprintf(stderr, "category in file %s has no storage for class properties\n", categoryAtom->safeFilePath());
+					}
 				}
 			}
 		}
@@ -1287,22 +1269,10 @@ template <typename A, bool isObjC2>
 void doPass(const Options& opts, ld::Internal& state)
 {
 	// Do nothing if the output has no ObjC content.
-	if ( state.objcObjectConstraint == ld::File::objcConstraintNone ) {
+	if ( !state.hasObjC ) {
 	 	return;
 	}
-
-	// verify dylibs are GC compatible with object files
-	if ( state.objcObjectConstraint != state.objcDylibConstraint ) {
-		if (   (state.objcDylibConstraint == ld::File::objcConstraintRetainRelease)
-			&& (state.objcObjectConstraint == ld::File::objcConstraintGC) ) {
-				throw "Linked dylibs built for retain/release but object files built for GC-only";
-		}
-		else if (   (state.objcDylibConstraint == ld::File::objcConstraintGC)
-			     && (state.objcObjectConstraint == ld::File::objcConstraintRetainRelease) ) {
-				throw "Linked dylibs built for GC-only but object files built for retain/release";
-		}
-	}
-
+	
 	if ( opts.objcCategoryMerging() ) {
 		// optimize classes defined in this linkage unit by merging in categories also in this linkage unit
 		OptimizeCategories<A>::doit(opts, state);
@@ -1324,8 +1294,7 @@ void doPass(const Options& opts, ld::Internal& state)
 
 	// add image info atom
 	// The HasCategoryClassProperties bit is set as often as possible.
-	state.addAtom(*new ObjCImageInfoAtom<A>(state.objcObjectConstraint, opts.objcGcCompaction(), isObjC2,
-											!haveCategoriesWithoutClassPropertyStorage, state.swiftVersion));
+	state.addAtom(*new ObjCImageInfoAtom<A>(isObjC2, !haveCategoriesWithoutClassPropertyStorage, state.swiftVersion));
 }
 
 
@@ -1353,6 +1322,12 @@ void doPass(const Options& opts, ld::Internal& state)
 #endif
 #if SUPPORT_ARCH_arm64
 		case CPU_TYPE_ARM64:
+#if SUPPORT_ARCH_arm64e
+			if (opts.subArchitecture() == CPU_SUBTYPE_ARM64_E) {
+				doPass<arm64e, true>(opts, state);
+				break;
+			}
+#endif
 			doPass<arm64, true>(opts, state);
 			break;
 #endif
