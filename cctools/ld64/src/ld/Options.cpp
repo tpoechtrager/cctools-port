@@ -5865,6 +5865,8 @@ void Options::checkIllegalOptionCombinations()
 	}
 
 	// <rdar://problem/39095109> Linker warning for i386 macOS binaries
+	// ld64-port: addded #if 0
+#if 0
 	if ( (architecture() == CPU_TYPE_I386) && platforms().contains(ld::kPlatform_macOS) ) {
 		bool internalSDK = false;
 		for (const char* sdkPath : fSDKPaths) {
@@ -5878,6 +5880,7 @@ void Options::checkIllegalOptionCombinations()
 		if ( !internalSDK )
 			warning("The i386 architecture is deprecated for macOS (remove from the Xcode build setting: ARCHS)");
 	}
+#endif
 }
 
 
