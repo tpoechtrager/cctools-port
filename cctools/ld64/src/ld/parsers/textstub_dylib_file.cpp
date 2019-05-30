@@ -122,8 +122,6 @@ static ld::VersionSet mapPlatform(tapi::Platform platform, bool useSimulatorVari
 		platforms.add({ld::kPlatform_bridgeOS, 0});
 		break;
 	#endif
-        #warning FIXME
-        #if 0
 	#if ((TAPI_API_VERSION_MAJOR == 1 &&  TAPI_API_VERSION_MINOR >= 4) || (TAPI_API_VERSION_MAJOR > 1))
 	case tapi::Platform::iOSMac:
 		platforms.add({ld::kPlatform_iOSMac, 0});
@@ -133,7 +131,6 @@ static ld::VersionSet mapPlatform(tapi::Platform platform, bool useSimulatorVari
 		platforms.add({ld::kPlatform_iOSMac, 0});
 		break;
 	#endif
-        #endif
 	}
 
 	return platforms;
