@@ -764,7 +764,7 @@ void Parser::setPreservedSymbols(	const std::vector<const ld::Atom*>&	allAtoms,
 
 	// special case running ld -r on all bitcode files to produce another bitcode file (instead of mach-o)
 	if ( options.relocatable && !hasNonllvmAtoms ) {
-#if LTO_API_VERSION >= 15
+#if LTO_API_VERSION >= 17
 		::lto_codegen_set_should_embed_uselists(generator, false);
 #endif
 		if ( ! ::lto_codegen_write_merged_modules(generator, options.outputFilePath) ) {
@@ -823,7 +823,7 @@ std::tuple<uint8_t *, size_t> Parser::codegen(const OptimizeOptions& options,
 		char tempBitcodePath[MAXPATHLEN];
 		strcpy(tempBitcodePath, options.outputFilePath);
 		strcat(tempBitcodePath, ".lto.bc");
-#if LTO_API_VERSION >= 15
+#if LTO_API_VERSION >= 17
 		::lto_codegen_set_should_embed_uselists(generator, true);
 #endif
 		::lto_codegen_write_merged_modules(generator, tempBitcodePath);
@@ -856,20 +856,21 @@ std::tuple<uint8_t *, size_t> Parser::codegen(const OptimizeOptions& options,
 	}
 #endif
 
-	// When lto API version is greater than or equal to 12, we use lto_codegen_optimize and lto_codegen_compile_optimized
+	// When lto API version is greater than or equal to 17, we use lto_codegen_optimize and lto_codegen_compile_optimized
 	// instead of lto_codegen_compile, and we save the merged bitcode file in between.
 	bool useSplitAPI = false;
-#if LTO_API_VERSION >= 12
+#if LTO_API_VERSION >= 17
 	if ( ::lto_api_version() >= 12)
 		useSplitAPI = true;
 #endif
 
 	if ( useSplitAPI) {
-#if LTO_API_VERSION >= 12
-#if LTO_API_VERSION >= 14
-		if ( ::lto_api_version() >= 14 && options.ltoCodegenOnly)
+// ld64-port: Fixed wrong if conditions
+#if LTO_API_VERSION >= 17
+//#if LTO_API_VERSION >= 14
+		if ( ::lto_api_version() >= 17 && options.ltoCodegenOnly)
 			lto_codegen_set_should_internalize(generator, false);
-#endif
+//#endif
 		// run optimizer
 		if ( !options.ltoCodegenOnly && ::lto_codegen_optimize(generator) )
 			throwf("could not do LTO optimization: '%s', using libLTO version '%s'", ::lto_get_error_message(), ::lto_get_version());
@@ -879,9 +880,9 @@ std::tuple<uint8_t *, size_t> Parser::codegen(const OptimizeOptions& options,
 			char tempOptBitcodePath[MAXPATHLEN];
 			strcpy(tempOptBitcodePath, options.outputFilePath);
 			strcat(tempOptBitcodePath, ".lto.opt.bc");
-#if LTO_API_VERSION >= 15
+//#if LTO_API_VERSION >= 15
 			::lto_codegen_set_should_embed_uselists(generator, true);
-#endif
+//#endif
 			::lto_codegen_write_merged_modules(generator, tempOptBitcodePath);
 			if ( options.bitcodeBundle )
 				state.ltoBitcodePath.push_back(tempOptBitcodePath);
@@ -903,7 +904,7 @@ std::tuple<uint8_t *, size_t> Parser::codegen(const OptimizeOptions& options,
 			char tempOptBitcodePath[MAXPATHLEN];
 			strcpy(tempOptBitcodePath, options.outputFilePath);
 			strcat(tempOptBitcodePath, ".lto.opt.bc");
-#if LTO_API_VERSION >= 15
+#if LTO_API_VERSION >= 17
 			::lto_codegen_set_should_embed_uselists(generator, true);
 #endif
 			::lto_codegen_write_merged_modules(generator, tempOptBitcodePath);
@@ -1711,11 +1712,16 @@ unsigned int static_api_version()
 //
 // used by "ld -v" to report version of libLTO.dylib being used
 //
+
 unsigned int runtime_api_version()
 {
+// ld64-port: Added #if
+#if LTO_API_VERSION >= 17
 	return ::lto_api_version();
+#else
+	return -1;
+#endif
 }
-
 
 //
 // used by ld for error reporting
