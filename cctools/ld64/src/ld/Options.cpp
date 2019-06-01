@@ -919,6 +919,12 @@ bool Options::findFile(const std::string &path, const std::vector<std::string> &
 		bool found = dylibInfo.checkFileExists(*this, path.c_str());
 		if ( fTraceDylibSearching )
 			printf("[Logging for XBS]%sfound library: '%s'\n", (found ? " " : " not "), path.c_str());
+		// ld64-port
+#ifndef TAPI_SUPPORT
+		if ( found )
+			result = dylibInfo;
+		return found;
+#endif
 	}
 
 #ifdef TAPI_SUPPORT
