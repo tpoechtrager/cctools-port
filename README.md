@@ -1,6 +1,6 @@
-# Apple cctools port for Linux, *BSD and Windows (Cygwin) #
+# Apple cctools and ld64 port for Linux, FreeBSD and macOS #
 
-Current Version: 921 + ld64-409.12.  
+Current Version: cctools: 921, ld64: 409.12.  
 Originally ported by [cjacker](http://ios-toolchain-based-on-clang-for-linux.googlecode.com).
 
 ## SUPPORTED HOSTS ##
@@ -30,7 +30,7 @@ Mac OS X, iOS, watchOS (untested) and tvOS (untested)
 
 ## DEPENDENCIES ##
 
-`Clang 3.2+` 
+`Clang 3.4+` 
 
 SDKs with .tdb stubs (>= Xcode 7) require the TAPI library to be installed.  
 => https://github.com/tpoechtrager/apple-libtapi

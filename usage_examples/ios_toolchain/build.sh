@@ -69,7 +69,7 @@ function git_clone_repository
     git reset --hard
     git clean -fdx
     git checkout $branch
-    git pull
+    git pull origin $branch
 
     popd &>/dev/null
 }
@@ -174,7 +174,7 @@ echo "*** building apple-libtapi ***"
 echo ""
 
 pushd tmp &>/dev/null
-git_clone_repository https://github.com/tpoechtrager/apple-libtapi.git 2.0.0
+git_clone_repository https://github.com/tpoechtrager/apple-libtapi.git 1000.10.8
 pushd apple-libtapi &>/dev/null
 INSTALLPREFIX=$TARGETDIR ./build.sh
 ./install.sh

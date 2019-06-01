@@ -160,7 +160,7 @@ am__define_uniq_tagged_files = \
 ETAGS = etags
 CTAGS = ctags
 CSCOPE = cscope
-DIST_SUBDIRS = $(SUBDIRS)
+DIST_SUBDIRS = libobjc2 libstuff ar as misc otool ld64 man
 am__DIST_COMMON = $(srcdir)/Makefile.in AUTHORS COPYING ChangeLog \
 	INSTALL NEWS README compile config.guess config.sub install-sh \
 	ltmain.sh missing
@@ -353,7 +353,8 @@ target_vendor = @target_vendor@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-SUBDIRS = libstuff ar as misc otool ld64 man
+@ISDARWIN_FALSE@SUBDIRS = libobjc2 libstuff ar as misc otool ld64 man
+@ISDARWIN_TRUE@SUBDIRS = libstuff ar as misc otool ld64 man
 ACLOCAL_AMFLAGS = -I m4
 DSTROOT = 
 RC_OS = macos
@@ -824,8 +825,6 @@ uninstall-am:
 
 .PRECIOUS: Makefile
 
-
-@ISDARWIN_FALSE@	SUBDIRS+=libobjc2
 
 installhdrs:
 	cd include; $(MAKE) DSTROOT=$(DSTROOT) RC_OS=$(RC_OS) install
