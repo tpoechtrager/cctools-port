@@ -926,13 +926,13 @@ void InputFiles::inferArchitecture(Options& opts, const char** archName)
 #elif __arm__
 	opts.setArchitecture(CPU_TYPE_ARM, CPU_SUBTYPE_ARM_V6, ld::kPlatform_macOS, 0);
 #elif __ppc__ // ld64-port
-    opts.setArchitecture(CPU_TYPE_POWERPC, CPU_SUBTYPE_POWERPC_ALL, Options::kPlatform_macOS);
+    opts.setArchitecture(CPU_TYPE_POWERPC, CPU_SUBTYPE_POWERPC_ALL, ld::kPlatform_macOS, 0);
 #elif __ppc64__ // ld64-port
-    opts.setArchitecture(CPU_TYPE_POWERPC64, CPU_SUBTYPE_POWERPC_ALL, Options::kPlatform_macOS);
+    opts.setArchitecture(CPU_TYPE_POWERPC64, CPU_SUBTYPE_POWERPC_ALL, ld::kPlatform_macOS, 0);
 #elif __arm__
-	opts.setArchitecture(CPU_TYPE_ARM, CPU_SUBTYPE_ARM_V6, Options::kPlatformiOS); // ld64-port: Options::kPlatform_macOS -> Options::kPlatformiOS
+	opts.setArchitecture(CPU_TYPE_ARM, CPU_SUBTYPE_ARM_V6, ld::kPlatform_iOS, 0); // ld64-port: Options::kPlatform_macOS -> Options::kPlatform_iOS
 #elif __arm64__ // ld64-port
-	opts.setArchitecture(CPU_TYPE_ARM, CPU_SUBTYPE_ARM64_ALL, Options::kPlatformiOS);
+	opts.setArchitecture(CPU_TYPE_ARM, CPU_SUBTYPE_ARM64_ALL, ld::kPlatform_iOS, 0);
 #else
 	#error unknown default architecture
 #endif

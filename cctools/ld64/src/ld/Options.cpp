@@ -662,7 +662,7 @@ void Options::setArchitecture(cpu_type_t type, cpu_subtype_t subtype, ld::Platfo
 				if ( platforms().contains(ld::kPlatform_iOS) && (platforms().minOS(ld::kPlatform_iOS) == 0) && (fOutputKind != Options::kObjectFile) ) {
 				#if defined(DEFAULT_IPHONEOS_MIN_VERSION)
 						warning("-ios_version_min not specified, assuming " DEFAULT_IPHONEOS_MIN_VERSION);
-						setVersionMin(ld::kPlatformiOS, DEFAULT_IPHONEOS_MIN_VERSION);
+						setVersionMin(ld::kPlatform_iOS, DEFAULT_IPHONEOS_MIN_VERSION);
 				#else
 						warning("-ios_version_min not specified, assuming 6.0");
 						setVersionMin(ld::kPlatform_iOS, "6.0");
@@ -4431,7 +4431,7 @@ void Options::reconfigureDefaults()
 					if ( (fOutputKind != Options::kObjectFile) && (fOutputKind != Options::kPreload) ) {
 			#if defined(DEFAULT_IPHONEOS_MIN_VERSION)
 						warning("-ios_version_min not specified, assuming " DEFAULT_IPHONEOS_MIN_VERSION);
-						setVersionMin(ld::kPlatformiOS, DEFAULT_IPHONEOS_MIN_VERSION);
+						setVersionMin(ld::kPlatform_iOS, DEFAULT_IPHONEOS_MIN_VERSION);
 			#else
 						if ( fSubArchitecture == CPU_SUBTYPE_ARM_V7K ) {
 							warning("-watchos_version_min not specified, assuming 2.0");
