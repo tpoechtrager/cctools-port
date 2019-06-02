@@ -1,4 +1,4 @@
-#if defined(__GLIBC__) || defined(__APPLE__)
+#if defined(__GLIBC__) || defined(__APPLE__) || defined(__FreeBSD__)
 
 #include_next <sys/cdefs.h>
 

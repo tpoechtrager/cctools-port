@@ -1,4 +1,4 @@
-#if defined(__APPLE__) || defined(__GLIBC__)
+#if defined(__APPLE__) || defined(__GLIBC__) || defined(__FreeBSD__)
 #include_next <sys/sysctl.h>
 #else
 #ifndef __SYSCTL_H__
