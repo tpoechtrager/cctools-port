@@ -285,14 +285,48 @@ AC_CHECK_LIB([fts],[fts_open],[
   AC_CHECK_HEADERS([fts.h], [FTS_LIB=-lfts])], [])
 AC_SUBST(FTS_LIB)
 
-### Check for libxar ###
+### Check for XAR ###
 
-if test "x$LLVM_CONFIG" != "xno"; then
+AC_ARG_ENABLE([xar-support],
+AS_HELP_STRING([--enable-xar-support],
+                [enable xar support]),
+[], [enable_xar_support=yes])
 
-AC_CHECK_LIB([xar],[xar_prop_create],[
-  AC_CHECK_HEADERS([xar/xar.h], [XAR_LIB=-lxar])], [])
-AC_SUBST(XAR_LIB)
+if test "x$LTO_LIB" != "x"; then
+  if test "x$enable_xar_support" = "xyes"; then
+    AC_ARG_WITH([libxar],
+        AS_HELP_STRING([--with-libxar],
+                      [path to the XAR library]),
+        [XAR_DIR=$with_libxar], [XAR_DIR=""])
 
+    if test "x$XAR_DIR" = "xno"; then
+      XAR_DIR=""
+    fi
+
+    if test "x$XAR_DIR" != "x"; then
+      CXXFLAGS="$CXXFLAGS -isystem $XAR_DIR/include"
+      CPPFLAGS="$CPPFLAGS -isystem $XAR_DIR/include"
+      test -d "$XAR_DIR/lib" && LDFLAGS="$LDFLAGS -L$XAR_DIR/lib"
+      test -d "$XAR_DIR/lib64" && LDFLAGS="$LDFLAGS -L$XAR_DIR/lib64"
+      test -d "$XAR_DIR/lib32" && LDFLAGS="$LDFLAGS -L$XAR_DIR/lib32"
+      if test "x$rpathlink" = "xyes"; then
+        XAR_RPATH="-Wl,-rpath,$XAR_DIR/lib,--enable-new-dtags"
+        XAR_RPATH="$XAR_RPATH -Wl,-rpath,$XAR_DIR/lib64,--enable-new-dtags"
+        XAR_RPATH="$XAR_RPATH -Wl,-rpath,$XAR_DIR/lib32,--enable-new-dtags"
+        LDFLAGS="$LDFLAGS $XAR_RPATH"
+      fi
+      if test "x$isdarwin" = "xyes"; then
+        XAR_RPATH="-Wl,-rpath,$XAR_DIR/lib"
+        LDFLAGS="$LDFLAGS $XAR_RPATH"
+      fi
+    fi
+
+    XAR_LIB=""
+
+    AC_CHECK_LIB([xar],[xar_prop_create],[
+      AC_CHECK_HEADERS([xar/xar.h], [XAR_LIB=-lxar])], [])
+    AC_SUBST(XAR_LIB)
+  fi
 fi
 
 ### Check for Apple TAPI library ###
@@ -303,63 +337,61 @@ AS_HELP_STRING([--enable-tapi-support],
 [], [enable_tapi_support=yes])
 
 if test "x$enable_tapi_support" = "xyes"; then
+  AC_ARG_WITH([libtapi],
+      AS_HELP_STRING([--with-libtapi],
+                    [path to the apple tapi library]),
+      [LIBTAPI_DIR=$with_libtapi], [LIBTAPI_DIR=""])
 
-AC_ARG_WITH([libtapi],
-    AS_HELP_STRING([--with-libtapi],
-                   [path to the apple tapi library]),
-    [LIBTAPI_DIR=$with_libtapi], [LIBTAPI_DIR=""])
-
-if test "x$LIBTAPI_DIR" = "xno"; then
-  LIBTAPI_DIR=""
-fi
-if test "x$LIBTAPI_DIR" != "x"; then
-  CXXFLAGS="$CXXFLAGS -isystem $LIBTAPI_DIR/include"
-  CPPFLAGS="$CPPFLAGS -isystem $LIBTAPI_DIR/include"
-  test -d "$LIBTAPI_DIR/lib" && LDFLAGS="$LDFLAGS -L$LIBTAPI_DIR/lib"
-  test -d "$LIBTAPI_DIR/lib64" && LDFLAGS="$LDFLAGS -L$LIBTAPI_DIR/lib64"
-  test -d "$LIBTAPI_DIR/lib32" && LDFLAGS="$LDFLAGS -L$LIBTAPI_DIR/lib32"
-  if test "x$rpathlink" = "xyes"; then
-    LIBTAPI_RPATH="-Wl,-rpath,$LIBTAPI_DIR/lib,--enable-new-dtags"
-    LIBTAPI_RPATH="$LIBTAPI_RPATH -Wl,-rpath,$LIBTAPI_DIR/lib64,--enable-new-dtags"
-    LIBTAPI_RPATH="$LIBTAPI_RPATH -Wl,-rpath,$LIBTAPI_DIR/lib32,--enable-new-dtags"
-    LDFLAGS="$LDFLAGS $LIBTAPI_RPATH"
+  if test "x$LIBTAPI_DIR" = "xno"; then
+    LIBTAPI_DIR=""
   fi
-  if test "x$isdarwin" = "xyes"; then
-    LIBTAPI_RPATH="-Wl,-rpath,$LIBTAPI_DIR/lib"
-    LDFLAGS="$LDFLAGS $LIBTAPI_RPATH"
-  fi
-fi
-
-TAPI_LIB=""
-AC_CACHE_CHECK([tapi/tapi.h and libtapi support],[cctools_cv_tapi_support],
-  AC_LANG_PUSH([C++])
-  save_LIBS="$LIBS"
-  LIBS="$LIBS -ltapi"
-  AC_TRY_LINK([#include <tapi/tapi.h>],
-              [return tapi::APIVersion::getMajor();],
-              [cctools_cv_tapi_support=yes],
-              [cctools_cv_tapi_support=no])
-  LIBS="$save_LIBS"
-  AC_LANG_POP([C++])
-)
-
-if test $cctools_cv_tapi_support = yes; then
-  TAPI_LIB=-ltapi
-  TAPI_DEF=-DTAPI_SUPPORT
-else
   if test "x$LIBTAPI_DIR" != "x"; then
-    AC_MSG_ERROR([-- ERROR: Failed TAPI checks in $LIBTAPI_DIR])
-    exit 1
+    CXXFLAGS="$CXXFLAGS -isystem $LIBTAPI_DIR/include"
+    CPPFLAGS="$CPPFLAGS -isystem $LIBTAPI_DIR/include"
+    test -d "$LIBTAPI_DIR/lib" && LDFLAGS="$LDFLAGS -L$LIBTAPI_DIR/lib"
+    test -d "$LIBTAPI_DIR/lib64" && LDFLAGS="$LDFLAGS -L$LIBTAPI_DIR/lib64"
+    test -d "$LIBTAPI_DIR/lib32" && LDFLAGS="$LDFLAGS -L$LIBTAPI_DIR/lib32"
+    if test "x$rpathlink" = "xyes"; then
+      LIBTAPI_RPATH="-Wl,-rpath,$LIBTAPI_DIR/lib,--enable-new-dtags"
+      LIBTAPI_RPATH="$LIBTAPI_RPATH -Wl,-rpath,$LIBTAPI_DIR/lib64,--enable-new-dtags"
+      LIBTAPI_RPATH="$LIBTAPI_RPATH -Wl,-rpath,$LIBTAPI_DIR/lib32,--enable-new-dtags"
+      LDFLAGS="$LDFLAGS $LIBTAPI_RPATH"
+    fi
+    if test "x$isdarwin" = "xyes"; then
+      LIBTAPI_RPATH="-Wl,-rpath,$LIBTAPI_DIR/lib"
+      LDFLAGS="$LDFLAGS $LIBTAPI_RPATH"
+    fi
   fi
-  echo ""
-  echo "### Building without TAPI support ###"
-  echo "### See README.md -> DEPENDENCIES ###"
-  echo ""
-  sleep 2
-fi
 
-AC_SUBST(TAPI_LIB)
-AC_SUBST(TAPI_DEF)
+  TAPI_LIB=""
+  AC_CACHE_CHECK([tapi/tapi.h and libtapi support],[cctools_cv_tapi_support],
+    AC_LANG_PUSH([C++])
+    save_LIBS="$LIBS"
+    LIBS="$LIBS -ltapi"
+    AC_TRY_LINK([#include <tapi/tapi.h>],
+                [return tapi::APIVersion::getMajor();],
+                [cctools_cv_tapi_support=yes],
+                [cctools_cv_tapi_support=no])
+    LIBS="$save_LIBS"
+    AC_LANG_POP([C++])
+  )
+
+  if test $cctools_cv_tapi_support = yes; then
+    TAPI_LIB=-ltapi
+    TAPI_DEF=-DTAPI_SUPPORT
+  else
+    if test "x$LIBTAPI_DIR" != "x"; then
+      AC_MSG_ERROR([-- ERROR: Failed TAPI checks in $LIBTAPI_DIR])
+      exit 1
+    fi
+    echo ""
+    echo "### Building without TAPI support ###"
+    echo "### See README.md -> DEPENDENCIES ###"
+    echo ""
+  fi
+
+  AC_SUBST(TAPI_LIB)
+  AC_SUBST(TAPI_DEF)
 fi
 
 ### Check whether we want to use clang as assembler ###
