@@ -795,6 +795,8 @@ with_sysroot
 enable_libtool_lock
 enable_lto_support
 with_llvm_config
+enable_xar_support
+with_libxar
 enable_tapi_support
 with_libtapi
 enable_clang_as
@@ -1447,6 +1449,7 @@ Optional Features:
                           optimize for fast installation [default=yes]
   --disable-libtool-lock  avoid locking (might break parallel builds)
   --enable-lto-support    enable link time optimization support
+  --enable-xar-support    enable xar support
   --enable-tapi-support   enable tapi support
   --disable-clang-as      do not use clang for assembling
 
@@ -1462,6 +1465,7 @@ Optional Packages:
   --with-sysroot[=DIR]    Search for dependent libraries within DIR (or the
                           compiler's sysroot if not specified).
   --with-llvm-config      llvm config tool
+  --with-libxar           path to the XAR library
   --with-libtapi          path to the apple tapi library
 
 Some influential environment variables:
@@ -17492,11 +17496,52 @@ fi
 
 
 
-### Check for libxar ###
+### Check for XAR ###
 
-if test "x$LLVM_CONFIG" != "xno"; then
+# Check whether --enable-xar-support was given.
+if test "${enable_xar_support+set}" = set; then :
+  enableval=$enable_xar_support;
+else
+  enable_xar_support=yes
+fi
 
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for xar_prop_create in -lxar" >&5
+
+if test "x$LTO_LIB" != "x"; then
+  if test "x$enable_xar_support" = "xyes"; then
+
+# Check whether --with-libxar was given.
+if test "${with_libxar+set}" = set; then :
+  withval=$with_libxar; XAR_DIR=$with_libxar
+else
+  XAR_DIR=""
+fi
+
+
+    if test "x$XAR_DIR" = "xno"; then
+      XAR_DIR=""
+    fi
+
+    if test "x$XAR_DIR" != "x"; then
+      CXXFLAGS="$CXXFLAGS -isystem $XAR_DIR/include"
+      CPPFLAGS="$CPPFLAGS -isystem $XAR_DIR/include"
+      test -d "$XAR_DIR/lib" && LDFLAGS="$LDFLAGS -L$XAR_DIR/lib"
+      test -d "$XAR_DIR/lib64" && LDFLAGS="$LDFLAGS -L$XAR_DIR/lib64"
+      test -d "$XAR_DIR/lib32" && LDFLAGS="$LDFLAGS -L$XAR_DIR/lib32"
+      if test "x$rpathlink" = "xyes"; then
+        XAR_RPATH="-Wl,-rpath,$XAR_DIR/lib,--enable-new-dtags"
+        XAR_RPATH="$XAR_RPATH -Wl,-rpath,$XAR_DIR/lib64,--enable-new-dtags"
+        XAR_RPATH="$XAR_RPATH -Wl,-rpath,$XAR_DIR/lib32,--enable-new-dtags"
+        LDFLAGS="$LDFLAGS $XAR_RPATH"
+      fi
+      if test "x$isdarwin" = "xyes"; then
+        XAR_RPATH="-Wl,-rpath,$XAR_DIR/lib"
+        LDFLAGS="$LDFLAGS $XAR_RPATH"
+      fi
+    fi
+
+    XAR_LIB=""
+
+    { $as_echo "$as_me:${as_lineno-$LINENO}: checking for xar_prop_create in -lxar" >&5
 $as_echo_n "checking for xar_prop_create in -lxar... " >&6; }
 if ${ac_cv_lib_xar_xar_prop_create+:} false; then :
   $as_echo_n "(cached) " >&6
@@ -17534,7 +17579,7 @@ fi
 $as_echo "$ac_cv_lib_xar_xar_prop_create" >&6; }
 if test "x$ac_cv_lib_xar_xar_prop_create" = xyes; then :
 
-  for ac_header in xar/xar.h
+      for ac_header in xar/xar.h
 do :
   ac_fn_c_check_header_mongrel "$LINENO" "xar/xar.h" "ac_cv_header_xar_xar_h" "$ac_includes_default"
 if test "x$ac_cv_header_xar_xar_h" = xyes; then :
@@ -17549,7 +17594,7 @@ done
 fi
 
 
-
+  fi
 fi
 
 ### Check for Apple TAPI library ###
@@ -17564,7 +17609,6 @@ fi
 
 if test "x$enable_tapi_support" = "xyes"; then
 
-
 # Check whether --with-libtapi was given.
 if test "${with_libtapi+set}" = set; then :
   withval=$with_libtapi; LIBTAPI_DIR=$with_libtapi
@@ -17573,29 +17617,29 @@ else
 fi
 
 
-if test "x$LIBTAPI_DIR" = "xno"; then
-  LIBTAPI_DIR=""
-fi
-if test "x$LIBTAPI_DIR" != "x"; then
-  CXXFLAGS="$CXXFLAGS -isystem $LIBTAPI_DIR/include"
-  CPPFLAGS="$CPPFLAGS -isystem $LIBTAPI_DIR/include"
-  test -d "$LIBTAPI_DIR/lib" && LDFLAGS="$LDFLAGS -L$LIBTAPI_DIR/lib"
-  test -d "$LIBTAPI_DIR/lib64" && LDFLAGS="$LDFLAGS -L$LIBTAPI_DIR/lib64"
-  test -d "$LIBTAPI_DIR/lib32" && LDFLAGS="$LDFLAGS -L$LIBTAPI_DIR/lib32"
-  if test "x$rpathlink" = "xyes"; then
-    LIBTAPI_RPATH="-Wl,-rpath,$LIBTAPI_DIR/lib,--enable-new-dtags"
-    LIBTAPI_RPATH="$LIBTAPI_RPATH -Wl,-rpath,$LIBTAPI_DIR/lib64,--enable-new-dtags"
-    LIBTAPI_RPATH="$LIBTAPI_RPATH -Wl,-rpath,$LIBTAPI_DIR/lib32,--enable-new-dtags"
-    LDFLAGS="$LDFLAGS $LIBTAPI_RPATH"
+  if test "x$LIBTAPI_DIR" = "xno"; then
+    LIBTAPI_DIR=""
   fi
-  if test "x$isdarwin" = "xyes"; then
-    LIBTAPI_RPATH="-Wl,-rpath,$LIBTAPI_DIR/lib"
-    LDFLAGS="$LDFLAGS $LIBTAPI_RPATH"
+  if test "x$LIBTAPI_DIR" != "x"; then
+    CXXFLAGS="$CXXFLAGS -isystem $LIBTAPI_DIR/include"
+    CPPFLAGS="$CPPFLAGS -isystem $LIBTAPI_DIR/include"
+    test -d "$LIBTAPI_DIR/lib" && LDFLAGS="$LDFLAGS -L$LIBTAPI_DIR/lib"
+    test -d "$LIBTAPI_DIR/lib64" && LDFLAGS="$LDFLAGS -L$LIBTAPI_DIR/lib64"
+    test -d "$LIBTAPI_DIR/lib32" && LDFLAGS="$LDFLAGS -L$LIBTAPI_DIR/lib32"
+    if test "x$rpathlink" = "xyes"; then
+      LIBTAPI_RPATH="-Wl,-rpath,$LIBTAPI_DIR/lib,--enable-new-dtags"
+      LIBTAPI_RPATH="$LIBTAPI_RPATH -Wl,-rpath,$LIBTAPI_DIR/lib64,--enable-new-dtags"
+      LIBTAPI_RPATH="$LIBTAPI_RPATH -Wl,-rpath,$LIBTAPI_DIR/lib32,--enable-new-dtags"
+      LDFLAGS="$LDFLAGS $LIBTAPI_RPATH"
+    fi
+    if test "x$isdarwin" = "xyes"; then
+      LIBTAPI_RPATH="-Wl,-rpath,$LIBTAPI_DIR/lib"
+      LDFLAGS="$LDFLAGS $LIBTAPI_RPATH"
+    fi
   fi
-fi
 
-TAPI_LIB=""
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking tapi/tapi.h and libtapi support" >&5
+  TAPI_LIB=""
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking tapi/tapi.h and libtapi support" >&5
 $as_echo_n "checking tapi/tapi.h and libtapi support... " >&6; }
 if ${cctools_cv_tapi_support+:} false; then :
   $as_echo_n "(cached) " >&6
@@ -17606,9 +17650,9 @@ ac_compile='$CXX -c $CXXFLAGS $CPPFLAGS conftest.$ac_ext >&5'
 ac_link='$CXX -o conftest$ac_exeext $CXXFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
 ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
 
-  save_LIBS="$LIBS"
-  LIBS="$LIBS -ltapi"
-  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+    save_LIBS="$LIBS"
+    LIBS="$LIBS -ltapi"
+    cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 #include <tapi/tapi.h>
 int
@@ -17626,8 +17670,8 @@ else
 fi
 rm -f core conftest.err conftest.$ac_objext \
     conftest$ac_exeext conftest.$ac_ext
-  LIBS="$save_LIBS"
-  ac_ext=c
+    LIBS="$save_LIBS"
+    ac_ext=c
 ac_cpp='$CPP $CPPFLAGS'
 ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
 ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
@@ -17638,20 +17682,19 @@ fi
 { $as_echo "$as_me:${as_lineno-$LINENO}: result: $cctools_cv_tapi_support" >&5
 $as_echo "$cctools_cv_tapi_support" >&6; }
 
-if test $cctools_cv_tapi_support = yes; then
-  TAPI_LIB=-ltapi
-  TAPI_DEF=-DTAPI_SUPPORT
-else
-  if test "x$LIBTAPI_DIR" != "x"; then
-    as_fn_error $? "-- ERROR: Failed TAPI checks in $LIBTAPI_DIR" "$LINENO" 5
-    exit 1
+  if test $cctools_cv_tapi_support = yes; then
+    TAPI_LIB=-ltapi
+    TAPI_DEF=-DTAPI_SUPPORT
+  else
+    if test "x$LIBTAPI_DIR" != "x"; then
+      as_fn_error $? "-- ERROR: Failed TAPI checks in $LIBTAPI_DIR" "$LINENO" 5
+      exit 1
+    fi
+    echo ""
+    echo "### Building without TAPI support ###"
+    echo "### See README.md -> DEPENDENCIES ###"
+    echo ""
   fi
-  echo ""
-  echo "### Building without TAPI support ###"
-  echo "### See README.md -> DEPENDENCIES ###"
-  echo ""
-  sleep 2
-fi
 
 
 
