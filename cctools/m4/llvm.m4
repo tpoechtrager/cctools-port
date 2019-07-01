@@ -28,12 +28,13 @@ AC_DEFUN([CHECK_LLVM],
       if test "x$LLVM_CONFIG" != "xno"; then
         LLVM_INCLUDE_DIR="`${LLVM_CONFIG} --includedir`"
         LLVM_LIB_DIR="`${LLVM_CONFIG} --libdir`"
+        LLVM_LIBS="`${LLVM_CONFIG} --libs`"
 
         ORIGLDFLAGS=$LDFLAGS
-        LDFLAGS="$LDFLAGS -L${LLVM_LIB_DIR}"
+        LDFLAGS="$LDFLAGS -L${LLVM_LIB_DIR} ${LLVM_LIBS}"
 
         AC_CHECK_LIB([LTO],[lto_get_version], [
-          LTO_LIB="-L${LLVM_LIB_DIR} -lLTO"
+          LTO_LIB="-L${LLVM_LIB_DIR} -lLTO ${LLVM_LIBS}"
           if test "x$rpathlink" = "xyes"; then
             LTO_RPATH="-Wl,-rpath,$LLVM_LIB_DIR,--enable-new-dtags"
           fi
