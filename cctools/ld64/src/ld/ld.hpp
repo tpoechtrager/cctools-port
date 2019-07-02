@@ -1141,6 +1141,7 @@ public:
 													_dontDeadStrip = a._dontDeadStrip;
 													_dontDeadStripIfRefLive = a._dontDeadStripIfRefLive;
 													_thumb = a._thumb;
+													_alias = a._alias;
 													_autoHide = a._autoHide;
 													_contentType = a._contentType;
 													_symbolTableInclusion = a._symbolTableInclusion;
