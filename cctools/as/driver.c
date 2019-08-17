@@ -29,6 +29,26 @@ int argc,
 char **argv,
 char **envp)
 {
+    /* cctools-port */
+    char libexec[MAXPATHLEN], libexec_old[MAXPATHLEN];
+    unsigned int libexec_len = sizeof(libexec);
+    _Static_assert(sizeof(ASLIBEXECDIR) < sizeof(libexec), "");
+    strcpy(libexec_old, ASLIBEXECDIR);
+    #undef ASLIBEXECDIR
+    const char *ASLIBEXECDIR = libexec;
+    if (!_NSGetExecutablePath(libexec, &libexec_len))
+    {
+        char *p = strrchr(libexec, '/');
+        if (sizeof(libexec) - (p - libexec) < 5)
+            abort();
+        strcpy(p, "/../");
+    }
+    else
+    {
+        strcpy(libexec, libexec_old);
+    }
+    /* cctools-port end */
+
     const char *LIB = ASLIBEXECDIR;
     const char *LOCALLIB = ASLIBEXECDIR;
     const char *AS = "/as";
