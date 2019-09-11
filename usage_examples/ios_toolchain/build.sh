@@ -187,7 +187,6 @@ echo ""
 
 pushd ../../cctools &>/dev/null
 git clean -fdx &>/dev/null || true
-./autogen.sh
 popd &>/dev/null
 
 pushd tmp &>/dev/null
