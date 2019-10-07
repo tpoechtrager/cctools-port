@@ -26,7 +26,9 @@
 #include <string.h>
 #include <mach/mach.h>
 #include <sys/types.h>
+#ifdef __APPLE__ /* cctools-port */
 #include <sys/sysctl.h>
+#endif
 #include "stuff/errors.h"
 #include "stuff/allocate.h"
 #include "stuff/macosx_deployment_target.h"

@@ -27,7 +27,9 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <mach/vm_prot.h>
+#ifdef __APPLE__ // ld64-port
 #include <sys/sysctl.h>
+#endif
 #include <mach-o/dyld.h>
 #include <fcntl.h>
 #include <errno.h>
