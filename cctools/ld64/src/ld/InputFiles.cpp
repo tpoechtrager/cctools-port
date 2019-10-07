@@ -28,7 +28,11 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
+#ifdef __APPLE__
 #include <sys/sysctl.h>
+#else // ld64-port
+#include <thread> // for std::thread
+#endif
 #include <fcntl.h>
 #include <errno.h>
 #include <limits.h>
@@ -40,17 +44,7 @@
 #include <dlfcn.h>
 #include <mach-o/dyld.h>
 #include <mach-o/fat.h>
-#include <sys/sysctl.h>
 #include <libkern/OSAtomic.h>
-
-// ld64-port
-#ifdef __linux__
-#ifndef __USE_GNU
-#define __USE_GNU
-#endif
-#include <sched.h>
-#endif
-// ld64-port end
 
 #include <string>
 #include <map>
@@ -993,20 +987,7 @@ InputFiles::InputFiles(Options& opts, const char** archName)
 	
 	// initialize info for parsing input files on worker threads
 	unsigned int ncpus;
-#ifdef __linux__ // ld64-port
-	cpu_set_t cs;
-	CPU_ZERO(&cs);
-
-	if (!sched_getaffinity(0, sizeof(cs), &cs)) {
-		ncpus = 0;
-
-		for (int i = 0; i < CPU_SETSIZE; i++)
-			if (CPU_ISSET(i, &cs))
-				ncpus++;
-	} else {
-		ncpus = 1;
-	}
-#else
+#ifdef __APPLE__
 	int mib[2];
 	size_t len = sizeof(ncpus);
 	mib[0] = CTL_HW;
@@ -1014,6 +995,10 @@ InputFiles::InputFiles(Options& opts, const char** archName)
 	if (sysctl(mib, 2, &ncpus, &len, NULL, 0) != 0) {
 		ncpus = 1;
 	}
+#else // ld64-port
+	ncpus = std::thread::hardware_concurrency();
+	if (ncpus <= 0)
+		ncpus = 1;
 #endif
 	_availableWorkers = MIN(ncpus, files.size()); // max # workers we permit
 	_idleWorkers = 0;

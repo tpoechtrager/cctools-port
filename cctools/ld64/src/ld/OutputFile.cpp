@@ -27,7 +27,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
-#include <sys/sysctl.h>
 #include <sys/param.h>
 #include <sys/mount.h>
 #include <signal.h> // ld64-port
