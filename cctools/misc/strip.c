@@ -46,6 +46,7 @@
 #include "stuff/symbol_list.h"
 #include "stuff/unix_standard_mode.h"
 #include "stuff/execute.h"
+#include "stuff/write64.h"
 #ifdef TRIE_SUPPORT
 #include <mach-o/prune_trie.h>
 #endif /* TRIE_SUPPORT */
@@ -69,7 +70,8 @@ static uint32_t nflag;	/* save N_SECT global symbols */
 static uint32_t Sflag;	/* -S strip only debugger symbols N_STAB */
 static uint32_t xflag;	/* -x strip non-globals */
 static uint32_t Xflag;	/* -X strip local symbols with 'L' names */
-static uint32_t Tflag;	/* -T strip symbols that start with '_$S' names */
+static uint32_t Tflag;	/* -T strip Swift symbols: symbols that start with
+                           '_$S' or '_$s' */
 static uint32_t Nflag;	/* -N strip all nlist symbols and strings */
 static uint32_t cflag;	/* -c strip section contents from dynamic libraries
 			   files to create stub libraries */
@@ -184,6 +186,11 @@ struct undef_map64 {
     struct nlist_64 symbol64;
 };
 static char *qsort_strings = NULL;
+
+struct strx_map {
+    uint32_t old_strx;
+    uint32_t new_strx;
+};
 #endif /* !defined(NMEDIT) */
 
 
@@ -296,6 +303,14 @@ static enum bool symbol_pointer_used(
     uint32_t symbol_index,
     uint32_t *indirectsyms,
     uint32_t nindirectsyms);
+
+static int cmp_qsort_strx_map(
+    const struct strx_map* a,
+    const struct strx_map* b);
+
+static int cmp_bsearch_strx_map(
+    const uint32_t* old_strx,
+    const struct strx_map *strx_map);
 
 static int cmp_qsort_undef_map(
     const struct undef_map *sym1,
@@ -2883,6 +2898,9 @@ enum bool *nlist_outofsync_with_dyldinfo)
     uint32_t swift_version;
     char *p_objc_image_info;
     struct objc_image_info o;
+    struct strx_map* strx_map;
+    uint32_t strx_count;
+    uint32_t strx_uniqcount;
 
 	*nlist_outofsync_with_dyldinfo = FALSE;
 	save_debug = 0;
@@ -2906,7 +2924,10 @@ enum bool *nlist_outofsync_with_dyldinfo)
 	new_nextdefsym = 0;
 	new_nundefsym = 0;
 	new_ext_strsize = 0;
-
+        strx_map = NULL;
+        strx_count = 0;
+        strx_uniqcount = 0;
+    
 	/*
 	 * If this an object file that has DWARF debugging sections to strip
 	 * then we have to run ld -r on it.  We also have to do this for
@@ -2981,6 +3002,12 @@ enum bool *nlist_outofsync_with_dyldinfo)
 	 */
 	saves = (int32_t *)allocate(nsyms * sizeof(int32_t));
 	bzero(saves, nsyms * sizeof(int32_t));
+    
+        /*
+         * Allocate space for the strx_map. This table will be used unique
+         * local symbol strings, reclaiming space from the file.
+         */
+        strx_map = calloc(nsyms, sizeof(*strx_map));
 
 	/*
 	 * Gather an array of section struct pointers so we can later determine
@@ -3085,6 +3112,15 @@ enum bool *nlist_outofsync_with_dyldinfo)
 	}
 	*p_swift_version = swift_version;
 
+        /*
+         * Build the list of symbols to save. Also compute the space required
+         * by the external and unknown symbol strings,
+         *
+         * In order to unique local symbol strings in a reasonable amount of
+         * time-complexity, we will build a list of strx string indexes to
+         * retain in the final file. This list will be processed and measured
+         * outside of this nsyms loop.
+         */
 	for(i = 0; i < nsyms; i++){
 	    s_flags = 0;
 	    if(object->mh != NULL){
@@ -3149,7 +3185,9 @@ enum bool *nlist_outofsync_with_dyldinfo)
 	     */
 	    if(Tflag && swift_version != 0 &&
 	       (mh_flags & MH_DYLDLINK) == MH_DYLDLINK &&
-	       n_strx != 0 && strncmp(strings + n_strx, "_$S", 3) == 0){
+	       n_strx != 0 &&
+               (strncmp(strings + n_strx, "_$S", 3) == 0 ||
+                strncmp(strings + n_strx, "_$s", 3) == 0)){
 		/* don't save this symbol */
 		*nlist_outofsync_with_dyldinfo = TRUE;
 		continue;
@@ -3166,7 +3204,7 @@ enum bool *nlist_outofsync_with_dyldinfo)
 		    object->mh_cputype == CPU_TYPE_ARM) &&
 		   object->mh_filetype == MH_OBJECT){
 		    if(n_strx != 0)
-			new_strsize += strlen(strings + n_strx) + 1;
+                        strx_map[strx_count++].old_strx = n_strx;
 		    new_nlocalsym++;
 		    new_nsyms++;
 		    saves[i] = new_nsyms;
@@ -3207,8 +3245,8 @@ enum bool *nlist_outofsync_with_dyldinfo)
 				     */
 				    if(save_debug){
 					if(n_strx != 0)
-					    new_strsize += strlen(strings +
-						  	          n_strx) + 1;
+                                            strx_map[strx_count++].old_strx =
+                                                n_strx;
 					new_nlocalsym++;
 					new_nsyms++;
 					saves[i] = new_nsyms;
@@ -3222,7 +3260,7 @@ enum bool *nlist_outofsync_with_dyldinfo)
 			}
 			if(saves[i] == 0 && (!Sflag || save_debug)){
 			    if(n_strx != 0)
-				new_strsize += strlen(strings + n_strx) + 1;
+                                strx_map[strx_count++].old_strx = n_strx;
 			    new_nlocalsym++;
 			    new_nsyms++;
 			    saves[i] = new_nsyms;
@@ -3243,7 +3281,7 @@ enum bool *nlist_outofsync_with_dyldinfo)
 				   (n_type & N_TYPE) != N_SECT ||
 			   	   (s_flags & S_ATTR_STRIP_STATIC_SYMS) != 
 					      S_ATTR_STRIP_STATIC_SYMS){
-				    new_strsize += strlen(strings + n_strx) + 1;
+                                    strx_map[strx_count++].old_strx = n_strx;
 				    new_nlocalsym++;
 				    new_nsyms++;
 				    saves[i] = new_nsyms;
@@ -3260,7 +3298,8 @@ enum bool *nlist_outofsync_with_dyldinfo)
 			       private_extern_reference_by_module(
 				i, refs ,nextrefsyms) == TRUE){
 				if(n_strx != 0)
-				    new_strsize += strlen(strings + n_strx) + 1;
+				    //new_strsize += strlen(strings + n_strx) + 1;
+                                    strx_map[strx_count++].old_strx = n_strx;
 				new_nlocalsym++;
 				new_nsyms++;
 				saves[i] = new_nsyms;
@@ -3272,10 +3311,8 @@ enum bool *nlist_outofsync_with_dyldinfo)
 			    if(saves[i] == 0 &&
 			       symbol_pointer_used(i, indirectsyms,
 						   nindirectsyms) == TRUE){
-				if(n_strx != 0){
-				    len = strlen(strings + n_strx) + 1;
-				    new_strsize += len;
-				}
+				if(n_strx != 0)
+                                    strx_map[strx_count++].old_strx = n_strx;
 				new_nlocalsym++;
 				new_nsyms++;
 				saves[i] = new_nsyms;
@@ -3303,7 +3340,7 @@ enum bool *nlist_outofsync_with_dyldinfo)
 				sp->seen = TRUE;
 			    }
 			    if(n_strx != 0)
-				new_strsize += strlen(strings + n_strx) + 1;
+                                strx_map[strx_count++].old_strx = n_strx;
 			    new_nlocalsym++;
 			    new_nsyms++;
 			    saves[i] = new_nsyms;
@@ -3313,7 +3350,7 @@ enum bool *nlist_outofsync_with_dyldinfo)
 		       private_extern_reference_by_module(
 			i, refs ,nextrefsyms) == TRUE){
 			if(n_strx != 0)
-			    new_strsize += strlen(strings + n_strx) + 1;
+                            strx_map[strx_count++].old_strx = n_strx;
 			new_nlocalsym++;
 			new_nsyms++;
 			saves[i] = new_nsyms;
@@ -3325,10 +3362,8 @@ enum bool *nlist_outofsync_with_dyldinfo)
 		    if(saves[i] == 0 &&
 		       symbol_pointer_used(i, indirectsyms, nindirectsyms) ==
 									TRUE){
-			if(n_strx != 0){
-			    len = strlen(strings + n_strx) + 1;
-			    new_strsize += len;
-			}
+			if(n_strx != 0)
+                            strx_map[strx_count++].old_strx = n_strx;
 			new_nlocalsym++;
 			new_nsyms++;
 			saves[i] = new_nsyms;
@@ -3390,7 +3425,6 @@ enum bool *nlist_outofsync_with_dyldinfo)
 			    ".objc_class_name_",
 			    sizeof(".objc_class_name_") - 1) == 0))){
 		    len = strlen(strings + n_strx) + 1;
-		    new_strsize += len;
 		    new_ext_strsize += len;
 		    new_nextdefsym++;
 		    new_nsyms++;
@@ -3402,7 +3436,6 @@ enum bool *nlist_outofsync_with_dyldinfo)
 		    (n_type & N_TYPE) == N_PBUD)){
 		    if(n_strx != 0){
 			len = strlen(strings + n_strx) + 1;
-			new_strsize += len;
 			new_ext_strsize += len;
 		    }
 		    new_nundefsym++;
@@ -3413,7 +3446,6 @@ enum bool *nlist_outofsync_with_dyldinfo)
 		   (n_type & N_TYPE) == N_SECT){
 		    if(n_strx != 0){
 			len = strlen(strings + n_strx) + 1;
-			new_strsize += len;
 			new_ext_strsize += len;
 		    }
 		    new_nextdefsym++;
@@ -3440,7 +3472,6 @@ enum bool *nlist_outofsync_with_dyldinfo)
 				sp->sym = &(symbols64[i]);
 			    sp->seen = TRUE;
 			    len = strlen(strings + n_strx) + 1;
-			    new_strsize += len;
 			    new_ext_strsize += len;
 			    if((n_type & N_TYPE) == N_UNDF ||
 			       (n_type & N_TYPE) == N_PBUD)
@@ -3466,7 +3497,6 @@ enum bool *nlist_outofsync_with_dyldinfo)
 		   symbol_pointer_used(i, indirectsyms, nindirectsyms) == TRUE){
 		    if(n_strx != 0){
 			len = strlen(strings + n_strx) + 1;
-			new_strsize += len;
 			new_ext_strsize += len;
 		    }
 		    new_nextdefsym++;
@@ -3478,7 +3508,6 @@ enum bool *nlist_outofsync_with_dyldinfo)
 		   (n_desc & N_WEAK_DEF) != 0){
 		    if(n_strx != 0){
 			len = strlen(strings + n_strx) + 1;
-			new_strsize += len;
 			new_ext_strsize += len;
 		    }
 		    new_nextdefsym++;
@@ -3489,11 +3518,9 @@ enum bool *nlist_outofsync_with_dyldinfo)
 		   ((rflag || default_dyld_executable) &&
 		    n_desc & REFERENCED_DYNAMICALLY))){
 		    len = strlen(strings + n_strx) + 1;
-		    new_strsize += len;
 		    new_ext_strsize += len;
 		    if((n_type & N_TYPE) == N_INDR){
 			len = strlen(strings + n_value) + 1;
-			new_strsize += len;
 			new_ext_strsize += len;
 		    }
 		    if((n_type & N_TYPE) == N_UNDF ||
@@ -3516,11 +3543,9 @@ enum bool *nlist_outofsync_with_dyldinfo)
 		     object->mh->cputype == CPU_TYPE_I386 &&
 		     object->mh->filetype == MH_OBJECT))){
 		    len = strlen(strings + n_strx) + 1;
-		    new_strsize += len;
 		    new_ext_strsize += len;
 		    if((n_type & N_TYPE) == N_INDR){
 			len = strlen(strings + n_value) + 1;
-			new_strsize += len;
 			new_ext_strsize += len;
 		    }
 		    if((n_type & N_TYPE) == N_UNDF ||
@@ -3548,7 +3573,6 @@ enum bool *nlist_outofsync_with_dyldinfo)
 		return(FALSE);
 	    }
 	    len = strlen(strings + module_name) + 1;
-	    new_strsize += len;
 	    new_ext_strsize += len;
 	}
 
@@ -3589,7 +3613,6 @@ enum bool *nlist_outofsync_with_dyldinfo)
 			else
 			    n_strx = symbols64[refs[i].isym].n_un.n_strx;
 			len = strlen(strings + n_strx) + 1;
-			new_strsize += len;
 			new_ext_strsize += len;
 			new_nundefsym++;
 			new_nsyms++;
@@ -3655,6 +3678,41 @@ enum bool *nlist_outofsync_with_dyldinfo)
 	    }
 	}
 
+        /*
+         * preserve uniqued local symbol strings by sorting and uniqing the
+         * n_strx values in strx_map. If the linker or some previous tool has
+         * uniqued the strings, each n_strx represents a uniqued string.
+         *
+         * Note that strip currently will not unique local symbol strings
+         * itself. It simply preserves the uniqueness when deserializing and
+         * reserializing the strings table.
+         */
+        qsort(strx_map, strx_count, sizeof(*strx_map),
+              (int (*)(const void *, const void *))cmp_qsort_strx_map);
+        for (j = 0; j < strx_count; ++j) {
+            if (strx_map[strx_uniqcount].old_strx != strx_map[j].old_strx) {
+	      strx_uniqcount += 1;
+                if (strx_uniqcount < j) {
+                    strx_map[strx_uniqcount].old_strx = strx_map[j].old_strx;
+                }
+            }
+        }
+        if (strx_count > 0) {
+            strx_uniqcount += 1;
+        }
+    
+        /*
+         * compute the size of the local symbol strings by measuring each
+         * remaining string. new_strsize represents the total size of the
+         * strings table, so it will include the new_ext_strsize value. From
+         * this point forward, new_ext_strsize represents the beginning of the
+         * local symbol strings in the strings table.
+         */
+        for (i = 0; i < strx_uniqcount; ++i) {
+            new_strsize += strlen(strings + strx_map[i].old_strx) + 1;
+        }
+        new_strsize += new_ext_strsize;
+
 	/*
 	 * If there is a chance that we could end up with an indirect symbol
 	 * with an index of zero we need to avoid that due to a work around
@@ -3687,7 +3745,7 @@ enum bool *nlist_outofsync_with_dyldinfo)
 	else{
     	    hack_5614542 = FALSE;
 	}
-
+    
 	if(object->mh != NULL){
 	    new_symbols = (struct nlist *)
 			  allocate(new_nsyms * sizeof(struct nlist));
@@ -3718,6 +3776,11 @@ enum bool *nlist_outofsync_with_dyldinfo)
 	    new_strings[new_strsize - 1] = '\0';
 	}
 
+        /*
+         * Zero out the new_strings table, and calculate working pointers:
+         *   p is the location where the next external string will go
+         *   q is the location where the next local string will go
+         */
 	memset(new_strings, '\0', sizeof(int32_t));
 	p = new_strings + sizeof(int32_t);
 	q = p + new_ext_strsize;
@@ -3782,6 +3845,14 @@ enum bool *nlist_outofsync_with_dyldinfo)
 	    inew_syms++;
 	}
 
+        /*
+         * write the local symbol names into the strings table, keeping track
+         * of the new strx so we can preserve string uniqueness. Begin by
+         * finding the strx_map entry for each symbol's n_strx. If the strx_map
+         * entry does not yet have a strx value, copy the string into the
+         * strings table and compute the new strx value; if the strx_map does
+         * have a new strx value, simply reuse it and move on...
+         */
 	for(i = 0; i < nsyms; i++){
 	    if(saves[i]){
 		if(object->mh != NULL){
@@ -3798,14 +3869,29 @@ enum bool *nlist_outofsync_with_dyldinfo)
 		    else
 			new_symbols64[inew_syms] = symbols64[i];
 		    if(n_strx != 0){
-			strcpy(q, strings + n_strx);
-			if(object->mh != NULL)
-			    new_symbols[inew_syms].n_un.n_strx =
-				q - new_strings;
-			else
-			    new_symbols64[inew_syms].n_un.n_strx =
-				q - new_strings;
-			q += strlen(q) + 1;
+                        struct strx_map* map =
+                            bsearch(&n_strx, strx_map, strx_uniqcount,
+                                    sizeof(*strx_map),
+                                    (int(*)(const void*, const void*))
+                                    cmp_bsearch_strx_map);
+                        if (map != NULL) {
+                            if (map->new_strx == 0) {
+                                strcpy(q, strings + n_strx);
+                                map->new_strx = q - new_strings;
+                                q += strlen(q) + 1;
+                            }
+                            if(object->mh != NULL)
+                                new_symbols[inew_syms].n_un.n_strx =
+                                map->new_strx;
+                            else
+                                new_symbols64[inew_syms].n_un.n_strx =
+                                map->new_strx;
+                        }
+                        else {
+			    error_arch(arch, member, "n_strx %d is not in the "
+				       "local symbol table index: ", n_strx);
+			    return(FALSE);
+                        }
 		    }
 		    inew_syms++;
 		    saves[i] = inew_syms;
@@ -4197,6 +4283,8 @@ enum bool *nlist_outofsync_with_dyldinfo)
 	    free(sections);
 	if(sections64 != NULL)
 	    free(sections64);
+        if (strx_map != NULL)
+            free(strx_map);
 
 	if(errors == 0)
 	    return(TRUE);
@@ -4292,7 +4380,7 @@ struct object *object)
 	if((fd = open(input_file, O_WRONLY|O_CREAT, 0600)) < 0)
 	    system_fatal("can't open temporary file: %s", input_file);
 
-	if(write(fd, object->object_addr, object->object_size) !=
+	if(write64(fd, object->object_addr, object->object_size) !=
 	        object->object_size)
 	    system_fatal("can't write temporary file: %s", input_file);
 
@@ -4871,6 +4959,26 @@ uint32_t nindirectsyms)
 		return(TRUE);
 	}
 	return(FALSE);
+}
+
+/*
+ * Functions for comparing strx_map entries.
+ */
+static
+int
+cmp_qsort_strx_map(
+const struct strx_map* a,
+const struct strx_map* b)
+{
+    return a->old_strx - b->old_strx;
+}
+
+static
+int
+cmp_bsearch_strx_map(const uint32_t* old_strx,
+                     const struct strx_map *strx_map)
+{
+    return *old_strx - strx_map->old_strx;
 }
 
 /*

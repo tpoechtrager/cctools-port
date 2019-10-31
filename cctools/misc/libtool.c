@@ -48,6 +48,7 @@
 #include "stuff/execute.h"
 #include "stuff/version_number.h"
 #include "stuff/unix_standard_mode.h"
+#include "stuff/write64.h"
 #ifdef LTO_SUPPORT
 #include "stuff/lto.h"
 #endif /* LTO_SUPPORT */
@@ -60,8 +61,9 @@
 #endif
 
 /* cctools-port start */
-int asprintf(char **strp, const char *fmt, ...); 
+int asprintf(char **strp, const char *fmt, ...);
 
+#ifndef HAVE_UTIMENS
 /*
  * utimens utility to set file times with sub-second resolution when available.
  * This is done by using utimensat if available at compile time.
@@ -98,6 +100,7 @@ static int utimens(const char *path, const struct timespec times[2])
     return utime(path, timep);
 #endif
 }
+#endif /* HAVE_UTIMENS */
 /* cctools-port end */
 
 /*
@@ -115,10 +118,22 @@ char *progname = NULL;
 static enum byte_sex host_byte_sex = UNKNOWN_BYTE_SEX;
 
 /*
- * The time the table of contents' are set to and the time to base the
- * modification time of the output file to be set to.
+ * toc_time holds the time_t value the archive contents are set to as well as
+ * the modification time of the output file.
+ *
+ * toc_uid, toc_gid, and toc_mode similarly hold the the uid, gid, and file mode
+ * values for the archive contents.
+ *
+ * all of these values are initialized to reasonable defaults for deterministic
+ * archives: archives that are consistent regardless of user, time, or umask
+ * differences. Ordinarily, these values and will be set to more specific
+ * ones when building new archives, but that can be suppressed using the
+ * '-D' option or the ZERO_AR_DATE environment variable.
  */
 static time_t toc_time = 0;
+static uid_t toc_uid = 0;
+static gid_t toc_gid = 0;
+static u_short toc_mode = 0100644;
 
 /*
  * The environment variable ZERO_AR_DATE is used here and other places that
@@ -126,11 +141,6 @@ static time_t toc_time = 0;
  * equality.
  */
 static enum bool zero_ar_date = FALSE;
-
-/*
- * The mode of the table of contents member (S_IFREG | (0666 & ~umask))
- */
-static u_short toc_mode = 0;
 
 /* flags set from the command line arguments */
 struct cmd_flags {
@@ -147,6 +157,7 @@ struct cmd_flags {
     enum bool t;	/* just "touch" the archives to get the date right */
     enum bool f;	/* warn if the output archive is fat,used by ar(1) -s */
     enum bool q;	/* only write archive if NOT fat, used by ar(1) */
+    enum bool D;	/* write deterministic archive files */
     char *output;	/* the output file specified by -o */
     enum bool final_output_specified; /* if -final_output is specified */
     enum bool dynamic;	/* create a dynamic shared library, static by default */
@@ -179,9 +190,16 @@ struct cmd_flags {
     enum bool		/* set with -L (the default) off with -T, for -static */
 	use_long_names; /* use 4.4bsd extended format 1 for long names */
     enum bool L_or_T_specified;
-    enum bool		/* set if the environ var LD_TRACE_ARCHIVES is set */
+    enum bool		/* set if the environ var LD_TRACE_ARCHIVES or        */
+                        /* RC_TRACE_ARCHIVES is set                           */
 	ld_trace_archives;
-	const char *	/* LD_TRACE_FILE if set and LD_TRACE_ARCHIVES is set, or NULL */
+    enum bool           /* set if the environ var LD_TRACE_DEPENDENTS is set. */
+                        /* Note that this value will take precedence over     */
+                        /* ld_trace_archives.                                 */
+        ld_trace_dependents;
+    const char *	/* LD_TRACE_FILE if set and one of LD_TRACE_ARCHIVES, */
+                        /* RC_TRACE_ARCHIVES, or LD_TRACE_DEPENDENTS is set,  */
+                        /* or NULL.                                           */
 	trace_file_path;
     enum bool		/* set if -search_paths_first is specified */
 	search_paths_first;
@@ -274,6 +292,15 @@ struct member {
     uint64_t      input_member_offset;  /* if from a thin archive */
 };
 
+/*
+ * trace_buffer points to a C string that will be written to the trace file, and
+ * trace_buflen records the current length of the trace data string, but without
+ * including the ASCII zero terminator. trace data will be written to the trace
+ * file only when processing concludes.
+ */
+static char* trace_buffer = NULL;
+static int trace_buflen = 0;
+
 static void usage(
     void);
 static void process(
@@ -347,8 +374,10 @@ static void warn_member(
     struct arch *arch,
     struct member *member,
     const char *format, ...) __attribute__ ((format (printf, 3, 4)));
-static void ld_trace(
-    const char *format, ...) __attribute__ ((format (printf, 1, 2)));
+static void ld_trace_archive(const char* path);
+static void ld_trace_close(void);
+static void ld_trace_append(
+     const char *format, ...) __attribute__ ((format (printf, 1, 2)));
 
 /*
  * This structure is used to describe blocks of the output file that are flushed
@@ -404,25 +433,6 @@ char **envp)
 	progname = argv[0];
 
 	host_byte_sex = get_host_byte_sex();
-
-	/*
-	 * The environment variable ZERO_AR_DATE is used here and other
-	 * places that write archives to allow testing and comparing
-	 * things for exact binary equality.
-	 */
-	if(getenv("ZERO_AR_DATE") == NULL)
-	    zero_ar_date = FALSE;
-	else
-	    zero_ar_date = TRUE;
-	if(zero_ar_date == FALSE)
-	    toc_time = time(0);
-	else
-	    toc_time = 0;
-
-	numask = 0;
-	oumask = umask(numask);
-	toc_mode = S_IFREG | (0666 & ~oumask);
-	(void)umask(oumask);
 
 	/* see if this is being run as ranlib */
 	/* cctools-port start*/
@@ -1125,6 +1135,9 @@ char **envp)
 				      argv[i][j], argv[i]);
 				usage();
 			    }
+                        case 'D':
+                            cmd_flags.D = TRUE;
+                            break;
 			default:
 			    error("unknown option character `%c' in: %s",
 				  argv[i][j], argv[i]);
@@ -1136,14 +1149,37 @@ char **envp)
 	    else
 		cmd_flags.files[cmd_flags.nfiles++] = argv[i];
 	}
+    
 	/*
-         * Test to see if the environment variable LD_TRACE_ARCHIVES is set.
+         * Test to see if one of the following trace environment variables are
+         * set:
+         *
+         *     LC_TRACE_DEPENDENTS
+         *     RC_TRACE_ARCHIVES
+         *     LC_TRACE_ARCHIVES
+         *
+         * If so, also get the LD_TRACE_FILE.
          */
-        if((getenv("RC_TRACE_ARCHIVES") != NULL) ||
-	   (getenv("LD_TRACE_ARCHIVES") != NULL)) {
-	     cmd_flags.ld_trace_archives = TRUE;
-	     cmd_flags.trace_file_path = getenv("LD_TRACE_FILE");
-	   }
+        if (getenv("LD_TRACE_DEPENDENTS") != NULL) {
+            cmd_flags.ld_trace_dependents = TRUE;
+            cmd_flags.ld_trace_archives = TRUE;
+            cmd_flags.trace_file_path = getenv("LD_TRACE_FILE");
+        }
+        else if ((getenv("RC_TRACE_ARCHIVES") != NULL) ||
+            (getenv("LD_TRACE_ARCHIVES") != NULL)) {
+            cmd_flags.ld_trace_archives = TRUE;
+            cmd_flags.trace_file_path = getenv("LD_TRACE_FILE");
+        }
+
+        /*
+         * The environment variable ZERO_AR_DATE is used here and other
+         * places that write archives to allow testing and comparing
+         * things for exact binary equality.
+         */
+        if(getenv("ZERO_AR_DATE") == NULL)
+            zero_ar_date = FALSE;
+        else
+            zero_ar_date = TRUE;
 
 	/*
 	 * If either -syslibroot or the environment variable NEXT_ROOT is set
@@ -1322,6 +1358,19 @@ char **envp)
 	if(cmd_flags.a == FALSE)
 	    cmd_flags.s = TRUE; /* sort table of contents by default */
 
+	/* remember common values used in the archive table of contents */
+	if (cmd_flags.D == FALSE && zero_ar_date == FALSE)
+	    toc_time = time(0);
+	if (cmd_flags.D == FALSE) {
+	    toc_uid = getuid();
+	    toc_gid = getgid();
+	    
+	    numask = 0;
+	    oumask = umask(numask);
+	    toc_mode = S_IFREG | (0666 & ~oumask);
+	    (void)umask(oumask);
+	}
+
 	process();
 
 	if(errors == 0)
@@ -1370,7 +1419,7 @@ void)
     struct ofile *ofiles;
     char *file_name;
     enum bool flag, ld_trace_archive_printed;
-
+    
 	/*
 	 * For libtool processing put all input files in the specified output
 	 * file.  For ranlib processing all input files should be archives or
@@ -1408,20 +1457,13 @@ void)
 
 	    if(ofiles[i].file_type == OFILE_FAT){
 		(void)ofile_first_arch(ofiles + i);
-		do{
-		    if(ofiles[i].arch_type == OFILE_ARCHIVE){
-			if(cmd_flags.ld_trace_archives == TRUE &&
-			   cmd_flags.dynamic == FALSE &&
-			   ld_trace_archive_printed == FALSE){
-			    char resolvedname[MAXPATHLEN];
-                	    if(realpath(ofiles[i].file_name, resolvedname) !=
-			       NULL)
-				ld_trace("[Logging for XBS] Used static "
-					 "archive: %s\n", resolvedname);
-			    else
-				ld_trace("[Logging for XBS] Used static "
-					 "archive: %s\n", ofiles[i].file_name);
-			    ld_trace_archive_printed = TRUE;
+                do{
+                    if(ofiles[i].arch_type == OFILE_ARCHIVE){
+                        if (cmd_flags.ld_trace_archives == TRUE &&
+                            cmd_flags.dynamic == FALSE &&
+                            ld_trace_archive_printed == FALSE){
+                            ld_trace_archive(ofiles[i].file_name);
+                            ld_trace_archive_printed = TRUE;
 			}
 			/* loop through archive */
 			if((flag = ofile_first_member(ofiles + i)) == TRUE){
@@ -1481,18 +1523,13 @@ void)
 		}while(ofile_next_arch(ofiles + i) == TRUE);
 	    }
 	    else if(ofiles[i].file_type == OFILE_ARCHIVE){
-		if(cmd_flags.ld_trace_archives == TRUE &&
-		   cmd_flags.dynamic == FALSE &&
-		   ld_trace_archive_printed == FALSE){
-		    char resolvedname[MAXPATHLEN];
-		    if(realpath(ofiles[i].file_name, resolvedname) != NULL)
-			ld_trace("[Logging for XBS] Used static archive: "
-				 "%s\n", resolvedname);
-		    else
-			ld_trace("[Logging for XBS] Used static archive: "
-				 "%s\n", ofiles[i].file_name);
-		    ld_trace_archive_printed = TRUE;
-		}
+                if (cmd_flags.ld_trace_archives == TRUE &&
+                    cmd_flags.dynamic == FALSE &&
+                    ld_trace_archive_printed == FALSE){
+                    ld_trace_archive(ofiles[i].file_name);
+                    ld_trace_archive_printed =
+                        TRUE;
+                }
 		/* loop through archive */
 		if((flag = ofile_first_member(ofiles + i)) == TRUE){
 		    if(ofiles[i].member_ar_hdr != NULL &&
@@ -1571,7 +1608,7 @@ void)
 			  "library)", cmd_flags.files[i]);
 		}
 	    }
-
+            
 	    if(cmd_flags.ranlib == TRUE){
 		/*
 		 * In the case where ranlib is being used on an archive that
@@ -1611,6 +1648,10 @@ ranlib_fat_error:
 	}
 	if(cmd_flags.ranlib == FALSE && errors == 0)
 	    create_library(cmd_flags.output, NULL);
+
+    	/* Finalize the trace log */
+        if (cmd_flags.ld_trace_archives)
+            ld_trace_close();
 
 	/*
 	 * Clean-up of ofiles[] and archs could be done here but since this
@@ -2121,8 +2162,14 @@ struct ofile *ofile)
 		    p[sizeof(member->ar_hdr.ar_name)] = c;
 		member->member_name_size = size_ar_name(&member->ar_hdr);
 	    }
-	    if(zero_ar_date == TRUE)
-		stat_buf.st_mtime = 0;
+	    if(cmd_flags.D == TRUE || zero_ar_date == TRUE)
+		stat_buf.st_mtime = toc_time;
+            if (cmd_flags.D == TRUE) {
+                stat_buf.st_mode = toc_mode;
+                stat_buf.st_uid = toc_uid;
+                stat_buf.st_gid = toc_gid;
+            }
+            
 	    /*
 	     * Create the rest of the archive header after the name.
 	     */
@@ -2612,7 +2659,7 @@ struct ofile *ofile)
 		system_error("can't open output file: %s", output);
 		return;
 	    }
-	    if(write(fd, library, library_size) != (int)library_size){
+	    if(write64(fd, library, library_size) != (ssize_t)library_size){
 		system_error("can't write output file: %s", output);
 		return;
 	    }
@@ -2874,7 +2921,7 @@ fail_to_update_toc_in_place:
 	 * file.
 	 */
 	if(cmd_flags.noflush == TRUE){
-	    if(write(fd, library, library_size) != (int)library_size){
+	    if(write64(fd, library, library_size) != (ssize_t)library_size){
 		system_error("can't write output file: %s", output);
 		return;
 	    }
@@ -2900,7 +2947,7 @@ update_toc_ar_dates:
 	    system_error("can't open output file: %s", output);
 	    return;
 	}
-	if(zero_ar_date == TRUE)
+	if(cmd_flags.D == TRUE || zero_ar_date == TRUE)
 	    toc_mtime = 0;
 	else
 	    toc_mtime = stat_buf.st_mtime + 5;
@@ -2919,6 +2966,7 @@ update_toc_ar_dates:
 		system_error("can't lseek in output file: %s", output);
 		return;
 	    }
+            /* MDT: write(2) is OK here, size is less than 2^31-1 */
 	    if(write(fd, &toc_ar_hdr.ar_date, sizeof(toc_ar_hdr.ar_date)) !=
 		     sizeof(toc_ar_hdr.ar_date)){
 		system_error("can't write to output file: %s", output);
@@ -3291,8 +3339,8 @@ uint64_t size)
 		   write_offset, write_size);
 #endif /* DEBUG */
 	    lseek(fd, write_offset, L_SET);
-	    if(write(fd, library + write_offset, write_size) !=
-	       (int)write_size)
+	    if(write64(fd, library + write_offset, write_size) !=
+	       (ssize_t)write_size)
 		system_fatal("can't write to output file");
 	    if((r = vm_deallocate(mach_task_self(), (vm_address_t)(library +
 				  write_offset), write_size)) != KERN_SUCCESS)
@@ -3355,8 +3403,8 @@ int fd)
 		       write_offset, write_size);
 #endif /* DEBUG */
 	    lseek(fd, write_offset, L_SET);
-	    if(write(fd, library + write_offset, write_size) !=
-	       (int)write_size)
+	    if(write64(fd, library + write_offset, write_size) !=
+	       (ssize_t)write_size)
 		system_fatal("can't write to output file");
 	    if((r = vm_deallocate(mach_task_self(), (vm_address_t)(library +
 				  write_offset), write_size)) != KERN_SUCCESS)
@@ -4098,9 +4146,9 @@ char *output)
 	   (int)sizeof(arch->toc_ar_hdr.ar_date),
 	       toc_time,
 	   (int)sizeof(arch->toc_ar_hdr.ar_uid),
-	       (unsigned short)getuid(),
+	       (unsigned short)toc_uid,
 	   (int)sizeof(arch->toc_ar_hdr.ar_gid),
-	       (unsigned short)getgid(),
+	       (unsigned short)toc_gid,
 	   (int)sizeof(arch->toc_ar_hdr.ar_mode),
 	       (unsigned int)toc_mode,
 	   (int)sizeof(arch->toc_ar_hdr.ar_size),
@@ -4434,42 +4482,96 @@ const char *format, ...)
 }
 
 /*
- * Prints the message to cmd_flags.trace_file_path, or stderr if that
- * isn't set.
+ * Prints a message for the archive file specified by archive to
+ * cmd_flags.trace_file_path, or stderr if that isn't set.
+ */
+static void ld_trace_archive(const char* archive)
+{
+    char resolvedname[MAXPATHLEN];
+    const char* path = realpath(archive, resolvedname);
+
+    if (path == NULL)
+        path = archive;
+    
+    if (cmd_flags.ld_trace_dependents) {
+        if (trace_buffer == NULL) {
+            ld_trace_append("{\"archives\":[");
+        } else {
+            ld_trace_append(",");
+        }
+        ld_trace_append("\"%s\"", path);
+    }
+    else if (cmd_flags.ld_trace_archives) {
+        ld_trace_append("[Logging for XBS] Used static archive: "
+                        "%s\n", path);
+    }
+}
+
+/*
+ * ld_trace_close completes the trace logging process and writes the contents
+ * of the trace buffer.
+ *
+ *   If logging to a JSON object, the object will be closed.
+ *
+ *   If LD_TRACE_FILE is present in the environment, the trace buffer will be
+ *   written to the path so specified. The file will be created if missing, and
+ *   appended to if present. An exclusive lock with flock(2) semantics will
+ *   be held to prevent problems caused by concurrent writers.
+ *
+ *   If LD_TRACE_FILE is not present, the contents of the trace buffer will be
+ *   written to stderr.
+ */
+static void ld_trace_close(void)
+{
+    int trace_file;
+
+    if (cmd_flags.ld_trace_dependents && trace_buffer) {
+        ld_trace_append("]}\n");
+    }
+    
+#ifndef O_EXLOCK // cctools-port
+#define O_EXLOCK 0
+#endif
+
+    if (trace_buffer) {
+        if (cmd_flags.trace_file_path != NULL) {
+            trace_file = open(cmd_flags.trace_file_path,
+                              O_WRONLY | O_APPEND | O_CREAT | O_EXLOCK, 0666);
+            if (trace_file == -1)
+                error("Could not open or create trace file: %s\n",
+                      cmd_flags.trace_file_path);
+        }
+        else {
+            trace_file = fileno(stderr);
+        }
+        
+        (void)write64(trace_file, trace_buffer, trace_buflen);
+        /* Failure to write shouldn't fail the build. */
+        
+        close(trace_file);
+    }
+}
+
+/*
+ * ld_trace_append appends the message to trace_buffer.
  */
 static
 void
-ld_trace(
-const char *format, ...)
+ld_trace_append(
+         const char *format, ...)
 {
-	static int trace_file = -1;
-	char trace_buffer[MAXPATHLEN * 2];
-	char *buffer_ptr;
-	int length;
-	ssize_t amount_written;
-
-	if(trace_file == -1){
-		if(cmd_flags.trace_file_path != NULL){
-			trace_file = open(cmd_flags.trace_file_path, O_WRONLY | O_APPEND | O_CREAT, 0666);
-			if(trace_file == -1)
-				error("Could not open or create trace file: %s\n", cmd_flags.trace_file_path);
-		}
-		else{
-			trace_file = fileno(stderr);
-		}
-	}
     va_list ap;
+    int length;
 
-	va_start(ap, format);
-	length = vsnprintf(trace_buffer, sizeof(trace_buffer), format, ap);
-	va_end(ap);
-	buffer_ptr = trace_buffer;
-	while(length > 0){
-		amount_written = write(trace_file, buffer_ptr, length);
-		if(amount_written == -1)
-			/* Failure to write shouldn't fail the build. */
-			return;
-		buffer_ptr += amount_written;
-		length -= amount_written;
-	}
+    va_start(ap, format);
+    length = vsnprintf(NULL, 0, format, ap);
+    va_end(ap);
+
+    trace_buffer = realloc(trace_buffer, trace_buflen + length + 1);
+    
+    va_start(ap, format);
+    vsnprintf(&trace_buffer[trace_buflen], length  + 1, format, ap);
+    va_end(ap);
+    
+    trace_buflen += length;
 }

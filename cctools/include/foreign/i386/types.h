@@ -67,7 +67,7 @@
 #define	_MACHTYPES_H_
 
 #ifndef __ASSEMBLER__
-#if defined(__NetBSD__) || defined(__OpenBSD__)
+#if defined(__NetBSD__)
 #include_next <machine/types.h> /* __cpu_simple_lock_t */
 #endif /* __NetBSD__ || __OpenBSD__ */
 #ifdef __DragonFly__
@@ -79,48 +79,52 @@
  * Basic integral types.  Omit the typedef if
  * not possible for a machine/compiler combination.
  */
+/* cctools-port: replaced types with compiler defines */
 #ifndef _INT8_T
 #define _INT8_T
-typedef	__signed char		int8_t;
+typedef	__INT8_TYPE__          int8_t;
 #endif
-typedef	unsigned char		u_int8_t;
+typedef	__UINT8_TYPE__         u_int8_t;
+
 #ifndef _INT16_T
 #define _INT16_T
-typedef	short			int16_t;
+typedef	__INT16_TYPE__         int16_t;
 #endif
-typedef	unsigned short		u_int16_t;
+typedef	__UINT16_TYPE__        u_int16_t;
+
 #ifndef _INT32_T
 #define _INT32_T
-typedef	int			int32_t;
+typedef	__INT32_TYPE__         int32_t;
 #endif
-typedef	unsigned int		u_int32_t;
+typedef	__UINT32_TYPE__        u_int32_t;
+
 #ifndef _INT64_T
 #define _INT64_T
-#if !defined(__NetBSD__) && !defined(__OpenBSD__) && !defined(__DragonFly__)
-typedef	long long		int64_t;
-#else
-typedef long            int64_t;
-#endif /* ! __NetBSD__ && !__OpenBSD__ && !__DragonFly__  */
+typedef __INT64_TYPE__         int64_t;
 #endif
-#if !defined(__NetBSD__) && !defined(__OpenBSD__) && !defined(__DragonFly__)
-typedef	unsigned long long	u_int64_t;
-#else
-typedef unsigned long       u_int64_t;
-#endif /* ! __NetBSD__ && !__OpenBSD__ && !__DragonFly__ */
+typedef __UINT64_TYPE__        u_int64_t;
 
+#ifdef __OpenBSD__ /* cctools-port: whatever ... */
 #if __LP64__
-typedef int64_t			register_t;
+ typedef long register_t;
 #else
-typedef int32_t			register_t;
+ typedef long long register_t;
 #endif
+#else
+#if __LP64__
+ typedef int64_t               register_t;
+#else
+ typedef int32_t               register_t;
+#endif
+#endif /* __OpenBSD__ */
 
 #ifndef _INTPTR_T
 #define _INTPTR_T
-typedef __darwin_intptr_t	intptr_t;
+typedef __INTPTR_TYPE__       intptr_t;
 #endif
 #ifndef _UINTPTR_T
 #define _UINTPTR_T
-typedef unsigned long		uintptr_t;
+typedef __UINTPTR_TYPE__      uintptr_t;
 #endif
 
 #if !defined(_ANSI_SOURCE) && (!defined(_POSIX_C_SOURCE) || defined(_DARWIN_C_SOURCE))

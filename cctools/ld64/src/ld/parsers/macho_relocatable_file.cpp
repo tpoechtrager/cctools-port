@@ -1441,6 +1441,11 @@ const char* Parser<arm64>::fileKind(const uint8_t* fileContent)
 		return NULL;
 	if ( header->cputype() != CPU_TYPE_ARM64 )
 		return NULL;
+	for (const ArchInfo* t=archInfoArray; t->archName != NULL; ++t) {
+		if ( (t->cpuType == CPU_TYPE_ARM) && ((cpu_subtype_t)header->cpusubtype() == t->cpuSubType) ) {
+			return t->archName;
+		}
+	}
 	return "arm64";
 }
 #endif
@@ -1757,7 +1762,10 @@ typename A::P::uint_t Parser<A>::realAddr(typename A::P::uint_t addr)
 	uint32_t _name##_count = 1; \
 	uint32_t _name##_stack_count = _actual_count; \
 	if ( _actual_count > _maxCount ) { \
-		_name = (_type*)malloc(sizeof(_type) * _actual_count); \
+		uint32_t allocSize;  \
+		if ( __builtin_mul_overflow(_actual_count, sizeof(_type), &allocSize) ) \
+			throw "STACK_ALLOC_IF_SMALL allocation overflow"; \
+		_name = (_type*)malloc(allocSize); \
 		_name##_stack_count = 1; \
 	} \
 	else \
@@ -8085,6 +8093,11 @@ const char* archName(const uint8_t* fileContent)
 	if ( mach_o::relocatable::Parser<arm>::validFile(fileContent, false, 0) ) {
 		return mach_o::relocatable::Parser<arm>::fileKind(fileContent);
 	}
+#if SUPPORT_ARCH_arm64
+	if ( mach_o::relocatable::Parser<arm64>::validFile(fileContent, false, 0) ) {
+		return mach_o::relocatable::Parser<arm64>::fileKind(fileContent);
+	}
+#endif
 	return NULL;
 }
 

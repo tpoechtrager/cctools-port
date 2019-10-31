@@ -91,6 +91,8 @@
 #include "parsers/lto_file.h"
 #include "parsers/opaque_section_file.h"
 
+// ld64-port: Moved basePlatform to ld.hpp
+
 const ld::VersionSet ld::File::_platforms;
 
 struct PerformanceStatistics {

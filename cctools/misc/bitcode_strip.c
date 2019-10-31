@@ -30,6 +30,7 @@
 #include "stuff/allocate.h"
 #include "stuff/rnd.h"
 #include "stuff/execute.h"
+#include "stuff/write64.h"
 
 /* used by error routines as the name of the program */
 char *progname = NULL;
@@ -1672,6 +1673,12 @@ struct object *object)
 	    case LC_CODE_SIGNATURE:
 		object->code_sig_cmd = (struct linkedit_data_command *)lc;
 		break;
+	    case LC_DYLD_CHAINED_FIXUPS:
+		object->dyld_chained_fixups = (struct linkedit_data_command *)lc;
+		break;
+	    case LC_DYLD_EXPORTS_TRIE:
+		object->dyld_exports_trie = (struct linkedit_data_command *)lc;
+		break;
 	    }
 	    lc = (struct load_command *)((char *)lc + lc->cmdsize);
 	}
@@ -1752,8 +1759,8 @@ struct object *object)
 	if((fd = open(input_file, O_WRONLY|O_CREAT, 0600)) < 0)
 	    system_fatal("can't open temporary file: %s", input_file);
 
-	if(write(fd, object->object_addr, object->object_size) !=
-	        object->object_size)
+	if(write64(fd, object->object_addr, object->object_size) !=
+	        (ssize_t)object->object_size)
 	    system_fatal("can't write temporary file: %s", input_file);
 
 	if(close(fd) == -1)

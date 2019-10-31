@@ -96,6 +96,7 @@
 #include "stuff/errors.h"
 #include "stuff/allocate.h"
 #include "stuff/guess_short_name.h"
+#include "stuff/write64.h"
 #ifdef LTO_SUPPORT
 #include "stuff/lto.h"
 #include <xar/xar.h>
@@ -1079,7 +1080,7 @@ struct cmd_flags *cmd_flags)
 	    return;
 
 	xar_fd = mkstemp(xar_filename);
-	if(write(xar_fd, llvm_bundle_pointer, llvm_bundle_size) !=
+	if(write64(xar_fd, llvm_bundle_pointer, llvm_bundle_size) !=
 	        llvm_bundle_size){
 	    if(ofile->xar_member_name != NULL)
 		system_error("Can't write (__LLVM,__bundle) section contents "

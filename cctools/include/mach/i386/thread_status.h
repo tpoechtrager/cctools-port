@@ -119,7 +119,6 @@
 #define x86_AVX512_STATE64		(x86_AVX512_STATE32 + 1)
 #define x86_AVX512_STATE		(x86_AVX512_STATE32 + 2)
 
-
 /*
  * Largest state on this machine:
  * (be sure mach/machine/thread_state.h matches!)

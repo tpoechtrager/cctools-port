@@ -25,7 +25,8 @@ bin_PROGRAMS =  \
 LDADD =  \
 	$(top_builddir)/libstuff/libstuff.la \
 	$(DL_LIB) \
-	$(LTO_RPATH)
+	$(LTO_RPATH) \
+	$(MATH_LIB)
 
 AM_CFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/include/foreign -I$(top_srcdir)/libstuff $(WARNINGS) $(LTO_DEF) -D__DARWIN_UNIX03 $(ENDIAN_FLAG)
 

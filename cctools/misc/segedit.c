@@ -48,6 +48,8 @@
 #include "stuff/errors.h"
 #include "stuff/rnd.h"
 #include "stuff/bytesex.h"
+#include "stuff/write64.h"
+#include "stuff/arch.h"
 
 /* These variables are set from the command line arguments */
 __private_extern__
@@ -108,7 +110,6 @@ static struct mach_header_64
 static uint32_t mh_ncmds;	/* number of load commands */
 static struct load_command
 		*load_commands;	/* pointer to the input file's load commands */
-static uint32_t pagesize = 8192;/* target pagesize */
 static enum bool swapped;	/* TRUE if the input is to be swapped */
 static enum byte_sex host_byte_sex = UNKNOWN_BYTE_SEX;
 static enum byte_sex target_byte_sex = UNKNOWN_BYTE_SEX;
@@ -138,33 +139,6 @@ static int cmp_qsort(
     const struct rep_seg *seg2);
 static void usage(
     void);
-
-/*
- * MDT: The  following routines have been copied from lipo.c to guess the page
- * alignment based on the mach header. They really should move to libstuff.
- */
-
-/* The maximum section alignment allowed to be specified, as a power of two */
-#define MAXSECTALIGN		15 /* 2**15 or 0x8000 */
-
-static uint32_t get_align(
-    struct mach_header *mhp,
-    struct load_command *load_commands,
-    uint64_t size,
-    char *name,
-    enum bool swapped);
-static uint32_t get_align_64(
-    struct mach_header_64 *mhp64,
-    struct load_command *load_commands,
-    uint64_t size,
-    char *name,
-    enum bool swapped);
-static uint32_t guess_align(
-    uint64_t vmaddr);
-
-/*
- * MDT: End of alignment routines
- */
 
 int
 main(
@@ -491,8 +465,8 @@ uint32_t size)
 		 if((fd = open(ep->filename, O_WRONLY | O_CREAT |
 			       O_TRUNC, 0666)) == -1)
 		    system_fatal("can't create: %s", ep->filename);
-		 if(write(fd, (char *)input_addr + offset,
-			 size) != (int)size)
+		 if(write64(fd, (char *)input_addr + offset,
+                            size) != (ssize_t)size)
 		    system_fatal("can't write: %s", ep->filename);
 		 if(close(fd) == -1)
 		    system_fatal("can't close: %s", ep->filename);
@@ -526,7 +500,8 @@ replace_sections(void)
     uint32_t size;
     kern_return_t r;
     enum bool no_seg_resize;
-
+    uint32_t pagesize;
+    
 	errors = 0;
 
 	high_reloc_seg = 0;
@@ -737,6 +712,8 @@ replace_sections(void)
 	    case LC_MAIN:
 	    case LC_SOURCE_VERSION:
 	    case LC_LINKER_OPTION:
+        case LC_DYLD_CHAINED_FIXUPS:
+        case LC_DYLD_EXPORTS_TRIE:
 		break;
 	    default:
 		error("unknown load command %u (result maybe bad)", i);
@@ -781,12 +758,29 @@ replace_sections(void)
 	 * Set the pagesize to match that of the input file. Note that we cannot
 	 * assume a single pagesize across all Mach-O files.
 	 */
-	if(mhp != NULL)
-	    pagesize = 1 << get_align(mhp, load_commands, input_size, input,
-				      swapped);
-	else
-	    pagesize = 1 << get_align_64(mhp64, load_commands, input_size,
-					 input, swapped);
+	pagesize = 0;
+	if (0 == pagesize)
+	{
+	    cpu_type_t cputype = (mhp != NULL ?
+				  mhp->cputype : mhp64->cputype);
+	    cpu_subtype_t cpusubtype = (mhp != NULL ?
+					mhp->cpusubtype : mhp64->cpusubtype);
+	    const char* arch_name = get_arch_name_from_types(cputype,
+							     cpusubtype);
+	    if (arch_name != NULL) {
+		struct arch_flag arch_flag;
+		if (get_arch_from_flag((char*)arch_name, &arch_flag)) {
+		    pagesize = get_segalign_from_flag(&arch_flag);
+		}
+		else {
+		    /* unreachable? */
+		    fatal("unknown cputype %u found in %s", cputype, input);
+		}
+	    }
+	    else {
+		fatal("unknown cputype %u found in %s", cputype, input);
+	    }
+	}
  
 	/*
 	 * First go through the segments and adjust the segment offsets, sizes
@@ -1146,8 +1140,8 @@ replace_sections(void)
 				system_error("Can't map file: %s",rp->filename);
 			    for(l = rp->size + 1; l < sp->size; l++)
 				*((char *)sect_addr + l) = '\0';
-			    if(write(outfd, (char *)sect_addr,sp->size) !=
-			       sp->size)
+			    if(write64(outfd, (char *)sect_addr,sp->size) !=
+                               sp->size)
 				system_fatal("can't write new section contents "
 				    "for section (%s,%s) to output file: %s", 
 				     rp->segname, rp->sectname, output);
@@ -1168,9 +1162,9 @@ replace_sections(void)
 				      "(section (%.16s,%.16s) extends past the "
 				      "end of the file)",input, sp->segname,
 				      sp->sectname);
-			    if(write(outfd,(char *)input_addr +
-					   sects[k + j].offset,
-			             sp->size) != sp->size)
+			    if(write64(outfd,(char *)input_addr +
+                                       sects[k + j].offset,
+			               sp->size) != sp->size)
 				system_fatal("can't write section contents for "
 					 "section (%s,%s) to output file: %s", 
 					 rp->segname, rp->sectname, output);
@@ -1178,7 +1172,7 @@ replace_sections(void)
 			sp++;
 		    }
 		    /* write the segment padding */
-		    if(write(outfd, (char *)pad_addr, segs[i].padsize) !=
+		    if(write64(outfd, (char *)pad_addr, segs[i].padsize) !=
 		       segs[i].padsize)
 			system_fatal("can't write segment padding for segment "
 			    "%s to output file: %s", segs[i].sgp->segname,
@@ -1201,8 +1195,8 @@ replace_sections(void)
 				system_error("Can't map file: %s",rp->filename);
 			    for(l = rp->size + 1; l < sp64->size; l++)
 				*((char *)sect_addr + l) = '\0';
-			    if(write(outfd, (char *)sect_addr,sp64->size) !=
-			       sp64->size)
+			    if(write64(outfd, (char *)sect_addr,sp64->size) !=
+                               sp64->size)
 				system_fatal("can't write new section contents "
 				    "for section (%s,%s) to output file: %s", 
 				     rp->segname, rp->sectname, output);
@@ -1223,9 +1217,9 @@ replace_sections(void)
 				      "(section (%.16s,%.16s) extends past the "
 				      "end of the file)",input, sp64->segname,
 				      sp64->sectname);
-			    if(write(outfd,(char *)input_addr +
-					   sects[k + j].offset,
-			             sp64->size) != sp64->size)
+			    if(write64(outfd,(char *)input_addr +
+                                       sects[k + j].offset,
+			               sp64->size) != sp64->size)
 				system_fatal("can't write section contents for "
 					 "section (%s,%s) to output file: %s", 
 					 rp->segname, rp->sectname, output);
@@ -1233,7 +1227,7 @@ replace_sections(void)
 			sp64++;
 		    }
 		    /* write the segment padding */
-		    if(write(outfd, (char *)pad_addr, segs[i].padsize) !=
+		    if(write64(outfd, (char *)pad_addr, segs[i].padsize) !=
 		       segs[i].padsize)
 			system_fatal("can't write segment padding for segment "
 			    "%s to output file: %s", segs[i].sgp64->segname,
@@ -1249,8 +1243,9 @@ replace_sections(void)
 			    fatal("truncated or malformed object file: %s "
 				  "(segment: %s extends past the end of "
 				  "the file)", input, segs[i].sgp->segname);
-			if(write(outfd, (char *)input_addr + segs[i].fileoff,
-			   segs[i].sgp->filesize) != segs[i].sgp->filesize)
+			if(write64(outfd, (char *)input_addr + segs[i].fileoff,
+                                   segs[i].sgp->filesize) !=
+                           segs[i].sgp->filesize)
 			    system_fatal("can't write segment contents for "
 					 "segment: %s to output file: %s", 
 					 segs[i].sgp->segname, output);
@@ -1264,8 +1259,9 @@ replace_sections(void)
 			    fatal("truncated or malformed object file: %s "
 				  "(segment: %s extends past the end of "
 				  "the file)", input, segs[i].sgp64->segname);
-			if(write(outfd, (char *)input_addr + segs[i].fileoff,
-			   segs[i].sgp64->filesize) != segs[i].sgp64->filesize)
+			if(write64(outfd, (char *)input_addr + segs[i].fileoff,
+			           segs[i].sgp64->filesize) !=
+                           segs[i].sgp64->filesize)
 			    system_fatal("can't write segment contents for "
 					 "segment: %s to output file: %s", 
 					 segs[i].sgp64->segname, output);
@@ -1279,7 +1275,7 @@ replace_sections(void)
 	}
 	/* write the linkedit info */
 	size = input_size - low_linkedit;
-	if(write(outfd, (char *)input_addr + low_linkedit, size) != size)
+	if(write64(outfd, (char *)input_addr + low_linkedit, size) != size)
 	    system_fatal("can't write link edit information to output file: %s",
 			 output);
 	lseek(outfd, 0, L_SET);
@@ -1325,7 +1321,7 @@ replace_sections(void)
 	    else
 		swap_mach_header_64(mhp64, host_byte_sex);
 	}
-	if(write(outfd, input_addr, size) != size)
+	if(write64(outfd, input_addr, size) != size)
 	    system_fatal("can't write headers to output file: %s", output);
 
 	if(close(outfd) == -1)
@@ -1399,234 +1395,6 @@ const struct rep_seg *seg2)
 		return(0);
 	}
 }
-
-/*
- * MDT: The  following routines have been copied from lipo.c to guess the page
- * alignment based on the mach header. They really should move to libstuff.
- */
-
-/* The maximum section alignment allowed to be specified, as a power of two */
-#define MAXSECTALIGN		15 /* 2**15 or 0x8000 */
-
-/*
- * get_align is passed a pointer to a mach header and size of the object.  It
- * returns the segment alignment the object was created with.  It guesses but
- * it is conservative.  The maximum alignment is that the link editor will allow
- * MAXSECTALIGN and the minimum is the conserative alignment for a uint32_t
- * which appears in a mach object files (2^2 worst case for all current 32-bit
- * machines).
- */
-static
-uint32_t
-get_align(
-struct mach_header *mhp,
-struct load_command *load_commands,
-uint64_t size,
-char *name,
-enum bool swapped)
-{
-    uint32_t i, j, cur_align, align;
-    struct load_command *lcp, l;
-    struct segment_command *sgp, sg;
-    struct section *sp, s;
-    enum byte_sex host_byte_sex;
-
-	/*
-	 * Special case ppc and i386 architectures and return 12.
-	 * We know that with those architectures that the kernel and mmap only
-	 * need file offsets to be page (4096 byte) aligned.
-	 */
-	if(mhp->cputype == CPU_TYPE_POWERPC ||
-	   mhp->cputype == CPU_TYPE_I386)
-	    return(12);
-	/*
-	 * Special case ARM and return 14.  As it has 16k pages.
-	 */
-	if(mhp->cputype == CPU_TYPE_ARM)
-	    return(14);
-
-	host_byte_sex = get_host_byte_sex();
-
-	/* set worst case the link editor uses first */
-	cur_align = MAXSECTALIGN;
-	if(mhp->sizeofcmds + sizeof(struct mach_header) > size)
-	    fatal("truncated or malformed object (load commands would "
-		  "extend past the end of the file) in: %s", name);
-	lcp = load_commands;
-	for(i = 0; i < mhp->ncmds; i++){
-	    l = *lcp;
-	    if(swapped)
-		swap_load_command(&l, host_byte_sex);
-	    if(l.cmdsize % sizeof(uint32_t) != 0)
-		error("load command %u size not a multiple of "
-		      "sizeof(uint32_t) in: %s", i, name);
-	    if(l.cmdsize <= 0)
-		fatal("load command %u size is less than or equal to zero "
-		      "in: %s", i, name);
-	    if((char *)lcp + l.cmdsize >
-	       (char *)load_commands + mhp->sizeofcmds)
-		fatal("load command %u extends past end of all load "
-		      "commands in: %s", i, name);
-	    if(l.cmd == LC_SEGMENT){
-		sgp = (struct segment_command *)lcp;
-		sg = *sgp;
-		if(swapped)
-		    swap_segment_command(&sg, host_byte_sex);
-		if(mhp->filetype == MH_OBJECT){
-		    /* this is the minimum alignment, then take largest */
-		    align = 2; /* 2^2 sizeof(uint32_t) */
-		    sp = (struct section *)((char *)sgp +
-					    sizeof(struct segment_command));
-		    for(j = 0; j < sg.nsects; j++){
-			s = *sp;
-			if(swapped)
-			    swap_section(&s, 1, host_byte_sex);
-			if(s.align > align)
-			    align = s.align;
-			sp++;
-		    }
-		    if(align < cur_align)
-			cur_align = align;
-		}
-		else{
-		    /* guess the smallest alignment and use that */
-		    align = guess_align(sg.vmaddr);
-		    if(align < cur_align)
-			cur_align = align;
-		}
-	    }
-	    lcp = (struct load_command *)((char *)lcp + l.cmdsize);
-	}
-	return(cur_align);
-}
-
-/*
- * get_align_64 is passed a pointer to a mach_header_64 and size of the object.
- * It returns the segment alignment the object was created with.  It guesses but
- * it is conservative.  The maximum alignment is that the link editor will allow
- * MAXSECTALIGN and the minimum is the conserative alignment for a long long
- * which appears in a mach object files (2^3 worst case for all 64-bit
- * machines).
- */
-static
-uint32_t
-get_align_64(
-struct mach_header_64 *mhp64,
-struct load_command *load_commands,
-uint64_t size,
-char *name,
-enum bool swapped)
-{
-    uint32_t i, j, cur_align, align;
-    struct load_command *lcp, l;
-    struct segment_command_64 *sgp, sg;
-    struct section_64 *sp, s;
-    enum byte_sex host_byte_sex;
-
-	/*
-	 * Special case ppc64 and x86_64 architectures and return 12.
-	 * We know that with those architectures that the kernel and mmap only
-	 * need file offsets to be page (4096 byte) aligned.
-	 */
-	if(mhp64->cputype == CPU_TYPE_POWERPC64 ||
-	   mhp64->cputype == CPU_TYPE_X86_64)
-	    return(12);
-	/*
-	 * Special case ARM64 and return 14.  As it has 16k pages.
-	 */
-	if(mhp64->cputype == CPU_TYPE_ARM64)
-	    return(14);
-
-	host_byte_sex = get_host_byte_sex();
-
-	/* set worst case the link editor uses first */
-	cur_align = MAXSECTALIGN;
-	if(mhp64->sizeofcmds + sizeof(struct mach_header_64) > size)
-	    fatal("truncated or malformed object (load commands would "
-		  "extend past the end of the file) in: %s", name);
-	lcp = load_commands;
-	for(i = 0; i < mhp64->ncmds; i++){
-	    l = *lcp;
-	    if(swapped)
-		swap_load_command(&l, host_byte_sex);
-	    if(l.cmdsize % sizeof(long long) != 0)
-		error("load command %u size not a multiple of "
-		      "sizeof(long long) in: %s", i, name);
-	    if(l.cmdsize <= 0)
-		fatal("load command %u size is less than or equal to zero "
-		      "in: %s", i, name);
-	    if((char *)lcp + l.cmdsize >
-	       (char *)load_commands + mhp64->sizeofcmds)
-		fatal("load command %u extends past end of all load "
-		      "commands in: %s", i, name);
-	    if(l.cmd == LC_SEGMENT_64){
-		sgp = (struct segment_command_64 *)lcp;
-		sg = *sgp;
-		if(swapped)
-		    swap_segment_command_64(&sg, host_byte_sex);
-		if(mhp64->filetype == MH_OBJECT){
-		    /* this is the minimum alignment, then take largest */
-		    align = 3; /* 2^3 sizeof(long long) */
-		    sp = (struct section_64 *)((char *)sgp +
-					    sizeof(struct segment_command_64));
-		    for(j = 0; j < sg.nsects; j++){
-			s = *sp;
-			if(swapped)
-			    swap_section_64(&s, 1, host_byte_sex);
-			if(s.align > align)
-			    align = s.align;
-			sp++;
-		    }
-		    if(align < cur_align)
-			cur_align = align;
-		}
-		else{
-		    /* guess the smallest alignment and use that */
-		    align = guess_align(sg.vmaddr);
-		    if(align < cur_align)
-			cur_align = align;
-		}
-	    }
-	    lcp = (struct load_command *)((char *)lcp + l.cmdsize);
-	}
-	return(cur_align);
-}
-
-/*
- * guess_align is passed a vmaddr of a segment and guesses what the segment
- * alignment was.  It uses the most conservative guess up to the maximum
- * alignment that the link editor uses.
- */
-static
-uint32_t
-guess_align(
-uint64_t vmaddr)
-{
-    uint32_t align;
-    uint64_t segalign;
-
-	if(vmaddr == 0)
-	    return(MAXSECTALIGN);
-
-	align = 0;
-	segalign = 1;
-	while((segalign & vmaddr) == 0){
-	    segalign = segalign << 1;
-	    align++;
-	}
-
-	if(align < 2)
-	    return(2);
-	if(align > MAXSECTALIGN)
-	    return(MAXSECTALIGN);
-
-	return(align);
-}
-
-/*
- * MDT: End of alignment routines
- */
-
 
 /*
  * Print the usage message and exit non-zero.

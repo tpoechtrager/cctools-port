@@ -382,13 +382,13 @@ put_arobj(cfp, sb)
 	 * which is required for object files in archives.
 	 */
 	if (lname) {
-		if (write(cfp->wfd, name, lname) != (int)lname)
+		if (write(cfp->wfd, name, lname) != (ssize_t)lname)
 			error(cfp->wname);
 		already_written = lname;
 		if ((lname % 4) != 0) {
 			static char pad[3] = "\0\0\0";
 			if (write(cfp->wfd, pad, 4-(lname%4)) !=
-			    (int)(4-(lname%4)))
+			    (ssize_t)(4-(lname%4)))
 				error(cfp->wname);
 			already_written += 4 - (lname % 4);
 		}

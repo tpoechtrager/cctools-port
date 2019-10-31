@@ -36,6 +36,7 @@
 #ifdef LTO_SUPPORT
 #include "stuff/lto.h"
 #endif /* LTO_SUPPORT */
+#include "stuff/write64.h"
 
 static void copy_new_symbol_info(
     char *p,
@@ -105,7 +106,7 @@ static void warn_member(
  * to FALSE.  If the output contains archive members that have archive offsets
  * greater than 32-bits then a 64-bit toc will be used.  If warnings about
  * unusual libraries are printed if library_warnings == TRUE.  If throttle is
- * not NULL is is set to a value of bytes per second to limiting the writes to
+ * not NULL it is set to a value of bytes per second to limiting the writes to
  * in order to not eat all I/O bandwidth.
  */
 __private_extern__
@@ -204,7 +205,8 @@ uint32_t *throttle)
                     write_size = (file + file_size) - p;
                 else
                     write_size = WRITE_SIZE;
-                if(write(fd, p, write_size) != (int)write_size){
+                /* MDT: write(2) is OK here, write_size is less than 2^31-1 */
+                if(write(fd, p, write_size) != (ssize_t)write_size){
                     system_error("can't write output file: %s", output);
                     goto cleanup;
                 }
@@ -253,7 +255,7 @@ uint32_t *throttle)
         }
         else{
 no_throttle:
-	    if(write(fd, file, file_size) != (int)file_size){
+	    if(write64(fd, file, file_size) != (ssize_t)file_size){
 		system_error("can't write output file: %s", output);
 		goto cleanup;
 	    }

@@ -214,6 +214,7 @@ const char *xar_member_name)
 	    return;
 
 	xar_fd = mkstemp(xar_filename);
+        /* MDT: write(2) is OK here, sect_size is less than 2^31-1 */
 	if(write(xar_fd, sect, sect_size) != sect_size){
 	    system_error("Can't write (__LLVM,__bundle) section contents "
 		"to temporary file: %s\n", xar_filename);

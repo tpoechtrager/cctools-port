@@ -17,10 +17,6 @@
 #define __has_include_next(x) 0
 #endif
 
-#ifdef __NetBSD__
-#define stoi(a,b) atoi(a.c_str()); do { if (!b) break; const char *p = a.c_str(); *b = 0; while (isdigit(*p++)) (*b)++; } while (0)
-#endif
-
 #ifdef __cplusplus
 extern "C" {
 #endif

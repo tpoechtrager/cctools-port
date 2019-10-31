@@ -1243,7 +1243,9 @@ struct info *info)
 	    else if(swift_version == 5)
 		printf(" Swift 4.0");
 	    else if(swift_version == 6)
-		printf(" Swift 4.1");
+		printf(" Swift 4.1/4.2");
+	    else if(swift_version == 7)
+	      printf(" Swift 5 or later");
 	    else
 		printf(" unknown future Swift version (%d)", swift_version);
 	}

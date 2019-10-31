@@ -1,28 +1,24 @@
 # Apple cctools and ld64 port for Linux, FreeBSD and macOS #
 
-Current Version: cctools: 921, ld64: 409.12.  
+Current Version: cctools: 927.0.2, ld64: 450.3.  
 Originally ported by [cjacker](http://ios-toolchain-based-on-clang-for-linux.googlecode.com).
 
 ## SUPPORTED HOSTS ##
 
 **SUPPORTED OPERATING SYSTEMS:**
 
-Linux, FreeBSD, Mac OS X and iOS
-
-Other BSDs may or may not work.
+Linux, FreeBSD, Mac OS X, iOS,  
+OpenBSD and NetBSD
 
 **SUPPORTED HOST ARCHITECTURES:**
 
-x86, x86_64, arm
-
-Untested, but compiles:
-
-aarch64, ppc, ppc64
+x86, x86_64, arm, arm64/aarch64
 
 ## SUPPORTED TARGET ARCHITECTURES ##
 
-armv6, armv7, armv7s, arm64, i386, x86_64,  
-x86_64h, armv6m, armv7k, armv7m and armv7em
+armv6, armv7, armv7s, arm64, arm64e (untested),  
+arm64_32 (untested), i386, x86_64,  x86_64h,  
+armv6m, armv7k, armv7m and armv7em
 
 ## SUPPORTED TARGET OPERATING SYSTEMS ##
 

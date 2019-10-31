@@ -8,7 +8,7 @@ else
 otool_LDADD = \
 $(top_builddir)/libstuff/libstuff.la \
 $(top_builddir)/libobjc2/libobjc.la \
-$(PTHREAD_FLAGS) $(CXXABI_LIB) $(DL_LIB)
+$(PTHREAD_FLAGS) $(CXXABI_LIB) $(DL_LIB) $(GCC_LIB)
 endif
 
 if ISDARWIN

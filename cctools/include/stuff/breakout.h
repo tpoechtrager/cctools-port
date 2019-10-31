@@ -176,6 +176,10 @@ struct object {
     struct section_64 **sections64; /* array of 64-bit section structs */
     struct dyld_info_command
 	*dyld_info;		    /* the LC_DYLD_INFO command,if any */
+    struct linkedit_data_command
+	*dyld_chained_fixups;	    /* the fixups */
+    struct linkedit_data_command
+	*dyld_exports_trie;	    /* the exports trie */
 
     /*
      * This is only used for redo_prebinding and is calculated by breakout()

@@ -8,7 +8,7 @@ ranlib \- add or update the table of contents of archive libraries
 .B \-static
 .BI \-o " output"
 [
-.B \-sacLT
+.B \-sacLTD
 ]
 [
 .B \-
@@ -406,6 +406,12 @@ will no longer be able to operate on it.
 .TP
 .B \-q
 Do nothing if a universal file would be created.
+.TP
+.B \-D
+When building a static library, set archive contents' user ids, group ids,
+dates, and file modes to reasonable defaults. This allows libraries created
+with identical input to be identical to each other, regardless of time of day,
+user, group, umask, and other aspects of the environment.
 .PP
 For compatibility, the following 
 .I ranlib

@@ -74,10 +74,12 @@ static void strip_LC_CODE_SIGNATURE_commands(
 extern char apple_version[];
 char *version = apple_version;
 
+static enum bool cs_alloc_debug;
+
 /*
  * The codesign_allocate(1) tool has the following usage:
  *
- *	codesign_allocate -i oldfile [-a arch size ...] | [-r]  -o newfile
+ *	codesign_allocate -i oldfile [-a arch size ...] | [-r] -o newfile
  * 
  * Where the oldfile is a Mach-O file that is input for the dynamic linker
  * and it creates or adds an 
@@ -92,6 +94,18 @@ char **envp)
     char *input, *output, *endp;
     struct arch *archs;
     uint32_t narchs;
+
+        /* if CS_ALLOC_DEBUG is set print the complete arguments to stderr */
+        cs_alloc_debug = (NULL != getenv("CS_ALLOC_DEBUG"));
+        if (cs_alloc_debug) {
+            for (i = 0; i < argc; ++i) {
+                if (i < (argc-1)) {
+                    fprintf(stderr, "%s ", argv[i]);
+                } else {
+                    fprintf(stderr, "%s\n", argv[i]);
+                }
+            }
+        }
 
 	progname = argv[0];
 	input = NULL;

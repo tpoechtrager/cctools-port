@@ -30,6 +30,7 @@
 #include "stuff/breakout.h"
 #include "stuff/rnd.h"
 #include "stuff/allocate.h"
+#include "stuff/write64.h"
 
 /* used by error routines as the name of the program */
 char *progname = NULL;
@@ -469,7 +470,7 @@ char *input)
 			fatal("internal error: swap_object_headers() failed");
 	    }
 
-	    if(write(fd, headers, size) != (int)size)
+	    if(write64(fd, headers, size) != (ssize_t)size)
 		system_error("can't write new headers in file: %s", input);
 
 	    free(headers);

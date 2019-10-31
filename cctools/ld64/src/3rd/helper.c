@@ -1,4 +1,7 @@
-const char ldVersionString[] = "@(#)PROGRAM:ld  PROJECT:ld64-409.12\n";
+#define VAL(x) #x
+#define STRINGIFY(x) VAL(x)
+
+const char ldVersionString[] = "@(#)PROGRAM:ld  PROJECT:ld64-" STRINGIFY(LD64_VERSION_NUM) "\n";
 
 #ifndef __APPLE__
 

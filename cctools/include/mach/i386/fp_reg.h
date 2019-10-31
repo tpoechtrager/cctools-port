@@ -122,6 +122,7 @@ struct x86_avx512_thread_state {
 typedef union {
 	struct x86_fx_thread_state	fx;
 	struct x86_avx_thread_state	avx;
+	struct x86_avx512_thread_state	avx512;
 } x86_ext_thread_state_t;
 
 #endif /* MACH_KERNEL_PRIVATE */

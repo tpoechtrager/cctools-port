@@ -8,6 +8,7 @@ ld_LDADD =  \
 	$(top_builddir)/ld64/src/ld/passes/libPasses.la \
 	$(UUID_LIB) \
 	$(LTO_LIB) \
+	$(LTO_RPATH) \
 	$(XAR_LIB) \
 	$(DL_LIB) \
 	$(TAPI_LIB) 

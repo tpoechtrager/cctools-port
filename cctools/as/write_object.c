@@ -45,6 +45,7 @@
 #include "messages.h"
 #include "xmalloc.h"
 #include "input-scrub.h"
+#include "stuff/write64.h"
 #if defined(I386) && defined(ARCH64)
 #include "i386.h"
 #endif
@@ -641,7 +642,7 @@ char *out_file_name)
 	}
 	if((fd = open(out_file_name, O_WRONLY | O_CREAT | O_TRUNC, 0666)) == -1)
 	    as_fatal("can't create output file: %s", out_file_name);
-	if(write(fd, output_addr, output_size) != (int)output_size)
+	if(write64(fd, output_addr, output_size) != (ssize_t)output_size)
 	    as_fatal("can't write output file");
 	if(close(fd) == -1)
 	    as_fatal("can't close output file");

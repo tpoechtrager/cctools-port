@@ -1205,7 +1205,7 @@ char *sumfile)
 	    data.type = GMONTYPE_SAMPLES;
 	    data.size = sample_sets[i].sampbytes + sizeof(header);
 	    if(write(fd, &data, sizeof(struct gmon_data)) !=
-					sizeof(struct gmon_data))
+               sizeof(struct gmon_data))
 		fatal("can't write gmon_data struct to gmon.sum file: %s",
 		      sumfile);
 
@@ -1245,7 +1245,7 @@ char *sumfile)
 	    }
 	}
 	if(write(fd, &data, sizeof(struct gmon_data)) !=
-				    sizeof(struct gmon_data))
+	   sizeof(struct gmon_data))
 	    fatal("can't write gmon_data struct to gmon.sum file: %s",
 		  sumfile);
 
@@ -1256,7 +1256,7 @@ char *sumfile)
 		arc_order.raw_count  = arcp->arc_count;
 		arc_order.raw_order  = arcp->arc_order;
 		if(write(fd, &arc_order, sizeof(struct rawarc_order)) != 
-			 sizeof(struct rawarc_order))
+		   sizeof(struct rawarc_order))
 		    fatal("can't write arc to gmon.sum file: %s", sumfile);
 #ifdef DEBUG
 		if(debug & SAMPLEDEBUG){

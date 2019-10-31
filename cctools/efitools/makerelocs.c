@@ -31,6 +31,7 @@
 #include "stuff/ofile.h"
 #include "stuff/errors.h"
 #include "stuff/reloc.h"
+#include "stuff/write64.h"
 #include "coff/base_relocs.h"
 #include "coff/bytesex.h"
 #include "mach-o/x86_64/reloc.h"
@@ -474,7 +475,8 @@ char *out)
 					       target_byte_sex);
 		}
 		// write out the block then start a new one
-		write(f, fb, size);
+		if (write64(f, fb, size) != size)
+                    fatal("failed to write block");
 
 		entries = 0;
 		blockcnt++;
@@ -501,7 +503,8 @@ char *out)
 	    swap_base_relocation_entry(b, entries, target_byte_sex);
 	}
 	/* write out the last block */
-	write(f, fb, size);
+        if (write64(f, fb, size) != size)
+            fatal("failed to write last block");
 
 	blockcnt++;
 	close(f);

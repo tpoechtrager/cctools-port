@@ -1,4 +1,4 @@
-AC_INIT([cctools], [921], [t.poechtrager@gmail.com])
+AC_INIT([cctools], [927.0.2], [t.poechtrager@gmail.com])
 
 AC_CANONICAL_BUILD
 AC_CANONICAL_HOST
@@ -79,6 +79,8 @@ case "$CCVERSION" in
     exit 1
   ;;
 esac
+
+EXTRAFLAGS="$EXTRAFLAGS -DLD64_VERSION_NUM=450.3"
 
 case "$CXXVERSION" in
   *clang* )
@@ -208,7 +210,7 @@ AC_CHECK_LIB([uuid],[uuid_generate_random],[
   AC_CHECK_HEADERS([uuid/uuid.h], [UUID_LIB=-luuid])], [])
 AC_SUBST(UUID_LIB)
 
-AC_CHECK_FUNCS([strmode, utimensat])
+AC_CHECK_FUNCS([strmode utimens utimensat])
 
 ### Check how to access struct stat's tv_nsec field.
 AC_MSG_CHECKING(for st_mtimespec.tv_nsec in struct stat)
@@ -235,6 +237,18 @@ AC_COMPILE_IFELSE(
    AC_MSG_RESULT([yes])],
   [AC_MSG_RESULT([no])])
 
+### Check for log2 in -lm
+
+AC_CHECK_LIB([m], [log2], [
+  MATH_LIB="-lm"
+])
+
+AC_SUBST(MATH_LIB)
+
+### Check for write64
+
+AC_CHECK_FUNC([write64])
+
 ### Check for __cxa_demangle in various C++ ABI libs ###
 
 AC_CHECK_LIB([c++abi],[__cxa_demangle],[CXXABI_LIB=-lc++abi],[
@@ -246,6 +260,14 @@ AC_CHECK_LIB([c++abi],[__cxa_demangle],[CXXABI_LIB=-lc++abi],[
 ])
 
 AC_SUBST(CXXABI_LIB)
+
+### Check for __gcc_personality_v0 in -lgcc (NetBSD needs this)
+
+AC_CHECK_LIB([gcc], [__gcc_personality_v0], [
+  GCC_LIB="-lgcc"
+])
+
+AC_SUBST(GCC_LIB)
 
 ### Check for supported warning options ###
 

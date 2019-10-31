@@ -114,45 +114,26 @@ __private_extern__ const struct arch_flag *get_arch_family_from_cputype(
 
 /*
  * get_byte_sex_from_flag() returns the byte sex of the architecture for the
- * specified cputype and cpusubtype if known.  If unknown it returns
- * UNKNOWN_BYTE_SEX.  If the bytesex can be determined directly as in the case
- * of reading a magic number from a file that should be done and this routine
- * should not be used as it could be out of date.
+ * specified cputype and cpusubtype if known.  If unknown it will abort().
+ * If the bytesex can be determined directly as in the case of reading a magic
+ * number from a file that should be done and this routine should not be used
+ * as it could be out of date.
  */
 __private_extern__ enum byte_sex get_byte_sex_from_flag(
     const struct arch_flag *flag);
 
 /*
- * get_stack_direction_from_flag() returns the direction the stack grows as
- * either positive (+1) or negative (-1) of the architecture for the
- * specified cputype and cpusubtype if known.  If unknown it returns 0.
- */
-__private_extern__ int get_stack_direction_from_flag(
-    const struct arch_flag *flag);
-
-/*
  * get_stack_addr_from_flag() returns the default starting address of the user
- * stack.
+ * stack. If unknown it will abort().
  */
 __private_extern__ uint64_t get_stack_addr_from_flag(
     const struct arch_flag *flag);
 
 /*
- * get_stack_size_from_flag() returns the default size of the userstack.
- */
-__private_extern__ uint32_t get_stack_size_from_flag(
-    const struct arch_flag *flag);
-
-/*
  * get_segalign_from_flag() returns the default segment alignment (page size).
+ * If unknown it will abort().
  */
 __private_extern__ uint32_t get_segalign_from_flag(
-    const struct arch_flag *flag);
-
-/*
- * get_segprot_from_flag() returns the default segment protection.
- */
-__private_extern__ vm_prot_t get_segprot_from_flag(
     const struct arch_flag *flag);
 
 /*

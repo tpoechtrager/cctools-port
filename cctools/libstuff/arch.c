@@ -109,6 +109,49 @@ static const struct arch_flag arch_flags[] = {
     { NULL,	0,		  0 }
 };
 
+struct cpu_entry {
+    cpu_type_t 		cputype;
+    enum byte_sex	endian;
+    uint64_t 		staddr;
+    uint32_t		segalign;
+};
+
+/*
+ * The cpu_entries table holds vital statistics for a number of entries in the
+ * arch_info table. Functions such as get_byte_sex_from_flag() are driven off
+ * the contents of this table, making it easier to add new cputypes. Rows in
+ * the table are organized by frequency, with the most common / recent at the
+ * top of the list.
+ *
+ * Note that some historical architectures, such as NeXTSTEP's i386 and
+ * Rhapsody's PPC, are no longer addressible with this design.
+ */
+ 
+static const struct cpu_entry cpu_entries[] = {
+    /* embedded */
+    { CPU_TYPE_ARM64,	    LITTLE_ENDIAN_BYTE_SEX, 0,		       0x4000 },
+    { CPU_TYPE_ARM64_32,    LITTLE_ENDIAN_BYTE_SEX, 0,		       0x4000 },
+    { CPU_TYPE_ARM,	    LITTLE_ENDIAN_BYTE_SEX, 0,		       0x4000 },
+    
+    /* desktop */
+    { CPU_TYPE_X86_64,	    LITTLE_ENDIAN_BYTE_SEX, 0x7fff5fc00000LL,  0x1000 },
+    { CPU_TYPE_I386,	    LITTLE_ENDIAN_BYTE_SEX, 0xc0000000,        0x1000 },
+    { CPU_TYPE_POWERPC,	    BIG_ENDIAN_BYTE_SEX,    0xc0000000,	       0x1000 },
+    { CPU_TYPE_POWERPC64,   BIG_ENDIAN_BYTE_SEX,    0x7ffff00000000LL, 0x1000 },
+    { CPU_TYPE_VEO,	    BIG_ENDIAN_BYTE_SEX,    0xc0000000,	       0x1000 },
+    
+    /* NeXTSTEP / Rhapsody */
+    /*
+    { CPU_TYPE_I386,	    LITTLE_ENDIAN_BYTE_SEX, 0xc0000000,        0x2000 },
+    { CPU_TYPE_POWERPC,	    BIG_ENDIAN_BYTE_SEX,    0xc0000000,	       0x2000 },
+     */
+    { CPU_TYPE_MC680x0,     BIG_ENDIAN_BYTE_SEX,    0x04000000,	       0x2000 },
+    { CPU_TYPE_MC88000,     BIG_ENDIAN_BYTE_SEX,    0xffffe000,	       0x2000 },
+    { CPU_TYPE_SPARC,       BIG_ENDIAN_BYTE_SEX,    0xf0000000,	       0x2000 },
+    { CPU_TYPE_I860,        BIG_ENDIAN_BYTE_SEX,    0,		       0x2000 },
+    { 0 },
+};
+    
 #ifndef RLD
 /*
  * get_arch_from_flag() is passed a name of an architecture flag and returns
@@ -225,6 +268,36 @@ cpu_type_t cputype)
 }
 
 /*
+ * abort_with_unknown_cputype() is a helper function to make calls to abort()
+ * more descriptive in a symbolicated backtrace.
+ */
+static
+void
+abort_with_unknown_cputype(cpu_type_t cputype)
+{
+    abort();
+}
+    
+/*
+ * get_cpu_entry_from_cputype() for the specified cputype. If unknown it
+ * calls abort_with_unknown_cputype().
+ */
+static
+const struct cpu_entry *
+get_cpu_entry_from_cputype(cpu_type_t cputype)
+{
+    for (uint32_t i = 0; cpu_entries[i].cputype != 0; ++i)
+    {
+	if (cpu_entries[i].cputype == cputype)
+	    return cpu_entries + i;
+    }
+    
+    abort_with_unknown_cputype(cputype);
+    
+    return NULL; /* unreachable */
+}
+    
+/*
  * get_byte_sex_from_flag() returns the byte sex of the architecture for the
  * specified cputype and cpusubtype if known.  If unknown it returns
  * UNKNOWN_BYTE_SEX.  If the bytesex can be determined directly as in the case
@@ -236,50 +309,12 @@ enum byte_sex
 get_byte_sex_from_flag(
 const struct arch_flag *flag)
 {
-   if(flag->cputype == CPU_TYPE_MC680x0 ||
-      flag->cputype == CPU_TYPE_MC88000 ||
-      flag->cputype == CPU_TYPE_POWERPC ||
-      flag->cputype == CPU_TYPE_POWERPC64 ||
-      flag->cputype == CPU_TYPE_HPPA ||
-      flag->cputype == CPU_TYPE_SPARC ||
-      flag->cputype == CPU_TYPE_I860 ||
-      flag->cputype == CPU_TYPE_VEO)
-        return BIG_ENDIAN_BYTE_SEX;
-    else if(flag->cputype == CPU_TYPE_I386 ||
-	    flag->cputype == CPU_TYPE_X86_64 ||
-	    flag->cputype == CPU_TYPE_ARM64 ||
-	    flag->cputype == CPU_TYPE_ARM64_32 ||
-	    flag->cputype == CPU_TYPE_ARM)
-        return LITTLE_ENDIAN_BYTE_SEX;
-    else
-        return UNKNOWN_BYTE_SEX;
+    const struct cpu_entry *entry = get_cpu_entry_from_cputype(flag->cputype);
+    
+    return entry->endian;
 }
 
 #ifndef RLD
-/*
- * get_stack_direction_from_flag() returns the direction the stack grows as
- * either positive (+1) or negative (-1) of the architecture for the
- * specified cputype and cpusubtype if known.  If unknown it returns 0.
- */
-__private_extern__
-int
-get_stack_direction_from_flag(
-const struct arch_flag *flag)
-{
-   if(flag->cputype == CPU_TYPE_MC680x0 ||
-      flag->cputype == CPU_TYPE_MC88000 ||
-      flag->cputype == CPU_TYPE_POWERPC ||
-      flag->cputype == CPU_TYPE_I386 ||
-      flag->cputype == CPU_TYPE_SPARC ||
-      flag->cputype == CPU_TYPE_I860 ||
-      flag->cputype == CPU_TYPE_VEO ||
-      flag->cputype == CPU_TYPE_ARM)
-        return(-1);
-    else if(flag->cputype == CPU_TYPE_HPPA)
-        return(+1);
-    else
-        return(0);
-}
 
 /*
  * get_stack_addr_from_flag() returns the default starting address of the user
@@ -293,52 +328,10 @@ uint64_t
 get_stack_addr_from_flag(
 const struct arch_flag *flag)
 {
-    switch(flag->cputype){
-    case CPU_TYPE_MC680x0:
-	return(0x04000000);
-    case CPU_TYPE_MC88000:
-	return(0xffffe000);
-    case CPU_TYPE_POWERPC:
-    case CPU_TYPE_VEO:
-    case CPU_TYPE_I386:
-	return(0xc0000000);
-    case CPU_TYPE_ARM:
-	return(0x30000000);
-    case CPU_TYPE_SPARC:
-	return(0xf0000000);
-    case CPU_TYPE_I860:
-	return(0);
-    case CPU_TYPE_HPPA:
-	return(0xc0000000-0x04000000);
-    case CPU_TYPE_POWERPC64:
-	return(0x7ffff00000000LL);
-    case CPU_TYPE_X86_64:
-	return(0x7fff5fc00000LL);
-    default:
-	return(0);
-    }
+    const struct cpu_entry *entry = get_cpu_entry_from_cputype(flag->cputype);
+    
+    return entry->staddr;
 }
-
-/*
- * get_stack_size_from_flag() returns the default size of the userstack.  This
- * should be in the header file <bsd/XXX/vmparam.h> as MAXSSIZ. Since some
- * architectures have come and gone and come back, you can't include all of
- * these headers in one source and some of the constants covered the whole
- * address space the common value of 64meg was chosen.
- */
-__private_extern__
-uint32_t
-get_stack_size_from_flag(
-const struct arch_flag *flag)
-{
-#ifdef __MWERKS__
-    const struct arch_flag *dummy;
-	dummy = flag;
-#endif
-
-    return(64*1024*1024);
-}
-#endif /* !defined(RLD) */
 
 /*
  * get_segalign_from_flag() returns the default segment alignment (page size).
@@ -348,33 +341,9 @@ uint32_t
 get_segalign_from_flag(
 const struct arch_flag *flag)
 {
-        if(flag->cputype == CPU_TYPE_ARM ||
-	   flag->cputype == CPU_TYPE_ARM64 ||
-	   flag->cputype == CPU_TYPE_ARM64_32)
-	    return(0x4000); /* 16K */
-
-	if(flag->cputype == CPU_TYPE_POWERPC ||
-	   flag->cputype == CPU_TYPE_POWERPC64 ||
-	   flag->cputype == CPU_TYPE_VEO ||
-	   flag->cputype == CPU_TYPE_I386 ||
-	   flag->cputype == CPU_TYPE_X86_64)
-	    return(0x1000); /* 4K */
-	else
-	    return(0x2000); /* 8K */
-}
-
-/*
- * get_segprot_from_flag() returns the default segment protection.
- */
-__private_extern__
-vm_prot_t
-get_segprot_from_flag(
-const struct arch_flag *flag)
-{
-	if(flag->cputype == CPU_TYPE_I386)
-	    return(VM_PROT_READ | VM_PROT_WRITE);
-	else
-	    return(VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE);
+    const struct cpu_entry *entry = get_cpu_entry_from_cputype(flag->cputype);
+    
+    return entry->segalign;
 }
 
 /*
@@ -407,3 +376,5 @@ cpu_type_t cputype)
 	else
 	    return(FALSE);
 }
+
+#endif /* !defined(RLD) */

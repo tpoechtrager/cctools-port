@@ -496,14 +496,17 @@ uint64_t OutputFile::addressOf(const ld::Internal& state, const ld::Fixup* fixup
 		case ld::Fixup::bindingByContentBound:
 		case ld::Fixup::bindingDirectlyBound:
 			*target = fixup->u.target;
+			if ( !(*target)->finalAddressMode() && ((*target)->contentType() == ld::Atom::typeLTOtemporary) )
+				throwf("reference to bitcode symbol '%s' which LTO has not compiled", (*target)->name());
 			return (*target)->finalAddress();
 		case ld::Fixup::bindingsIndirectlyBound:
 			*target = state.indirectBindingTable[fixup->u.bindingIndex];
-		#ifndef NDEBUG
 			if ( ! (*target)->finalAddressMode() ) {
-				throwf("reference to symbol (which has not been assigned an address) %s", (*target)->name());
+				if ( (*target)->contentType() == ld::Atom::typeLTOtemporary )
+				throwf("reference to bitcode symbol '%s' which LTO has not compiled", (*target)->name());
+				else
+					throwf("reference to symbol (which has not been assigned an address) %s", (*target)->name());
 			}
-		#endif
 			return (*target)->finalAddress();
 	}
 	throw "unexpected binding";
@@ -2347,7 +2350,8 @@ void OutputFile::applyFixUps(ld::Internal& state, uint64_t mhAddress, const ld::
 					isLDR = parseLoadOrStore(infoB.instruction, ldrInfoB);
 					if ( isLDR ) {
 						// target of GOT is external
-						LOH_ASSERT(ldrInfoB.size == 8);
+						LOH_ASSERT((_options.architecture() == CPU_TYPE_ARM64 && ldrInfoB.size == 8) ||
+						           (_options.architecture() == CPU_TYPE_ARM64_32 && ldrInfoB.size == 4));
 						LOH_ASSERT(!ldrInfoB.isFloat);
 						LOH_ASSERT(ldrInfoC.baseReg == ldrInfoB.reg);
 						//fprintf(stderr, "infoA.target=%p, %s, infoA.targetAddress=0x%08llX\n", infoA.target, infoA.target->name(), infoA.targetAddress);
@@ -2465,7 +2469,8 @@ void OutputFile::applyFixUps(ld::Internal& state, uint64_t mhAddress, const ld::
 					isLDR = parseLoadOrStore(infoB.instruction, ldrInfoB);
 					if ( isLDR ) {
 						// target of GOT is external
-						LOH_ASSERT(ldrInfoB.size == 8);
+						LOH_ASSERT((_options.architecture() == CPU_TYPE_ARM64 && ldrInfoB.size == 8) ||
+						           (_options.architecture() == CPU_TYPE_ARM64_32 && ldrInfoB.size == 4));
 						LOH_ASSERT(!ldrInfoB.isFloat);
 						LOH_ASSERT(ldrInfoC.baseReg == ldrInfoB.reg);
 						targetFourByteAligned = ( ((infoA.targetAddress + ldrInfoC.offset) & 0x3) == 0 );
@@ -2668,14 +2673,16 @@ bool OutputFile::hasZeroForFileOffset(const ld::Section* sect)
 
 void OutputFile::writeAtoms(ld::Internal& state, uint8_t* wholeBuffer)
 {
+	const bool logThreadedFixups = false;
+
 	// have each atom write itself
 	uint64_t fileOffsetOfEndOfLastAtom = 0;
-	uint64_t mhAddress = 0;
 	bool lastAtomUsesNoOps = false;
+	uint64_t baseAddress = _options.baseAddress();
 	for (std::vector<ld::Internal::FinalSection*>::iterator sit = state.sections.begin(); sit != state.sections.end(); ++sit) {
 		ld::Internal::FinalSection* sect = *sit;
-		if ( sect->type() == ld::Section::typeMachHeader )
-			mhAddress = sect->address;
+		if ( (sect->type() == ld::Section::typeMachHeader) && (_options.outputKind() != Options::kPreload) )
+			baseAddress = sect->address;
 		if ( takesNoDiskSpace(sect) )
 			continue;
 		const bool sectionUsesNops = (sect->type() == ld::Section::typeCode);
@@ -2695,7 +2702,7 @@ void OutputFile::writeAtoms(ld::Internal& state, uint8_t* wholeBuffer)
 				// copy atom content
 				atom->copyRawContent(&wholeBuffer[fileOffset]);
 				// apply fix ups
-				this->applyFixUps(state, mhAddress, atom, &wholeBuffer[fileOffset]);
+				this->applyFixUps(state, baseAddress, atom, &wholeBuffer[fileOffset]);
 				fileOffsetOfEndOfLastAtom = fileOffset+atom->size();
 				lastAtomUsesNoOps = sectionUsesNops;
 				lastAtomWasThumb = atom->isThumb();
@@ -2802,6 +2809,8 @@ void OutputFile::writeAtoms(ld::Internal& state, uint8_t* wholeBuffer)
 				}
 			}
 
+			if (logThreadedFixups) fprintf(stderr, "fixup: %s, address=0x%llX\n", curSection->sectionName(), currentAddress);
+
 			bool makeChainToNextAddress = true;
 			if ( allowThreadsToCrossPages ) {
 				// Even if we allow threads to cross pages, we still need to have the same section.
@@ -2845,15 +2854,15 @@ void OutputFile::writeAtoms(ld::Internal& state, uint8_t* wholeBuffer)
 						// Bit 62 is a 0 to say this is a rebase
 						value = get64LE(lastBindLocation);
 #if SUPPORT_ARCH_arm64e
-						auto fixupOffset = (uintptr_t)(lastBindLocation - mhAddress);
+						auto fixupOffset = (uintptr_t)(lastBindLocation - baseAddress);
 						auto it = _authenticatedFixupData.find(fixupOffset);
 						if (it != _authenticatedFixupData.end()) {
 							// For authenticated data, we zeroed out the location
 							assert(value == 0);
 							const auto &authData = it->second.first;
 							uint64_t accumulator = it->second.second;
-							assert(accumulator >= mhAddress);
-							accumulator -= mhAddress;
+							assert(accumulator >= baseAddress);
+							accumulator -= baseAddress;
 
 							// Make sure the high bits aren't set.  The low 32-bits may
 							// be the target value.
@@ -2882,7 +2891,7 @@ void OutputFile::writeAtoms(ld::Internal& state, uint8_t* wholeBuffer)
 						// Bit 62 is a 1 to say this is a bind
 						value = get64LE(lastBindLocation);
 #if SUPPORT_ARCH_arm64e
-						auto fixupOffset = (uintptr_t)(lastBindLocation - mhAddress);
+						auto fixupOffset = (uintptr_t)(lastBindLocation - baseAddress);
 						auto it = _authenticatedFixupData.find(fixupOffset);
 						if (it != _authenticatedFixupData.end()) {
 							// For authenticated data, we zeroed out the location
@@ -2961,11 +2970,13 @@ void OutputFile::writeAtoms(ld::Internal& state, uint8_t* wholeBuffer)
 			}
 			uint64_t threadStartsFileOffset = threadStartsAtom->finalAddress() - threadStartsSection->address + threadStartsSection->fileOffset;
 			// Skip the header
+			if (logThreadedFixups) fprintf(stderr, "thread start[0x%llX]: header=0x%X\n", threadStartsFileOffset, get32LE(&wholeBuffer[threadStartsFileOffset]));
 			threadStartsFileOffset += sizeof(uint32_t);
 			for (uint64_t threadStart : threadStarts) {
-				uint64_t offset = threadStart - mhAddress;
+				uint64_t offset = threadStart - baseAddress;
 				assert(offset < 0x100000000);
 				set32LE(&wholeBuffer[threadStartsFileOffset], offset);
+				if (logThreadedFixups) fprintf(stderr, "thread start[0x%llX]: address=0x%llX -> offset=0x%llX\n", threadStartsFileOffset, threadStart, offset);
 				threadStartsFileOffset += sizeof(uint32_t);
 			}
 		}
@@ -3090,7 +3101,8 @@ static void removePathAndExit(int sig)
 	fprintf(stderr, "%s should be unreachable on non-Apple OSs; please report this!", __func__);
 #endif
 	fprintf(stderr, "ld: interrupted\n");
-	exit(1);
+	// we are in a sig handler, don't do clean ups
+	abort();
 }
 	
 void OutputFile::writeOutputFile(ld::Internal& state)
@@ -3521,8 +3533,21 @@ void OutputFile::buildSymbolTable(ld::Internal& state)
 	}
 
 	for (const auto &it : hiddenSymbols) {
-		for (const auto &symbol :  it.second)
-			warning("linker symbol '%s' hides a non-existent symbol '%s'", symbol.c_str(), it.first.c_str());
+		for (const auto &symbol :  it.second) {
+			// <rdar:/problem/40095559> ok for umbrella to hide symbol that is in re-exported dylib
+			bool isReExported = false;
+			const char* symbolName = it.first.c_str();
+			for (const ld::dylib::File* aDylib : _dylibsToLoad) {
+				if (aDylib->willBeReExported()) {
+					if ( aDylib->hasDefinition(symbolName) ) {
+						isReExported = true;
+						break;
+					}
+				}
+			}
+			if ( !isReExported )
+				warning("linker symbol '%s' hides a non-existent symbol '%s'", symbol.c_str(), it.first.c_str());
+		}
 	}
 }
 
@@ -5580,6 +5605,7 @@ void OutputFile::writeJSONEntry(ld::Internal& state)
 		std::vector<const ld::dylib::File*> dynamicList;
 		std::vector<const ld::dylib::File*> upwardList;
 		std::vector<const ld::dylib::File*> reexportList;
+		std::vector<const ld::dylib::File*> weakList;
 
 		for (const ld::dylib::File* dylib :  _dylibsToLoad) {
 			
@@ -5589,6 +5615,10 @@ void OutputFile::writeJSONEntry(ld::Internal& state)
 			} else if (dylib->willBeReExported()) {
 			 
 				reexportList.push_back(dylib);
+			} else if (dylib->forcedWeakLinked() || dylib->allSymbolsAreWeakImported()) {
+			
+				weakList.push_back(dylib);
+				dynamicList.push_back(dylib);
 			} else {
 			
 				dynamicList.push_back(dylib);
@@ -5637,6 +5667,17 @@ void OutputFile::writeJSONEntry(ld::Internal& state)
 			for (const ld::dylib::File* dylib :  reexportList) {
 				jsonEntry += "\"" + realPathString(dylib->path()) + "\"";
 				if ((dylib != reexportList.back())) {
+					jsonEntry += ",";
+				}
+			}
+			jsonEntry += "]";
+		}
+		
+		if (weakList.size() > 0) {
+			jsonEntry += ",\"weak\":[";
+			for (const ld::dylib::File* dylib :  weakList) {
+				jsonEntry += "\"" + realPathString(dylib->path()) + "\"";
+				if ((dylib != weakList.back())) {
 					jsonEntry += ",";
 				}
 			}

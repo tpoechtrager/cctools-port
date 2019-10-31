@@ -172,6 +172,20 @@ struct object *object)
 			"LC_DYLD_INFO load command): ");
 		object->dyld_info = (struct dyld_info_command *)lc;
 	    }
+	    else if(lc->cmd == LC_DYLD_CHAINED_FIXUPS){
+		if(object->dyld_chained_fixups != NULL)
+		    fatal_arch(arch, member, "malformed file (more than one "
+			"LC_DYLD_CHAINED_FIXUPS load command): ");
+		object->dyld_chained_fixups =
+			(struct linkedit_data_command *)lc;
+	    }
+	    else if(lc->cmd == LC_DYLD_EXPORTS_TRIE){
+		if(object->dyld_exports_trie != NULL)
+		    fatal_arch(arch, member, "malformed file (more than one "
+			"LC_DYLD_EXPORTS_TRIE load command): ");
+		object->dyld_exports_trie =
+			(struct linkedit_data_command *)lc;
+	    }
 	    else if(lc->cmd == LC_SEGMENT){
 		sg = (struct segment_command *)lc;
 		if(strcmp(sg->segname, SEG_LINKEDIT) == 0){
@@ -393,6 +407,7 @@ struct object *object)
 			       SEG_LINKEDIT " segment in: ");
 	    }
 	}
+
 	if(object->dyld_info != NULL){
 	    /* dyld_info starts at beginning of __LINKEDIT */
 	    if (object->dyld_info->rebase_off != 0){
@@ -428,6 +443,21 @@ struct object *object)
 	    else if (object->dyld_info->rebase_size != 0)
 		offset = object->dyld_info->rebase_off + 
 			    object->dyld_info->rebase_size;
+	}
+	if(object->dyld_chained_fixups != NULL){
+	    /* dyld_chained_fixups starts at beginning of __LINKEDIT */
+	    if (object->dyld_chained_fixups->dataoff != offset)
+		    order_error(arch, member, "dyld chained fixups "
+			"out of place");
+	    offset = object->dyld_chained_fixups->dataoff +
+	    		object->dyld_chained_fixups->datasize;
+	}
+	if(object->dyld_exports_trie != NULL){
+	    if (object->dyld_exports_trie->dataoff != offset)
+		    order_error(arch, member, "dyld exports trie "
+			"out of place");
+	    offset = object->dyld_exports_trie->dataoff +
+	    		object->dyld_exports_trie->datasize;
 	}
 	if(object->dyst->nlocrel != 0){
 	    if(object->dyst->locreloff != offset)

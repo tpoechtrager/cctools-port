@@ -35,6 +35,7 @@
 #include "stuff/allocate.h"
 #include "stuff/reloc.h"
 #include "stuff/rnd.h"
+#include "stuff/write64.h"
 
 #include "coff/ms_dos_stub.h"
 #include "coff/filehdr.h"
@@ -1670,7 +1671,7 @@ char *out)
 	if(f == -1)
 	    system_fatal("Can't create output file: %s", out);
 
-	if(write(f, buf, output_size) != output_size)
+	if(write64(f, buf, output_size) != (ssize_t)output_size)
 	    system_fatal("Can't write output file: %s", out);
 
 	if(close(f) == -1)

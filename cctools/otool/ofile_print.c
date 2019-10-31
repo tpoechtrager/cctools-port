@@ -2636,6 +2636,8 @@ enum bool very_verbose)
 	    case LC_DATA_IN_CODE:
 	    case LC_DYLIB_CODE_SIGN_DRS:
 	    case LC_LINKER_OPTIMIZATION_HINT:
+	    case LC_DYLD_EXPORTS_TRIE:
+	    case LC_DYLD_CHAINED_FIXUPS:
 		memset((char *)&ld, '\0', sizeof(struct linkedit_data_command));
 		size = left < sizeof(struct linkedit_data_command) ?
 		       left : sizeof(struct linkedit_data_command);
@@ -3056,6 +3058,10 @@ enum bool verbose)
 		    printf(" PROTECTED_VERSION_1");
 		    flags &= ~SG_PROTECTED_VERSION_1;
 		}
+        if(flags & SG_READ_ONLY){
+            printf(" SG_READ_ONLY");
+            flags &= ~SG_READ_ONLY;
+        }
 		if(flags)
 		    printf(" 0x%x (unknown flags)\n", (unsigned int)flags);
 		else
@@ -3942,6 +3948,10 @@ uint32_t object_size)
 	    printf("      cmd LC_DYLIB_CODE_SIGN_DRS\n");
         else if(ld->cmd == LC_LINKER_OPTIMIZATION_HINT)
 	    printf("      cmd LC_LINKER_OPTIMIZATION_HINT\n");
+        else if(ld->cmd == LC_DYLD_EXPORTS_TRIE)
+	    printf("      cmd LC_DYLD_EXPORTS_TRIE\n");
+        else if(ld->cmd == LC_DYLD_CHAINED_FIXUPS)
+	    printf("      cmd LC_DYLD_CHAINED_FIXUPS\n");
 	else
 	    printf("      cmd %u (?)\n", ld->cmd);
 	printf("  cmdsize %u", ld->cmdsize);

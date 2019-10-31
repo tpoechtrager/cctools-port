@@ -62,6 +62,8 @@
 #include "stuff/errors.h"
 #include "stuff/allocate.h"
 #include "stuff/lto.h"
+#include "stuff/write64.h"
+#include <math.h>
 
 /* The maximum section alignment allowed to be specified, as a power of two */
 #define MAXSECTALIGN		15 /* 2**15 or 0x8000 */
@@ -81,6 +83,7 @@ struct input_file {
     struct fat_arch *fat_arches;
     struct fat_arch_64 *fat_arches64;
     enum bool is_thin;
+    uint32_t raw_nfat_arch;
 };
 static struct input_file *input_files = NULL;
 static uint32_t ninput_files = 0;
@@ -155,6 +158,8 @@ static uint32_t nverify_archs = 0;
 
 static enum bool fat64_flag = FALSE;
 
+static enum bool hideARM64_flag = FALSE;
+
 static void create_fat(
     void);
 static void process_input_file(
@@ -172,6 +177,9 @@ static void check_extend_format_1(
     struct ar_hdr *ar_hdr,
     uint64_t size_left,
     uint32_t *member_name_size);
+static uint32_t get_mh_filetype(
+    char* addr,
+    uint64_t size);
 static uint32_t get_align(
     struct mach_header *mhp,
     struct load_command *load_commands,
@@ -241,7 +249,6 @@ char *envp[])
     const struct arch_flag *arch_flags;
     enum bool found;
     struct arch_flag blank_arch;
-    uint64_t nbytes_to_write, nbytes_written;
 
 	input = NULL;
 	/*
@@ -331,6 +338,13 @@ char *envp[])
 		    else
 			goto unknown_flag;
 		    break;
+                case 'h':
+                    if (strcmp(p, "hideARM64") == 0) {
+                        hideARM64_flag = TRUE;
+                    }
+                    else
+                        goto unknown_flag;
+                    break;
 		case 'i':
 		    if(strcmp(p, "info") == 0 || strcmp(p, "i") == 0){
 			info_flag = TRUE;
@@ -534,6 +548,12 @@ unknown_flag:
 		error("-arch_blank may only be used with -create");
 		usage();
 	}
+        if (hideARM64_flag == TRUE && create_flag == FALSE &&
+            replace_flag == FALSE && remove_flag == FALSE) {
+            error("-hideARM64 may only be used with -create, -remove, or "
+                  "-replace");
+            usage();
+        }
 
 	/*
 	 * Determine the types of the input files.
@@ -593,20 +613,10 @@ unknown_flag:
 			system_fatal("can't create output file: %s",
 				     output_file);
 
-		    nbytes_written = 0;
-		    do{
-#define MAX_WRITE 0x10000000
-			if(thin_files[i].size - nbytes_written > MAX_WRITE)
-			    nbytes_to_write = MAX_WRITE;
-			else
-			    nbytes_to_write = thin_files[i].size -
-					      nbytes_written;
-			if(write(fd, thin_files[i].addr + nbytes_written,
-				 nbytes_to_write) != nbytes_to_write)
-			    system_fatal("can't write thin file to output "
-					 "file: %s", output_file);
-			nbytes_written += nbytes_to_write;
-		    }while(nbytes_written != thin_files[i].size);
+                    if (write64(fd, thin_files[i].addr, thin_files[i].size) !=
+                        thin_files[i].size)
+                        system_fatal("can't write thin file to output "
+                                     "file: %s", output_file);
 		    if(close(fd) == -1)
 			system_fatal("can't close output file: %s",output_file);
 		    if(utime(output_file,
@@ -830,13 +840,23 @@ unknown_flag:
 		    printf("Fat header in: %s\n", input_files[i].name);
 		    printf("fat_magic 0x%x\n",
 			  (unsigned int)(input_files[i].fat_header->magic));
-		    printf("nfat_arch %u\n",
-			   input_files[i].fat_header->nfat_arch);
+		    printf("nfat_arch %u",
+			   input_files[i].raw_nfat_arch);
+                    if (input_files[i].fat_header->nfat_arch -
+                        input_files[i].raw_nfat_arch) {
+                        printf(" (+%u hidden)",
+                               input_files[i].fat_header->nfat_arch -
+                               input_files[i].raw_nfat_arch);
+                    }
+                    printf("\n");
 		    for(j = 0; j < input_files[i].fat_header->nfat_arch; j++){
 			printf("architecture ");
 			if(input_files[i].fat_arches != NULL){
 			    print_arch(input_files[i].fat_arches[j].cputype,
 				       input_files[i].fat_arches[j].cpusubtype);
+                            if (j >= input_files[i].raw_nfat_arch) {
+                                printf(" (hidden)");
+                            }
 			    printf("\n");
 			    print_cputype(input_files[i].fat_arches[j].cputype,
 				      input_files[i].fat_arches[j].cpusubtype &
@@ -852,6 +872,9 @@ unknown_flag:
 			else{
 			    print_arch(input_files[i].fat_arches64[j].cputype,
 				   input_files[i].fat_arches64[j].cpusubtype);
+                            if (j >= input_files[i].raw_nfat_arch) {
+                                printf(" (hidden)");
+                            }
 			    printf("\n");
 			    print_cputype(
 				input_files[i].fat_arches64[j].cputype,
@@ -915,7 +938,6 @@ create_fat(void)
     int fd;
     struct fat_arch fat_arch;
     struct fat_arch_64 fat_arch64;
-    uint64_t nbytes_to_write, nbytes_written;
 
 	/* fold in specified segment alignments */
 	for(i = 0; i < nsegaligns; i++){
@@ -959,13 +981,44 @@ create_fat(void)
 	/* sort the files by alignment to save space in the output file */
 	qsort(thin_files, nthin_files, sizeof(struct thin_file),
 	      (int (*)(const void *, const void *))cmp_qsort);
-
+    
 	/* Fill in the fat header and the fat_arch's offsets. */
 	if(fat64_flag == TRUE)
 	    fat_header.magic = FAT_MAGIC_64;
 	else
 	    fat_header.magic = FAT_MAGIC;
 	fat_header.nfat_arch = nthin_files;
+        /* begin change for 15002326: write a hidden arm64 arch */
+        if (hideARM64_flag) {
+            enum bool has_arm32 = FALSE;
+            enum bool has_arm64 = FALSE;
+            uint32_t num_archs = 0;
+            uint32_t num_archs_arm64 = 0;
+            
+            for(i = 0; i < nthin_files; i++){
+                if (MH_EXECUTE != get_mh_filetype(thin_files[i].addr,
+                                                  thin_files[i].size)) {
+                    fatal("-hideARM64 specified but thin file %s is not of "
+                          "type MH_EXECUTE", thin_files[i].name);
+                }
+                if (has_arm64 && thin_files[i].cputype != CPU_TYPE_ARM64) {
+                    fatal("-hideARM64 specified but thin files are not in "
+                          "correct order");
+                }
+                if (thin_files[i].cputype == CPU_TYPE_ARM) {
+                    has_arm32 = TRUE;
+                }
+                if (thin_files[i].cputype == CPU_TYPE_ARM64) {
+                    has_arm64 = TRUE;
+                    num_archs_arm64 += 1;
+                }
+                num_archs += 1;
+            }
+            if (has_arm32 && has_arm64) {
+                fat_header.nfat_arch = num_archs - num_archs_arm64;
+            }
+        }
+        /* end change for 15002326 */
 	offset = sizeof(struct fat_header);
 	if(fat64_flag == TRUE)
 	    offset += nthin_files * sizeof(struct fat_arch_64);
@@ -997,7 +1050,7 @@ create_fat(void)
 #ifdef __LITTLE_ENDIAN__
 	    swap_fat_header(&fat_header, BIG_ENDIAN_BYTE_SEX);
 #endif /* __LITTLE_ENDIAN__ */
-	    if(write(fd, &fat_header, sizeof(struct fat_header)) !=
+	    if(write64(fd, &fat_header, sizeof(struct fat_header)) !=
 	       sizeof(struct fat_header))
 		system_fatal("can't write fat header to output file: %s",
 			     rename_file);
@@ -1023,7 +1076,7 @@ create_fat(void)
 #ifdef __LITTLE_ENDIAN__
 		    swap_fat_arch_64(&fat_arch64, 1, BIG_ENDIAN_BYTE_SEX);
 #endif /* __LITTLE_ENDIAN__ */
-		    if(write(fd, &fat_arch64, sizeof(struct fat_arch_64)) !=
+		    if(write64(fd, &fat_arch64, sizeof(struct fat_arch_64)) !=
 		       sizeof(struct fat_arch_64))
 			system_fatal("can't write fat arch to output file: %s",
 				     rename_file);
@@ -1032,7 +1085,7 @@ create_fat(void)
 #ifdef __LITTLE_ENDIAN__
 		    swap_fat_arch(&fat_arch, 1, BIG_ENDIAN_BYTE_SEX);
 #endif /* __LITTLE_ENDIAN__ */
-		    if(write(fd, &fat_arch, sizeof(struct fat_arch)) !=
+		    if(write64(fd, &fat_arch, sizeof(struct fat_arch)) !=
 		       sizeof(struct fat_arch))
 			system_fatal("can't write fat arch to output file: %s",
 				     rename_file);
@@ -1044,17 +1097,9 @@ create_fat(void)
 	    if(extract_family_flag == FALSE || nthin_files > 1)
 		if(lseek(fd, thin_files[i].offset, L_SET) == -1)
 		    system_fatal("can't lseek in output file: %s", rename_file);
-	    nbytes_written = 0;
-	    do{
-		if(thin_files[i].size - nbytes_written > MAX_WRITE)
-		    nbytes_to_write = MAX_WRITE;
-		else
-		    nbytes_to_write = thin_files[i].size - nbytes_written;
-		if(write(fd, thin_files[i].addr + nbytes_written,
-			 nbytes_to_write) != nbytes_to_write)
-		    system_fatal("can't write to output file: %s", rename_file);
-		nbytes_written += nbytes_to_write;
-	    }while(nbytes_written != thin_files[i].size);
+            if(write64(fd, thin_files[i].addr, thin_files[i].size) !=
+               thin_files[i].size)
+                system_fatal("can't write to output file: %s", rename_file);
 	}
 	if(close(fd) == -1)
 	    system_fatal("can't close output file: %s", rename_file);
@@ -1086,6 +1131,7 @@ struct input_file *input)
     cpu_subtype_t cpusubtype;
     enum bool swapped;
     uint64_t big_size;
+    uint32_t offset, first_offset;
 
 	/* Open the input file and map it in */
 	if((fd = open(input->name, O_RDONLY)) == -1)
@@ -1167,6 +1213,34 @@ struct input_file *input)
 		      "extend past the end of the file) %s", input->name);
 	    input->fat_arches = (struct fat_arch *)
 				(addr + sizeof(struct fat_header));
+            /*
+	     * begin change for 15002326: look for a hidden arm64 arch
+	     *
+	     * the hidden arch(es) must reside between the existing fat_arch
+	     * list and the start of the first file. Also, the hidden arm64
+	     * arch(es) must be CPU_TYPE_ARM64, natch.
+	     */
+	    first_offset = 0xFFFFFFFF;
+	    input->raw_nfat_arch = input->fat_header->nfat_arch;
+	    for(i = 0; i < input->fat_header->nfat_arch; i++){
+		offset = input->fat_arches[i].offset;
+#ifdef __LITTLE_ENDIAN__
+		cputype = OSSwapInt32(offset);
+#endif
+		if (offset < first_offset)
+		    first_offset = offset;
+	    }
+            if (big_size + sizeof(struct fat_arch) <= size &&
+		big_size + sizeof(struct fat_arch) <= first_offset) {
+                i = input->fat_header->nfat_arch;
+                cputype = input->fat_arches[i].cputype;
+#ifdef __LITTLE_ENDIAN__
+                cputype = OSSwapInt32(cputype);
+#endif
+                if (cputype == CPU_TYPE_ARM64)
+                    input->fat_header->nfat_arch += 1;
+            }
+            /* end change for 15002326 */
 #ifdef __LITTLE_ENDIAN__
 	    swap_fat_arch(input->fat_arches, input->fat_header->nfat_arch,
 			  LITTLE_ENDIAN_BYTE_SEX);
@@ -1824,12 +1898,93 @@ uint32_t *member_name_size)
 }
 
 /*
- * get_align is passed a pointer to a mach header and size of the object.  It
- * returns the segment alignment the object was created with.  It guesses but
- * it is conservative.  The maximum alignment is that the link editor will allow
- * MAXSECTALIGN and the minimum is the conserative alignment for a uint32_t
- * which appears in a mach object files (2^2 worst case for all current 32-bit
- * machines).
+ * get_default_align() returns the default segment alignment for the specified
+ * cputype and cpusubtype, as an exponent of a power of 2; e.g., a segment
+ * alignment of 0x4000 will be described as 14. If the default alignment is not
+ * known it will return 0.
+ */
+static
+uint32_t
+get_default_align(
+cpu_type_t cputype,
+cpu_subtype_t cpusubtype)
+{
+    const char* arch_name = get_arch_name_from_types(cputype, cpusubtype);
+    if (arch_name != NULL) {
+	struct arch_flag arch_flag;
+	if (get_arch_from_flag((char*)arch_name, &arch_flag)) {
+	    uint32_t pagesize = get_segalign_from_flag(&arch_flag);
+	    return (uint32_t)(log2(pagesize));
+	}
+    }
+    
+    return 0;
+}
+
+/*
+ * get_mh_filetype() gets the filetype from the mach-o pointed to by addr.
+ * will return 0 if addr does not point to a struct mach_header or struct
+ * mach_header_64.
+ */
+static uint32_t get_mh_filetype(
+    char* addr,
+    uint64_t size)
+{
+    uint32_t filetype;
+    uint32_t magic;
+    struct mach_header mh32;
+    struct mach_header_64 mh64;
+    
+    filetype = 0;
+    
+    if (size >= sizeof(magic)) {
+        magic = *(uint32_t*)(addr);
+        if (magic == MH_MAGIC || magic == MH_CIGAM) {
+            if (size >= sizeof(mh32)) {
+                memcpy(&mh32, addr, sizeof(mh32));
+                if (magic == MH_CIGAM)
+                    swap_mach_header(&mh32, get_host_byte_sex());
+                filetype = mh32.filetype;
+            }
+        }
+        else if (magic == MH_MAGIC_64 || magic == MH_CIGAM_64) {
+            if (size >= sizeof(mh64)) {
+                memcpy(&mh64, addr, sizeof(mh64));
+                if (magic == MH_CIGAM)
+                    swap_mach_header_64(&mh64, get_host_byte_sex());
+                filetype = mh64.filetype;
+            }
+        }
+    }
+    
+    return filetype;
+}
+
+/*
+ * get_align() returns the segment alignment for this object, as an exponent of
+ * a power of 2; e.g., a segment alignment of 0x4000 will be described as 14.
+ * Since the actual segment alignment used by the linker is not recorded in the
+ * Mach-O file, get_align() will choose an alignment based on the file contents.
+ *
+ * If the mach_header points to a well-known cputype, get_align() will return
+ * the default segment alignment for that cputype. No attempt will be made to
+ * guess the "-segalign" flag passed into ld(1).
+ *
+ * If the cputype isn't recognized, get_align() will issue a warning (this is
+ * potentially a serious configuration error) and fall back to historical
+ * methods:
+ *
+ *   If the Mach-O is an MH_OBJECT (.o) file, get_align() will return the
+ *   largest section alignment within the first-and-only segment.
+ *
+ *   If the Mach-O is any other file type, get_align() will guess the alignment
+ *   for each segment from vmaddr, and then return the smallest such value.
+ *   Since all well-formed segments are required to be page aligned, the
+ *   resulting alignment will be legal, but there is a risk that unlucky
+ *   binaries will choose an alignment value that is larger than necessary.
+ *
+ * In either fall back method, the result of get_align() will be bounded by
+ * 2 (which is log2(sizeof(uint32_t))) and MAXSECTALIGN.
  */
 static
 uint32_t
@@ -1845,20 +2000,19 @@ enum bool swapped)
     struct segment_command *sgp, sg;
     struct section *sp, s;
     enum byte_sex host_byte_sex;
-
+    
 	/*
-	 * Special case ppc and i386 architectures and return 12.
-	 * We know that with those architectures that the kernel and mmap only
-	 * need file offsets to be page (4096 byte) aligned.
+	 * Special case well-known architectures. We know that for these
+	 * architectures that the Darwin kernel and mmap require file offsets
+	 * to be page aligned.
 	 */
-	if(mhp->cputype == CPU_TYPE_POWERPC ||
-	   mhp->cputype == CPU_TYPE_I386)
-	    return(12);
-	/*
-	 * Special case ARM and return 14.  As it has 16k pages.
-	 */
-	if(mhp->cputype == CPU_TYPE_ARM)
-	    return(14);
+	align = get_default_align(mhp->cputype, mhp->cpusubtype);
+	if (align != 0)
+	    return align;
+    
+	warning("unknown cputype (%u) cpusubtype (%u), computing the segment "
+		"alignment from file contents.", mhp->cputype,
+		mhp->cpusubtype & ~CPU_SUBTYPE_MASK);
 
 	host_byte_sex = get_host_byte_sex();
 
@@ -1916,12 +2070,13 @@ enum bool swapped)
 }
 
 /*
- * get_align_64 is passed a pointer to a mach_header_64 and size of the object.
- * It returns the segment alignment the object was created with.  It guesses but
- * it is conservative.  The maximum alignment is that the link editor will allow
- * MAXSECTALIGN and the minimum is the conserative alignment for a long long
- * which appears in a mach object files (2^3 worst case for all 64-bit
- * machines).
+ * get_align_64() returns the segment alignment for this object, as an exponent
+ * of a power of 2; e.g., a segment alignment of 0x4000 will be described as 14.
+ * The method of determining the segment alignment is the same as get_align()
+ * above.
+ *
+ * In either fall back method, the result of get_align_64() will be bounded by
+ * 3 (which is log2(sizeof(uint64_t))) and MAXSECTALIGN.
  */
 static
 uint32_t
@@ -1939,19 +2094,18 @@ enum bool swapped)
     enum byte_sex host_byte_sex;
 
 	/*
-	 * Special case ppc64 and x86_64 architectures and return 12.
-	 * We know that with those architectures that the kernel and mmap only
-	 * need file offsets to be page (4096 byte) aligned.
+	 * Special case well-known architectures. We know that for these
+	 * architectures that the Darwin kernel and mmap require file offsets
+	 * to be page aligned.
 	 */
-	if(mhp64->cputype == CPU_TYPE_POWERPC64 ||
-	   mhp64->cputype == CPU_TYPE_X86_64)
-	    return(12);
-	/*
-	 * Special case ARM64 and ARM64_32 and return 14.  As it has 16k pages.
-	 */
-	if(mhp64->cputype == CPU_TYPE_ARM64 || mhp64->cputype == CPU_TYPE_ARM64_32)
-	    return(14);
+	align = get_default_align(mhp64->cputype, mhp64->cpusubtype);
+	if (align != 0)
+	    return align;
 
+	warning("unknown cputype (%u) cpusubtype (%u), computing the segment "
+		"alignment from file contents.", mhp64->cputype,
+		mhp64->cpusubtype & ~CPU_SUBTYPE_MASK);
+	
 	host_byte_sex = get_host_byte_sex();
 
 	/* set worst case the link editor uses first */
@@ -2865,17 +3019,30 @@ struct arch_flag *arch)
 }
 
 /*
- * Print the current usage line and exit (by calling fatal).
+ * Print the current usage line and exit.
  */
 static
 void
 usage(void)
 {
-	fatal("Usage: %s [input_file] ... [-arch <arch_type> input_file] ... "
-	      "[-info] [-detailed_info] [-archs] [-output output_file] "
-	      "[-create] [-arch_blank <arch_type>] [-thin <arch_type>] "
-	      "[-remove <arch_type>] ... [-extract <arch_type>] ... "
-	      "[-extract_family <arch_type>] ... "
-	      "[-verify_arch <arch_type> ...] "
-	      "[-replace <arch_type> <file_name>] ...", progname);
+    fprintf(stderr,
+"usage: lipo <input_file> <command> [<options> ...]\n"
+"  command is one of:\n"
+"    -archs\n"
+"    -create [-arch_blank <arch_type>]\n"
+"    -detailed_info\n"
+"    -extract <arch_type> [-extract <arch_type> ...]\n"
+"    -extract_family <arch_type> [-extract_family <arch_type> ...]\n"
+"    -info\n"
+"    -remove <arch_type> [-remove <arch_type> ...]\n"
+"    -replace <arch_type> <file_name> [-replace <arch_type> <file_name> ...]\n"
+"    -thin <arch_type>\n"
+"    -verify_arch <arch_type> ...\n"
+"  options are one or more of:\n"
+"    -arch <arch_type> <input_file>\n"
+"    -hideARM64\n"
+"    -output <output_file>\n"
+"    -segalign <arch_type> <alignment>\n"
+            );
+    exit(EXIT_FAILURE);
 }

@@ -1767,6 +1767,8 @@ check_dylinker_command:
 	    case LC_DATA_IN_CODE:
 	    case LC_DYLIB_CODE_SIGN_DRS:
 	    case LC_LINKER_OPTIMIZATION_HINT:
+	    case LC_DYLD_EXPORTS_TRIE:
+	    case LC_DYLD_CHAINED_FIXUPS:
 		ld = (struct linkedit_data_command *)lc;
 		swap_linkedit_data_command(ld, target_byte_sex);
 		break;
