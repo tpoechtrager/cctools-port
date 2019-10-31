@@ -117,7 +117,7 @@ ld_DEPENDENCIES = $(top_builddir)/ld64/src/3rd/libhelper.la \
 	$(top_builddir)/ld64/src/ld/passes/libPasses.la \
 	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
-	$(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
@@ -280,6 +280,7 @@ EXECINFO_LIB = @EXECINFO_LIB@
 EXEEXT = @EXEEXT@
 FGREP = @FGREP@
 FTS_LIB = @FTS_LIB@
+GCC_LIB = @GCC_LIB@
 GREP = @GREP@
 HOST_AR = @HOST_AR@
 HOST_RANLIB = @HOST_RANLIB@
@@ -306,6 +307,7 @@ LT_SYS_LIBRARY_PATH = @LT_SYS_LIBRARY_PATH@
 MAINT = @MAINT@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
+MATH_LIB = @MATH_LIB@
 MKDIR_P = @MKDIR_P@
 NM = @NM@
 NMEDIT = @NMEDIT@
@@ -401,6 +403,7 @@ ld_LDADD = \
 	$(top_builddir)/ld64/src/ld/passes/libPasses.la \
 	$(UUID_LIB) \
 	$(LTO_LIB) \
+	$(LTO_RPATH) \
 	$(XAR_LIB) \
 	$(DL_LIB) \
 	$(TAPI_LIB) 

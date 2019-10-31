@@ -242,6 +242,7 @@ EXECINFO_LIB = @EXECINFO_LIB@
 EXEEXT = @EXEEXT@
 FGREP = @FGREP@
 FTS_LIB = @FTS_LIB@
+GCC_LIB = @GCC_LIB@
 GREP = @GREP@
 HOST_AR = @HOST_AR@
 HOST_RANLIB = @HOST_RANLIB@
@@ -268,6 +269,7 @@ LT_SYS_LIBRARY_PATH = @LT_SYS_LIBRARY_PATH@
 MAINT = @MAINT@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
+MATH_LIB = @MATH_LIB@
 MKDIR_P = @MKDIR_P@
 NM = @NM@
 NMEDIT = @NMEDIT@
@@ -389,11 +391,11 @@ machocheck_SOURCES = machochecker.cpp
 machocheck_LDADD = $(top_builddir)/ld64/src/3rd/libhelper.la
 ObjectDump_SOURCES = \
 	ObjectDump.cpp \
-	$(top_srcdir)/ld64/src/ld/debugline.c 
+	$(top_srcdir)/ld64/src/ld/debugline.c
 
 ObjectDump_LDADD = \
 	$(top_builddir)/ld64/src/ld/parsers/libParsers.la \
-        $(top_builddir)/ld64/src/3rd/BlocksRuntime/libBlocksRuntime.la  \
+	$(top_builddir)/ld64/src/3rd/BlocksRuntime/libBlocksRuntime.la  \
 	$(LTO_LIB)
 
 dyldinfo_SOURCES = dyldinfo.cpp

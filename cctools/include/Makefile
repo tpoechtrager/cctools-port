@@ -43,6 +43,7 @@ OTHER_SRCS = notes gnu/symseg.h \
 	     stuff/SymLoc.h stuff/dylib_roots.h stuff/guess_short_name.h \
 	     stuff/macosx_deployment_target.h stuff/symbol_list.h \
 	     stuff/symbol.h stuff/unix_standard_mode.h \
+	     stuff/write64.h \
 	     coff/base_relocs.h coff/bytesex.h coff/ms_dos_stub.h \
 	     coff/filehdr.h coff/aouthdr.h coff/scnhdr.h coff/syment.h \
 	     coff/debug_directory.h elf/dwarf2.h llvm-c/Disassembler.h \

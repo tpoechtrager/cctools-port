@@ -123,7 +123,7 @@ am_libstuff_la_OBJECTS = libstuff_la-allocate.lo \
 	libstuff_la-symbol_list.lo libstuff_la-SymLoc.lo \
 	libstuff_la-unix_standard_mode.lo \
 	libstuff_la-version_number.lo libstuff_la-writeout.lo \
-	libstuff_la-coff_bytesex.lo
+	libstuff_la-write64.lo libstuff_la-coff_bytesex.lo
 libstuff_la_OBJECTS = $(am_libstuff_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -227,6 +227,7 @@ EXECINFO_LIB = @EXECINFO_LIB@
 EXEEXT = @EXEEXT@
 FGREP = @FGREP@
 FTS_LIB = @FTS_LIB@
+GCC_LIB = @GCC_LIB@
 GREP = @GREP@
 HOST_AR = @HOST_AR@
 HOST_RANLIB = @HOST_RANLIB@
@@ -253,6 +254,7 @@ LT_SYS_LIBRARY_PATH = @LT_SYS_LIBRARY_PATH@
 MAINT = @MAINT@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
+MATH_LIB = @MATH_LIB@
 MKDIR_P = @MKDIR_P@
 NM = @NM@
 NMEDIT = @NMEDIT@
@@ -382,6 +384,7 @@ libstuff_la_SOURCES = \
 	unix_standard_mode.c  \
 	version_number.c  \
 	writeout.c \
+	write64.c \
 	coff_bytesex.c
 
 all: all-am
@@ -560,6 +563,9 @@ libstuff_la-version_number.lo: version_number.c
 
 libstuff_la-writeout.lo: writeout.c
 	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libstuff_la_CFLAGS) $(CFLAGS) -c -o libstuff_la-writeout.lo `test -f 'writeout.c' || echo '$(srcdir)/'`writeout.c
+
+libstuff_la-write64.lo: write64.c
+	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libstuff_la_CFLAGS) $(CFLAGS) -c -o libstuff_la-write64.lo `test -f 'write64.c' || echo '$(srcdir)/'`write64.c
 
 libstuff_la-coff_bytesex.lo: coff_bytesex.c
 	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libstuff_la_CFLAGS) $(CFLAGS) -c -o libstuff_la-coff_bytesex.lo `test -f 'coff_bytesex.c' || echo '$(srcdir)/'`coff_bytesex.c

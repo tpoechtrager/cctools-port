@@ -116,7 +116,8 @@ bitcode_strip_OBJECTS = $(am_bitcode_strip_OBJECTS)
 bitcode_strip_LDADD = $(LDADD)
 am__DEPENDENCIES_1 =
 bitcode_strip_DEPENDENCIES = $(top_builddir)/libstuff/libstuff.la \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
@@ -128,62 +129,74 @@ am_check_dylib_OBJECTS = check_dylib.$(OBJEXT)
 check_dylib_OBJECTS = $(am_check_dylib_OBJECTS)
 check_dylib_LDADD = $(LDADD)
 check_dylib_DEPENDENCIES = $(top_builddir)/libstuff/libstuff.la \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
 am_checksyms_OBJECTS = checksyms.$(OBJEXT)
 checksyms_OBJECTS = $(am_checksyms_OBJECTS)
 checksyms_LDADD = $(LDADD)
 checksyms_DEPENDENCIES = $(top_builddir)/libstuff/libstuff.la \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
 am_cmpdylib_OBJECTS = cmpdylib.$(OBJEXT)
 cmpdylib_OBJECTS = $(am_cmpdylib_OBJECTS)
 cmpdylib_LDADD = $(LDADD)
 cmpdylib_DEPENDENCIES = $(top_builddir)/libstuff/libstuff.la \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
 am_codesign_allocate_OBJECTS = codesign_allocate.$(OBJEXT)
 codesign_allocate_OBJECTS = $(am_codesign_allocate_OBJECTS)
 codesign_allocate_LDADD = $(LDADD)
 codesign_allocate_DEPENDENCIES = $(top_builddir)/libstuff/libstuff.la \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
 am_ctf_insert_OBJECTS = ctf_insert.$(OBJEXT)
 ctf_insert_OBJECTS = $(am_ctf_insert_OBJECTS)
 ctf_insert_LDADD = $(LDADD)
 ctf_insert_DEPENDENCIES = $(top_builddir)/libstuff/libstuff.la \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
 am_indr_OBJECTS = indr.$(OBJEXT)
 indr_OBJECTS = $(am_indr_OBJECTS)
 indr_LDADD = $(LDADD)
 indr_DEPENDENCIES = $(top_builddir)/libstuff/libstuff.la \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
 am_inout_OBJECTS = inout.$(OBJEXT)
 inout_OBJECTS = $(am_inout_OBJECTS)
 inout_LDADD = $(LDADD)
 inout_DEPENDENCIES = $(top_builddir)/libstuff/libstuff.la \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
 am_install_name_tool_OBJECTS = install_name_tool.$(OBJEXT)
 install_name_tool_OBJECTS = $(am_install_name_tool_OBJECTS)
 install_name_tool_LDADD = $(LDADD)
 install_name_tool_DEPENDENCIES = $(top_builddir)/libstuff/libstuff.la \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
 am_libtool_OBJECTS = libtool.$(OBJEXT)
 libtool_OBJECTS = $(am_libtool_OBJECTS)
 libtool_LDADD = $(LDADD)
 libtool_DEPENDENCIES = $(top_builddir)/libstuff/libstuff.la \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
 am_lipo_OBJECTS = lipo.$(OBJEXT)
 lipo_OBJECTS = $(am_lipo_OBJECTS)
 lipo_LDADD = $(LDADD)
 lipo_DEPENDENCIES = $(top_builddir)/libstuff/libstuff.la \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
 am_nm_OBJECTS = nm.$(OBJEXT)
 nm_OBJECTS = $(am_nm_OBJECTS)
 nm_LDADD = $(LDADD)
 nm_DEPENDENCIES = $(top_builddir)/libstuff/libstuff.la \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
 am_nmedit_OBJECTS = nmedit-strip.$(OBJEXT)
 nmedit_OBJECTS = $(am_nmedit_OBJECTS)
 nmedit_LDADD = $(LDADD)
 nmedit_DEPENDENCIES = $(top_builddir)/libstuff/libstuff.la \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
 nmedit_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(nmedit_CFLAGS) $(CFLAGS) \
 	$(AM_LDFLAGS) $(LDFLAGS) -o $@
@@ -191,12 +204,14 @@ am_pagestuff_OBJECTS = pagestuff.$(OBJEXT)
 pagestuff_OBJECTS = $(am_pagestuff_OBJECTS)
 pagestuff_LDADD = $(LDADD)
 pagestuff_DEPENDENCIES = $(top_builddir)/libstuff/libstuff.la \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
 am_ranlib_OBJECTS = ranlib-libtool.$(OBJEXT)
 ranlib_OBJECTS = $(am_ranlib_OBJECTS)
 ranlib_LDADD = $(LDADD)
 ranlib_DEPENDENCIES = $(top_builddir)/libstuff/libstuff.la \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
 ranlib_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
 	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(ranlib_CFLAGS) $(CFLAGS) \
 	$(AM_LDFLAGS) $(LDFLAGS) -o $@
@@ -204,37 +219,44 @@ am_redo_prebinding_OBJECTS = redo_prebinding.$(OBJEXT)
 redo_prebinding_OBJECTS = $(am_redo_prebinding_OBJECTS)
 redo_prebinding_LDADD = $(LDADD)
 redo_prebinding_DEPENDENCIES = $(top_builddir)/libstuff/libstuff.la \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
 am_seg_addr_table_OBJECTS = seg_addr_table.$(OBJEXT)
 seg_addr_table_OBJECTS = $(am_seg_addr_table_OBJECTS)
 seg_addr_table_LDADD = $(LDADD)
 seg_addr_table_DEPENDENCIES = $(top_builddir)/libstuff/libstuff.la \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
 am_seg_hack_OBJECTS = seg_hack.$(OBJEXT)
 seg_hack_OBJECTS = $(am_seg_hack_OBJECTS)
 seg_hack_LDADD = $(LDADD)
 seg_hack_DEPENDENCIES = $(top_builddir)/libstuff/libstuff.la \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
 am_segedit_OBJECTS = segedit.$(OBJEXT)
 segedit_OBJECTS = $(am_segedit_OBJECTS)
 segedit_LDADD = $(LDADD)
 segedit_DEPENDENCIES = $(top_builddir)/libstuff/libstuff.la \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
 am_size_OBJECTS = size.$(OBJEXT)
 size_OBJECTS = $(am_size_OBJECTS)
 size_LDADD = $(LDADD)
 size_DEPENDENCIES = $(top_builddir)/libstuff/libstuff.la \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
 am_strings_OBJECTS = strings.$(OBJEXT)
 strings_OBJECTS = $(am_strings_OBJECTS)
 strings_LDADD = $(LDADD)
 strings_DEPENDENCIES = $(top_builddir)/libstuff/libstuff.la \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
 am_strip_OBJECTS = strip.$(OBJEXT)
 strip_OBJECTS = $(am_strip_OBJECTS)
 strip_LDADD = $(LDADD)
 strip_DEPENDENCIES = $(top_builddir)/libstuff/libstuff.la \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -346,6 +368,7 @@ EXECINFO_LIB = @EXECINFO_LIB@
 EXEEXT = @EXEEXT@
 FGREP = @FGREP@
 FTS_LIB = @FTS_LIB@
+GCC_LIB = @GCC_LIB@
 GREP = @GREP@
 HOST_AR = @HOST_AR@
 HOST_RANLIB = @HOST_RANLIB@
@@ -372,6 +395,7 @@ LT_SYS_LIBRARY_PATH = @LT_SYS_LIBRARY_PATH@
 MAINT = @MAINT@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
+MATH_LIB = @MATH_LIB@
 MKDIR_P = @MKDIR_P@
 NM = @NM@
 NMEDIT = @NMEDIT@
@@ -462,7 +486,8 @@ top_srcdir = @top_srcdir@
 LDADD = \
 	$(top_builddir)/libstuff/libstuff.la \
 	$(DL_LIB) \
-	$(LTO_RPATH)
+	$(LTO_RPATH) \
+	$(MATH_LIB)
 
 AM_CFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/include/foreign -I$(top_srcdir)/libstuff $(WARNINGS) $(LTO_DEF) -D__DARWIN_UNIX03 $(ENDIAN_FLAG)
 checksyms_SOURCES = checksyms.c

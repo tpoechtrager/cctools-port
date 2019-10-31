@@ -122,7 +122,7 @@ am__DEPENDENCIES_1 =
 @ISDARWIN_FALSE@	$(top_builddir)/libstuff/libstuff.la \
 @ISDARWIN_FALSE@	$(top_builddir)/libobjc2/libobjc.la \
 @ISDARWIN_FALSE@	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
-@ISDARWIN_FALSE@	$(am__DEPENDENCIES_1)
+@ISDARWIN_FALSE@	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
 @ISDARWIN_TRUE@otool_DEPENDENCIES =  \
 @ISDARWIN_TRUE@	$(top_builddir)/libstuff/libstuff.la \
 @ISDARWIN_TRUE@	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
@@ -229,6 +229,7 @@ EXECINFO_LIB = @EXECINFO_LIB@
 EXEEXT = @EXEEXT@
 FGREP = @FGREP@
 FTS_LIB = @FTS_LIB@
+GCC_LIB = @GCC_LIB@
 GREP = @GREP@
 HOST_AR = @HOST_AR@
 HOST_RANLIB = @HOST_RANLIB@
@@ -255,6 +256,7 @@ LT_SYS_LIBRARY_PATH = @LT_SYS_LIBRARY_PATH@
 MAINT = @MAINT@
 MAKEINFO = @MAKEINFO@
 MANIFEST_TOOL = @MANIFEST_TOOL@
+MATH_LIB = @MATH_LIB@
 MKDIR_P = @MKDIR_P@
 NM = @NM@
 NMEDIT = @NMEDIT@
@@ -345,7 +347,7 @@ top_srcdir = @top_srcdir@
 @ISDARWIN_FALSE@otool_LDADD = \
 @ISDARWIN_FALSE@$(top_builddir)/libstuff/libstuff.la \
 @ISDARWIN_FALSE@$(top_builddir)/libobjc2/libobjc.la \
-@ISDARWIN_FALSE@$(PTHREAD_FLAGS) $(CXXABI_LIB) $(DL_LIB)
+@ISDARWIN_FALSE@$(PTHREAD_FLAGS) $(CXXABI_LIB) $(DL_LIB) $(GCC_LIB)
 
 @ISDARWIN_TRUE@otool_LDADD = \
 @ISDARWIN_TRUE@$(top_builddir)/libstuff/libstuff.la \
