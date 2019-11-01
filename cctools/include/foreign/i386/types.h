@@ -80,6 +80,16 @@
  * not possible for a machine/compiler combination.
  */
 /* cctools-port: replaced types with compiler defines */
+
+#ifdef __GLIBC__
+#ifdef __ARM_32BIT_STATE
+/* Heck, why is asm/types.h (glibc) defining this type wrong?!
+   It's supposed to be 'unsigned int' */
+#undef __UINTPTR_TYPE__
+#define __UINTPTR_TYPE__ unsigned int
+#endif
+#endif
+
 #ifndef _INT8_T
 #define _INT8_T
 typedef	__INT8_TYPE__          int8_t;
