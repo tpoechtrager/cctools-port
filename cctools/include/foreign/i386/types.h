@@ -90,6 +90,45 @@
 #endif
 #endif
 
+#if defined(__clang_major__) && __clang_major__ == 3 && \
+                                __clang_minor__ == 4
+#ifndef __UINT8_TYPE__
+#define __UINT8_TYPE__ unsigned char
+#endif
+
+#ifndef __UINT16_TYPE__
+#define __UINT16_TYPE__ unsigned __INT16_TYPE__
+#endif
+
+#ifndef __UINT32_TYPE__
+#define __UINT32_TYPE__ unsigned __INT32_TYPE__
+#endif
+
+#ifndef __UINT64_TYPE__
+#define __UINT64_TYPE__ unsigned __INT64_TYPE__
+#endif
+
+#ifndef __UINTPTR_TYPE__
+#define __UINTPTR_TYPE__ unsigned __INTPTR_TYPE__
+#endif
+
+/*
+    clang 3.4:
+
+    $ clang -target x86_64-unknown-linux -dM -E - < /dev/null|grep __INT8_TYPE__
+    #define __INT8_TYPE__ char
+
+    clang 3.5:
+
+    $ clang -target x86_64-unknown-linux -dM -E - < /dev/null|grep __INT8_TYPE__
+    #define __INT8_TYPE__ signed char
+
+ */
+
+#undef __INT8_TYPE__
+#define __INT8_TYPE__ signed char
+#endif /* clang 3.4 */
+
 #ifndef _INT8_T
 #define _INT8_T
 typedef	__INT8_TYPE__          int8_t;
