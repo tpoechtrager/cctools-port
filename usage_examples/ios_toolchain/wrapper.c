@@ -147,7 +147,7 @@ int main(int argc, char *argv[])
 
     target_info(argv, &target, &compiler);
     if (!get_executable_path(execpath, sizeof(execpath))) abort();
-    snprintf(sdkpath, sizeof(sdkpath), "%s/../SDK/" SDK_DIR, execpath);
+    snprintf(sdkpath, sizeof(sdkpath) - 1, "%s/../SDK/" SDK_DIR, execpath);
 
     snprintf(codesign_allocate, sizeof(codesign_allocate),
              "%s-codesign_allocate", target);

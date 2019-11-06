@@ -202,6 +202,7 @@ AC_CHECK_LIB([uuid],[uuid_generate_random],[
 AC_SUBST(UUID_LIB)
 
 AC_CHECK_FUNCS([strmode utimens utimensat])
+AC_CHECK_FUNCS([bcopy bcmp bzero index rindex])
 
 ### Check how to access struct stat's tv_nsec field.
 AC_MSG_CHECKING(for st_mtimespec.tv_nsec in struct stat)

@@ -86,6 +86,7 @@
 #import <stdio.h>
 #import <stdlib.h>
 #import <string.h>
+#import <strings.h> /* cctools-port: For bcmp, bzero ... */
 #import <limits.h>
 #import <libc.h>
 #import <malloc/malloc.h>

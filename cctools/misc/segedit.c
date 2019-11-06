@@ -32,6 +32,7 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
+#include <strings.h> /* cctools-port: For bcmp, bzero ... */
 #include <errno.h>
 #include <stdio.h>
 #include <sys/file.h>

@@ -32,6 +32,7 @@
 #include "stdlib.h"
 #include "stddef.h"
 #include "string.h"
+#include <strings.h> /* cctools-port: For bcmp, bzero ... */
 #include "mach-o/loader.h"
 #include "mach-o/arm64/reloc.h"
 #include "stuff/allocate.h"

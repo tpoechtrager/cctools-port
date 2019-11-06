@@ -4,6 +4,12 @@ export LC_ALL=C
 pushd "${0%/*}" &>/dev/null
 
 PLATFORM=$(uname -s)
+OPERATING_SYSTEM=$(uname -o || echo "-")
+
+if [ $OPERATING_SYSTEM == "Android" ]; then
+  export CC="clang -D__ANDROID_API__=26"
+  export CXX="clang++ -D__ANDROID_API__=26"
+fi
 
 if [ -z "$LLVM_DSYMUTIL" ]; then
     LLVM_DSYMUTIL=llvm-dsymutil
@@ -141,7 +147,7 @@ if [ $OK -eq 1 ]; then
     pushd $TARGETDIR/bin &>/dev/null
     ln -sf $TRIPLE-lipo lipo
     popd &>/dev/null
-else
+elif ! which dsymutil &>/dev/null; then
     echo "int main(){return 0;}" | cc -xc -O2 -o $TARGETDIR/bin/dsymutil -
 fi
 

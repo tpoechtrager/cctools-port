@@ -95,7 +95,8 @@
 #define I386_PGBYTES		4096		/* bytes per 80386 page */
 #define I386_PGSHIFT		12		/* bitshift for pages */
 
-#undef	PAGE_SIZE				/* Cygwin */
+#undef	PAGE_SIZE               /* cctools-port */
+#undef  PAGE_MASK
 #define	PAGE_SIZE		I386_PGBYTES
 #define	PAGE_SHIFT		I386_PGSHIFT
 #define	PAGE_MASK		(PAGE_SIZE - 1)

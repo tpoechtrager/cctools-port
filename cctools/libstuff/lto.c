@@ -1,6 +1,7 @@
 #ifdef LTO_SUPPORT
 
 #include <stdio.h>
+#include <strings.h> /* cctools-port: For bcmp, bzero ... */
 #include <stdlib.h>
 #include <libc.h>
 #include <sys/file.h>

@@ -9,6 +9,7 @@
 #include "stdio.h"
 #include "stdlib.h"
 #include "string.h"
+#include <strings.h> /* cctools-port: For bcmp, bzero ... */
 #include "libc.h"
 #include <sys/file.h>
 #include <mach/mach.h>

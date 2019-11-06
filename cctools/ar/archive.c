@@ -78,6 +78,7 @@ static char rcsid[] = "$NetBSD: archive.c,v 1.7 1995/03/26 03:27:46 glass Exp $"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h> /* cctools-port: For bcmp, bzero ... */
 #include <unistd.h>
 
 #include <mach-o/fat.h>

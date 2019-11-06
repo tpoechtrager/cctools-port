@@ -24,6 +24,7 @@
 #include <libc.h> /* first to get rid of pre-comp warning */
 #include <mach/mach.h> /* first to get rid of pre-comp warning */
 #include "stdio.h"
+#include <strings.h> /* cctools-port: For bcmp, bzero ... */
 #include <signal.h>
 #include <sys/wait.h>
 #include <sys/file.h>

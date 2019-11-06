@@ -34,7 +34,9 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <string.h>
+#ifndef __ANDROID__ // ld64-port
 #include <spawn.h>
+#endif
 #include <cxxabi.h>
 #include <Availability.h>
 #ifdef TAPI_SUPPORT

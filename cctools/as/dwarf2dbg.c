@@ -30,6 +30,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h> /* cctools-port: For bcmp, bzero ... */
 #include <unistd.h>
 #include <sys/param.h>
 #include <libgen.h>

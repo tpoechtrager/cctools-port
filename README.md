@@ -7,8 +7,8 @@ Originally ported by [cjacker](http://ios-toolchain-based-on-clang-for-linux.goo
 
 **SUPPORTED OPERATING SYSTEMS:**
 
-Linux, FreeBSD, Mac OS X, iOS,  
-OpenBSD and NetBSD
+Linux, Android (Termux), FreeBSD,  
+Mac OS X, iOS, OpenBSD and NetBSD
 
 **SUPPORTED HOST ARCHITECTURES:**
 

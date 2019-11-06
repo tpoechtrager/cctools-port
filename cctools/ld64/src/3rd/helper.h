@@ -5,18 +5,6 @@
 #define __USE_GNU
 #endif
 
-#ifndef __has_extension
-#define __has_extension(x) 0
-#endif
-
-#ifndef __has_include
-#define __has_include(x) 0
-#endif
-
-#ifndef __has_include_next
-#define __has_include_next(x) 0
-#endif
-
 #ifdef __cplusplus
 extern "C" {
 #endif

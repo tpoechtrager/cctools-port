@@ -19,7 +19,7 @@ fi
 export LIBTOOLIZE
 mkdir -p m4
 
-$LIBTOOLIZE -c -i
+$LIBTOOLIZE -c -i --force
 aclocal -I m4
 autoconf
 

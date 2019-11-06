@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <strings.h> /* cctools-port: For bcmp, bzero ... */
 #include <stdlib.h>
 #include <mach-o/loader.h>
 #include <mach-o/nlist.h>
