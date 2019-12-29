@@ -47,7 +47,10 @@ AC_DEFUN([CHECK_LLVM],
           LTO_DEF=-DLTO_SUPPORT
           # DO NOT include the LLVM include dir directly,
           # it may cause the build to fail.
-          cp -f $LLVM_INCLUDE_DIR/llvm-c/lto.h `dirname ${0}`/include/llvm-c/lto.h
+          cp -f $LLVM_INCLUDE_DIR/llvm-c/lto.h `dirname ${0}`/include/llvm-c
+          if test -e $LLVM_INCLUDE_DIR/llvm-c/ExternC.h; then
+            cp -f $LLVM_INCLUDE_DIR/llvm-c/ExternC.h `dirname ${0}`/include/llvm-c
+          fi
           AC_SUBST([LTO_DEF])
           AC_SUBST([LTO_RPATH])
           AC_SUBST([LTO_LIB])

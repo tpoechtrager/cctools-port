@@ -17528,7 +17528,10 @@ if test "x$ac_cv_lib_LTO_lto_get_version" = xyes; then :
           LTO_DEF=-DLTO_SUPPORT
           # DO NOT include the LLVM include dir directly,
           # it may cause the build to fail.
-          cp -f $LLVM_INCLUDE_DIR/llvm-c/lto.h `dirname ${0}`/include/llvm-c/lto.h
+          cp -f $LLVM_INCLUDE_DIR/llvm-c/lto.h `dirname ${0}`/include/llvm-c
+          if test -e $LLVM_INCLUDE_DIR/llvm-c/ExternC.h; then
+            cp -f $LLVM_INCLUDE_DIR/llvm-c/ExternC.h `dirname ${0}`/include/llvm-c
+          fi
 
 
 
@@ -19688,7 +19691,6 @@ $as_echo "$as_me: executing $ac_file commands" >&6;}
     cat <<_LT_EOF >> "$cfgfile"
 #! $SHELL
 # Generated automatically by $as_me ($PACKAGE) $VERSION
-# Libtool was configured on host `(hostname || uname -n) 2>/dev/null | sed 1q`:
 # NOTE: Changes made to this file will be lost: look at ltmain.sh.
 
 # Provide generalized library-building support services.
