@@ -1322,7 +1322,7 @@ void doPass(const Options& opts, ld::Internal& state)
 #if SUPPORT_ARCH_arm64
 		case CPU_TYPE_ARM64:
 #if SUPPORT_ARCH_arm64e
-			if (opts.subArchitecture() == CPU_SUBTYPE_ARM64_E) {
+			if (opts.subArchitecture() == CPU_SUBTYPE_ARM64E) {
 				doPass<arm64e, true>(opts, state);
 				break;
 			}
