@@ -16,9 +16,11 @@ x86, x86_64, arm, arm64/aarch64
 
 ## SUPPORTED TARGET ARCHITECTURES ##
 
-armv6, armv7, armv7s, arm64, arm64e (untested),  
+armv6, armv7, armv7s, arm64, arm64e,  
 arm64_32 (untested), i386, x86_64,  x86_64h,  
 armv6m, armv7k, armv7m and armv7em
+
+arm64 requires [Apple LLVM/Clang](https://github.com/apple/llvm-project).
 
 ## SUPPORTED TARGET OPERATING SYSTEMS ##
 
