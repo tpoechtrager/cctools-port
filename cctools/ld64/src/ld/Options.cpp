@@ -676,7 +676,7 @@ void Options::setArchitecture(cpu_type_t type, cpu_subtype_t subtype, ld::Platfo
 				#endif
 					}
 #if SUPPORT_ARCH_arm64e
-					if ( (fArchitecture == CPU_TYPE_ARM64) && (fSubArchitecture == CPU_SUBTYPE_ARM64_E) ) {
+					if ( (fArchitecture == CPU_TYPE_ARM64) && (fSubArchitecture == CPU_SUBTYPE_ARM64E) ) {
 						fSupportsAuthenticatedPointers = true;
 					}
 #endif
@@ -4838,7 +4838,7 @@ void Options::reconfigureDefaults()
 			break;
 		case Options::kDyld:
 			// arm64e has support for compressed LINKEDIT.
-			if ( (fArchitecture == CPU_TYPE_ARM64) && (fSubArchitecture == CPU_SUBTYPE_ARM64_E) )
+			if ( (fArchitecture == CPU_TYPE_ARM64) && (fSubArchitecture == CPU_SUBTYPE_ARM64E) )
 				break;
 		case Options::kPreload:
 		case Options::kStaticExecutable:
@@ -4903,7 +4903,7 @@ void Options::reconfigureDefaults()
 
 	if (fArchitecture == CPU_TYPE_ARM64) {
 #if SUPPORT_ARCH_arm64e
-		if (fSubArchitecture == CPU_SUBTYPE_ARM64_E)
+		if (fSubArchitecture == CPU_SUBTYPE_ARM64E)
 		{
 			// FIXME: Move some of these to arm64
 			fNoLazyBinding = true;
@@ -4962,7 +4962,7 @@ void Options::reconfigureDefaults()
 				fUseLinkedListBinding = true;
 				fNoLazyBinding = true;
 #if SUPPORT_ARCH_arm64e
-				if ( (fArchitecture == CPU_TYPE_ARM64) && (fSubArchitecture == CPU_SUBTYPE_ARM64_E) )
+				if ( (fArchitecture == CPU_TYPE_ARM64) && (fSubArchitecture == CPU_SUBTYPE_ARM64E) )
 					fSupportsAuthenticatedPointers = true;
 #endif
 				break;
@@ -5361,7 +5361,7 @@ void Options::reconfigureDefaults()
 	}
 	else if ( platforms().minOS(ld::iOS_10_0) ) {
 #if SUPPORT_ARCH_arm64e
-		if ( (fArchitecture == CPU_TYPE_ARM64) && (fSubArchitecture == CPU_SUBTYPE_ARM64_E) ) {
+		if ( (fArchitecture == CPU_TYPE_ARM64) && (fSubArchitecture == CPU_SUBTYPE_ARM64E) ) {
 				fUnalignedPointerTreatment = Options::kUnalignedPointerError;
 		} else
 #endif
