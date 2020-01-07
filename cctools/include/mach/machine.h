@@ -325,6 +325,7 @@ extern vm_offset_t		interrupt_stack[];
 
 #define	CPU_SUBTYPE_ARM64_32_V8		((cpu_subtype_t) 1)
 #define	CPU_SUBTYPE_ARM64E		((cpu_subtype_t) 2)
+#define	CPU_SUBTYPE_ARM64_E		CPU_SUBTYPE_ARM64E /* cctools-port */
 
 /*
  *	MC88000 subtypes

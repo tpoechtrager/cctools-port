@@ -235,7 +235,7 @@ ld::Atom* Pass::makeStub(const ld::Atom& target, bool weakImport)
 #if SUPPORT_ARCH_arm64
 		case CPU_TYPE_ARM64:
 #if SUPPORT_ARCH_arm64e
-			if ( (_options.subArchitecture() == CPU_SUBTYPE_ARM64E) && _options.useAuthenticatedStubs() ) {
+			if ( (_options.subArchitecture() == CPU_SUBTYPE_ARM64_E) && _options.useAuthenticatedStubs() ) {
 				if ( (_options.outputKind() == Options::kKextBundle) && _options.kextsUseStubs() )
 					return new ld::passes::stubs::arm64e::NonLazyStubAtom(*this, target, weakImport);
 				else if ( usingCompressedLINKEDIT() && !forLazyDylib && _options.noLazyBinding() && !stubToResolver )

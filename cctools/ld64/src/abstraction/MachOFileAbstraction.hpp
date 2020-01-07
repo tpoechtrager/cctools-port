@@ -672,7 +672,7 @@ static const ArchInfo archInfoArray[] = {
 	{ "arm64v8", CPU_TYPE_ARM64, CPU_SUBTYPE_ARM64_V8,   "arm64v8-",  "aarch64-",   true,  false },
 #endif
 #if SUPPORT_ARCH_arm64e
-	{ "arm64e", CPU_TYPE_ARM64, CPU_SUBTYPE_ARM64E,   "arm64e-",  "aarch64-",   true,  false },
+	{ "arm64e", CPU_TYPE_ARM64, CPU_SUBTYPE_ARM64_E,   "arm64e-",  "aarch64-",   true,  false },
 #endif
 	{ NULL, 0, 0, NULL, NULL, false, false }
 };
