@@ -90,10 +90,11 @@
 static enum bool otool_first_ofile_map = TRUE;
 #else /* !define(OTOOL) */
 
-#if (!defined(m68k) && !defined(__i386__) && !defined(__x86_64__) && !defined(__ppc__) && !defined(__arm__))
+/* cctools-port: Added    && !defined(__arm64__) && !defined(__aarch64__)  */
+#if (!defined(m68k) && !defined(__i386__) && !defined(__x86_64__) && !defined(__ppc__) && !defined(__arm__) && !defined(__arm64__) && !defined(__aarch64__))
 #define ALIGNMENT_CHECKS_ARCHIVE_64_BIT
 static enum bool archive_64_bit_align_warning = FALSE;
-#endif /* (!defined(m68k) && !defined(__i386__) && !defined(__x86_64__) && !defined(__ppc__) && !defined(__arm__)) */
+#endif /* (!defined(m68k) && !defined(__i386__) && !defined(__x86_64__) && !defined(__ppc__) && !defined(__arm__) && !defined(__arm64__) && !defined(__aarch64__)) */
 
 #endif /* OTOOL */
 
