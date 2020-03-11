@@ -15,6 +15,7 @@
 #include "arm64_disasm.h"
 #include "cxa_demangle.h"
 
+static /* cctools-port */
 struct disassemble_info {
   /* otool(1) specific stuff */
   enum bool verbose;

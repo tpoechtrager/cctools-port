@@ -1617,6 +1617,7 @@ static unsigned int xmm_rm(int r_m, int rex)
 /*
  * This is passed to the llvm disassembler.
  */
+static /* cctools-port */
 struct disassemble_info {
   enum bool verbose;
   /* Relocation information.  */
