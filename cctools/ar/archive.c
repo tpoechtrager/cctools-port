@@ -375,6 +375,15 @@ put_arobj(cfp, sb)
 		size = chdr.size;
 	}
 
+	/* cctools-port */
+	if (strlen(hb) != sizeof(HDR)) {
+		fprintf(stderr, "ar is not working correctly. "
+			"Please report this issue to the cctools-port "
+			"project. Thank you.\n");
+		exit(1);
+	}
+	/* cctools-port end */
+
 	if (write(cfp->wfd, hb, sizeof(HDR)) != sizeof(HDR))
 		error(cfp->wname);
 	/*

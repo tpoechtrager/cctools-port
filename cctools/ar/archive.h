@@ -113,12 +113,18 @@ typedef struct {
 	char name[MAXNAMLEN + 1];	/* name */
 } CHDR;
 
+/*
+ * cctools-port:
+ *  Replaced 'qd' with 'lld' in format strings
+ *  https://github.com/tpoechtrager/osxcross/issues/216#issuecomment-599044727
+ * */
+
 /* Header format strings. */
-#define	HDR1	"%s%-13d%-12ld%-6u%-6u%-8o%-10qd%2s"
-#define	HDR2	"%-16.16s%-12ld%-6u%-6u%-8o%-10qd%2s"
+#define	HDR1	"%s%-13d%-12ld%-6u%-6u%-8o%-10lld%2s"
+#define	HDR2	"%-16.16s%-12ld%-6u%-6u%-8o%-10lld%2s"
 
 #define	OLDARMAXNAME	15
-#define	HDR3	"%-16.15s%-12ld%-6u%-6u%-8o%-10qd%2s"
+#define	HDR3	"%-16.15s%-12ld%-6u%-6u%-8o%-10lld%2s"
 
 
 #include <sys/cdefs.h>

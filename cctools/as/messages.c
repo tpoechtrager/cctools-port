@@ -236,5 +236,6 @@ const char *format,
 void
 sprint_value (char *buf, signed_expr_t val)
 {
-    sprintf (buf, "%qd", val);
+    /* cctools-port: Replaced 'qd' with 'lld' in format string */
+    sprintf (buf, "%lld", val);
 }

@@ -107,7 +107,8 @@ contents(argv)
 			goto next;
 		if (options & AR_V) {
 			(void)strmode(chdr.mode, buf);
-			(void)printf("%s %6d/%-6d %8qd ",
+			/* cctools-port: replaced 'qd' with 'lld' in format string */
+			(void)printf("%s %6d/%-6d %8lld ",
 			    buf + 1, chdr.uid, chdr.gid, chdr.size);
 			tp = localtime(&chdr.date);
 			(void)strftime(buf, sizeof(buf), "%b %e %H:%M %Y", tp);
