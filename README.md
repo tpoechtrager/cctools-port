@@ -1,6 +1,6 @@
-# Apple cctools and ld64 port for Linux, FreeBSD and macOS #
+# Apple cctools and ld64 port for Linux, *BSD and macOS #
 
-Current Version: cctools: 927.0.2, ld64: 450.3.  
+Current Version: cctools: 949.0.1, ld64: 512.4.  
 Originally ported by [cjacker](http://ios-toolchain-based-on-clang-for-linux.googlecode.com).
 
 ## SUPPORTED HOSTS ##
@@ -17,14 +17,17 @@ x86, x86_64, arm, arm64/aarch64
 ## SUPPORTED TARGET ARCHITECTURES ##
 
 armv6, armv7, armv7s, arm64, arm64e,  
-arm64_32 (untested), i386, x86_64,  x86_64h,  
+arm64_32 (untested), i386, x86_64, x86_64h,  
 armv6m, armv7k, armv7m and armv7em
 
 arm64e requires [Apple LLVM/Clang](https://github.com/apple/llvm-project).
 
 ## SUPPORTED TARGET OPERATING SYSTEMS ##
 
-Mac OS X, iOS, watchOS (untested) and tvOS (untested)
+macOS, iOS, tvOS, watchOS, bridgeOS, Mac Catalyst,  
+iOS Simluator, watchOS Simulator, DriverKit
+
+Not all of the targets have been tested.
 
 ## DEPENDENCIES ##
 
@@ -73,4 +76,4 @@ If you get compile errors because of `unistd.h`, then please run
 
 ## TRAVIS CI ##
 
-[![Build Status](https://travis-ci.org/tpoechtrager/cctools-port.svg?branch=927.0.2-ld64-450.3)](https://travis-ci.org/tpoechtrager/cctools-port)
+[![Build Status](https://travis-ci.org/tpoechtrager/cctools-port.svg?branch=949.0.1-ld64-512.4)](https://travis-ci.org/tpoechtrager/cctools-port)
