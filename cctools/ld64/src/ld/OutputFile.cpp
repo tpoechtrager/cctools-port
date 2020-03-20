@@ -6970,6 +6970,8 @@ uint32_t OutputFile::ChainedFixupBinds::ordinal(const ld::Atom* atom, uint64_t a
 		++index;
 	}
 	assert(0 && "bind ordinal missing");
+	abort();                    // ld64-port
+	__builtin_unreachable();    // ld64-port
 }
 
 
