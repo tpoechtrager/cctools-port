@@ -247,7 +247,7 @@ FLONUM_TYPE *address_of_generic_floating_point_number)
       FLONUM_TYPE	digits_flonum;
 
 
-      precision = (address_of_generic_floating_point_number -> high
+      precision = (int)(address_of_generic_floating_point_number -> high
 		   - address_of_generic_floating_point_number -> low
 		   + 1
 		   );		/* Number of destination littlenums. */

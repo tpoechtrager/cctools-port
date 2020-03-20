@@ -38,8 +38,8 @@
 __private_extern__
 enum bool
 get_version_number(
-char *flag,
-char *argument,
+const char *flag,
+const char *argument,
 uint32_t *value)
 {
     char *p, *x, *y, *z, *dot, *endp;
@@ -71,7 +71,7 @@ uint32_t *value)
 	Y = 0;
 	Z = 0;
 
-	X = strtoul(x, &endp, 10);
+	X = (uint32_t)strtoul(x, &endp, 10);
 	if(*endp != '\0'){
 	    error("first field (%s) in argument for: %s %s not a proper "
 		  "unsigned number", x, flag, argument);
@@ -83,7 +83,7 @@ uint32_t *value)
 	    goto fail;
 	}
 	if(y != NULL){
-	    Y = strtoul(y, &endp, 10);
+	    Y = (uint32_t)strtoul(y, &endp, 10);
 	    if(*endp != '\0'){
 		error("second field (%s) in argument for: %s %s not a proper "
 		      "unsigned number", y, flag, argument);
@@ -95,7 +95,7 @@ uint32_t *value)
 		goto fail;
 	    }
 	    if(z != NULL){
-		Z = strtoul(z, &endp, 10);
+		Z = (uint32_t)strtoul(z, &endp, 10);
 		if(*endp != '\0'){
 		    error("third field (%s) in argument for: %s %s not a "
 			  "proper unsigned number", z, flag, argument);

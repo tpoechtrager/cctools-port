@@ -49,8 +49,8 @@ struct fat_arch *fat_archs,
 struct fat_arch_64 *fat_archs64,
 uint32_t nfat_archs)
 {
-    uint32_t i;
-    long lowest_family, lowest_model, lowest_index;
+    uint32_t i, lowest_index;
+    long lowest_family, lowest_model;
     cpu_type_t fat_cputype;
     cpu_subtype_t fat_cpusubtype;
 

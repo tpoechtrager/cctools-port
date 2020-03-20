@@ -210,16 +210,21 @@ struct mach_header_64 {
 #define MH_APP_EXTENSION_SAFE 0x02000000 /* The code was linked for use in an
 					    application extension. */
 
-#define	MH_NLIST_OUTOFSYNC_WITH_DYLDINFO 0x04000000
-					/* The external symbols listed in the nlist
-   					   symbol table do not include all the symbols
-					   listed in the dyld info. */
+#define	MH_NLIST_OUTOFSYNC_WITH_DYLDINFO 0x04000000 /* The external symbols
+					   listed in the nlist symbol table do
+					   not include all the symbols listed in
+					   the dyld info. */
 
 #define	MH_SIM_SUPPORT 0x08000000	/* Allow LC_MIN_VERSION_MACOS and
 					   LC_BUILD_VERSION load commands with
-					   the platforms macOS, iOSMac,
+					   the platforms macOS, macCatalyst,
 					   iOSSimulator, tvOSSimulator and
 					   watchOSSimulator. */
+					   
+#define MH_DYLIB_IN_CACHE 0x80000000	/* Only for use on dylibs. When this bit
+					   is set, the dylib is part of the dyld
+					   shared cache, rather than loose in
+					   the filesystem. */
 
 /*
  * The load commands directly follow the mach_header.  The total size of all
@@ -1181,9 +1186,11 @@ struct rpath_command {
  */
 struct linkedit_data_command {
     uint32_t	cmd;		/* LC_CODE_SIGNATURE, LC_SEGMENT_SPLIT_INFO,
-                                   LC_FUNCTION_STARTS, LC_DATA_IN_CODE,
-				   LC_DYLIB_CODE_SIGN_DRS or
-				   LC_LINKER_OPTIMIZATION_HINT. */
+				   LC_FUNCTION_STARTS, LC_DATA_IN_CODE,
+				   LC_DYLIB_CODE_SIGN_DRS,
+				   LC_LINKER_OPTIMIZATION_HINT,
+				   LC_DYLD_EXPORTS_TRIE, or
+				   LC_DYLD_CHAINED_FIXUPS. */
     uint32_t	cmdsize;	/* sizeof(struct linkedit_data_command) */
     uint32_t	dataoff;	/* file offset of data in __LINKEDIT segment */
     uint32_t	datasize;	/* file size of data in __LINKEDIT segment  */
@@ -1239,7 +1246,7 @@ struct version_min_command {
 struct build_version_command {
     uint32_t	cmd;		/* LC_BUILD_VERSION */
     uint32_t	cmdsize;	/* sizeof(struct build_version_command) plus */
-                                /* ntools * sizeof(struct build_tool_version) */
+				/* ntools * sizeof(struct build_tool_version) */
     uint32_t	platform;	/* platform */
     uint32_t	minos;		/* X.Y.Z is encoded in nibbles xxxx.yy.zz */
     uint32_t	sdk;		/* X.Y.Z is encoded in nibbles xxxx.yy.zz */
@@ -1258,9 +1265,13 @@ struct build_tool_version {
 #define PLATFORM_WATCHOS 4
 #define PLATFORM_BRIDGEOS 5
 #define PLATFORM_IOSMAC 6
+#if (!defined(PLATFORM_MACCATALYST))
+#define PLATFORM_MACCATALYST 6
+#endif
 #define PLATFORM_IOSSIMULATOR 7
 #define PLATFORM_TVOSSIMULATOR 8
 #define PLATFORM_WATCHOSSIMULATOR 9
+#define PLATFORM_DRIVERKIT 10
 
 /* Known values for the tool field above. */
 #define TOOL_CLANG 1
@@ -1353,18 +1364,18 @@ struct dyld_info_command {
      * the exported symbol information for the string so far.
      * If there is no exported symbol, the node starts with a zero byte. 
      * If there is exported info, it follows the length.  
-	 *
-	 * First is a uleb128 containing flags. Normally, it is followed by
+     *
+     * First is a uleb128 containing flags. Normally, it is followed by
      * a uleb128 encoded offset which is location of the content named
      * by the symbol from the mach_header for the image.  If the flags
      * is EXPORT_SYMBOL_FLAGS_REEXPORT, then following the flags is
      * a uleb128 encoded library ordinal, then a zero terminated
      * UTF8 string.  If the string is zero length, then the symbol
      * is re-export from the specified dylib with the same name.
-	 * If the flags is EXPORT_SYMBOL_FLAGS_STUB_AND_RESOLVER, then following
-	 * the flags is two uleb128s: the stub offset and the resolver offset.
-	 * The stub is used by non-lazy pointers.  The resolver is used
-	 * by lazy pointers and must be called to get the actual address to use.
+     * If the flags is EXPORT_SYMBOL_FLAGS_STUB_AND_RESOLVER, then following
+     * the flags is two uleb128s: the stub offset and the resolver offset.
+     * The stub is used by non-lazy pointers.  The resolver is used
+     * by lazy pointers and must be called to get the actual address to use.
      *
      * After the optional exported symbol information is a byte of
      * how many edges (0-255) that this node has leaving it, 

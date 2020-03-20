@@ -45,7 +45,7 @@ uint32_t sizeofcmds,
 uint32_t filetype,
 enum byte_sex object_byte_sex,
 char *object_addr,
-uint32_t object_size,
+uint64_t object_size,
 enum bool verbose)
 {
     char *sect, *p;

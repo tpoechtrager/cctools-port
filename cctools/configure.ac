@@ -1,4 +1,4 @@
-AC_INIT([cctools], [927.0.2], [t.poechtrager@gmail.com])
+AC_INIT([cctools], [949.0.1], [t.poechtrager@gmail.com])
 
 AC_CANONICAL_BUILD
 AC_CANONICAL_HOST
@@ -80,7 +80,7 @@ case "$CCVERSION" in
   ;;
 esac
 
-EXTRAFLAGS="$EXTRAFLAGS -DLD64_VERSION_NUM=450.3"
+EXTRAFLAGS="$EXTRAFLAGS -DLD64_VERSION_NUM=512.4"
 
 case "$CXXVERSION" in
   *clang* )
@@ -237,9 +237,29 @@ AC_CHECK_LIB([m], [log2], [
 
 AC_SUBST(MATH_LIB)
 
+### Check for reallocf in -lc, -lbsd
+
+AC_CHECK_HEADERS([bsd/stdlib.h], [])
+
+AC_CHECK_LIB([c],[reallocf],[
+    REALLOCF_LIB=""
+    AC_DEFINE(HAVE_REALLOCF, 1)
+  ],[
+  AC_CHECK_LIB([bsd],[reallocf],[
+    REALLOCF_LIB=-lbsd
+    AC_DEFINE(HAVE_REALLOCF, 1)
+  ],[])
+])
+
+AC_SUBST(REALLOCF_LIB)
+
+### Check for clock_gettime
+
+AC_CHECK_FUNC([clock_gettime],[AC_DEFINE(HAVE_CLOCK_GETTIME, 1)])
+
 ### Check for write64
 
-AC_CHECK_FUNC([write64])
+AC_CHECK_FUNC([write64],[AC_DEFINE(HAVE_WRITE64, 1)])
 
 ### Check for __cxa_demangle in various C++ ABI libs ###
 
@@ -425,7 +445,7 @@ AC_C_BIGENDIAN([AC_SUBST([ENDIAN_FLAG],[-D__BIG_ENDIAN__=1])],
       [AC_SUBST([ENDIAN_FLAG],[-D__LITTLE_ENDIAN__=1])])
 
 
-AC_CONFIG_FILES([Makefile libstuff/Makefile])
+AC_CONFIG_FILES([Makefile libstuff/Makefile libmacho/Makefile])
 AC_CONFIG_FILES([ar/Makefile])
 AC_CONFIG_FILES([as/Makefile])
 AC_CONFIG_FILES([as/arm/Makefile])

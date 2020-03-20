@@ -148,7 +148,8 @@ static const struct cpu_entry cpu_entries[] = {
     { CPU_TYPE_MC680x0,     BIG_ENDIAN_BYTE_SEX,    0x04000000,	       0x2000 },
     { CPU_TYPE_MC88000,     BIG_ENDIAN_BYTE_SEX,    0xffffe000,	       0x2000 },
     { CPU_TYPE_SPARC,       BIG_ENDIAN_BYTE_SEX,    0xf0000000,	       0x2000 },
-    { CPU_TYPE_I860,        BIG_ENDIAN_BYTE_SEX,    0,		       0x2000 },
+    { CPU_TYPE_I860,        BIG_ENDIAN_BYTE_SEX,    0,                 0x2000 },
+    { CPU_TYPE_HPPA,        BIG_ENDIAN_BYTE_SEX,    0,                 0x2000 },
     { 0 },
 };
     

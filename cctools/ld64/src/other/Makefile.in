@@ -107,12 +107,14 @@ am__installdirs = "$(DESTDIR)$(bindir)"
 PROGRAMS = $(bin_PROGRAMS)
 am__dirstamp = $(am__leading_dot)dirstamp
 am_ObjectDump_OBJECTS = ObjectDump.$(OBJEXT) \
+	$(top_builddir)/ld64/src/ld/PlatformSupport.$(OBJEXT) \
 	$(top_builddir)/ld64/src/ld/debugline.$(OBJEXT)
 ObjectDump_OBJECTS = $(am_ObjectDump_OBJECTS)
 am__DEPENDENCIES_1 =
 ObjectDump_DEPENDENCIES =  \
 	$(top_builddir)/ld64/src/ld/parsers/libParsers.la \
 	$(top_builddir)/ld64/src/3rd/BlocksRuntime/libBlocksRuntime.la \
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -291,6 +293,7 @@ PATH_SEPARATOR = @PATH_SEPARATOR@
 PROGRAM_PREFIX = @PROGRAM_PREFIX@
 PTHREAD_FLAGS = @PTHREAD_FLAGS@
 RANLIB = @RANLIB@
+REALLOCF_LIB = @REALLOCF_LIB@
 SED = @SED@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
@@ -391,12 +394,15 @@ machocheck_SOURCES = machochecker.cpp
 machocheck_LDADD = $(top_builddir)/ld64/src/3rd/libhelper.la
 ObjectDump_SOURCES = \
 	ObjectDump.cpp \
+	$(top_srcdir)/ld64/src/ld/PlatformSupport.cpp \
 	$(top_srcdir)/ld64/src/ld/debugline.c
 
 ObjectDump_LDADD = \
 	$(top_builddir)/ld64/src/ld/parsers/libParsers.la \
 	$(top_builddir)/ld64/src/3rd/BlocksRuntime/libBlocksRuntime.la  \
-	$(LTO_LIB)
+	$(LTO_RPATH) \
+	$(LTO_LIB) \
+	$(DL_LIB) 
 
 dyldinfo_SOURCES = dyldinfo.cpp
 dyldinfo_LDADD = $(top_builddir)/ld64/src/3rd/libhelper.la
@@ -485,6 +491,8 @@ clean-binPROGRAMS:
 $(top_builddir)/ld64/src/ld/$(am__dirstamp):
 	@$(MKDIR_P) $(top_builddir)/ld64/src/ld
 	@: > $(top_builddir)/ld64/src/ld/$(am__dirstamp)
+$(top_builddir)/ld64/src/ld/PlatformSupport.$(OBJEXT):  \
+	$(top_builddir)/ld64/src/ld/$(am__dirstamp)
 $(top_builddir)/ld64/src/ld/debugline.$(OBJEXT):  \
 	$(top_builddir)/ld64/src/ld/$(am__dirstamp)
 

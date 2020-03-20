@@ -44,5 +44,7 @@ libstuff_la_SOURCES =  \
 	version_number.c  \
 	writeout.c \
 	write64.c \
-	coff_bytesex.c
+	coff_bytesex.c \
+	args.c
+
 

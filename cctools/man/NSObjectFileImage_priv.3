@@ -6,15 +6,15 @@ NSObjectFileImage_priv \- programmatic interface for working with Mach-O files
 .PP
 #include <mach-o/dyld_priv.h>
 .sp .5
-extern enum DYLD_BOOL 
+extern enum DYLD_BOOL
 NSFindSectionAndOffsetInObjectFileImage(
-	NSObjectFileImage objectFileImage, 
+	NSObjectFileImage objectFileImage,
 	unsigned long imageOffset,
 	const char** segmentName, 	/* can be NULL */
 	const char** sectionName, 	/* can be NULL */
 	unsigned long* sectionOffset)	/* can be NULL */
 .sp .5
-extern enum DYLD_BOOL 
+extern enum DYLD_BOOL
 NSHasModInitObjectFileImage(
 	NSObjectFileImage objectFileImage);
 .fi
@@ -28,9 +28,9 @@ machine's cpu architecture.
 .PP
 .PP
 .I NSFindSectionAndOffsetInObjectFileImage
-is supplied an imageOffset into an ObjectFileImage and returns 
+is supplied an imageOffset into an ObjectFileImage and returns
 via parameters the segment/section name and offset into that section of
-that imageOffset.  It returns FALSE if the imageOffset is not 
+that imageOffset.  It returns FALSE if the imageOffset is not
 in any section, otherwise TRUE.  You can used the resulting sectionOffset to
 index into the data returned by NSGetSectionDataInObjectFileImage.
 .PP

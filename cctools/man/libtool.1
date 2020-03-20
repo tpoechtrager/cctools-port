@@ -12,13 +12,13 @@ ranlib \- add or update the table of contents of archive libraries
 ]
 [
 .B \-
-] 
+]
 [
 .BI -arch_only " arch_type"
 ]
 [
 .B \-no_warning_for_no_symbols
-] 
+]
 .IR file ...
 [-filelist listfile[,dirname]]
 .br
@@ -37,22 +37,22 @@ ranlib \- add or update the table of contents of archive libraries
 ]
 [
 .I "link editor flags"
-] 
+]
 [
 .B \-v
-] 
+]
 [
 .B \-noall_load
 ]
 [
 .B \-
-] 
+]
 [
 .BI -arch_only " arch_type"
 ]
 [
 .B \-V
-] 
+]
 .IR file ...
 [-filelist listfile[,dirname]]
 .br
@@ -63,22 +63,22 @@ ranlib \- add or update the table of contents of archive libraries
 ]
 [
 .B \-
-] 
+]
 .IR archive ...
 .SH DESCRIPTION
 The
 .I libtool
-command takes the specified input object files and creates a library for 
+command takes the specified input object files and creates a library for
 use with the link editor,
-.IR ld (1).  
+.IR ld (1).
 The library's name is specified by
 .I output
 (the argument
-to the 
-.B \-o 
+to the
+.B \-o
 flag).  The input object files may be
 in any correct format that contains object files (``universal'' files, archives,
-object files).  
+object files).
 .I Libtool
 will not put any non-object input file into the output library
 (unlike
@@ -113,7 +113,7 @@ in more than one object file and no common symbol can be used.
 To maximize sharing of a dynamically linked shared library the objects should
 be compiled with the
 .B \-dynamic
-flag of 
+flag of
 .IR cc (1)
 to produce indirect undefined references and position-independent code.
 To build a dynamically linked library,
@@ -128,9 +128,9 @@ to create a universal file if needed.
 .SH "ARCHIVE (or statically linked) LIBRARIES"
 .PP
 .I Libtool
-with 
+with
 .B \-static
-is intended to replace 
+is intended to replace
 .IR ar (5)
 and
 .IR ranlib .
@@ -170,11 +170,29 @@ These are explained below, under the
 and
 .B \-a
 options.
+.\" OPTIONS
 .SH OPTIONS
-.PP 
+.PP
 The following options pertain to
 .I libtool
 only.
+.TP
+.BI @ file
+Arguments beginning with
+.B @
+are replaced by arguments read from the specified
+.I file,
+as an alternative to listing those arguments on the command line. The files
+simply contain libtool options and files separated by whitespace: spaces, tabs,
+and newlines. Characters can be escaped with a backslash (\\), including
+whitespace characters and other backslashes. Also, arguments that include
+whitespace can be enclosed, wholly or in part, by single- or double-quote
+charcters. These files may contain
+.I @file
+references to additional files, although libtool will error on include cycles.
+If a file cannot be found, the original
+.I @file
+argument will remain in the argument list.
 .TP
 .B \-static
 Produce a statically linked (archive) library from the input files.
@@ -212,8 +230,8 @@ value of 0 and no checking is done when the library is used.
 .TP
 .BI \-current_version " number"
 For dynamic shared library files this specifies the current version number
-of the library.  The program using the library can obtain the 
-current version of the library programmatically to determine exactly 
+of the library.  The program using the library can obtain the
+current version of the library programmatically to determine exactly
 which version of the library it is using.
 The format of
 .I number
@@ -263,7 +281,7 @@ flags are accepted and passed through:
 .B \-sectcreate,
 .B \-sectorder,
 .B \-sectorder_detail,
-.B \-sectalign, 
+.B \-sectalign,
 .B \-undefined,
 .B \-read_only_relocs,
 .B \-prebind,
@@ -341,7 +359,7 @@ only by newlines (spaces and tabs are assumed to be part of the file name).
 If the optional directory name,
 .I dirname
 is specified then it is prepended to each name in the list file.
-.TP 
+.TP
 .BI \-arch_only " arch_type"
 This option causes libtool to build a library only for the specified
 .I arch_type
@@ -357,7 +375,7 @@ argument to
 as the
 .B \-arch
 flag so that the output is tagged with that cpusubtype.
-.PP 
+.PP
 The following options pertain to the table of contents for an archive library,
 and apply to both
 .IB libtool " \-static"
@@ -413,19 +431,19 @@ dates, and file modes to reasonable defaults. This allows libraries created
 with identical input to be identical to each other, regardless of time of day,
 user, group, umask, and other aspects of the environment.
 .PP
-For compatibility, the following 
+For compatibility, the following
 .I ranlib
 option is accepted (but ignored):
 .TP
 .B \-t
-This option used to request that 
+This option used to request that
 .I ranlib
 only ``touch'' the archives instead of modifying them.
 The option is now ignored, and the table of contents is rebuilt.
 .PP
 One other option applies to both
 .I libtool
-and 
+and
 .IR ranlib :
 .TP
 .B \-
@@ -437,15 +455,15 @@ Don't warn about file that have no symbols.
 .SH "SEE ALSO"
 ld(1), ar(1), otool(1), make(1), redo_prebinding(1), ar(5)
 .SH BUGS
-With the way libraries used to be created, errors were possible if the library 
+With the way libraries used to be created, errors were possible if the library
 was modified with
 .IR ar (1)
 and the table of contents was not updated by rerunning
 .IR ranlib (1).
 So previously the link editor,
 .IR ld (1),
-generated an error when the modification date of a library was more recent than 
-the creation date of its table of contents.  Unfortunately, this meant that 
+generated an error when the modification date of a library was more recent than
+the creation date of its table of contents.  Unfortunately, this meant that
 you got the error even if you only copy the library.  Since this error was
 found to be too much of a nuisance it was removed.  So now it is possible
 again to get link errors if the library is modified and the table of contents is

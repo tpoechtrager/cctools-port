@@ -47,9 +47,6 @@ static void write_on_input(
     uint32_t narchs,
     char *input);
 
-static void setup_object_symbolic_info(
-    struct object *object);
-
 static void update_load_commands(
     struct arch *arch,
     uint32_t *header_size);
@@ -96,13 +93,6 @@ static uint32_t ndelete_rpaths = 0;
  */
 static uint32_t *arch_header_sizes = NULL;
 
-/*
- * The -o output option is not enabled as it is not needed and has the
- * unintended side effect of changing the time stamps in LC_ID_DYLIB commands
- * which is not the desired functionality of this command.
- */
-#undef OUTPUT_OPTION
-
 /* apple_version is created by the libstuff/Makefile */
 extern char apple_version[];
 char *version = apple_version;
@@ -148,21 +138,6 @@ char **envp)
 	archs = NULL;
 	narchs = 0;
 	for(i = 1; i < argc; i++){
-#ifdef OUTPUT_OPTION
-	    if(strcmp(argv[i], "-o") == 0){
-		if(i + 1 == argc){
-		    error("missing argument to: %s option", argv[i]);
-		    usage();
-		}
-		if(output != NULL){
-		    error("more than one: %s option specified", argv[i]);
-		    usage();
-		}
-		output = argv[i+1];
-		i++;
-	    }
-	    else
-#endif /* OUTPUT_OPTION */
 	    if(strcmp(argv[i], "-id") == 0){
 		if(i + 1 == argc){
 		    error("missing argument to: %s option", argv[i]);
@@ -360,9 +335,6 @@ void)
 	fprintf(stderr, "Usage: %s [-change old new] ... [-rpath old new] ... "
 			"[-add_rpath new] ... [-delete_rpath old] ... "
 			"[-id name] input"
-#ifdef OUTPUT_OPTION
-		" [-o output]"
-#endif /* OUTPUT_OPTION */
 		"\n", progname);
 	exit(EXIT_FAILURE);
 }
@@ -382,7 +354,6 @@ uint32_t narchs)
 		if(object->mh_filetype == MH_DYLIB_STUB)
 		    fatal("input file: %s is Mach-O dynamic shared library stub"
 			  " file and can't be changed", archs[i].file_name);
-		setup_object_symbolic_info(object);
 		update_load_commands(archs + i, arch_header_sizes + i);
 	    }
 	    else{
@@ -404,7 +375,8 @@ uint32_t narchs,
 char *input)
 {
     int fd;
-    uint32_t i, offset, size, headers_size;
+    uint32_t i, size, headers_size;
+    off_t offset;
     char *headers;
     struct mach_header *mh;
     struct mach_header_64 *mh64;
@@ -425,7 +397,7 @@ char *input)
 	    else
 		offset = 0;
 	    if(lseek(fd, offset, SEEK_SET) == -1)
-		system_error("can't lseek to offset: %u in file: %s for "
+		system_error("can't lseek to offset: %lld in file: %s for "
 			     "writing", offset, input);
 	    /*
 	     * Since the new headers may be smaller than the old headers and
@@ -477,165 +449,6 @@ char *input)
 	}
 	if(close(fd) == -1)
 	    system_error("can't close written on input file: %s", input);
-}
-
-static
-void
-setup_object_symbolic_info(
-struct object *object)
-{
-#ifdef OUTPUT_OPTION
-	if(object->st != NULL && object->st->nsyms != 0){
-	    object->output_symbols = (struct nlist *)
-		(object->object_addr + object->st->symoff);
-	    if(object->object_byte_sex != get_host_byte_sex())
-		swap_nlist(object->output_symbols,
-			   object->st->nsyms,
-			   get_host_byte_sex());
-	    object->output_nsymbols = object->st->nsyms;
-	    object->output_strings =
-		object->object_addr + object->st->stroff;
-	    object->output_strings_size = object->st->strsize;
-	    object->input_sym_info_size =
-		object->st->nsyms * sizeof(struct nlist) +
-		object->st->strsize;
-	    object->output_sym_info_size =
-		object->input_sym_info_size;
-	}
-	if(object->dyst != NULL){
-	    object->output_ilocalsym = object->dyst->ilocalsym;
-	    object->output_nlocalsym = object->dyst->nlocalsym;
-	    object->output_iextdefsym = object->dyst->iextdefsym;
-	    object->output_nextdefsym = object->dyst->nextdefsym;
-	    object->output_iundefsym = object->dyst->iundefsym;
-	    object->output_nundefsym = object->dyst->nundefsym;
-
-	    object->output_loc_relocs = (struct relocation_info *)
-		(object->object_addr + object->dyst->locreloff);
-	    object->output_ext_relocs = (struct relocation_info *)
-		(object->object_addr + object->dyst->extreloff);
-	    object->output_indirect_symtab = (uint32_t *)
-		(object->object_addr + object->dyst->indirectsymoff);
-	    object->output_tocs =
-		(struct dylib_table_of_contents *)
-		(object->object_addr + object->dyst->tocoff);
-	    object->output_ntoc = object->dyst->ntoc;
-	    object->output_mods = (struct dylib_module *)
-		(object->object_addr + object->dyst->modtaboff);
-	    object->output_nmodtab = object->dyst->nmodtab;
-	    object->output_refs = (struct dylib_reference *)
-		(object->object_addr + object->dyst->extrefsymoff);
-	    object->output_nextrefsyms = object->dyst->nextrefsyms;
-	    if(object->dyld_info != NULL){
-		object->input_sym_info_size += object->dyld_info->rebase_size
-					    + object->dyld_info->bind_size
-					    + object->dyld_info->weak_bind_size
-					    + object->dyld_info->lazy_bind_size
-					    + object->dyld_info->export_size;
-	    }
-	    object->input_sym_info_size +=
-		object->dyst->nlocrel *
-		    sizeof(struct relocation_info) +
-		object->dyst->nextrel *
-		    sizeof(struct relocation_info) +
-		object->dyst->nindirectsyms *
-		    sizeof(uint32_t) +
-		object->dyst->ntoc *
-		    sizeof(struct dylib_table_of_contents)+
-		object->dyst->nmodtab *
-		    sizeof(struct dylib_module) +
-		object->dyst->nextrefsyms *
-		    sizeof(struct dylib_reference);
-	    object->output_sym_info_size +=
-		object->dyst->nlocrel *
-		    sizeof(struct relocation_info) +
-		object->dyst->nextrel *
-		    sizeof(struct relocation_info) +
-		object->dyst->nindirectsyms *
-		    sizeof(uint32_t) +
-		object->dyst->ntoc *
-		    sizeof(struct dylib_table_of_contents)+
-		object->dyst->nmodtab *
-		    sizeof(struct dylib_module) +
-		object->dyst->nextrefsyms *
-		    sizeof(struct dylib_reference);
-	    if(object->split_info_cmd != NULL){
-		object->output_split_info_data = 
-		(object->object_addr + object->split_info_cmd->dataoff);
-		object->output_split_info_data_size = 
-		    object->split_info_cmd->datasize;
-		object->input_sym_info_size +=
-		    object->split_info_cmd->datasize;
-		object->output_sym_info_size +=
-		    object->split_info_cmd->datasize;
-	    }
-	    if(object->func_starts_info_cmd != NULL){
-		object->output_func_start_info_data = 
-		(object->object_addr + object->func_starts_info_cmd->dataoff);
-		object->output_func_start_info_data_size = 
-		    object->func_starts_info_cmd->datasize;
-		object->input_sym_info_size +=
-		    object->func_starts_info_cmd->datasize;
-		object->output_sym_info_size +=
-		    object->func_starts_info_cmd->datasize;
-	    }
-	    if(object->data_in_code_cmd != NULL){
-		object->output_data_in_code_info_data = 
-		(object->object_addr + object->data_in_code_cmd->dataoff);
-		object->output_data_in_code_info_data_size = 
-		    object->data_in_code_cmd->datasize;
-		object->input_sym_info_size +=
-		    object->data_in_code_cmd->datasize;
-		object->output_sym_info_size +=
-		    object->data_in_code_cmd->datasize;
-	    }
-	    if(object->code_sign_drs_cmd != NULL){
-		object->output_code_sign_drs_info_data = 
-		(object->object_addr + object->code_sign_drs_cmd->dataoff);
-		object->output_code_sign_drs_info_data_size = 
-		    object->code_sign_drs_cmd->datasize;
-		object->input_sym_info_size +=
-		    object->code_sign_drs_cmd->datasize;
-		object->output_sym_info_size +=
-		    object->code_sign_drs_cmd->datasize;
-	    }
-	    if(object->link_opt_hint_cmd != NULL){
-		object->output_link_opt_hint_info_data = 
-		(object->object_addr + object->link_opt_hint_cmd->dataoff);
-		object->output_link_opt_hint_info_data_size = 
-		    object->link_opt_hint_cmd->datasize;
-		object->input_sym_info_size +=
-		    object->link_opt_hint_cmd->datasize;
-		object->output_sym_info_size +=
-		    object->link_opt_hint_cmd->datasize;
-	    }
-	    if(object->hints_cmd != NULL){
-		object->output_hints = (struct twolevel_hint *)
-		    (object->object_addr +
-		     object->hints_cmd->offset);
-		object->input_sym_info_size +=
-		    object->hints_cmd->nhints *
-		    sizeof(struct twolevel_hint);
-		object->output_sym_info_size +=
-		    object->hints_cmd->nhints *
-		    sizeof(struct twolevel_hint);
-	    }
-	    if(object->code_sig_cmd != NULL){
-		object->output_code_sig_data = object->object_addr +
-		    object->code_sig_cmd->dataoff;
-		object->output_code_sig_data_size = 
-		    object->code_sig_cmd->datasize;
-		object->input_sym_info_size =
-		    rnd(object->input_sym_info_size, 16);
-		object->input_sym_info_size +=
-		    object->code_sig_cmd->datasize;
-		object->output_sym_info_size =
-		    rnd(object->output_sym_info_size, 16);
-		object->output_sym_info_size +=
-		    object->code_sig_cmd->datasize;
-	    }
-	}
-#endif /* OUTPUT_OPTION */
 }
 
 /*
@@ -703,7 +516,7 @@ uint32_t *header_size)
 		dylib_name1 = (char *)dl_id1 + dl_id1->dylib.name.offset;
 		if(id != NULL){
 		    new_size = sizeof(struct dylib_command) +
-			       rnd(strlen(id) + 1, cmd_round);
+			       rnd32((uint32_t)strlen(id) + 1, cmd_round);
 		    new_sizeofcmds += (new_size - dl_id1->cmdsize);
 		}
 		break;
@@ -718,7 +531,7 @@ uint32_t *header_size)
 		for(j = 0; j < nchanges; j++){
 		    if(strcmp(changes[j].old, dylib_name1) == 0){
 			new_size = sizeof(struct dylib_command) +
-				   rnd(strlen(changes[j].new) + 1,
+				   rnd32((int)strlen(changes[j].new) + 1,
 					 cmd_round);
 			new_sizeofcmds += (new_size - dl_load1->cmdsize);
 			break;
@@ -733,9 +546,9 @@ uint32_t *header_size)
 		    if(strcmp(changes[j].old, dylib_name1) == 0){
 			linked_modules_size = pbdylib1->cmdsize - (
 				sizeof(struct prebound_dylib_command) +
-				rnd(strlen(dylib_name1) + 1, cmd_round));
+				rnd32((int)strlen(dylib_name1) + 1, cmd_round));
 			new_size = sizeof(struct prebound_dylib_command) +
-				   rnd(strlen(changes[j].new) + 1,
+				   rnd32((int)strlen(changes[j].new) + 1,
 					 cmd_round) +
 				   linked_modules_size;
 			new_sizeofcmds += (new_size - pbdylib1->cmdsize);
@@ -802,8 +615,8 @@ uint32_t *header_size)
 			if(rpaths[j].found == TRUE)
 			    break;
 			rpaths[j].found = TRUE;
-			new_size = rnd(sizeof(struct rpath_command) +
-				         strlen(rpaths[j].new) + 1,
+			new_size = rnd32(sizeof(struct rpath_command) +
+				         (int)strlen(rpaths[j].new) + 1,
 					 cmd_round);
 			new_sizeofcmds += (new_size - rpath1->cmdsize);
 			break;
@@ -843,8 +656,8 @@ uint32_t *header_size)
 	}
 
 	for(i = 0; i < nadd_rpaths; i++){
-	    new_size = rnd(sizeof(struct rpath_command) +
-			     strlen(add_rpaths[i].new) + 1, cmd_round);
+	    new_size = rnd32(sizeof(struct rpath_command) +
+			     (int)strlen(add_rpaths[i].new) + 1, cmd_round);
 	    new_sizeofcmds += new_size;
 	}
 
@@ -879,7 +692,7 @@ uint32_t *header_size)
 		    memcpy(lc2, lc1, sizeof(struct dylib_command));
 		    dl_id2 = (struct dylib_command *)lc2;
 		    dl_id2->cmdsize = sizeof(struct dylib_command) +
-				     rnd(strlen(id) + 1, cmd_round);
+				     rnd32((int)strlen(id) + 1, cmd_round);
 		    dl_id2->dylib.name.offset = sizeof(struct dylib_command);
 		    dylib_name2 = (char *)dl_id2 + dl_id2->dylib.name.offset;
 		    strcpy(dylib_name2, id);
@@ -901,7 +714,7 @@ uint32_t *header_size)
 			memcpy(lc2, lc1, sizeof(struct dylib_command));
 			dl_load2 = (struct dylib_command *)lc2;
 			dl_load2->cmdsize = sizeof(struct dylib_command) +
-					    rnd(strlen(changes[j].new) + 1,
+					    rnd32((int)strlen(changes[j].new)+1,
 						  cmd_round);
 			dl_load2->dylib.name.offset =
 			    sizeof(struct dylib_command);
@@ -925,10 +738,10 @@ uint32_t *header_size)
 			pbdylib2 = (struct prebound_dylib_command *)lc2;
 			linked_modules_size = pbdylib1->cmdsize - (
 			    sizeof(struct prebound_dylib_command) +
-			    rnd(strlen(dylib_name1) + 1, cmd_round));
+			    rnd32((int)strlen(dylib_name1) + 1, cmd_round));
 			pbdylib2->cmdsize =
 			    sizeof(struct prebound_dylib_command) +
-			    rnd(strlen(changes[j].new) + 1, cmd_round) +
+			    rnd32((int)strlen(changes[j].new) + 1, cmd_round) +
 			    linked_modules_size;
 
 			pbdylib2->name.offset =
@@ -939,7 +752,7 @@ uint32_t *header_size)
 			
 			pbdylib2->linked_modules.offset = 
 			    sizeof(struct prebound_dylib_command) +
-			    rnd(strlen(changes[j].new) + 1, cmd_round);
+			    rnd32((int)strlen(changes[j].new) + 1, cmd_round);
 			linked_modules1 = (char *)pbdylib1 +
 					  pbdylib1->linked_modules.offset;
 			linked_modules2 = (char *)pbdylib2 +
@@ -977,8 +790,8 @@ uint32_t *header_size)
 			rpaths[j].found = TRUE;
 			memcpy(lc2, lc1, sizeof(struct rpath_command));
 			rpath2 = (struct rpath_command *)lc2;
-			rpath2->cmdsize = rnd(sizeof(struct rpath_command) +
-					        strlen(rpaths[j].new) + 1,
+			rpath2->cmdsize = rnd32(sizeof(struct rpath_command) +
+					        (int)strlen(rpaths[j].new) + 1,
 						cmd_round);
 			rpath2->path.offset = sizeof(struct rpath_command);
 			path2 = (char *)rpath2 + rpath2->path.offset;
@@ -1005,8 +818,8 @@ uint32_t *header_size)
 	for(i = 0; i < nadd_rpaths; i++){
 	    rpath2 = (struct rpath_command *)lc2;
 	    rpath2->cmd = LC_RPATH;
-	    rpath2->cmdsize = rnd(sizeof(struct rpath_command) +
-				    strlen(add_rpaths[i].new) + 1,
+	    rpath2->cmdsize = rnd32(sizeof(struct rpath_command) +
+				    (int)strlen(add_rpaths[i].new) + 1,
 				    cmd_round);
 	    rpath2->path.offset = sizeof(struct rpath_command);
 	    path2 = (char *)rpath2 + rpath2->path.offset;
@@ -1097,6 +910,14 @@ uint32_t *header_size)
 		break;
 	    case LC_LINKER_OPTIMIZATION_HINT:
 		arch->object->link_opt_hint_cmd =
+		    (struct linkedit_data_command *)lc1;
+		break;
+	    case LC_DYLD_CHAINED_FIXUPS:
+		arch->object->dyld_chained_fixups =
+		    (struct linkedit_data_command *)lc1;
+		break;
+	    case LC_DYLD_EXPORTS_TRIE:
+		arch->object->dyld_exports_trie =
 		    (struct linkedit_data_command *)lc1;
 		break;
 	    }

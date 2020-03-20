@@ -25,8 +25,8 @@ flonum_copy(
 FLONUM_TYPE *in,
 FLONUM_TYPE *out)
 {
-  int			in_length;	/* 0 origin */
-  int			out_length;	/* 0 origin */
+  long			in_length;	/* 0 origin */
+  long			out_length;	/* 0 origin */
 
   out -> sign = in -> sign;
   in_length = in  -> leader - in -> low;
@@ -61,14 +61,14 @@ FLONUM_TYPE *out)
 	}
       else
 	{
-	  int	shorten;		/* 1-origin. Number of littlenums we drop. */
+	  long	shorten;		/* 1-origin. Number of littlenums we drop. */
 
 	  shorten = in_length - out_length;
 	  /* Assume out_length >= 0 ! */
 	  memcpy((char *)(out->low), (char *)(in->low + shorten),
 		 (int)((out_length + 1) * sizeof(LITTLENUM_TYPE)));
 	  out -> leader = out -> high;
-	  out -> exponent = in -> exponent + shorten;
+	  out -> exponent = (int32_t)(in -> exponent + shorten);
 	}
     }				/* if any significant bits */
 }

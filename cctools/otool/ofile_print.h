@@ -117,7 +117,7 @@ extern void print_reloc(
     cpu_type_t cputype,
     enum byte_sex load_commands_byte_sex,
     char *object_addr,
-    uint32_t object_size,
+    uint64_t object_size,
     struct nlist *symbols,
     struct nlist_64 *symbols64,
     uint32_t nsymbols,
@@ -131,7 +131,7 @@ extern void print_toc(
     uint32_t sizeofcmds,
     enum byte_sex load_commands_byte_sex,
     char *object_addr,
-    uint32_t object_size,
+    uint64_t object_size,
     struct dylib_table_of_contents *tocs,
     uint32_t ntocs,
     struct dylib_module *mods,
@@ -239,23 +239,23 @@ extern void print_section(
     uint32_t cmd,
     char *sg_segname,
     uint32_t filetype,
-    uint32_t object_size,
+    uint64_t object_size,
     enum bool verbose);
 
 extern void print_symtab_command(
     struct symtab_command *sg,
     cpu_type_t cputype,
-    uint32_t object_size);
+    uint64_t object_size);
 
 extern void print_dysymtab_command(
     struct dysymtab_command *dyst,
     uint32_t nsyms,
-    uint32_t object_size,
+    uint64_t object_size,
     cpu_type_t cputype);
 
 extern void print_symseg_command(
     struct symseg_command *ss,
-    uint32_t object_size);
+    uint64_t object_size);
 
 extern void print_fvmlib_command(
     struct fvmlib_command *fl,
@@ -311,7 +311,7 @@ extern void print_routines_command_64(
 
 extern void print_twolevel_hints_command(
     struct twolevel_hints_command *hints,
-    uint32_t object_size);
+    uint64_t object_size);
 
 extern void print_prebind_cksum_command(
     struct prebind_cksum_command *cksum);
@@ -321,7 +321,7 @@ extern void print_uuid_command(
 
 extern void print_linkedit_data_command(
     struct linkedit_data_command *ld,
-    uint32_t object_size);
+    uint64_t object_size);
 
 extern void print_version_min_command(
     struct version_min_command *vd);
@@ -351,11 +351,11 @@ extern void print_rpath_command(
 
 extern void print_encryption_info_command(
     struct encryption_info_command *ec,
-    uint32_t object_size);
+    uint64_t object_size);
 
 extern void print_encryption_info_command_64(
     struct encryption_info_command_64 *ec,
-    uint32_t object_size);
+    uint64_t object_size);
 
 extern void print_linker_option_command(
     struct linker_option_command *lo,
@@ -364,7 +364,7 @@ extern void print_linker_option_command(
 
 extern void print_dyld_info_info_command(
     struct dyld_info_command *dc,
-    uint32_t object_size);
+    uint64_t object_size);
 
 extern void print_thread_states(
     char *begin, 
@@ -375,14 +375,14 @@ extern void print_thread_states(
 extern void print_cstring_section(
     cpu_type_t cputype,
     char *sect,
-    uint32_t sect_size,
+    uint64_t sect_size,
     uint64_t sect_addr,
     enum bool print_addresses);
 
 extern void print_literal4_section(
     cpu_type_t cputype,
     char *sect,
-    uint32_t sect_size,
+    uint64_t sect_size,
     uint64_t sect_addr,
     enum byte_sex literal_byte_sex,
     enum bool print_addresses);
@@ -390,7 +390,7 @@ extern void print_literal4_section(
 extern void print_literal8_section(
     cpu_type_t cputype,
     char *sect,
-    uint32_t sect_size,
+    uint64_t sect_size,
     uint64_t sect_addr,
     enum byte_sex literal_byte_sex,
     enum bool print_addresses);
@@ -398,7 +398,7 @@ extern void print_literal8_section(
 extern void print_literal16_section(
     cpu_type_t cputype,
     char *sect,
-    uint32_t sect_size,
+    uint64_t sect_size,
     uint64_t sect_addr,
     enum byte_sex literal_byte_sex,
     enum bool print_addresses);
@@ -412,9 +412,9 @@ extern void print_literal_pointer_section(
     uint32_t filetype,
     enum byte_sex object_byte_sex,
     char *addr,
-    uint32_t size,
+    uint64_t object_size,
     char *sect,
-    uint32_t sect_size,
+    uint64_t sect_size,
     uint64_t sect_addr,
     struct nlist *symbols,
     struct nlist_64 *symbols64,
@@ -428,7 +428,7 @@ extern void print_literal_pointer_section(
 extern void print_init_term_pointer_section(
     cpu_type_t cputype,
     char *sect,
-    uint32_t sect_size,
+    uint64_t sect_size,
     uint64_t sect_addr,
     enum byte_sex object_byte_sex,
     struct symbol *sorted_symbols,
@@ -445,8 +445,8 @@ extern void print_init_term_pointer_section(
 extern void print_shlib_init(
     enum byte_sex object_byte_sex,
     char *sect,
-    uint32_t sect_size,
-    uint32_t sect_addr,
+    uint64_t sect_size,
+    uint64_t sect_addr,
     struct symbol *sorted_symbols,
     uint32_t nsorted_symbols,
     struct nlist *symbols,
@@ -507,7 +507,7 @@ extern enum bool print_objc_segment(
     uint32_t sizeofcmds,
     enum byte_sex object_byte_sex,
     char *object_addr,
-    uint32_t object_size,
+    uint64_t object_size,
     struct symbol *sorted_symbols,
     uint32_t nsorted_symbols,
     enum bool verbose);
@@ -520,7 +520,7 @@ extern void print_objc2_64bit(
     uint32_t sizeofcmds,
     enum byte_sex object_byte_sex,
     char *object_addr,
-    uint32_t object_size,
+    uint64_t object_size,
     struct nlist_64 *symbols64,
     uint32_t nsymbols,
     char *strings,
@@ -533,7 +533,7 @@ extern void print_objc2_64bit(
     uint32_t nloc_relocs,
     struct dyld_bind_info *dbi,
     uint64_t ndbi,
-    enum bool ThreadedRebaseBind,
+    enum chain_format_t chain_format,
     enum bool verbose,
     enum bool Vflag);
 
@@ -544,7 +544,7 @@ extern void print_objc2_32bit(
     uint32_t sizeofcmds,
     enum byte_sex object_byte_sex,
     char *object_addr,
-    uint32_t object_size,
+    uint64_t object_size,
     struct nlist *symbols,
     uint32_t nsymbols,
     char *strings,
@@ -555,6 +555,9 @@ extern void print_objc2_32bit(
     uint32_t next_relocs,
     struct relocation_info *loc_relocs,
     uint32_t nloc_relocs,
+    struct dyld_bind_info* dbi,
+    uint64_t ndbi,
+    enum chain_format_t chain_format,
     enum bool verbose);
 
 extern void print_objc_protocol_section(
@@ -563,7 +566,7 @@ extern void print_objc_protocol_section(
     uint32_t sizeofcmds,
     enum byte_sex object_byte_sex,
     char *object_addr,
-    uint32_t object_size,
+    uint64_t object_size,
     enum bool verbose);
 
 extern void print_objc_string_object_section(
@@ -573,7 +576,7 @@ extern void print_objc_string_object_section(
     uint32_t sizeofcmds,
     enum byte_sex object_byte_sex,
     char *object_addr,
-    uint32_t object_size,
+    uint64_t object_size,
     enum bool verbose);
 
 extern void print_objc_string_object_section_64(
@@ -583,7 +586,7 @@ extern void print_objc_string_object_section_64(
     uint32_t sizeofcmds,
     enum byte_sex object_byte_sex,
     char *object_addr,
-    uint32_t object_size,
+    uint64_t object_size,
     cpu_type_t cputype,
     struct nlist_64 *symbols64,
     uint32_t nsymbols,
@@ -599,7 +602,7 @@ extern void print_objc_runtime_setup_section(
     uint32_t sizeofcmds,
     enum byte_sex object_byte_sex,
     char *object_addr,
-    uint32_t object_size,
+    uint64_t object_size,
     enum bool verbose);
 
 extern void print_bitcode_section(
@@ -617,7 +620,7 @@ extern char *get_objc2_64bit_cfstring_name(
     uint32_t sizeofcmds,
     enum byte_sex object_byte_sex,
     char *object_addr,
-    uint32_t object_size,
+    uint64_t object_size,
     struct nlist_64 *symbols64,
     uint32_t nsymbols,
     char *strings,
@@ -632,7 +635,7 @@ extern char *get_objc2_64bit_class_name(
     uint32_t sizeofcmds,
     enum byte_sex object_byte_sex,
     char *object_addr,
-    uint32_t object_size,
+    uint64_t object_size,
     struct nlist_64 *symbols64,
     uint32_t nsymbols, 
     char *strings,          
@@ -646,7 +649,7 @@ extern uint64_t get_objc2_64bit_selref(
     uint32_t sizeofcmds,
     enum byte_sex object_byte_sex,
     char *object_addr,
-    uint32_t object_size,
+    uint64_t object_size,
     struct nlist_64 *symbols64,
     uint32_t nsymbols,
     char *strings,
@@ -660,7 +663,7 @@ extern void print_coff_reloc_section(
     uint32_t filetype,
     enum byte_sex object_byte_sex,
     char *object_addr,
-    uint32_t object_size,
+    uint64_t object_size,
     enum bool verbose);
 
 extern char *get_label(
@@ -683,7 +686,7 @@ extern enum bool get_sect_info(
     uint32_t filetype,
     enum byte_sex load_commands_byte_sex,
     char *object_addr,
-    uint32_t object_size,
+    uint64_t object_size,
     char **sect_pointer,
     uint64_t *sect_size,
     uint64_t *sect_addr,
@@ -691,3 +694,12 @@ extern enum bool get_sect_info(
     uint32_t *sect_nrelocs,
     uint32_t *sect_flags,
     uint64_t *seg_addr);
+
+extern void get_seg_names(
+    struct load_command *load_commands,
+    uint32_t ncmds,
+    uint32_t sizeofcmds,
+    enum byte_sex load_commands_byte_sex,
+    char* sectname,
+    char*** segnames,
+    uint32_t* nsegname);

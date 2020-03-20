@@ -315,12 +315,13 @@ int exponent_bits)
 		 */
 	bits_left_in_littlenum = LITTLENUM_NUMBER_OF_BITS;
 	littlenum_pointer = generic_floating_point_number.leader;
-	littlenums_left = 1+generic_floating_point_number.leader - generic_floating_point_number.low;
+	littlenums_left = (int)(1+generic_floating_point_number.leader - generic_floating_point_number.low);
 	/* Seek (and forget) 1st significant bit */
 	for (exponent_skippage = 0;! next_bits(1); exponent_skippage ++)
 		;
-	exponent_1 = generic_floating_point_number.exponent + generic_floating_point_number.leader + 1 -
- generic_floating_point_number.low;
+	exponent_1 = (int32_t)(generic_floating_point_number.exponent +
+			       generic_floating_point_number.leader + 1 -
+			       generic_floating_point_number.low);
 	/* Radix LITTLENUM_RADIX, point just higher than generic_floating_point_number.leader. */
 	exponent_2 = exponent_1 * LITTLENUM_NUMBER_OF_BITS;
 	/* Radix 2. */

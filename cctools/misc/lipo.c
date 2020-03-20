@@ -49,6 +49,7 @@
 #include <ctype.h>
 #include <libc.h>
 #ifndef __OPENSTEP__
+#include <time.h>
 #include <utime.h>
 #endif
 #include <sys/file.h>
@@ -63,7 +64,14 @@
 #include "stuff/allocate.h"
 #include "stuff/lto.h"
 #include "stuff/write64.h"
+#include "stuff/rnd.h"
 #include <math.h>
+
+/* cctools-port start */
+#ifndef HAVE_UTIMENS
+int utimens(const char *path, const struct timespec times[2]);
+#endif
+/* cctools-port end */
 
 /* The maximum section alignment allowed to be specified, as a power of two */
 #define MAXSECTALIGN		15 /* 2**15 or 0x8000 */
@@ -109,7 +117,8 @@ static uint32_t nthin_files = 0;
 static char *output_file = NULL;
 static uint32_t output_filemode = 0;
 #ifndef __OPENSTEP__
-static struct utimbuf output_timep = { 0 };
+static struct timespec output_times[2] = { 0 };
+static struct timeval output_timev[2] = { 0 };
 #else
 static time_t output_timep[2] = { 0 };
 #endif
@@ -119,7 +128,7 @@ static enum bool archives_in_input = FALSE;
 static enum bool create_flag = FALSE;
 static enum bool info_flag = FALSE;
 static enum bool detailed_info_flag = FALSE;
-static enum bool brief_info_flag = FALSE;
+static enum bool brief_info_flag = FALSE; // -archs
 
 static enum bool thin_flag = FALSE;
 static struct arch_flag thin_arch_flag = { 0 };
@@ -216,9 +225,6 @@ static struct segalign *new_segalign(
 static int cmp_qsort(
     const struct thin_file *thin1,
     const struct thin_file *thin2);
-static uint64_t rnd(
-    uint64_t v,
-    uint64_t r);
 static enum bool ispoweroftwo(
     uint32_t x);
 static void check_arch(
@@ -249,6 +255,7 @@ char *envp[])
     const struct arch_flag *arch_flags;
     enum bool found;
     struct arch_flag blank_arch;
+    int time_result;
 
 	input = NULL;
 	/*
@@ -420,7 +427,7 @@ char *envp[])
 			    arch_usage();
 			    usage();
 			}
-			value = strtoul(argv[a+2], &endp, 16);
+			value = (uint32_t)strtoul(argv[a+2], &endp, 16);
 			if(*endp != '\0')
 			    fatal("argument for -segalign <arch_type> %s not a "
 				  "proper hexadecimal number", argv[a+2]);
@@ -619,12 +626,22 @@ unknown_flag:
                                      "file: %s", output_file);
 		    if(close(fd) == -1)
 			system_fatal("can't close output file: %s",output_file);
-		    if(utime(output_file,
 #ifndef __OPENSTEP__
-		       &output_timep) == -1)
-#else
-		       output_timep) == -1)
+			/* cctools-port: Replaced for portability. */
+#if 0
+		    if (__builtin_available(macOS 10.12, *)) {
+			time_result = utimensat(AT_FDCWD, output_file,
+						output_times, 0);
+		    }
+		    else {
+			time_result = utimes(output_file, output_timev);
+		    }
 #endif
+			time_result = utimens(output_file, output_times);
+#else
+		    time_result = utime(output_file, output_timep);
+#endif
+		    if (time_result == -1)
 			system_fatal("can't set the modify times for "
 				     "output file: %s", output_file);
 		    break;
@@ -784,11 +801,14 @@ unknown_flag:
 		const char* s = get_arch_name_if_known(
 				    thin_files[i].cputype,
 				    thin_files[i].cpusubtype);
+		if (i) {
+		    printf(" ");
+		}
 		if (s) {
-		    printf("%s ", s);
+		    printf("%s", s);
 		}
 		else {
-		    printf("unknown(%u,%u) ", thin_files[i].cputype,
+		    printf("unknown(%u,%u)", thin_files[i].cputype,
 			   thin_files[i].cpusubtype & ~CPU_SUBTYPE_MASK);
 		}
 	    }
@@ -1068,8 +1088,8 @@ create_fat(void)
 		else{
 		    fat_arch.cputype = thin_files[i].cputype;
 		    fat_arch.cpusubtype = thin_files[i].cpusubtype;
-		    fat_arch.offset = thin_files[i].offset;
-		    fat_arch.size = thin_files[i].size;
+		    fat_arch.offset = (uint32_t)thin_files[i].offset;
+		    fat_arch.size = (uint32_t)thin_files[i].size;
 		    fat_arch.align = thin_files[i].align;
 		}
 		if(fat64_flag == TRUE){
@@ -1141,6 +1161,41 @@ struct input_file *input)
 	size = stat_buf.st_size;
 	/* pick up set uid, set gid and sticky text bits */
 	output_filemode = stat_buf.st_mode & 07777;
+#ifndef __OPENSTEP__
+	/*
+	 * Select the first modify time
+	 */
+	/* cctools-port: Replaced for portability. */
+#if 0
+	if (__builtin_available(macOS 10.12, *)) {
+	    if (output_times[1].tv_sec == 0) {
+		memcpy(&output_times[0], &stat_buf.st_atimespec,
+		       sizeof(struct timespec));
+		memcpy(&output_times[1], &stat_buf.st_mtimespec,
+		       sizeof(struct timespec));
+	    }
+	} else {
+	    if (output_timev[1].tv_sec == 0) {
+		TIMESPEC_TO_TIMEVAL(&output_timev[0], &stat_buf.st_atimespec);
+		TIMESPEC_TO_TIMEVAL(&output_timev[1], &stat_buf.st_mtimespec);
+	    }
+	}
+#endif 
+	/* cctools-port start */
+#ifdef HAVE_STAT_ST_MTIMESPEC
+	output_times[0] = stat_buf.st_atimespec;
+	output_times[1] = stat_buf.st_mtimespec;
+#elif HAVE_STAT_ST_MTIM
+	output_times[0] = stat_buf.st_atim;
+	output_times[1] = stat_buf.st_mtim;
+#else
+	output_times[0].tv_sec = stat_buf.st_atime;
+	output_times[0].tv_nsec = 0;
+	output_times[1].tv_sec = stat_buf.st_mtime;
+	output_times[0].tv_nsec = 0;
+#endif
+	/* cctools-port end */
+#else
 	/*
 	 * Select the eariliest modify time so that if the output file
 	 * contains archives with table of contents lipo will not make them
@@ -1148,13 +1203,6 @@ struct input_file *input)
 	 * contents appear up todate if another file is combined with it that
 	 * has a date early enough.
 	 */
-#ifndef __OPENSTEP__
-	if(output_timep.modtime == 0 ||
-	   output_timep.modtime > stat_buf.st_mtime){
-	    output_timep.actime = stat_buf.st_atime;
-	    output_timep.modtime = stat_buf.st_mtime;
-	}
-#else
 	if(output_timep[1] == 0 || output_timep[1] > stat_buf.st_mtime){
 	    output_timep[0] = stat_buf.st_atime;
 	    output_timep[1] = stat_buf.st_mtime;
@@ -1514,8 +1562,8 @@ struct input_file *input)
 	    }
 	    else{
 #ifdef LTO_SUPPORT
-		if(is_llvm_bitcode_from_memory(addr, size, &input->arch_flag,
-					       NULL) != 0){
+		if(is_llvm_bitcode_from_memory(addr, (uint32_t)size,
+					       &input->arch_flag, NULL) != 0){
 		    /* create a thin file struct for it */
 		    thin = new_thin();
 		    thin->name = input->name;
@@ -1829,7 +1877,7 @@ cpu_subtype_t *cpusubtype)
 		else{
 		    if(strncmp(ar_name, SYMDEF, sizeof(SYMDEF) - 1) != 0){
 			ar_addr = addr + offset + ar_name_size;
-			ar_size = strtoul(ar_hdr->ar_size, NULL, 10);
+			ar_size = (uint32_t)strtoul(ar_hdr->ar_size, NULL, 10);
 #ifdef LTO_SUPPORT
 			if(is_llvm_bitcode_from_memory(ar_addr, ar_size,
 						       &arch_flag, NULL) != 0){
@@ -1852,7 +1900,7 @@ cpu_subtype_t *cpusubtype)
 		    }
 		}
 	    }
-	    offset += rnd(strtoul(ar_hdr->ar_size, NULL, 10),
+	    offset += rnd64(strtoul(ar_hdr->ar_size, NULL, 10),
 			    sizeof(short));
 	}
 }
@@ -1879,7 +1927,7 @@ uint32_t *member_name_size)
 	    fatal("archive: %s malformed (ar_name: %.*s for archive extend "
 		  "format #1 starts with non-digit)", name,
 		  (int)sizeof(ar_hdr->ar_name), ar_hdr->ar_name);
-	ar_name_size = strtoul(p, &endp, 10);
+	ar_name_size = (uint32_t)strtoul(p, &endp, 10);
 	if(ar_name_size == UINT_MAX && errno == ERANGE)
 	    fatal("archive: %s malformed (size in ar_name: %.*s for archive "
 		  "extend format #1 overflows uint32_t)", name,
@@ -2907,21 +2955,6 @@ const struct thin_file *thin2)
 
 	/* sort all other cpu types by alignment */
 	return thin1->align - thin2->align;
-}
-
-/*
- * rnd() rounds v to a multiple of r.
- */
-static
-uint64_t
-rnd(
-uint64_t v,
-uint64_t r)
-{
-	r--;
-	v += r;
-	v &= ~(int64_t)r;
-	return(v);
 }
 
 /*

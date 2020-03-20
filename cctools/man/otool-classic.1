@@ -1,13 +1,15 @@
 .TH OTOOL-CLASSIC 1 "June 22, 2017" "Apple Inc."
+.\#  NAME
 .SH NAME
 otool-classic \- object file displaying tool
 .SH SYNOPSIS
 .B otool
-[ 
+[
 .I "option \&..."
-] [ 
+] [
 .I "file \&..."
-] 
+]
+.\#  DESCRIPTION
 .SH DESCRIPTION
 The
 .I otool-classic
@@ -33,7 +35,7 @@ understands both Mach-O (Mach object) files and universal file formats.
 can display the specified information in either its raw (numeric) form
 (without the
 .B \-v
-flag), or in a symbolic form using macro names of constants, etc. (with the 
+flag), or in a symbolic form using macro names of constants, etc. (with the
 .B \-v
 or
 .B \-V
@@ -85,6 +87,16 @@ flag, this disassembles the text.  With the
 .B \-V
 flag, it also symbolically disassembles the operands.
 .TP
+.B \-x
+Display the contents of every \_\^\_text section found in the file. This is
+useful when looking at the Mach kernel and other files with \_\^\_text sections
+in more than one segment, or where the \_\^\_text section is somewhere other
+than \_\^\_TEXT. When used with the
+.B \-v
+flag, this disassembles the text. When used with the
+.B \-V
+flag, it also symbolically disassembles the operands.
+.TP
 .B \-d
 Display the contents of the (\_\^\_DATA,\_\^\_data) section.
 .TP
@@ -121,7 +133,6 @@ Display the linker optimization hints (-v for verbose mode can also be added).
 .TP
 .B \-P
 Print the info plist section, (\_\^\_TEXT,\_\^\_info\_plist), as strings.
-
 .PP
 The following options may also be given:
 .TP
@@ -134,7 +145,12 @@ or
 .B \-V
 options to start the disassembly from symbol
 .I name
-and continue to the end of the (\_\^\_TEXT,\_\^\_text) section.
+and continue to the end of the (\_\^\_TEXT,\_\^\_text) section. This option
+can also be used with the
+.B \-x
+option to begin disassembly from symbol
+.I name
+in any segment where a \_\^\_text section is found.
 .TP
 .B \-v
 Display verbosely (symbolically) when possible.
@@ -144,7 +160,9 @@ Display the disassembled operands symbolically (this implies the
 .B \-v
 option).  This is useful with the
 .B \-t
-option.
+and
+.B \-x
+options.
 .TP
 .B \-X
 Don't print leading addresses or headers with disassembly of sections.
@@ -192,5 +210,6 @@ which allows file names containing parenthesis.
 Print the
 .IR otool-classic (1)
 version information.
+.\#  "SEE ALSO"
 .SH "SEE ALSO"
 llvm-otool(1), install_name_tool(1), dyld(1) and libtool(1)

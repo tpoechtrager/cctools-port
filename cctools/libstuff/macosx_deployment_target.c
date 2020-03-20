@@ -83,20 +83,20 @@ struct macosx_deployment_target *value)
 	else
 	    p = getenv("MACOSX_DEPLOYMENT_TARGET");
 	if(p != NULL){
-	    ten = strtoul(p, &endp, 10);
+	    ten = (uint32_t)strtoul(p, &endp, 10);
 	    if(*endp != '.')
 		goto use_default;
 	    if(ten != 10)
 		goto use_default;
 	    q = endp + 1;
-	    major = strtoul(q, &endp, 10);
+	    major = (uint32_t)strtoul(q, &endp, 10);
 	    if(major == 0)
 		goto use_default;
 	    if(*endp != '.' && *endp != '\0')
 		goto use_default;
 	    if(*endp == '.'){
 		q = endp + 1;
-		minor = strtoul(q, &endp, 10);
+		minor = (uint32_t)strtoul(q, &endp, 10);
 		if(*endp != '\0')
 		    goto use_default;
 	    }
@@ -130,14 +130,14 @@ use_default:
 	 * version number, and y is the minor version number.  We don't parse
 	 * out the value of z.
 	 */
-	major = strtoul(osversion, &endp, 10);
+	major = (uint32_t)strtoul(osversion, &endp, 10);
 	if(*endp != '.')
 	    goto bad_system_value;
 	if(major <= 4)
 	    goto bad_system_value;
 	major = major - 4;
 	q = endp + 1;
-	minor = strtoul(q, &endp, 10);
+	minor = (uint32_t)strtoul(q, &endp, 10);
 	if(*endp != '.')
 	    goto bad_system_value;
 

@@ -134,8 +134,8 @@ struct obstack		/* control current object in current chunk */
   char	*chunk_limit;		/* address of char after current chunk */
   int	temp;			/* Temporary for some macros.  */
   int   alignment_mask;		/* Mask of alignment for each object. */
-  struct _obstack_chunk *(*chunkfun) (); /* User's fcn to allocate a chunk.  */
-  void (*freefun) ();		/* User's function to free a chunk.  */
+  void *(*chunkfun)(size_t);	/* User's fcn to allocate a chunk.*/
+  void (*freefun)(void*);	/* User's function to free a chunk.  */
 };
 
 #ifdef __STDC__
@@ -177,7 +177,8 @@ int obstack_alignment_mask (struct obstack *obstack);
 int obstack_chunk_size (struct obstack *obstack);
 
 void _obstack_begin (struct obstack *h, int size, int alignment,
-		     void * (*chunkfun)(size_t n), void (*freefun)());
+		     void * (*chunkfun)(size_t n),
+		     void (*freefun)(void*));
 void _obstack_newchunk (struct obstack *h, int length);
 #endif /* __STDC__ */
 

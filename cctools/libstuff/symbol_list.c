@@ -21,6 +21,7 @@
  * @APPLE_LICENSE_HEADER_END@
  */
 #ifndef RLD
+#include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -52,7 +53,8 @@ struct symbol_list **list,
 uint32_t *size)
 {
     int fd;
-    uint32_t i, j, len, strings_size;
+    uint32_t i, j, strings_size;
+    size_t len;
     struct stat stat_buf;
     char *strings, *p, *line;
 
@@ -65,7 +67,7 @@ uint32_t *size)
 	    close(fd);
 	    return;
 	}
-	strings_size = stat_buf.st_size;
+	strings_size = (uint32_t)stat_buf.st_size;
 	strings = (char *)allocate(strings_size + 2);
 	strings[strings_size] = '\n';
 	strings[strings_size + 1] = '\0';
@@ -116,7 +118,7 @@ uint32_t *size)
 		    (*list)[i].seen = FALSE;
 		    i++;
 		    len = strlen(line);
-		    j = len - 1;
+		    j = (uint32_t)(len - 1);
 		    while(j > 0 && isspace(line[j])){
 			j--;
 		    }
@@ -151,7 +153,7 @@ uint32_t *size)
 #ifdef DEBUG
 	printf("symbol list:\n");
 	for(i = 0; i < (*size); i++){
-	    printf("0x%x name = %s\n", &((*list)[i]),(*list)[i].name);
+	    printf("0x%p name = %s\n", &((*list)[i]),(*list)[i].name);
 	}
 #endif /* DEBUG */
 }

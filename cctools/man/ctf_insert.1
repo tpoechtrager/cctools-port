@@ -1,15 +1,21 @@
-.TH CODESIGN_ALLOCATE 1 "March 2, 2010" "Apple, Inc."
+.TH CTF_INSERT 1 "December 13, 2018" "Apple, Inc."
 .SH NAME
-ctf_insert \- insert the (__CTF,__ctf) section data into the mach_kernel file
+ctf_insert \- insert Compact C Type Format data into a mach_kernel file
 .SH SYNOPSIS
 .B ctf_insert
 input [ \-arch arch file ]... \-o output
 .SH DESCRIPTION
 .I ctf_insert
-inserts the cft (Compact File Type) data into a mach_kernel creating
-(__CTF,__ctf) sections.  The input must not have this section or it is an error.
-And the program must be passed one \-arch argument for each architecture in a
-universal file, or exactly one \-arch for a thin file.
+inserts CTF (Compact C Type Format) data into a mach_kernel binary, storing the
+data in a newly created (__CTF,__ctf) section. This section must not be
+present in the input file.
+.IR ctf_insert (1)
+must be passed one
+.B \-arch
+argument for each architecture in a universal file, or
+exactly one
+.B \-arch
+for a thin file.
 .TP
 .BI input
 specifies the input mach_kernel.
@@ -18,7 +24,7 @@ specifies the input mach_kernel.
 specifies the output file.
 .TP
 .BI \-arch " arch file"
-specifies for the file containing the cft (Compact File Type) data to be used
-for the specified
+specifies a file of CTF data to be used for the specified
 .I arch
-whos content will be the section's data.
+in a Mach-O or universal file. The file's content will be stored in a newly
+created (__CTF,__ctf) section.

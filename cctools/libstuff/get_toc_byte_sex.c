@@ -40,7 +40,7 @@ __private_extern__
 enum byte_sex
 get_toc_byte_sex(
 char *addr,
-uint32_t size)
+uint64_t size)
 {
      uint32_t magic;
      uint32_t ar_name_size;
@@ -54,8 +54,8 @@ uint32_t size)
 	while(p + sizeof(struct ar_hdr) + sizeof(uint32_t) < addr + size){
 	    ar_hdr = (struct ar_hdr *)p;
 	    if(strncmp(ar_hdr->ar_name, AR_EFMT1, sizeof(AR_EFMT1) - 1) == 0)
-		ar_name_size = strtoul(ar_hdr->ar_name + sizeof(AR_EFMT1) - 1,
-				       NULL, 10);
+		ar_name_size = (uint32_t)
+		    strtoul(ar_hdr->ar_name + sizeof(AR_EFMT1) - 1, NULL, 10);
 	    else
 		ar_name_size = 0;
 	    p += sizeof(struct ar_hdr);

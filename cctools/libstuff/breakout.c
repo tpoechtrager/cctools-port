@@ -267,7 +267,7 @@ struct ofile *ofile)
     struct member *member;
     enum bool flag;
     struct ar_hdr *ar_hdr;
-    uint32_t size, ar_name_size;
+    uint64_t size, ar_name_size;
     char ar_name_buf[sizeof(ofile->member_ar_hdr->ar_name) + 1];
     char ar_size_buf[sizeof(ofile->member_ar_hdr->ar_size) + 1];
 
@@ -322,7 +322,7 @@ struct ofile *ofile)
 		    if(ofile->member_name[ar_name_size - 1] != '\0')
 		       break;
 		}
-		member->member_name_size = ar_name_size;
+		member->member_name_size = (uint32_t)ar_name_size;
 		ar_name_size = rnd(ar_name_size, 8) +
 			       (rnd(sizeof(struct ar_hdr), 8) -
 				sizeof(struct ar_hdr));

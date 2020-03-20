@@ -517,7 +517,7 @@ FILE *fp)
 }
 
 int
-do_scrub_next_char_from_string()
+do_scrub_next_char_from_string(void)
 {
 	/* State 0: beginning of normal line
 		1: After first whitespace on normal line (flush more white)

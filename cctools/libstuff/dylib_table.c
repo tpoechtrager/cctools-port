@@ -20,6 +20,7 @@
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
+/* NOTE: This is no longer compiled into libstuff as of 2/27/2019 */
 #ifndef RLD
 #include <stdio.h>
 #include <stdlib.h>
@@ -66,22 +67,29 @@ char *argument) /* -dylib_file argument or "dylib table" */
 	if(fstat(fd, &stat_buf) == -1)
 	    system_fatal("Can't stat file: %s for %s %s",
 		    file_name, flag, argument);
+
 	/*
 	 * For some reason mapping files with zero size fails
-	 * so it has to be handled specially.
+	 * so it has to be handled specially. Also, deal with files that are
+	 * too large to be valid seg_addr tables.
 	 */
 	file_addr = NULL;
-	if(stat_buf.st_size != 0){
+	if (stat_buf.st_size > 0xFFFFFFFF) {
+	    fatal("File too large (%llu): %s for %s %s", stat_buf.st_size,
+		  file_name, flag, argument);
+	}
+	else if (stat_buf.st_size == 0) {
+	    fatal("Empty file: %s for %s %s", file_name, flag, argument);
+	}
+	else {
 	    file_addr = mmap(0, stat_buf.st_size, PROT_READ|PROT_WRITE,
 			     MAP_FILE|MAP_PRIVATE, fd, 0);
 	    if((intptr_t)file_addr == -1)
 		system_error("can't map file: %s for %s %s", file_name, flag,
 			     argument);
 	}
-	else
-	    fatal("Empty file: %s for %s %s", file_name, flag, argument);
 	close(fd);
-	file_size = stat_buf.st_size;
+	file_size = (uint32_t)stat_buf.st_size;
 
 	/*
 	 * Got the file mapped now parse it.
@@ -108,11 +116,11 @@ char *argument) /* -dylib_file argument or "dylib table" */
 		continue;
 	    }
 	    new_dylib_table[k].seg1addr =
-		strtoul(file_addr + j, &endp, 16);
+		(uint32_t)strtoul(file_addr + j, &endp, 16);
 	    if(endp == NULL)
 		fatal("improper hexadecimal number on line %u in "
 		      "file: %s for %s %s", j, file_name, flag, argument);
-	    j = endp - file_addr;
+	    j = (uint32_t)(endp - file_addr);
 	    if(j == file_size)
 		fatal("missing library name on line %u in file: "
 		      "%s for %s %s", j, file_name, flag, argument);
@@ -144,7 +152,7 @@ struct dylib_table *
 parse_default_dylib_table(
 char **file_name)
 {
-    uint32_t i;
+    size_t i;
     FILE *fp;
 
 	*file_name = allocate(MAXPATHLEN+1);

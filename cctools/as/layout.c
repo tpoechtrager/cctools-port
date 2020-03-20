@@ -117,8 +117,8 @@ void)
 	 * If there is any current frag close it off.
 	 */
 	if(frag_now != NULL && frag_now->fr_fix == 0){
-	    frag_now->fr_fix = obstack_next_free(&frags) -
-			       frag_now->fr_literal;
+	    frag_now->fr_fix = (int32_t)(obstack_next_free(&frags) -
+			       frag_now->fr_literal);
 	    frag_wane(frag_now);
 	}
 
@@ -139,7 +139,7 @@ void)
 	    /*
 	     * Make a fresh frag for the last frag.
 	     */
-	    frag_now = (fragS *)obstack_alloc(&frags, SIZEOF_STRUCT_FRAG);
+	    frag_now = (fragS *)obstack_alloc(&frags, (int)SIZEOF_STRUCT_FRAG);
 	    memset(frag_now, '\0', SIZEOF_STRUCT_FRAG);
 	    frag_now->fr_next = NULL;
 	    (void)obstack_finish(&frags);
@@ -165,7 +165,7 @@ void)
 {
     struct frchain *frchainP;
     fragS *fragP;
-    relax_addressT slide, tmp;
+    uint64_t slide, tmp;
     symbolS *symbolP;
     uint32_t nbytes, fill_size, repeat_expression, partial_bytes, layout_pass;
     uint32_t section_type;
@@ -179,8 +179,8 @@ void)
 	 * If there is any current frag close it off.
 	 */
 	if(frag_now != NULL && frag_now->fr_fix == 0){
-	    frag_now->fr_fix = obstack_next_free(&frags) -
-			       frag_now->fr_literal;
+	    frag_now->fr_fix = (int32_t)(obstack_next_free(&frags) -
+			       frag_now->fr_literal);
 	    frag_wane(frag_now);
 	}
 
@@ -201,7 +201,7 @@ void)
 	    /*
 	     * Make a fresh frag for the last frag.
 	     */
-	    frag_now = (fragS *)obstack_alloc(&frags, SIZEOF_STRUCT_FRAG);
+	    frag_now = (fragS *)obstack_alloc(&frags, (int)SIZEOF_STRUCT_FRAG);
 	    memset(frag_now, '\0', SIZEOF_STRUCT_FRAG);
 	    frag_now->fr_next = NULL;
 	    (void)obstack_finish(&frags);
@@ -346,9 +346,9 @@ void)
 		     * as the fill_size * repeat_expression + partial_bytes.
 		     */
 		    know(fragP->fr_next != NULL);
-		    nbytes = fragP->fr_next->fr_address -
-			     fragP->fr_address -
-			     fragP->fr_fix;
+		    nbytes = (uint32_t)(fragP->fr_next->fr_address -
+					fragP->fr_address -
+					fragP->fr_fix);
 		    if((int)nbytes < 0){
 			as_warn("rs_org invalid, dot past value by %d bytes",
 				nbytes);
@@ -448,8 +448,8 @@ void)
 			value += expression->X_add_number;
 		      }
 		      else{
-			value = fragP->fr_symbol->sy_nlist.n_value +
-				fragP->fr_address;
+			value = (valueT)(fragP->fr_symbol->sy_nlist.n_value +
+					 fragP->fr_address);
 		      }
 #endif
 
@@ -901,7 +901,7 @@ down:
 	     * a relocation entry if required.
 	     */
 	    md_number_to_imm((unsigned char *)place, value, size, fixP, nsect);
-	    fixP->fx_value = value;
+	    fixP->fx_value = (int32_t)value;
 
 	    /*
 	     * If this is a non-lazy pointer section and this fix is for a
@@ -1093,13 +1093,13 @@ int nsect)
     int32_t aim;
 #endif /* !defined(ARM) */
 
-    int32_t growth;
-    uint32_t was_address;
+    uint64_t growth;
+    relax_addressT was_address;
     int32_t offset;
     symbolS *symbolP;
     int32_t target;
-    int32_t after;
-    uint32_t oldoff, newoff;
+    uint64_t after;
+    relax_addressT oldoff, newoff;
     int ret;
 
 	ret = 0;
@@ -1121,7 +1121,7 @@ int nsect)
 		break;
 
 	    case rs_align:
-		offset = relax_align (address, (int) fragP->fr_offset);
+		offset = (int32_t)relax_align (address, (int) fragP->fr_offset);
 		/*
 		 * If a maximum number of bytes to fill was specified for this
 		 * align (stored in fr_subtype) then check to see if this align
@@ -1182,9 +1182,9 @@ int nsect)
 #ifdef ARM
                 fragP->relax_marker ^= 1;
 #endif /* ARM */
-		was_address = fragP->fr_address;
+		was_address = (relax_addressT)fragP->fr_address;
 		fragP->fr_address += stretch;
-		address = fragP->fr_address;
+		address = (relax_addressT)fragP->fr_address;
 		symbolP = fragP->fr_symbol;
 		offset = fragP->fr_offset;
 		switch(fragP->fr_type){
@@ -1258,7 +1258,7 @@ int nsect)
 			   is_down_range(fragP, symbolP->sy_frag))
 			    target += stretch;
 		    }
-		    aim = target - address - fragP->fr_fix;
+		    aim = (int32_t)(target - address - fragP->fr_fix);
 		    if(aim < 0){
 			/* Look backwards. */
 			for(next_state = this_type->rlx_more; next_state; ){
@@ -1316,13 +1316,13 @@ int nsect)
 			value += expression->X_add_number;
 		      }
 		      else{
-			value = fragP->fr_symbol->sy_nlist.n_value +
-				fragP->fr_address;
+			value = (valueT)(fragP->fr_symbol->sy_nlist.n_value +
+					 fragP->fr_address);
 		      }
 #endif
 		      size = sizeof_leb128 (value, fragP->fr_subtype);
 		      growth = size - fragP->fr_offset;
-		      fragP->fr_offset = size;
+		      fragP->fr_offset = (int32_t)size;
 		    }
 		    break;
 

@@ -228,8 +228,8 @@ static void out_opcode (int);
 static void out_two (int);
 static void out_four (int);
 static void out_abbrev (int, int);
-static void out_uleb128 (addressT);
-static void out_sleb128 (addressT);
+static void out_uleb128 (unsigned int);
+static void out_sleb128 (int);
 static offsetT get_frag_fix (fragS *, segT);
 static void out_set_addr (symbolS *);
 static int size_inc_line_addr (int, addressT);
@@ -269,11 +269,11 @@ emit_expr (expressionS *exp, unsigned int nbytes)
   p = frag_more ((int) nbytes);
 
   fix_new(frag_now,
-	  p - frag_now->fr_literal,
+	  (int)(p - frag_now->fr_literal),
 	  nbytes,
 	  exp->X_add_symbol,
 	  exp->X_subtract_symbol,
-	  exp->X_add_number,
+	  (signed_target_addr_t)exp->X_add_number,
 	  0,
 	  0,
 	  0);
@@ -393,7 +393,7 @@ dwarf2_gen_line_info (addressT ofs, struct dwarf2_line_info *loc)
   line = loc->line;
   filenum = loc->filenum;
 
-  sym = symbol_temp_new (now_seg, ofs, frag_now);
+  sym = symbol_temp_new (now_seg, (valueT)ofs, frag_now);
   dwarf2_gen_line_info_1 (sym, loc);
 }
 
@@ -536,7 +536,8 @@ char *path)
 static unsigned int
 get_filenum (char *filename, unsigned int num)
 {
-  static unsigned int last_used, last_used_dir_len;
+  static unsigned int last_used;
+  static size_t last_used_dir_len;
   char *file;
   size_t dir_len;
   unsigned int i, dir;
@@ -687,7 +688,7 @@ dwarf2_directive_file (uintptr_t dummy ATTRIBUTE_UNUSED)
       return NULL;
     }
 
-  get_filenum (filename, num);
+  get_filenum (filename, (unsigned int)num);
 
   return filename;
 }
@@ -701,17 +702,17 @@ dwarf2_file (
 char *filename,
 offsetT num)
 {
-  get_filenum (filename, num);
+  get_filenum (filename, (unsigned int)num);
 }
 
 void
 dwarf2_directive_loc (uintptr_t dummy ATTRIBUTE_UNUSED)
 {
-  offsetT filenum, line;
+  unsigned int filenum, line;
 
-  filenum = get_absolute_expression ();
+  filenum = (unsigned int)get_absolute_expression ();
   SKIP_WHITESPACE ();
-  line = get_absolute_expression ();
+  line = (unsigned int)get_absolute_expression ();
 
   if (filenum < 1)
     {
@@ -751,14 +752,14 @@ dwarf2_directive_loc (uintptr_t dummy ATTRIBUTE_UNUSED)
   SKIP_WHITESPACE ();
   if (ISDIGIT (*input_line_pointer))
     {
-      current.column = get_absolute_expression ();
+      current.column = (unsigned int)get_absolute_expression ();
       SKIP_WHITESPACE ();
     }
 
   while (ISALPHA (*input_line_pointer))
     {
       char *p, c;
-      offsetT value;
+      unsigned int value;
 
       p = input_line_pointer;
       c = get_symbol_end ();
@@ -781,7 +782,7 @@ dwarf2_directive_loc (uintptr_t dummy ATTRIBUTE_UNUSED)
       else if (strcmp (p, "is_stmt") == 0)
 	{
 	  *input_line_pointer = c;
-	  value = get_absolute_expression ();
+	  value = (unsigned int)get_absolute_expression ();
 	  if (value == 0)
 	    current.flags &= ~DWARF2_FLAG_IS_STMT;
 	  else if (value == 1)
@@ -795,7 +796,7 @@ dwarf2_directive_loc (uintptr_t dummy ATTRIBUTE_UNUSED)
       else if (strcmp (p, "isa") == 0)
 	{
           *input_line_pointer = c;
-	  value = get_absolute_expression ();
+	  value = (unsigned int)get_absolute_expression ();
 	  if (value >= 0)
 	    current.isa = value;
 	  else
@@ -825,8 +826,8 @@ dwarf2_directive_loc (uintptr_t dummy ATTRIBUTE_UNUSED)
 void
 dwarf2_loc (offsetT filenum, offsetT line)
 {
-  current.filenum = filenum;
-  current.line = line;
+  current.filenum = (unsigned int)filenum;
+  current.line = (unsigned int)line;
 }
 
 void
@@ -900,7 +901,7 @@ out_four (int data)
 /* Emit an unsigned "little-endian base 128" number.  */
 
 static void
-out_uleb128 (addressT value)
+out_uleb128 (unsigned int value)
 {
   output_leb128 (frag_more (sizeof_leb128 (value, 0)), value, 0);
 }
@@ -908,7 +909,7 @@ out_uleb128 (addressT value)
 /* Emit a signed "little-endian base 128" number.  */
 
 static void
-out_sleb128 (addressT value)
+out_sleb128 (int value)
 {
   output_leb128 (frag_more (sizeof_leb128 (value, 1)), value, 1);
 }
@@ -1018,7 +1019,7 @@ size_inc_line_addr (int line_delta, addressT addr_delta)
       if (addr_delta == MAX_SPECIAL_ADDR_DELTA)
 	len = 1;
       else
-	len = 1 + sizeof_leb128 (addr_delta, 0);
+	len = 1 + (int)sizeof_leb128((valueT)addr_delta, 0);
       return len + 3;
     }
 
@@ -1041,18 +1042,18 @@ size_inc_line_addr (int line_delta, addressT addr_delta)
   if (addr_delta < 256 + MAX_SPECIAL_ADDR_DELTA)
     {
       /* Try using a special opcode.  */
-      opcode = tmp + addr_delta * DWARF2_LINE_RANGE;
+      opcode = (unsigned int)(tmp + addr_delta * DWARF2_LINE_RANGE);
       if (opcode <= 255)
 	return len + 1;
 
       /* Try using DW_LNS_const_add_pc followed by special op.  */
-      opcode = tmp + (addr_delta - MAX_SPECIAL_ADDR_DELTA) * DWARF2_LINE_RANGE;
+      opcode = (unsigned int)(tmp + (addr_delta - MAX_SPECIAL_ADDR_DELTA) * DWARF2_LINE_RANGE);
       if (opcode <= 255)
 	return len + 2;
     }
 
   /* Otherwise use DW_LNS_advance_pc.  */
-  len += 1 + sizeof_leb128 (addr_delta, 0);
+  len += 1 + (int)sizeof_leb128 ((valueT)addr_delta, 0);
 
   /* DW_LNS_copy or special opcode.  */
   len += 1;
@@ -1084,7 +1085,8 @@ emit_inc_line_addr (int line_delta, addressT addr_delta, char *p, int len)
       else
 	{
 	  *p++ = DW_LNS_advance_pc;
-	  p += output_leb128 (p, addr_delta, 0);
+	  p +=
+	    (int)output_leb128 (p, (valueT)addr_delta, 0);
 	}
 
       *p++ = DW_LNS_extended_op;
@@ -1123,7 +1125,7 @@ emit_inc_line_addr (int line_delta, addressT addr_delta, char *p, int len)
   if (addr_delta < 256 + MAX_SPECIAL_ADDR_DELTA)
     {
       /* Try using a special opcode.  */
-      opcode = tmp + addr_delta * DWARF2_LINE_RANGE;
+      opcode = (unsigned int)(tmp + addr_delta * DWARF2_LINE_RANGE);
       if (opcode <= 255)
 	{
 	  *p++ = opcode;
@@ -1131,7 +1133,7 @@ emit_inc_line_addr (int line_delta, addressT addr_delta, char *p, int len)
 	}
 
       /* Try using DW_LNS_const_add_pc followed by special op.  */
-      opcode = tmp + (addr_delta - MAX_SPECIAL_ADDR_DELTA) * DWARF2_LINE_RANGE;
+      opcode = (unsigned int)(tmp + (addr_delta - MAX_SPECIAL_ADDR_DELTA) * DWARF2_LINE_RANGE);
       if (opcode <= 255)
 	{
 	  *p++ = DW_LNS_const_add_pc;
@@ -1142,7 +1144,7 @@ emit_inc_line_addr (int line_delta, addressT addr_delta, char *p, int len)
 
   /* Otherwise use DW_LNS_advance_pc.  */
   *p++ = DW_LNS_advance_pc;
-  p += output_leb128 (p, addr_delta, 0);
+  p += (int)output_leb128 (p, (valueT)addr_delta, 0);
 
   if (need_copy)
     *p++ = DW_LNS_copy;
@@ -1473,7 +1475,7 @@ process_entries (segT seg, struct line_entry *e)
     out_inc_line_addr (INT_MAX, frag_ofs - last_frag_ofs);
   else
     {
-      lab = symbol_temp_new (seg, frag_ofs, frag);
+      lab = symbol_temp_new (seg, (valueT)frag_ofs, frag);
       relax_inc_line_addr (INT_MAX, lab, last_lab);
     }
 
@@ -1493,7 +1495,7 @@ out_file_list (void)
   for (i = 1; i < dirs_in_use; ++i)
     {
       size = strlen (dirs[i]) + 1;
-      cp = frag_more (size);
+      cp = frag_more ((int)size);
       memcpy (cp, dirs[i], size);
     }
   /* Terminate it.  */
@@ -1510,7 +1512,7 @@ out_file_list (void)
 	}
 
       size = strlen (files[i].filename) + 1;
-      cp = frag_more (size);
+      cp = frag_more ((int)size);
       memcpy (cp, files[i].filename, size);
 
       out_uleb128 (files[i].dir);	/* directory number */
@@ -1699,7 +1701,7 @@ struct frchain *ranges_section)
       s->text_start = beg;
 
       frag = last_frag_for_seg (s->seg);
-      end = symbol_temp_new (s->seg, get_frag_fix (frag, s->seg), frag);
+      end = symbol_temp_new (s->seg, (valueT)get_frag_fix (frag, s->seg), frag);
       s->text_end = end;
 
       memset(&expr, '\0', sizeof(expr));
@@ -1753,7 +1755,7 @@ struct frchain *info_section)
   section_set(aranges_section);
 
   /* Length of the compilation unit.  */
-  out_four (size - 4);
+  out_four ((int)size - 4);
 
   /* Version.  */
   out_two (2);
@@ -1787,7 +1789,7 @@ struct frchain *info_section)
       s->text_start = beg;
 
       frag = last_frag_for_seg (s->seg);
-      end = symbol_temp_new (s->seg, get_frag_fix (frag, s->seg), frag);
+      end = symbol_temp_new (s->seg, (valueT)get_frag_fix (frag, s->seg), frag);
       s->text_end = end;
 
       memset(&expr, '\0', sizeof(expr));
@@ -1841,8 +1843,9 @@ struct frchain * abbrev_section)
     {
       if (DWARF2_FORMAT () == dwarf2_format_32bit)
 	out_abbrev (DW_AT_ranges, DW_FORM_data4);
-      else
-	out_abbrev (DW_AT_ranges, DW_FORM_data8);
+// The goggles do nothing
+//      else
+//	out_abbrev (DW_AT_ranges, DW_FORM_data8);
     }
   out_abbrev (DW_AT_name, DW_FORM_string);
   out_abbrev (DW_AT_comp_dir, DW_FORM_string);
@@ -1990,12 +1993,12 @@ struct frchain *ranges_section)
     abort ();
   if (files[1].dir)
     {
-      len = strlen (dirs[files[1].dir]);
+      len = (int)strlen (dirs[files[1].dir]);
       p = frag_more (len + 1);
       memcpy (p, dirs[files[1].dir], len);
       INSERT_DIR_SEPARATOR (p, len);
     }
-  len = strlen (files[1].filename) + 1;
+  len = (int)strlen (files[1].filename) + 1;
   p = frag_more (len);
   memcpy (p, files[1].filename, len);
 
@@ -2005,13 +2008,13 @@ struct frchain *ranges_section)
 #else
   comp_dir = getcwd(xmalloc(MAXPATHLEN + 1), MAXPATHLEN + 1); /* cctools-port: getwd() -> getcwd() */
 #endif
-  len = strlen (comp_dir) + 1;
+  len = (int)strlen (comp_dir) + 1;
   p = frag_more (len);
   memcpy (p, comp_dir, len);
 
   if(apple_flags != NULL){
     /* DW_AT_APPLE_flags */
-    len = strlen (apple_flags) + 1;
+    len = (int)strlen (apple_flags) + 1;
     p = frag_more (len);
     memcpy (p, apple_flags, len);
   }
@@ -2019,7 +2022,7 @@ struct frchain *ranges_section)
   /* DW_AT_producer */
   sprintf (producer, "%s %s, %s", APPLE_INC_VERSION, apple_version,
 	   version_string);
-  len = strlen (producer) + 1;
+  len = (int)strlen (producer) + 1;
   p = frag_more (len);
   memcpy (p, producer, len);
 
@@ -2050,7 +2053,7 @@ struct frchain *ranges_section)
     out_uleb128 (2);
 
     /* DW_AT_name */
-    len = strlen (subs->name) + 1;
+    len = (int)strlen (subs->name) + 1;
     p = frag_more (len);
     memcpy (p, subs->name, len);
 
@@ -2092,7 +2095,7 @@ struct frchain *ranges_section)
       {
         n_sect = subs->symbol->sy_nlist.n_sect;
         frag = last_frag_for_seg (n_sect);
-        end = symbol_temp_new (n_sect, get_frag_fix (frag, n_sect), frag);
+        end = symbol_temp_new (n_sect, (valueT)get_frag_fix(frag,n_sect),frag);
       }
     memset(&expr, '\0', sizeof(expr));
     expr.X_op = O_symbol;

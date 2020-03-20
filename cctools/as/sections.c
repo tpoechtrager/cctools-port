@@ -175,8 +175,8 @@ uint32_t sizeof_stub)
 	     * If there is any current frag in the old section close it off.
 	     */
 	    if(frag_now != NULL){
-		frag_now->fr_fix = obstack_next_free(&frags) -
-				   frag_now->fr_literal;
+		frag_now->fr_fix = (int32_t)(obstack_next_free(&frags) -
+					     frag_now->fr_literal);
 		frag_wane(frag_now);
 	    }
 
@@ -217,7 +217,8 @@ uint32_t sizeof_stub)
 		/*
 		 * Make a fresh frag for the section.
 		 */
-		frag_now = (fragS *)obstack_alloc(&frags, SIZEOF_STRUCT_FRAG);
+		frag_now = (fragS *)obstack_alloc(&frags,
+						  (int)SIZEOF_STRUCT_FRAG);
 		memset(frag_now, '\0', SIZEOF_STRUCT_FRAG);
 		frag_now->fr_next = NULL;
 
@@ -262,7 +263,8 @@ uint32_t sizeof_stub)
 		/*
 		 * Make a fresh frag for the new section.
 		 */
-		frag_now = (fragS *)obstack_alloc(&frags, SIZEOF_STRUCT_FRAG);
+		frag_now = (fragS *)obstack_alloc(&frags,
+						  (int)SIZEOF_STRUCT_FRAG);
 		memset(frag_now, '\0', SIZEOF_STRUCT_FRAG);
 		frag_now->fr_next = NULL;
 

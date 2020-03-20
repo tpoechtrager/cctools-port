@@ -78,21 +78,21 @@ const_FLONUM_TYPE *a,
 FLONUM_TYPE *b,
 FLONUM_TYPE *product)
 {
-  int			size_of_a;		/* 0 origin */
-  int			size_of_b;		/* 0 origin */
-  int			size_of_product;	/* 0 origin */
-  int			size_of_sum;		/* 0 origin */
-  int			extra_product_positions;/* 1 origin */
+  long			size_of_a;		/* 0 origin */
+  long			size_of_b;		/* 0 origin */
+  long			size_of_product;	/* 0 origin */
+  long			size_of_sum;		/* 0 origin */
+  long			extra_product_positions;/* 1 origin */
   uint32_t		work;
   uint32_t		carry;
   int32_t		exponent;
   LITTLENUM_TYPE *	q;
   int32_t		significant;		/* TRUE when we emit a non-0 littlenum  */
 				/* ForTran accent follows. */
-  int			P;	/* Scan product low-order -> high. */
-  int			N;	/* As in sum above.  */
-  int			A;	/* Which [] of a? */
-  int			B;	/* Which [] of b? */
+  long			P;	/* Scan product low-order -> high. */
+  long			N;	/* As in sum above.  */
+  long			A;	/* Which [] of a? */
+  long			B;	/* Which [] of b? */
 
   if((a->sign!='-' && a->sign!='+') || (b->sign!='-' && b->sign!='+')) {
     /* ...

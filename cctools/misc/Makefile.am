@@ -20,13 +20,16 @@ bin_PROGRAMS =  \
 	ctf_insert \
 	check_dylib \
 	cmpdylib \
-	inout
+	inout \
+	vtool
 
 LDADD =  \
 	$(top_builddir)/libstuff/libstuff.la \
+	$(top_builddir)/libmacho/libmacho.la \
 	$(DL_LIB) \
 	$(LTO_RPATH) \
-	$(MATH_LIB)
+	$(MATH_LIB) \
+	$(REALLOCF_LIB)
 
 AM_CFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/include/foreign -I$(top_srcdir)/libstuff $(WARNINGS) $(LTO_DEF) -D__DARWIN_UNIX03 $(ENDIAN_FLAG)
 
@@ -55,3 +58,4 @@ ctf_insert_SOURCES= ctf_insert.c
 check_dylib_SOURCES= check_dylib.c
 cmpdylib_SOURCES= cmpdylib.c
 inout_SOURCES= inout.c
+vtool_SOURCES= vtool.c

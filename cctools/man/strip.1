@@ -10,11 +10,11 @@ removes or modifies the symbol table attached to the output of the assembler and
 link editor.  This is useful to save space after a program has been debugged and
 to limit dynamically bound symbols.
 .PP
-.I strip 
+.I strip
 no longer removes relocation entries under any condition.  Instead, it
 updates the external relocation entries (and indirect symbol table entries) to
 reflect the resulting symbol table.
-.I strip 
+.I strip
 prints an error message for those symbols not in the resulting symbol
 table that are needed by an external relocation entry or an indirect symbol table.
 The link editor
@@ -22,10 +22,10 @@ The link editor
 is the only program that can strip relocation entries and know if it is safe to
 do so.
 .PP
-When 
+When
 .I strip
 is used with no options on an executable file, it checks that file to see if it uses the dynamic link editor.
-If it does, the effect of the 
+If it does, the effect of the
 .I strip
 command is the same as using the
 .B \-u
@@ -33,9 +33,9 @@ and
 .B \-r
 options. If the file does not use the dynamic link editor, the effect of
 .I strip
-without any options is the same as using the 
+without any options is the same as using the
 .B \-s
-option of 
+option of
 .IR ld (1).
 The options
 .B \-S,
@@ -47,12 +47,12 @@ have the same effect as the
 options.
 The options to
 .IR strip (1)
-can be combined to trim the symbol table to just what is desired. 
+can be combined to trim the symbol table to just what is desired.
 .PP
 You should trim the symbol table of files used with dynamic
 linking so that only those symbols intended to be external interfaces are saved.
 Files used with dynamic linking include executables, objects that are
-loaded (usually bundles), and dynamic shared libraries.  
+loaded (usually bundles), and dynamic shared libraries.
 Only global symbols are used by the dynamic linking process. You should strip
 all non-global symbols.
 .PP
@@ -79,7 +79,7 @@ where the file
 would contain only those global symbols from the executable that the executable
 wants the loaded objects to have access to.
 .PP
-For objects that will be loaded into an executable, you should trim the symbol table 
+For objects that will be loaded into an executable, you should trim the symbol table
 to limit the global symbols the executable will see.
 This would be done with:
 .RS
@@ -153,7 +153,7 @@ white space.
 .BI \-R " filename"
 Remove the symbol table entries for the global symbols listed in
 .I filename.
-This file has the same format as the 
+This file has the same format as the
 .B \-s
 .I filename
 option above.
@@ -193,8 +193,8 @@ at runtime and want the loaded code to use symbols from the shared libraries
 .TP
 .B \-n
 Save all N_SECT global symbols.  This is intended for use with executable
-programs in combination with 
-.B \-A 
+programs in combination with
+.B \-A
 to remove the symbols needed for correct static
 link editing which are not needed for use with runtime loading interfaces
 where using the
@@ -209,7 +209,7 @@ These options specify symbols to be removed from the resulting output file.
 .B \-S
 Remove the debugging symbol table entries (those created by the
 .B \-g
-option to 
+option to
 .IR cc (1)
 and other compilers).
 .TP
@@ -225,7 +225,7 @@ The future the implementation of this flag may change to match the intent.
 .B \-N
 In binaries that use the dynamic linker remove all nlist symbols and the string
 table.  Setting the environment variable STRIP_NLISTS has the same effect.
-.TP 
+.TP
 .B \-x
 Remove all local symbols (saving only global symbols).
 .TP
@@ -269,11 +269,11 @@ ld(1), cc(1)
 .PP
 When creating a stub library the
 .B \-c
-and 
+and
 .B \-x
 are typically used:
 .IP
 strip -x -c libfoo -o libfoo.stripped
 .SH LIMITATIONS
-Not every layout of a Mach-O file can be stripped by this program.  But all 
+Not every layout of a Mach-O file can be stripped by this program.  But all
 layouts produced by the Apple compiler system can be stripped.

@@ -71,7 +71,7 @@ enum bool no_error_if_missing)
     char		*c		= NULL;
     char		*v		= NULL;
     char		*viewMap	= NULL;
-    int			 releaseLen	= strlen(releaseName);
+    size_t		 releaseLen	= strlen(releaseName);
     char		 buf[MAXPATHLEN+MAXNAMLEN+64];
     char		 readbuf[MAXPATHLEN+64];
     char		 viewPath[MAXPATHLEN];

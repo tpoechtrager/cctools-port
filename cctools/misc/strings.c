@@ -74,6 +74,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <limits.h>
+#include <locale.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include "stuff/bool.h"
@@ -99,8 +100,8 @@ static void ofile_processor(
     void *cookie);
 static void ofile_find(
     char *addr,
-    uint32_t size,
-    uint32_t offset,
+    uint64_t size,
+    uint64_t offset,
     struct flags *flags);
 static void find(
     uint32_t cnt,
@@ -174,7 +175,8 @@ char **envp)
 			error("missing argument to %s option", argv[i]);
 			usage();
 		    }
-		    flags.minimum_length = strtoul(argv[i+1], &endp, 10);
+		    flags.minimum_length =
+			(uint32_t)strtoul(argv[i+1], &endp, 10);
 		    if(*endp != '\0'){
 			error("invalid decimal number in option: %s %s",
 			      argv[i], argv[i+1]);
@@ -228,7 +230,8 @@ char **envp)
 				error("unknown flag: %s", argv[i]);
 				usage();
 			    }
-			    flags.minimum_length = strtoul(argv[i]+j,&endp,10);
+			    flags.minimum_length =
+				(uint32_t)strtoul(argv[i] + j, &endp, 10);
 			    if(*endp != '\0'){
 				error("invalid decimal number in flag: %s",
 				argv[i]);
@@ -470,11 +473,11 @@ static
 void
 ofile_find(
 char *addr,
-uint32_t size,
-uint32_t offset,
+uint64_t size,
+uint64_t offset,
 struct flags *flags)
 {
-    uint32_t i, string_length;
+    uint64_t i, string_length;
     char c, *string;
 
 	string = addr;
@@ -515,10 +518,14 @@ struct flags *flags)
     register char *cp;
     register int c, cc, i;
 
-    cp = buf, cc = 0;
+	/* <rdar://problem/54055310> Unix Conformance 2019 */
+	setlocale(LC_ALL, "");
+
+	cp = buf;
+	cc = 0;
 	for (i = 0; i < cnt; ++i) {
 		c = getc(stdin);
-		if (c == '\n' || dirt(c) || (i + 1) == cnt) {
+		if (c == '\n' || !isprint(c) || (i + 1) == cnt) {
 			if (cp > buf && cp[-1] == '\n')
 				--cp;
 			*cp++ = 0;
@@ -530,7 +537,8 @@ struct flags *flags)
 				}
 				printf("%s\n", buf);
 			}
-			cp = buf, cc = 0;
+			cp = buf;
+			cc = 0;
 		} else {
 			if (cp < &buf[sizeof buf - 2])
 				*cp++ = c;

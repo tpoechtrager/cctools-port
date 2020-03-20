@@ -886,7 +886,7 @@ static void
 set_code_flag (
 uintptr_t value)
 {
-  flag_code = value;
+  flag_code = (enum flag_code)value;
   cpu_arch_flags &= ~(Cpu64 | CpuNo64);
   cpu_arch_flags |= (flag_code == CODE_64BIT ? Cpu64 : CpuNo64);
 #if NeXT_MOD
@@ -908,7 +908,7 @@ static void
 set_16bit_gcc_code_flag (
 uintptr_t new_code_flag)
 {
-  flag_code = new_code_flag;
+  flag_code = (enum flag_code)new_code_flag;
   cpu_arch_flags &= ~(Cpu64 | CpuNo64);
   cpu_arch_flags |= (flag_code == CODE_64BIT ? Cpu64 : CpuNo64);
   stackop_size = LONG_MNEM_SUFFIX;
@@ -941,7 +941,7 @@ uintptr_t syntax_flag)
     }
   demand_empty_rest_of_line ();
 
-  intel_syntax = syntax_flag;
+  intel_syntax = (int)syntax_flag;
 
   if (ask_naked_reg == 0)
 #ifdef NeXT_MOD
@@ -1785,7 +1785,7 @@ md_assemble (line)
 	  68 /* N_SLINE */,
 	  text_nsect,
 	  logical_input_line /* n_desc, line number */,
-	  obstack_next_free(&frags) - frag_now->fr_literal,
+	  (valueT)(obstack_next_free(&frags) - frag_now->fr_literal),
 	  frag_now);
   }
 #endif /* NeXT_MOD */
@@ -3444,13 +3444,13 @@ output_branch ()
 	    }
 	    p =  frag_more (4);
 #if ARCH64
-	    fix_new (frag_now, p - frag_now->fr_literal, 4,
+	    fix_new (frag_now, (int)(p - frag_now->fr_literal), 4,
 		 i.op[0].disps->X_add_symbol, i.op[0].disps->X_subtract_symbol,
 		 i.op[0].disps->X_add_number, 1, 1, X86_64_RELOC_BRANCH);
 #else
-	    fix_new (frag_now, p - frag_now->fr_literal, 4,
+	    fix_new (frag_now, (int)(p - frag_now->fr_literal), 4,
 		 i.op[0].disps->X_add_symbol, i.op[0].disps->X_subtract_symbol,
-		 i.op[0].disps->X_add_number, 1, 1, 0);
+		 (int)(i.op[0].disps->X_add_number), 1, 1, 0);
 #endif
 	} else
 #endif
@@ -3488,11 +3488,12 @@ output_branch ()
 #endif
 
 #if !ARCH64
-	  frag_var (rs_machine_dependent, 5, 1, subtype, sym, off, p);
+	  frag_var (rs_machine_dependent, 5, 1, subtype, sym, (int)off, p);
 #else
 	  /* 1 possible extra opcode + 4 byte displacement go in var part.
 		 Pass reloc in fr_var.  */
-	  frag_var (rs_machine_dependent, 5, i.reloc[0], subtype, sym, off, p);
+	  frag_var (rs_machine_dependent, 5, i.reloc[0], subtype, sym,
+		    (int)off, p);
 #endif
 	}
 }
@@ -3559,23 +3560,23 @@ output_jump ()
 	  !is_local_symbol(i.op[0].disps->X_add_symbol) ||
 	  flagseen ['L']))
 #if ARCH64
-	fixP = fix_new (frag_now, p - frag_now->fr_literal, size,
+	fixP = fix_new (frag_now, (int)(p - frag_now->fr_literal), size,
 		 i.op[0].disps->X_add_symbol, i.op[0].disps->X_subtract_symbol,
 		 i.op[0].disps->X_add_number, 1, 1, X86_64_RELOC_BRANCH);
 #else
-	fixP = fix_new (frag_now, p - frag_now->fr_literal, size,
+	fixP = fix_new (frag_now, (int)(p - frag_now->fr_literal), size,
 		 i.op[0].disps->X_add_symbol, i.op[0].disps->X_subtract_symbol,
-		 i.op[0].disps->X_add_number, 1, 1, 0);
+		 (int)i.op[0].disps->X_add_number, 1, 1, 0);
 #endif
   else
 #if ARCH64
-	fixP = fix_new (frag_now, p - frag_now->fr_literal, size,
+	fixP = fix_new (frag_now, (int)(p - frag_now->fr_literal), size,
 		 i.op[0].disps->X_add_symbol, i.op[0].disps->X_subtract_symbol,
 		 i.op[0].disps->X_add_number, 1, 0, X86_64_RELOC_BRANCH);
 #else
-	fixP = fix_new (frag_now, p - frag_now->fr_literal, size,
+	fixP = fix_new (frag_now, (int)(p - frag_now->fr_literal), size,
 		 i.op[0].disps->X_add_symbol, i.op[0].disps->X_subtract_symbol,
-		 i.op[0].disps->X_add_number, 1, 0, 0);
+		 (int)i.op[0].disps->X_add_number, 1, 0, 0);
 #endif
 #else
   fixP = fix_new_exp (frag_now, p - frag_now->fr_literal, size,
@@ -3647,15 +3648,15 @@ output_interseg_jump ()
   else {
 #ifdef NeXT_MOD
 #if ARCH64
-	fix_new (frag_now, p - frag_now->fr_literal, size,
+	fix_new (frag_now, (int)(p - frag_now->fr_literal), size,
 		 i.op[1].imms->X_add_symbol,
 		 i.op[1].imms->X_subtract_symbol,
 		 i.op[1].imms->X_add_number, 0, 0, X86_64_RELOC_BRANCH);
 #else
-	fix_new (frag_now, p - frag_now->fr_literal, size,
+	fix_new (frag_now, (int)(p - frag_now->fr_literal), size,
 		 i.op[1].imms->X_add_symbol,
 		 i.op[1].imms->X_subtract_symbol,
-		 i.op[1].imms->X_add_number, 0, 0, 0);
+		 (int)i.op[1].imms->X_add_number, 0, 0, 0);
 #endif
 #else
     fix_new_exp (frag_now, p - frag_now->fr_literal, size,
@@ -3903,9 +3904,9 @@ output_disp (insn_start_frag, insn_start_off)
 
 	      p = frag_more (size);
 #if !ARCH64
-	      fix_new (frag_now, p - frag_now->fr_literal, size,
+	      fix_new (frag_now, (int)(p - frag_now->fr_literal), size,
 		       i.op[n].disps->X_add_symbol, i.op[n].disps->X_subtract_symbol,
-		       i.op[n].disps->X_add_number, 0, 0, i.reloc[n]);
+		       (int)i.op[n].disps->X_add_number, 0, 0, i.reloc[n]);
 #else
 #ifdef NeXT_MOD
 	      /*
@@ -3920,7 +3921,7 @@ output_disp (insn_start_frag, insn_start_off)
 		 i.reloc[n] == NO_RELOC &&
 		 i.op[n].disps->X_add_symbol != NULL &&
 		 i.op[n].disps->X_subtract_symbol != NULL){
-		  fix_new (frag_now, p - frag_now->fr_literal, size,
+		  fix_new (frag_now, (int)(p - frag_now->fr_literal), size,
 		           i.op[n].disps->X_add_symbol,
 			   i.op[n].disps->X_subtract_symbol,
 		           i.op[n].disps->X_add_number, pcrel, 0,
@@ -3942,7 +3943,7 @@ output_disp (insn_start_frag, insn_start_off)
 		 i.op[n].disps->X_add_symbol != NULL &&
 		 i.op[n].disps->X_add_symbol->expression != NULL &&
 		 i.op[n].disps->X_subtract_symbol == NULL){
-		  fix_new (frag_now, p - frag_now->fr_literal, size,
+		  fix_new (frag_now, (int)(p - frag_now->fr_literal), size,
 		           i.op[n].disps->X_add_symbol, NULL,
 		           i.op[n].disps->X_add_number, pcrel, 0,
 			   X86_64_RELOC_UNSIGNED);
@@ -3983,7 +3984,7 @@ output_disp (insn_start_frag, insn_start_off)
 		}
 #endif
 #ifdef NeXT_MOD
-	      fix_new (frag_now, p - frag_now->fr_literal, size,
+	      fix_new (frag_now, (int)(p - frag_now->fr_literal), size,
 		       i.op[n].disps->X_add_symbol, i.op[n].disps->X_subtract_symbol,
 		       i.op[n].disps->X_add_number, pcrel, 0, reloc_type);
 #else
@@ -4053,10 +4054,10 @@ output_imm (insn_start_frag, insn_start_off)
 
 	      p = frag_more (size);
 #if !ARCH64
-		fix_new (frag_now, p - frag_now->fr_literal, size,
+		fix_new (frag_now, (int)(p - frag_now->fr_literal), size,
 			 i.op[n].imms->X_add_symbol,
 			 i.op[n].imms->X_subtract_symbol,
-			 i.op[n].imms->X_add_number, 0, 0, 0);
+			 (int)i.op[n].imms->X_add_number, 0, 0, 0);
 #else
 #ifdef NeXT_MOD
 	      /*
@@ -4071,7 +4072,7 @@ output_imm (insn_start_frag, insn_start_off)
 		 i.reloc[n] == NO_RELOC &&
 		 i.op[n].imms->X_add_symbol != NULL &&
 		 i.op[n].imms->X_subtract_symbol != NULL){
-		  fix_new (frag_now, p - frag_now->fr_literal, size,
+		  fix_new (frag_now, (int)(p - frag_now->fr_literal), size,
 		           i.op[n].imms->X_add_symbol,
 			   i.op[n].imms->X_subtract_symbol,
 		           i.op[n].imms->X_add_number, 0, 0,
@@ -4156,7 +4157,7 @@ output_imm (insn_start_frag, insn_start_off)
 		}
 #endif
 #ifdef NeXT_MOD
-		  fix_new (frag_now, p - frag_now->fr_literal, size,
+		  fix_new (frag_now, (int)(p - frag_now->fr_literal), size,
 			   i.op[n].imms->X_add_symbol,
 			   i.op[n].imms->X_subtract_symbol,
 			   i.op[n].imms->X_add_number, 0, 0, reloc_type);
@@ -4244,7 +4245,7 @@ lex_got (reloc, adjust)
     {
       int len;
 
-      len = strlen (gotrel[j].str);
+      len = (int)strlen (gotrel[j].str);
       if (strncasecmp (cp + 1, gotrel[j].str, len) == 0)
 	{
 	  if (gotrel[j].rel[(unsigned int) flag_code] != 0)
@@ -4265,7 +4266,7 @@ lex_got (reloc, adjust)
 		 errors like foo@GOTOFF1 will be detected.  */
 
 	      /* The length of the first part of our input line.  */
-	      first = cp - input_line_pointer;
+	      first = (int)(cp - input_line_pointer);
 
 	      /* The second part goes from after the reloc token until
 		 (and including) an end_of_line char.  Don't use strlen
@@ -4277,7 +4278,7 @@ lex_got (reloc, adjust)
 	      for (cp = past_reloc; !is_end_of_line[(unsigned char) *cp++]; )
 #endif
 		;
-	      second = cp - past_reloc;
+	      second = (int)(cp - past_reloc);
 
 	      /* Allocate and copy string.  The trailing NUL shouldn't
 		 be necessary, but be safe.  */
@@ -4819,7 +4820,7 @@ i386_operand (operand_string)
      char *operand_string;
 {
   const reg_entry *r;
-  char *end_op;
+    char *end_op = NULL;
   char *op_string = operand_string;
 
   if (is_space_char (*op_string))
@@ -5423,6 +5424,8 @@ int md_long_jump_size = 5;
 /* Size of relocation record.  */
 const int md_reloc_size = 8;
 
+void md_create_short_jump (char *ptr, addressT from_addr, addressT to_addr, fragS *, symbolS *to_symbol);
+
 void
 md_create_short_jump (ptr, from_addr, to_addr, frag, to_symbol)
      char *ptr;
@@ -5437,6 +5440,8 @@ md_create_short_jump (ptr, from_addr, to_addr, frag, to_symbol)
   md_number_to_chars (ptr, (valueT) 0xeb, 1);
   md_number_to_chars (ptr + 1, (valueT) offset, 1);
 }
+
+void md_create_long_jump (char *ptr, addressT from_addr, addressT to_addr, fragS *, symbolS *to_symbol);
 
 void
 md_create_long_jump (ptr, from_addr, to_addr, frag, to_symbol)
@@ -5878,6 +5883,8 @@ md_parse_option (c, arg)
   return 1;
 }
 
+void md_show_usage (FILE *stream);
+
 void
 md_show_usage (stream)
      FILE *stream;
@@ -6004,6 +6011,8 @@ md_undefined_symbol (name)
 
 /* Round up a section size to the appropriate boundary.  */
 
+valueT md_section_align (segT segment, valueT size);
+
 valueT
 md_section_align (segment, size)
      segT segment ATTRIBUTE_UNUSED;
@@ -6038,7 +6047,7 @@ md_pcrel_from (fixP)
 #endif
      fixS *fixP;
 {
-  return fixP->fx_size + fixP->fx_where + fixP->fx_frag->fr_address;
+  return (int32_t)(fixP->fx_size + fixP->fx_where + fixP->fx_frag->fr_address);
 }
 
 #ifndef I386COFF
@@ -6176,7 +6185,7 @@ x86_64_fixup_symbol(fixS *fix, int nsect, symbolS **sym)
 			if (prev_symbol != NULL)
 			{
 				/* Replace sym and adjust offset. */
-				offset = (*sym)->sy_value - prev_symbol->sy_value;
+				offset = (int32_t)((*sym)->sy_value - prev_symbol->sy_value);
 				*sym = prev_symbol;
 			}
 			else if (fix->fx_pcrel)

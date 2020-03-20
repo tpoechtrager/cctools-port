@@ -19,7 +19,7 @@ extern uint32_t arm64_disassemble(
     uint32_t nloc_relocs,
     struct dyld_bind_info *dbi,
     uint64_t ndbi,
-    enum bool ThreadedRebaseBind,
+    enum chain_format_t chain_format,
     struct nlist *symbols,
     struct nlist_64 *symbols64,
     uint32_t nsymbols,
@@ -34,7 +34,7 @@ extern uint32_t arm64_disassemble(
     uint32_t ncmds,
     uint32_t sizeofcmds,
     char *object_addr,
-    uint32_t object_size,
+    uint64_t object_size,
     enum bool verbose,
     LLVMDisasmContextRef dc);
 

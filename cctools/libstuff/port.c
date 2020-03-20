@@ -38,6 +38,51 @@ char *find_clang()
 }
 #endif /* ! DISABLE_CLANG_AS */
 
+#ifndef HAVE_UTIMENS
+/*
+ * utimens utility to set file times with sub-second resolution when available.
+ * This is done by using utimensat if available at compile time.
+ *
+ * macOS is special cased: utimensat is only visible at compile time when
+ * building for macOS >= 10.13, but with proper runtime checks we can make
+ * builds targeted at older versions also work with sub-second resolution when
+ * available. This is especially important because APFS introduces sub-second
+ * timestamp resolution.
+ */
+#include <utime.h>
+
+#ifdef HAVE_UTIMENSAT
+#include <fcntl.h>
+#endif
+
+#if defined(__APPLE__) && defined(HAVE_UTIMENSAT)
+#pragma weak utimensat
+#endif
+
+int utimens(const char *path, const struct timespec times[2])
+{
+#ifdef HAVE_UTIMENSAT
+#ifdef __APPLE__
+    if (utimensat != NULL)
+#endif
+	return utimensat(AT_FDCWD, path, times, 0);
+#endif
+
+    /* Fall back to truncating the timestamp to 1s resolution. */
+#ifndef __OPENSTEP__
+    struct utimbuf timep;
+    timep.actime = times[0].tv_sec;
+    timep.modtime = times[1].tv_sec;
+    return utime(path, &timep);
+#else
+    time_t timep[2];
+    timep[0] = times[0].tv_sec;
+    timep[1] = times[1].tv_sec;
+    return utime(path, timep);
+#endif
+}
+#endif /* HAVE_UTIMENS */
+
 #ifndef __APPLE__
 
 #include <errno.h>
@@ -58,7 +103,6 @@ char *find_clang()
 #ifdef __OpenBSD__
 #include <sys/user.h>
 #endif
-
 
 int _NSGetExecutablePath(char *epath, unsigned int *size)
 {
@@ -402,4 +446,49 @@ size_t strlcpy(char *dst, const char *src, size_t siz)
     return(s - src - 1);        /* count does not include NUL */
 }
 
-#endif /* __APPLE__ */
+#ifndef HAVE_REALLOCF
+/*-
+ * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
+ *
+ * Copyright (c) 1998 M. Warner Losh <imp@FreeBSD.org>
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ */
+void *reallocf(void *ptr, size_t size)
+{
+	void *nptr;
+
+	nptr = realloc(ptr, size);
+
+	/*
+	 * When the System V compatibility option (malloc "V" flag) is
+	 * in effect, realloc(ptr, 0) frees the memory and returns NULL.
+	 * So, to avoid double free, call free() only when size != 0.
+	 * realloc(ptr, 0) can't fail when ptr != NULL.
+	 */
+	if (!nptr && ptr && size != 0)
+		free(ptr);
+	return (nptr);
+}
+#endif /* !HAVE_REALLOCF */
+
+#endif /* !__APPLE__ */

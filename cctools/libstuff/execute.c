@@ -73,7 +73,6 @@ int verbose)
 	    return(1); /* can't get here, removes a warning from the compiler */
 	}
 	else{
-            waitpid = -1;
 	    do{
 	        waitpid = wait(&waitstatus);
 	    } while (waitpid == -1 && errno == EINTR);

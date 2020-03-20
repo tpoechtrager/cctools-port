@@ -145,7 +145,7 @@ char **envp)
 		    }
 		    arch_ctfs[narch_ctfs].filename = argv[i+2];
 		    arch_ctfs[narch_ctfs].contents = contents;
-		    arch_ctfs[narch_ctfs].size = stat_buf.st_size;
+		    arch_ctfs[narch_ctfs].size = (uint32_t)stat_buf.st_size;
 		    arch_ctfs[narch_ctfs].arch_found = FALSE;
 		    narch_ctfs++;
 		    i += 2;
@@ -247,7 +247,7 @@ struct object *object)
 	    cputype = object->mh64->cputype;
 	    cpusubtype = object->mh64->cpusubtype & ~CPU_SUBTYPE_MASK;
 	    flags = object->mh64->flags;
-	    offset = object->seg_linkedit64->fileoff;
+	    offset = (uint32_t)object->seg_linkedit64->fileoff;
 	    addr = object->seg_linkedit64->vmaddr;
 	}
 
@@ -414,11 +414,11 @@ struct object *object)
 	 * rounded to the load command size for this arch.
 	 */
 	if(object->mh != NULL){
-	    move_size = rnd(arch_ctfs[i].size, sizeof(uint32_t));
+	    move_size = rnd32(arch_ctfs[i].size, sizeof(uint32_t));
 	    object->seg_linkedit->fileoff += move_size;
 	}
 	else{
-	    move_size = rnd(arch_ctfs[i].size, sizeof(uint64_t));
+	    move_size = rnd32(arch_ctfs[i].size, sizeof(uint64_t));
 	    object->seg_linkedit64->fileoff += move_size;
 	}
 	if(object->st != NULL && object->st->nsyms != 0){
@@ -545,7 +545,7 @@ uint32_t size)
 		}
 		else{
 		    if(sg64->filesize != 0 && sg64->fileoff < low_fileoff)
-			low_fileoff = sg64->fileoff;
+			low_fileoff = (uint32_t)sg64->fileoff;
 		}
 	    }
 	    lc = (struct load_command *)((char *)lc + lc->cmdsize);
@@ -571,7 +571,7 @@ printf("space available = %d\n", low_fileoff - (sizeofcmds + mach_header_size));
 	    sg_CTF->cmdsize = sizeof(struct segment_command) +
 			      sizeof(struct section);
 	    strcpy(sg_CTF->segname, "__CTF");
-	    sg_CTF->vmaddr = addr;
+	    sg_CTF->vmaddr = (uint32_t)addr;
 	    sg_CTF->vmsize = 0;
 	    sg_CTF->fileoff = offset;
 	    sg_CTF->filesize = size;
@@ -584,7 +584,7 @@ printf("space available = %d\n", low_fileoff - (sizeofcmds + mach_header_size));
 	    memset(s_ctf, '\0', sizeof(struct section));
 	    strcpy(s_ctf->sectname, "__ctf");
 	    strcpy(s_ctf->segname, "__CTF");
-	    s_ctf->addr = addr;
+	    s_ctf->addr = (uint32_t)addr;
 	    s_ctf->size = size;
 	    s_ctf->offset = offset;
 	    s_ctf->align = 0;

@@ -108,7 +108,8 @@ am__dirstamp = $(am__leading_dot)dirstamp
 am_ld_OBJECTS = ld-debugline.$(OBJEXT) ld-InputFiles.$(OBJEXT) \
 	ld-ld.$(OBJEXT) ld-Options.$(OBJEXT) ld-OutputFile.$(OBJEXT) \
 	ld-Resolver.$(OBJEXT) ld-Snapshot.$(OBJEXT) \
-	ld-SymbolTable.$(OBJEXT) code-sign-blobs/ld-blob.$(OBJEXT)
+	ld-SymbolTable.$(OBJEXT) ld-PlatformSupport.$(OBJEXT) \
+	code-sign-blobs/ld-blob.$(OBJEXT)
 ld_OBJECTS = $(am_ld_OBJECTS)
 am__DEPENDENCIES_1 =
 ld_DEPENDENCIES = $(top_builddir)/ld64/src/3rd/libhelper.la \
@@ -117,7 +118,7 @@ ld_DEPENDENCIES = $(top_builddir)/ld64/src/3rd/libhelper.la \
 	$(top_builddir)/ld64/src/ld/passes/libPasses.la \
 	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_1)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
@@ -329,6 +330,7 @@ PATH_SEPARATOR = @PATH_SEPARATOR@
 PROGRAM_PREFIX = @PROGRAM_PREFIX@
 PTHREAD_FLAGS = @PTHREAD_FLAGS@
 RANLIB = @RANLIB@
+REALLOCF_LIB = @REALLOCF_LIB@
 SED = @SED@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
@@ -402,7 +404,6 @@ ld_LDADD = \
 	$(top_builddir)/ld64/src/ld/parsers/libParsers.la \
 	$(top_builddir)/ld64/src/ld/passes/libPasses.la \
 	$(UUID_LIB) \
-	$(LTO_LIB) \
 	$(LTO_RPATH) \
 	$(XAR_LIB) \
 	$(DL_LIB) \
@@ -453,6 +454,7 @@ ld_SOURCES = \
 	Resolver.cpp  \
 	Snapshot.cpp  \
 	SymbolTable.cpp \
+	PlatformSupport.cpp \
 	code-sign-blobs/blob.cpp
 
 all: all-recursive
@@ -618,6 +620,12 @@ ld-SymbolTable.o: SymbolTable.cpp
 
 ld-SymbolTable.obj: SymbolTable.cpp
 	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(ld_CXXFLAGS) $(CXXFLAGS) -c -o ld-SymbolTable.obj `if test -f 'SymbolTable.cpp'; then $(CYGPATH_W) 'SymbolTable.cpp'; else $(CYGPATH_W) '$(srcdir)/SymbolTable.cpp'; fi`
+
+ld-PlatformSupport.o: PlatformSupport.cpp
+	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(ld_CXXFLAGS) $(CXXFLAGS) -c -o ld-PlatformSupport.o `test -f 'PlatformSupport.cpp' || echo '$(srcdir)/'`PlatformSupport.cpp
+
+ld-PlatformSupport.obj: PlatformSupport.cpp
+	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(ld_CXXFLAGS) $(CXXFLAGS) -c -o ld-PlatformSupport.obj `if test -f 'PlatformSupport.cpp'; then $(CYGPATH_W) 'PlatformSupport.cpp'; else $(CYGPATH_W) '$(srcdir)/PlatformSupport.cpp'; fi`
 
 code-sign-blobs/ld-blob.o: code-sign-blobs/blob.cpp
 	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(ld_CXXFLAGS) $(CXXFLAGS) -c -o code-sign-blobs/ld-blob.o `test -f 'code-sign-blobs/blob.cpp' || echo '$(srcdir)/'`code-sign-blobs/blob.cpp

@@ -68,7 +68,7 @@ extern uint32_t i386_disassemble(
     LLVMDisasmContextRef i386_dc,
     LLVMDisasmContextRef x86_64_dc,
     char *object_addr,
-    uint32_t object_size,
+    uint64_t object_size,
     struct inst *inst,
     struct inst *insts,
     uint32_t ninsts);

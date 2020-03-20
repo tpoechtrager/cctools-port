@@ -18,6 +18,7 @@
 #include <algorithm>
 #endif
 
+#define LD_PAGE_SIZE 0x1000
 #define CPU_SUBTYPE_X86_ALL     ((cpu_subtype_t)3)
 
 #define SUPPORT_ARCH_armv6 1

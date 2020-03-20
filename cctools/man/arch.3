@@ -112,7 +112,7 @@ returns a pointer to an array of all known
 NXArchInfo structures.  The last NXArchInfo is marked by a NULL name.
 .Pp
 .Fn NXGetLocalArchInfo
-returns the NXArchInfo for the local host, or NULL if none is known. 
+returns the NXArchInfo for the local host, or NULL if none is known.
 .Pp
 .Fn NXGetArchInfoFromName
 and
@@ -137,7 +137,7 @@ cases returns a pointer from the array returned in
 In some cases when the cputype is CPU_TYPE_I386 or CPU_TYPE_POWERPC it will
 return a malloc(3)'ed NXArchInfo struct which contains a string in the
 description field also a malloc(3)'ed pointer.  To allow programs not to
-leak memory they can call 
+leak memory they can call
 .Fn NXFreeArchInfo
 on pointers returned from the above interfaces.  Since this is a new API on
 older systems can use the code below.  Going forward the above interfaces will
@@ -145,7 +145,7 @@ only return pointers from the array returned in
 .Fn NXGetAllArchInfos .
 .Bd -literal -offset indent
 static void NXFreeArchInfo(
-const NXArchInfo *x) 
+const NXArchInfo *x)
 {
 	const NXArchInfo *p;
 

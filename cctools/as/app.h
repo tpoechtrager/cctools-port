@@ -8,7 +8,7 @@ extern void do_scrub_begin(
     void);
 extern int do_scrub_next_char(
     FILE *fp);
-extern int do_scrub_next_char_from_string();
+extern int do_scrub_next_char_from_string(void);
 
 /*
  * typedefs and routines to save scrub context so .include can make recursive

@@ -67,7 +67,7 @@ unsigned int nchars)
     }
     if ((int)(obstack_room(&frags)) < nchars) {
 	unsigned int n,oldn;
-	int32_t oldc;
+	size_t oldc;
 
 	frag_wane (frag_now);
 	frag_new (0);
@@ -119,8 +119,9 @@ int old_frags_var_max_size)	/* Number of chars (already allocated on obstack
 		"can begin");
     }
 
-    frag_now->fr_fix = (char *) (obstack_next_free (&frags)) -
-    (frag_now->fr_literal) - old_frags_var_max_size;
+    frag_now->fr_fix = (int)((char *) (obstack_next_free (&frags)) -
+			     (long)(frag_now->fr_literal) -
+			     old_frags_var_max_size);
  /* Fix up old frag's fr_fix. */
 
     (void)obstack_finish (&frags);
@@ -132,7 +133,7 @@ int old_frags_var_max_size)	/* Number of chars (already allocated on obstack
     former_last_fragP = frchP->frch_last;
     know (former_last_fragP);
     know (former_last_fragP == frag_now);
-    obstack_blank (&frags, SIZEOF_STRUCT_FRAG);
+    obstack_blank (&frags, (int)SIZEOF_STRUCT_FRAG);
  /* We expect this will begin at a correct */
  /* boundary for a struct. */
     tmp=obstack_alignment_mask(&frags);

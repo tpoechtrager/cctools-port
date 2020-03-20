@@ -62,7 +62,7 @@ extern uint32_t arm_disassemble(
     LLVMDisasmContextRef arm_dc,
     LLVMDisasmContextRef thumb_dc,
     char *object_addr,
-    uint32_t object_size,
+    uint64_t object_size,
     struct data_in_code_entry *dices,
     uint32_t ndices,
     uint64_t seg_addr,

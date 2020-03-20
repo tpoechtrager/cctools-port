@@ -10,24 +10,24 @@ lipo \- create or operate on universal files
 The
 .B lipo
 tool creates or operates on ``universal'' (multi-architecture) files. Generally,
-.B lipo 
+.B lipo
 reads a single input file and writes to a single output file, although some
-commands and options accept multiple input files. 
+commands and options accept multiple input files.
 .B lipo
 will only ever write to a single output file, and input files are never
 modified in place.
 .PP
 .B lipo
-supports a number of commands for creating universal files from 
-single-architecture files, extracting singe-architecture files from universal
+supports a number of commands for creating universal files from
+single-architecture files, extracting single-architecture files from universal
 files, and displaying architecture information.
 .B lipo
 can only perform one such command at a time, although some command flags may appear more than once. Some commands support additional options that can be
 used with that command. In addition, there are global options that are
 supported by multiple commands.
 .PP
-The  
-.I arch_type 
+The
+.I arch_type
 arguments may be any of the supported architecture names listed in the man page
 .IR arch (3).
 .SH COMMANDS
@@ -44,17 +44,17 @@ specified on the command-line, all of the architectures in each file will be
 copied into the output file, whereas when input files are included using the
 global
 .B \-arch
-option, only the specified architecture will be copied from that input file. 
-The 
+option, only the specified architecture will be copied from that input file.
+The
 .B \-arch_blank
-option specifies that the output for the specified 
+option specifies that the output for the specified
 .I arch_type
 will be an MH_DYLIB_STUB file. This command requires the
 .B \-output
 option.
 .TP
 .BI \-detailed_info
-Display a detailed list of the architecture types in the input universal file 
+Display a detailed list of the architecture types in the input universal file
 (all the the information in the universal header, for each architecture in the
 file).
 .TP
@@ -67,7 +67,7 @@ only that architecture. This command requires the
 option.
 .TP
 .BI \-extract_family " arch_type [\-extract_family arch_type...]"
-Take one universal input file and copy all of the 
+Take one universal input file and copy all of the
 .IR arch_type s
 for the family that
 .I arch_type
@@ -76,7 +76,7 @@ only those architectures.  The file will be thin if only one architecture is
 found or universal otherwise. This command requires the
 .B \-output
 option.
-.TP 
+.TP
 .BI \-info
 Display a brief description of each input file along with the names of each
 architecture type in that input file.
@@ -109,7 +109,7 @@ Take one input file and verify the specified
 are present in the file.  If so then exit with a status of 0 else exit with a
 status of 1. Because more than one
 .I arch_type
-can be verified at once, all of the input files must appear before the 
+can be verified at once, all of the input files must appear before the
 .B \-verify_arch
 flag on the command-line.
 .SH OPTIONS
@@ -119,10 +119,10 @@ Tells
 .B lipo
 that
 .I input_file
-contains the specified architecture type.  
+contains the specified architecture type.
 The
 .BI \-arch " arch_type"
-specification is unnecessary if 
+specification is unnecessary if
 .I input_file
 is an
 object file, a universal file, or some other file whose architecture(s)
@@ -140,19 +140,19 @@ files are present, and no other files may be hidden in this way. This option onl
 .B \-create,
 .B \-remove,
 and
-.B \-replace, 
+.B \-replace,
 commands, and is only intended for tools and workflows testing a workaround on
 older systems.
 .TP
 .BI \-output " output_file"
-Commands that create new files write to the output file specified by the  
+Commands that create new files write to the output file specified by the
 .B \-output
-flag. This option is required for the 
+flag. This option is required for the
 .B \-create,
 .B \-extract,
 .B \-extract_family,
 .B \-remove,
-.B \-replace, 
+.B \-replace,
 and
 .B \-thin
 commands.
@@ -165,12 +165,12 @@ when creating a universal file containing that architecture.
 is a hexadecimal number that must be an integral power of 2.
 This is only needed when
 .B lipo
-can't figure out the alignment of an input file 
+can't figure out the alignment of an input file
 (currently not an object file),
 or when it guesses at the alignment too conservatively.
 The default for files unknown to
 .B lipo
-is 0 (2^0, or an alignment of one byte), 
+is 0 (2^0, or an alignment of one byte),
 and the default alignment for archives
 is 4 (2^2, or 4-byte alignment).
 .SH "SEE ALSO"

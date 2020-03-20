@@ -21,7 +21,7 @@ not be prebound.
 .PP
 The options allow for different types of checking for use in shell scripts.
 Only one of \-c, \-p or \-d can be used at a time.
-If 
+If
 .I redo_prebinding
 redoes the prebinding on an input file it will run /usr/bin/objcunique if it
 exists on the result.
@@ -50,12 +50,12 @@ ignore non-prebound files (useful when running on all types of files).
 zero out the prebind check sum in the output if it has one.
 .TP
 .B \-u
-unprebind, rather than reprebind (-c, -p, -d, -e ignored).  
+unprebind, rather than reprebind (-c, -p, -d, -e ignored).
 Resets or removes prebinding-specific information from the input file.
-As unprebinding is intended to produce a canonical Mach-O 
-binary, bundles and non-prebound executables and dylibs are acceptable 
-as input.  For these files, the  unprebind operation will zero library time 
-stamps and version numbers and zero entries in the two-level hints 
+As unprebinding is intended to produce a canonical Mach-O
+binary, bundles and non-prebound executables and dylibs are acceptable
+as input.  For these files, the  unprebind operation will zero library time
+stamps and version numbers and zero entries in the two-level hints
 table.
 .TP
 .BI "\-e " executable_path

@@ -58,7 +58,7 @@ struct obstack *h,
 int size,
 int alignment,
 void *(*chunkfun)(size_t n),
-void (*freefun)() )
+void (*freefun)(void*) )
 {
   register struct _obstack_chunk* chunk; /* points to new chunk */
 
@@ -81,8 +81,8 @@ void (*freefun)() )
       size = 4096 - extra;
     }
 
-  h->chunkfun = (struct _obstack_chunk * (*)()) chunkfun;
-  h->freefun = freefun;
+  h->chunkfun = (void* (*)(size_t))chunkfun;
+  h->freefun = (void (*)(void*))freefun;
   h->chunk_size = size;
   h->alignment_mask = alignment - 1;
 
@@ -107,14 +107,14 @@ int length)
   register struct _obstack_chunk*	old_chunk = h->chunk;
   register struct _obstack_chunk*	new_chunk;
   register int32_t	new_size;
-  register int obj_size = h->next_free - h->object_base;
+  register int obj_size = (int)(h->next_free - h->object_base);
   register int i;
   int already;
 
   /* Compute size for new chunk.  */
   new_size = (obj_size + length) + (obj_size >> 3) + 100;
   if (new_size < h->chunk_size)
-    new_size = h->chunk_size;
+    new_size = (int32_t)h->chunk_size;
 
   /* Allocate and initialize the new chunk.  */
   new_chunk = h->chunk = (*h->chunkfun) (new_size);
@@ -145,7 +145,7 @@ int length)
   h->next_free = h->object_base + obj_size;
 }
 
-#ifdef DEBUG
+#ifdef DEBUG_DEAD_CODE
 /* Return nonzero if object OBJ has been allocated from obstack H.
    This is here for debugging.
    If you use it in a program, you are probably losing.  */
@@ -187,7 +187,7 @@ POINTER obj)
   while (lp != 0 && ((POINTER)lp >= obj || (POINTER)(lp)->limit < obj))
     {
       plp = lp -> prev;
-      (*h->freefun) (lp);
+      (*h->freefun)(lp);
       lp = plp;
     }
   if (lp)

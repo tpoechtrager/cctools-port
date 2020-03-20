@@ -152,7 +152,7 @@ char *where,	/* Where to place 1st character of new buffer. */
 int *give_next_size)
 {
   char *	return_value;	/* -> Last char of what we read, + 1. */
-  register int	size;
+  register size_t	size;
 
   *give_next_size = BUFFER_SIZE;
   if (f_in == (FILE *)0)

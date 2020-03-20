@@ -180,17 +180,17 @@ adds the
 .I subscriber
 port to the list of event ports that dyld event messages are sent to.  This is
 just a different interface to get dynamic link events on a mach port rather
-than using 
+than using
 .I _dyld_debug_subscribe_to_events
 which creates a new thread.
 .PP
 .I _dyld_event_server
 is the mig generated routine to dispatch dyld event messages that can be used if
-the 
+the
 .I _dyld_debug_add_event_subscriber
 interface is used.  This routine will call the routine
 .I _dyld_event_server_callback
-which must be provided if 
+which must be provided if
 .I _dyld_event_server
 is used.
 .PP
@@ -221,7 +221,7 @@ struct dyld_debug_error_data {
 .RE
 .PP
 The local_error field is a unique number for each possible error condition
-in the source code in that makes up the dyld debug APIs. 
+in the source code in that makes up the dyld debug APIs.
 The file_name and line_number fields are filled in with the the source file name
 and line number for the files in the Darwin cctools project in the libdyld
 sub-directory which is where the dyld debug APIs are implemented.
@@ -327,7 +327,7 @@ NSUnLinkModule call (without the
 option specified) done by the target task.  For this event only the arg[0]
 field of the dyld_event structure is used to identify the module being removed.
 .SH RETURN CODES
-.TP 
+.TP
 .SM DYLD_SUCCESS
 Indicates the operation and the communication with the target task was
 successful.

@@ -59,6 +59,14 @@ static char *look_back_for_slash(
  * If the name of the dynamic library is none of the forms above then NULL is
  * returned.
  */
+/*
+ * MDT 20190119 rdar://12400897
+ * guess_short_name() will require suffixes be either "_debug" or "_profile".
+ * If a '_' substring has any other value, guess_short_name() will assume that
+ * substring is part of the short name. This is because a large number of dylib
+ * authors -- 1st party and 3rd party -- don't realize '_' is a reserved
+ * character in dylib names, and some cctools get confused.
+ */
 __private_extern__
 char *
 guess_short_name(
@@ -71,6 +79,7 @@ char **return_suffix)
 
 	*is_framework = FALSE;
 	*return_suffix = NULL;
+  
 	/* pull off the last component and make foo point to it */
 	a = strrchr(name, '/');
 	if(a == NULL)
@@ -86,6 +95,10 @@ char **return_suffix)
 	    s = strlen(suffix);
 	    if(suffix == foo || s < 2)
 		suffix = NULL;
+	    else if (0 != strncmp("_debug", suffix, 6) &&
+		     0 != strncmp("_profile", suffix, 8)) {
+		suffix = NULL;
+	    }
 	    else{
 		l -= s;
 		*return_suffix = allocate(s + 1);
@@ -174,7 +187,10 @@ guess_library:
 	    /* ignore any suffix after an underbar
 	       like Foo_profile.A.dylib */
 	    c = strchr(name, '_');
-	    if(c != NULL && c != name){
+	    if (c != NULL && c != name &&
+	       (0 == strncmp("_debug", c, 6) ||
+		0 == strncmp("_profile", c, 8)))
+	    {
 		l = c - name;
 		suffix = c;
 		for(s = 0; suffix[s] != '.'; s++)
@@ -197,8 +213,11 @@ guess_library:
 	else{
 	    /* ignore any suffix after an underbar
 	       like Foo_profile.A.dylib */
-	    c = strchr(b+1, '_');
-	    if(c != NULL && c != b+1){
+	    c = strrchr(b+1, '_');
+	    if (c != NULL && c != b+1 &&
+		(0 == strncmp("_debug", c, 6) ||
+		 0 == strncmp("_profile", c, 8)))
+	    {
 		l = c - (b+1);
 		suffix = c;
 		for(s = 0; suffix[s] != '.'; s++)

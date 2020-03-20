@@ -336,11 +336,11 @@ struct frag    *frag)	/* For sy_frag. */
 {
   register symbolS *		symbolP;
   register char *		preserved_copy_of_name;
-  register unsigned int		name_length;
+  register size_t		name_length;
            char *		p;
 
   name_length = strlen(name) + 1;
-  obstack_grow(&notes,name,name_length);
+  obstack_grow(&notes,name,(int)name_length);
   p=obstack_finish(&notes);
   /* obstack_1done( &notes, name, name_length, &p ); */
   preserved_copy_of_name = p;
@@ -461,7 +461,8 @@ int local_colon)/* non-zero if called from local_colon() */
 	     && symbolP -> sy_value == 0)
 	    {
 	      symbolP -> sy_frag  = frag_now;
-	      symbolP -> sy_value = obstack_next_free(& frags) - frag_now -> fr_literal;
+	      symbolP -> sy_value = (uint32_t)(obstack_next_free(& frags) -
+					       frag_now -> fr_literal);
 	      know( N_UNDF == 0 );
 	      symbolP -> sy_type |= N_SECT; /* keep N_EXT bit */
 	      symbolP -> sy_other = frchain_now->frch_nsect;
@@ -604,7 +605,7 @@ make_stab_for_symbol(
 symbolS *symbolP)
 {
     symbolS *stab;
-    int stabnamelen;
+    size_t stabnamelen;
     char *stabname;
 
 	if(symbolP->sy_name[0] == 'L')
@@ -695,7 +696,7 @@ uint32_t	offset)	  /* Offset from frag address. */
 {
     isymbolS *isymbolP;
     char *preserved_copy_of_name;
-    uint32_t name_length;
+    size_t name_length;
     char *p;
     struct frag *fr_next;
     symbolS *symbolP;
@@ -723,7 +724,7 @@ uint32_t	offset)	  /* Offset from frag address. */
 	}
 
 	name_length = strlen(name) + 1;
-	obstack_grow(&notes, name, name_length);
+	obstack_grow(&notes, name, (int)name_length);
 	p = obstack_finish(&notes);
 	preserved_copy_of_name = p;
 	p = obstack_alloc(&notes, sizeof(struct indirect_symbol));
@@ -883,7 +884,7 @@ struct frag *frag)
 symbolS *
 symbol_temp_new_now(void)
 {
-    return(symbol_temp_new(now_seg, frag_now_fix(), frag_now));
+    return(symbol_temp_new(now_seg, (valueT)frag_now_fix(), frag_now));
 }
 
 symbolS *
@@ -899,7 +900,7 @@ symbolS *sym)
 {
     sym->sy_type = N_SECT;
     sym->sy_other = now_seg;
-    sym->sy_value = frag_now_fix();
+    sym->sy_value = (uint32_t)frag_now_fix();
     sym->sy_frag = frag_now;
 }
 

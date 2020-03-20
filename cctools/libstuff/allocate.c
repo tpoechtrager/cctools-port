@@ -105,6 +105,7 @@ const char *args,
 		size += strlen(p);
 		p = (char *)va_arg(ap, char *);
 	    }
+	  va_end(ap);
 	}
 	s = allocate(size + 1);
 	*s = '\0';

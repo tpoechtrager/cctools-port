@@ -389,7 +389,8 @@ enum bool nflag)
 {
 	FILE *list;
 	char buf[BUFSIZ], *symbol_name, *_symbol_name, *membername;
-	int32_t i, len, symbol_number;
+	int32_t i, symbol_number;
+	size_t len;
 	struct indr_object *io;
 
 	/*
@@ -548,7 +549,7 @@ enum bool nflag)
 		    archs[i].members[j].offset = offset;
 		    size = 0;
 		    if(archs[i].members[j].member_long_name == TRUE){
-			size = rnd(archs[i].members[j].member_name_size,
+			size = rnd32(archs[i].members[j].member_name_size,
 				     sizeof(int32_t));
 			archs[i].toc_long_name = TRUE;
 		    }
@@ -812,8 +813,9 @@ struct object *object)
 {
     enum byte_sex host_byte_sex;
     uint32_t i, inew_syms, inew_undefsyms, inew_mods, indr_iextdefsym;
-    uint32_t new_ext_strsize, len, offset;
+    uint32_t new_ext_strsize, offset;
     uint32_t *map;
+    size_t len;
     struct symbol *sp;
     char *p, *q;
     struct scattered_relocation_info *sreloc;
@@ -1018,7 +1020,7 @@ struct object *object)
 	 * Second pass, create the new tables.
 	 */
 	new_symbols =(struct nlist *)allocate(new_nsyms * sizeof(struct nlist));
-	new_strsize = rnd(new_strsize, sizeof(int32_t));
+	new_strsize = rnd32(new_strsize, sizeof(int32_t));
 	new_strings = (char *)allocate(new_strsize);
 	new_strings[new_strsize - 3] = '\0';
 	new_strings[new_strsize - 2] = '\0';
@@ -1046,7 +1048,8 @@ struct object *object)
 		new_symbols[inew_syms] = symbols[i];
 		if(symbols[i].n_un.n_strx != 0){
 		    strcpy(q, strings + symbols[i].n_un.n_strx);
-		    new_symbols[inew_syms].n_un.n_strx = q - new_strings;
+		    new_symbols[inew_syms].n_un.n_strx =
+			(uint32_t)(q - new_strings);
 		    q += strlen(q) + 1;
 		}
 		map[i] = inew_syms;
@@ -1065,13 +1068,15 @@ struct object *object)
 			strcpy(p, sp->indr);
 		    else
 			strcpy(p, strings + symbols[i].n_un.n_strx);
-		    new_symbols[inew_syms].n_un.n_strx = p - new_strings;
+		    new_symbols[inew_syms].n_un.n_strx =
+			(uint32_t)(p - new_strings);
 		    p += strlen(p) + 1;
 		}
 		if((symbols[i].n_type & N_TYPE) == N_INDR){
 		    if(symbols[i].n_value != 0){
 			strcpy(p, strings + symbols[i].n_value);
-			new_symbols[inew_syms].n_value = p - new_strings;
+			new_symbols[inew_syms].n_value =
+			    (uint32_t)(p - new_strings);
 			p += strlen(p) + 1;
 		    }
 		}
@@ -1082,7 +1087,7 @@ struct object *object)
 	indr_iextdefsym = inew_syms;
 	for(i = 0; i < indr_list.used; i++){ /* loop for new defined symbols*/
 	    strcpy(p, indr_list.list[i]->indr);
-	    new_symbols[inew_syms].n_un.n_strx = p - new_strings;
+	    new_symbols[inew_syms].n_un.n_strx = (uint32_t)(p - new_strings);
 	    p += strlen(p) + 1;
 	    new_symbols[inew_syms].n_type = N_INDR | N_EXT;
 	    new_symbols[inew_syms].n_desc = 0;
@@ -1090,7 +1095,7 @@ struct object *object)
 	    /* Note this name is used below for the undefined */
 	    strcpy(p, indr_list.list[i]->undef);
 	    indr_list.list[i]->undef = p;
-	    new_symbols[inew_syms].n_value = p - new_strings;
+	    new_symbols[inew_syms].n_value = (uint32_t)(p - new_strings);
 	    p += strlen(p) + 1;
 	    inew_syms++;
 	}
@@ -1106,7 +1111,7 @@ struct object *object)
 	    if(indr_list.list[i]->existing_symbol == FALSE){
 		/* Note this name is used from above for the undefined */
 		undef_map[inew_undefsyms].symbol.n_un.n_strx =
-		    indr_list.list[i]->undef - new_strings;
+		    (uint32_t)(indr_list.list[i]->undef - new_strings);
 		undef_map[inew_undefsyms].symbol.n_type = N_UNDF | N_EXT;
 		undef_map[inew_undefsyms].symbol.n_desc = 0;
 		undef_map[inew_undefsyms].symbol.n_sect = NO_SECT;
@@ -1128,7 +1133,7 @@ struct object *object)
 		    else
 			strcpy(p, strings + symbols[i].n_un.n_strx);
 		    undef_map[inew_undefsyms].symbol.n_un.n_strx =
-			p - new_strings;
+			(uint32_t)(p - new_strings);
 		    p += strlen(p) + 1;
 		}
 		undef_map[inew_undefsyms].old_symbol = TRUE;
@@ -1162,14 +1167,14 @@ struct object *object)
 	for(i = 0; i < nmodtab; i++){
 	    new_mods[inew_mods] = mods[i];
 	    strcpy(p, strings + mods[i].module_name);
-	    new_mods[inew_mods].module_name = p - new_strings;
+	    new_mods[inew_mods].module_name = (uint32_t)(p - new_strings);
 	    p += strlen(p) + 1;
 	    inew_mods++;
 	}
 	for(i = 0; i < indr_list.used; i++){
 	    memset(new_mods + inew_mods, '\0', sizeof(struct dylib_module));
 	    strcpy(p, indr_list.list[i]->membername);
-	    new_mods[inew_mods].module_name = p - new_strings;
+	    new_mods[inew_mods].module_name = (uint32_t)(p - new_strings);
 	    p += strlen(p) + 1;
 	    new_mods[inew_mods].iextdefsym = indr_iextdefsym + i;
 	    new_mods[inew_mods].nextdefsym = 1;
@@ -1327,11 +1332,11 @@ struct object *object)
 
 	if(object->code_sig_cmd != NULL){
 	    object->input_sym_info_size =
-		rnd(object->input_sym_info_size, 16);
+		rnd32(object->input_sym_info_size, 16);
 	    object->input_sym_info_size +=
 		object->code_sig_cmd->datasize;
 	    object->output_sym_info_size =
-		rnd(object->output_sym_info_size, 16);
+		rnd32(object->output_sym_info_size, 16);
 	    object->output_sym_info_size +=
 		object->code_sig_cmd->datasize;
 	}
@@ -1487,7 +1492,7 @@ struct object *object)
 	    offset += object->st->strsize;
 	}
 	if(object->code_sig_cmd != NULL){
-	    offset = rnd(offset, 16);
+	    offset = rnd32(offset, 16);
 	    object->code_sig_cmd->dataoff = offset;
 	    offset += object->code_sig_cmd->datasize;
 	}
@@ -1582,7 +1587,7 @@ struct arch *arch)
 	 * Now loop through the indr list creating the objects for each indirect
 	 * symbol to be added to this archive.
 	 */
-	indr_time = time(0);
+	indr_time = (uint32_t)time(0);
 	oumask = umask(0);
 	indr_mode = S_IFREG | (0666 & ~oumask);
 	(void)umask(oumask);
@@ -1794,7 +1799,8 @@ int32_t
 add_to_string_table(
 char *p)
 {
-    int32_t len, index;
+    size_t len;
+    uint32_t index;
 
 	len = strlen(p) + 1;
 	if(string_table.size < string_table.index + len){
@@ -1818,7 +1824,7 @@ end_string_table()
 {
     uint32_t length;
 
-	length = rnd(string_table.index, sizeof(uint32_t));
+	length = rnd32(string_table.index, sizeof(uint32_t));
 	memset(string_table.strings + string_table.index, '\0',
 	       length - string_table.index);
 	string_table.index = length;

@@ -343,7 +343,7 @@ char **envp)
 			    "option");
 		    usage();
 		}
-		section_alignment = strtoul(argv[i+1], &endp, 16);
+		section_alignment = (uint32_t)strtoul(argv[i+1], &endp, 16);
 		if(*endp != '\0')
 		    fatal("argument for -section_alignment %s not a proper "
 			  "hexadecimal number", argv[i+1]);
@@ -367,7 +367,7 @@ char **envp)
 		    warning("no argument specified for -align option");
 		    usage();
 		}
-		file_alignment = strtoul(argv[i+1], &endp, 16);
+		file_alignment = (uint32_t)strtoul(argv[i+1], &endp, 16);
 		if(*endp != '\0')
 		    fatal("argument for -align %s not a proper hexadecimal "
 			  "number", argv[i+1]);
@@ -686,7 +686,6 @@ struct arch *arch)
 		    switch(arch->object->mh_cputype){
 		    case CPU_TYPE_I386:
 			switch((int)flavor){
-			i386_thread_state_t *cpu;
 			case i386_THREAD_STATE:
 #if i386_THREAD_STATE == 1
 			case -1:
@@ -695,9 +694,12 @@ struct arch *arch)
 #if i386_THREAD_STATE == -1
 			case 1:
 #endif /* i386_THREAD_STATE == -1 */
-			    cpu = (i386_thread_state_t *)state;
-			    entry = cpu->eip;
-			    state += sizeof(i386_thread_state_t);
+			    {
+				i386_thread_state_t *cpu =
+				    (i386_thread_state_t *)state;
+				entry = cpu->eip;
+				state += sizeof(i386_thread_state_t);
+			    }
 			    break;
 			default:
 			    state += count * sizeof(uint32_t);
@@ -706,11 +708,13 @@ struct arch *arch)
 		        break;
 		    case CPU_TYPE_ARM:
 			switch(flavor){
-			arm_thread_state_t *cpu;
 			case ARM_THREAD_STATE:
-			    cpu = (arm_thread_state_t *)state;
-			    entry = cpu->__pc;
-			    state += sizeof(arm_thread_state_t);
+			    {
+				arm_thread_state_t *cpu =
+				    (arm_thread_state_t *)state;
+				entry = cpu->__pc;
+				state += sizeof(arm_thread_state_t);
+			    }
 			    break;
 			default:
 			    state += count * sizeof(uint32_t);
@@ -793,7 +797,7 @@ struct arch *arch)
 		    scnhdrs[j].s_vsize = sg->vmsize;
 #endif
 		    scnhdrs[j].s_vaddr = sg->vmaddr;
-		    scnhdrs[j].s_size = rnd(sg->filesize, file_alignment);
+		    scnhdrs[j].s_size = rnd32(sg->filesize, file_alignment);
 		    scnhdrs[j].s_relptr = 0;
 		    scnhdrs[j].s_lnnoptr = 0;
 		    scnhdrs[j].s_nlnno = 0;
@@ -811,7 +815,7 @@ struct arch *arch)
 		    scnhdrs[j].s_vsize = sg->vmsize;
 #endif
 		    scnhdrs[j].s_vaddr = sg->vmaddr;
-		    scnhdrs[j].s_size = rnd(sg->filesize, file_alignment);
+		    scnhdrs[j].s_size = rnd32(sg->filesize, file_alignment);
 		    scnhdrs[j].s_relptr = 0;
 		    scnhdrs[j].s_lnnoptr = 0;
 		    scnhdrs[j].s_nlnno = 0;
@@ -858,7 +862,7 @@ struct arch *arch)
 		    strcpy(scnhdrs[j].s_name, ".import");
 		    scnhdrs[j].s_vsize = sg->vmsize;
 		    scnhdrs[j].s_vaddr = sg->vmaddr;
-		    scnhdrs[j].s_size = rnd(sg->filesize, file_alignment);
+		    scnhdrs[j].s_size = rnd32(sg->filesize, file_alignment);
 		    scnhdrs[j].s_relptr = 0;
 		    scnhdrs[j].s_lnnoptr = 0;
 		    scnhdrs[j].s_nlnno = 0;
@@ -899,9 +903,9 @@ struct arch *arch)
 	if(reloc_size != 0){
 	    strcpy(scnhdrs[j].s_name, ".reloc");
 	    scnhdrs[j].s_vsize = reloc_size;
-	    reloc_addr = rnd(reloc_addr, section_alignment);
+	    reloc_addr = rnd32(reloc_addr, section_alignment);
 	    scnhdrs[j].s_vaddr = reloc_addr;
-	    scnhdrs[j].s_size = rnd(reloc_size, file_alignment);
+	    scnhdrs[j].s_size = rnd32(reloc_size, file_alignment);
 	    scnhdrs[j].s_relptr = 0;
 	    scnhdrs[j].s_lnnoptr = 0;
 	    scnhdrs[j].s_nlnno = 0;
@@ -914,14 +918,14 @@ struct arch *arch)
 	    debug_addr = reloc_addr + reloc_scnhdr->s_size;
 	}
 	else{
-	    debug_addr = rnd(reloc_addr, section_alignment);
+	    debug_addr = rnd32(reloc_addr, section_alignment);
 	}
 
 	if(debug_filename != NULL){
 	    strcpy(scnhdrs[j].s_name, ".debug");
 	    scnhdrs[j].s_vsize = debug_size;
 	    scnhdrs[j].s_vaddr = debug_addr;
-	    scnhdrs[j].s_size = rnd(debug_size, file_alignment);
+	    scnhdrs[j].s_size = rnd32(debug_size, file_alignment);
 	    scnhdrs[j].s_relptr = 0;
 	    scnhdrs[j].s_lnnoptr = 0;
 	    scnhdrs[j].s_nlnno = 0;
@@ -1032,11 +1036,17 @@ struct arch *arch)
 #ifdef x86_THREAD_STATE64
 		    case CPU_TYPE_X86_64:
 			switch(flavor){
-		        x86_thread_state64_t *cpu64;
 			case x86_THREAD_STATE64:
-			    cpu64 = (x86_thread_state64_t *)state;
-			    entry = cpu64->rip;
-			    state += sizeof(x86_thread_state64_t);
+			    {
+				x86_thread_state64_t *cpu64 =
+				    (x86_thread_state64_t *)state;
+				/*
+				 * The aouthdr_64 struct only allows for a
+				 * 32-bit entry point.
+				 */
+				entry = (uint32_t)cpu64->rip;
+				state += sizeof(x86_thread_state64_t);
+			    }
 			    break;
 			default:
 			    state += count * sizeof(uint32_t);
@@ -1047,11 +1057,17 @@ struct arch *arch)
 #ifdef ARM_THREAD_STATE64
 		    case CPU_TYPE_ARM64:
 			switch(flavor){
-		        arm_thread_state64_t *cpu64;
 			case ARM_THREAD_STATE64:
-			    cpu64 = (arm_thread_state64_t *)state;
-			    entry = cpu64->__pc;
-			    state += sizeof(arm_thread_state64_t);
+			    {
+				arm_thread_state64_t *cpu64 =
+				    (arm_thread_state64_t *)state;
+				/*
+				 * The aouthdr_64 struct only allows for a
+				 * 32-bit entry point.
+				 */
+				entry = (uint32_t)cpu64->__pc;
+				state += sizeof(arm_thread_state64_t);
+			    }
 			    break;
 			default:
 			    state += count * sizeof(uint32_t);
@@ -1128,9 +1144,10 @@ struct arch *arch)
 #ifndef HACK_TO_MATCH_TEST_CASE
 		if(strcmp(sg64->segname, SEG_TEXT) == 0){
 		    strcpy(scnhdrs[j].s_name, ".text");
-		    scnhdrs[j].s_vsize = sg64->vmsize;
-		    scnhdrs[j].s_vaddr = sg64->vmaddr;
-		    scnhdrs[j].s_size = rnd(sg64->filesize, file_alignment);
+		    scnhdrs[j].s_vsize = (uint32_t)sg64->vmsize;
+		    scnhdrs[j].s_vaddr = (uint32_t)sg64->vmaddr;
+		    scnhdrs[j].s_size = (uint32_t)rnd64(sg64->filesize,
+							file_alignment);
 		    scnhdrs[j].s_relptr = 0;
 		    scnhdrs[j].s_lnnoptr = 0;
 		    scnhdrs[j].s_nlnno = 0;
@@ -1142,9 +1159,10 @@ struct arch *arch)
 		}
 		else if(strcmp(sg64->segname, SEG_DATA) == 0){
 		    strcpy(scnhdrs[j].s_name, ".data");
-		    scnhdrs[j].s_vsize = sg64->vmsize;
-		    scnhdrs[j].s_vaddr = sg64->vmaddr;
-		    scnhdrs[j].s_size = rnd(sg64->filesize, file_alignment);
+		    scnhdrs[j].s_vsize = (uint32_t)sg64->vmsize;
+		    scnhdrs[j].s_vaddr = (uint32_t)sg64->vmaddr;
+		    scnhdrs[j].s_size = (uint32_t)rnd64(sg64->filesize,
+							file_alignment);
 		    scnhdrs[j].s_relptr = 0;
 		    scnhdrs[j].s_lnnoptr = 0;
 		    scnhdrs[j].s_nlnno = 0;
@@ -1193,8 +1211,8 @@ struct arch *arch)
 	    strcpy(scnhdrs[j].s_name, ".reloc");
 	    scnhdrs[j].s_vsize = reloc_size;
 	    reloc_addr = rnd(reloc_addr, section_alignment);
-	    scnhdrs[j].s_vaddr = reloc_addr;
-	    scnhdrs[j].s_size = rnd(reloc_size, file_alignment);
+	    scnhdrs[j].s_vaddr = (uint32_t)reloc_addr;
+	    scnhdrs[j].s_size = rnd32(reloc_size, file_alignment);
 	    scnhdrs[j].s_relptr = 0;
 	    scnhdrs[j].s_lnnoptr = 0;
 	    scnhdrs[j].s_nlnno = 0;
@@ -1215,8 +1233,8 @@ struct arch *arch)
 	if(debug_filename != NULL){
 	    strcpy(scnhdrs[j].s_name, ".debug");
 	    scnhdrs[j].s_vsize = debug_size;
-	    scnhdrs[j].s_vaddr = debug_addr;
-	    scnhdrs[j].s_size = rnd(debug_size, file_alignment);
+	    scnhdrs[j].s_vaddr = (uint32_t)debug_addr;
+	    scnhdrs[j].s_size = rnd32(debug_size, file_alignment);
 	    scnhdrs[j].s_relptr = 0;
 	    scnhdrs[j].s_lnnoptr = 0;
 	    scnhdrs[j].s_nlnno = 0;
@@ -1261,7 +1279,7 @@ struct ofile *ofile)
 	    header_size += sizeof(struct aouthdr);
 	else
 	    header_size += sizeof(struct aouthdr_64);
-	header_size = rnd(header_size, file_alignment);
+	header_size = rnd32(header_size, file_alignment);
 #ifdef HACK_TO_MATCH_TEST_CASE
 	/* for some unknown reason the header size is 0x488 not 0x400 */
 	if(ofile->mh64 != NULL)
@@ -1322,7 +1340,7 @@ struct ofile *ofile)
 #ifdef HACK_TO_MATCH_TEST_CASE
 		if(ofile->mh != NULL)
 #endif
-		    offset = rnd(offset, file_alignment);
+		    offset = rnd32(offset, file_alignment);
 #ifdef HACK_TO_MATCH_TEST_CASE
 		else{
 		    /* for some unknown reason the next offset is moved up
@@ -1385,7 +1403,7 @@ struct ofile *ofile)
 	else
 	    filehdr.f_timdat = 0x47671e62;
 #else
-	filehdr.f_timdat = time(NULL);
+	filehdr.f_timdat = (uint32_t)time(NULL);
 #endif
 	filehdr.f_symptr = syment_offset;
 	filehdr.f_nsyms = nsyments;
@@ -1412,9 +1430,9 @@ struct ofile *ofile)
 	    aouthdr.tsize = 0;
 	    aouthdr.dsize = 0;
 	    aouthdr.bsize = 0;
-	    aouthdr.SizeOfImage = rnd(header_size, section_alignment);
+	    aouthdr.SizeOfImage = rnd32(header_size, section_alignment);
 	    for(i = 0; i < nscns; i++){
-	        aouthdr.SizeOfImage += rnd(scnhdrs[i].s_vsize, section_alignment); 
+	        aouthdr.SizeOfImage += rnd32(scnhdrs[i].s_vsize, section_alignment);
 		}
 
 	    aouthdr.entry = entry;
@@ -1479,7 +1497,7 @@ struct ofile *ofile)
 	    aouthdr64.dsize = 0;
 	    aouthdr64.bsize = 0;
 	    
-	    aouthdr64.SizeOfImage = rnd(header_size, section_alignment);
+	    aouthdr64.SizeOfImage = rnd32(header_size, section_alignment);
 	    for(i = 0; i < nscns; i++){
 	        aouthdr64.SizeOfImage += rnd(scnhdrs[i].s_vsize, section_alignment); 
 	    }
@@ -1488,7 +1506,10 @@ struct ofile *ofile)
 	       just a quick hack to match the PECOFF file */
 	    aouthdr64.dsize = 0x200;
 #endif
-
+	    /*
+	     * The aouthdr_64 struct only allows for a
+	     * 32-bit entry point.
+	     */
 	    aouthdr64.entry = entry;
 #ifdef HACK_TO_MATCH_TEST_CASE
             aouthdr64.entry = 0x4a2;
@@ -2032,7 +2053,7 @@ struct arch *arch)
 		if((syms64[i].n_type & N_STAB) == 0 &&
 		    syms64[i].n_un.n_strx != 0 &&
 		    strcmp(strs + syms64[i].n_un.n_strx, entry_point) == 0){
-		    entry = syms64[i].n_value;
+		    entry = (uint32_t)syms64[i].n_value;
 		    break;
 		}
 	    }
@@ -2180,11 +2201,11 @@ struct arch *arch)
 			swap_relocation_info(relocs, s64[j].nreloc,
 					     host_byte_sex);
 		    if(arch->object->mh_cputype == CPU_TYPE_X86_64)
-			gather_base_reloc_info(s64[j].addr, relocs,
+			gather_base_reloc_info((uint32_t)s64[j].addr, relocs,
 			    s64[j].nreloc, CPU_TYPE_X86_64, 3,
 			    X86_64_RELOC_UNSIGNED, IMAGE_REL_BASED_DIR64);
 		    else if(arch->object->mh_cputype == CPU_TYPE_ARM64)
-			gather_base_reloc_info(s64[j].addr, relocs,
+			gather_base_reloc_info((uint32_t)s64[j].addr, relocs,
 			    s64[j].nreloc, CPU_TYPE_ARM64, 3,
 			    ARM64_RELOC_UNSIGNED, IMAGE_REL_BASED_DIR64);
 		    if((s64[j].flags & SECTION_TYPE) ==
@@ -2205,21 +2226,25 @@ struct arch *arch)
 	    if(swapped)
 		swap_relocation_info(relocs, dyst->nlocrel, host_byte_sex);
 	    if(arch->object->mh_cputype == CPU_TYPE_I386)
-		gather_base_reloc_info(first_addr, relocs, dyst->nlocrel,
-		    CPU_TYPE_I386, 2, GENERIC_RELOC_VANILLA,
-		    IMAGE_REL_BASED_HIGHLOW);
+		gather_base_reloc_info((uint32_t)first_addr, relocs,
+				       dyst->nlocrel, CPU_TYPE_I386, 2,
+				       GENERIC_RELOC_VANILLA,
+				       IMAGE_REL_BASED_HIGHLOW);
 	    else if(arch->object->mh_cputype == CPU_TYPE_ARM)
-		gather_base_reloc_info(first_addr, relocs, dyst->nlocrel,
-		    CPU_TYPE_ARM, 2, GENERIC_RELOC_VANILLA,
-		    IMAGE_REL_BASED_HIGHLOW);
+		gather_base_reloc_info((uint32_t)first_addr, relocs,
+				       dyst->nlocrel, CPU_TYPE_ARM, 2,
+				       GENERIC_RELOC_VANILLA,
+				       IMAGE_REL_BASED_HIGHLOW);
 	    else if(arch->object->mh_cputype == CPU_TYPE_X86_64)
-		gather_base_reloc_info(first_addr, relocs, dyst->nlocrel,
-		    CPU_TYPE_X86_64, 3, X86_64_RELOC_UNSIGNED,
-		    IMAGE_REL_BASED_DIR64);
+		gather_base_reloc_info((uint32_t)first_addr, relocs,
+				       dyst->nlocrel, CPU_TYPE_X86_64, 3,
+				       X86_64_RELOC_UNSIGNED,
+				       IMAGE_REL_BASED_DIR64);
 	    else if(arch->object->mh_cputype == CPU_TYPE_ARM64)
-		gather_base_reloc_info(first_addr, relocs, dyst->nlocrel,
-		    CPU_TYPE_ARM64, 3, ARM64_RELOC_UNSIGNED,
-		    IMAGE_REL_BASED_DIR64);
+		gather_base_reloc_info((uint32_t)first_addr, relocs,
+				       dyst->nlocrel, CPU_TYPE_ARM64, 3,
+				       ARM64_RELOC_UNSIGNED,
+				       IMAGE_REL_BASED_DIR64);
 	}
 	/*
 	if(dyst != NULL && dyst->nextrel != 0)
@@ -2383,7 +2408,7 @@ void)
 	b = (struct base_relocation_entry *)
 	    (fb + sizeof(struct base_relocation_block_header));
 	for(i = 0; i < nbase_reloc; i++){
-	    offset = base_relocs[i].addr - base;
+	    offset = (uint32_t)(base_relocs[i].addr - base);
 	    if(offset >= MAX_BLOCK_OFFSET) {
 		/* add padding if needed */
 		if((entries % 2) != 0){
@@ -2391,7 +2416,7 @@ void)
 		    b[entries].offset = 0;
 		    entries++;
 		}
-		h->page_rva = base;
+		h->page_rva = (uint32_t)base;
 		size = sizeof(struct base_relocation_block_header) +
 		       entries * sizeof(struct base_relocation_entry);
 		h->block_size = size;
@@ -2409,7 +2434,7 @@ void)
 		entries = 0;
 		blockcnt++;
 		base = base_relocs[i].addr & ~BLOCK_MASK;
-		offset = base_relocs[i].addr - base;
+		offset = (uint32_t)(base_relocs[i].addr - base);
 	    }
 	    b[entries].type = base_relocs[i].type;
 	    b[entries].offset = offset;
@@ -2422,7 +2447,7 @@ void)
 	    b[entries].offset = 0;
 	    entries++;
 	}
-	h->page_rva = base;
+	h->page_rva = (uint32_t)base;
 	size = sizeof(struct base_relocation_block_header) +
 	       entries * sizeof(struct base_relocation_entry);
 	h->block_size = size;
@@ -2440,7 +2465,7 @@ void)
 	 * The make the relocs buffer the s_size rounded to file_alignment and
 	 * zero out the padding
          */
-	s_size = rnd(reloc_size, file_alignment);
+	s_size = rnd32(reloc_size, file_alignment);
 	pad = s_size - reloc_size;
 	reloc_contents = reallocate(reloc_contents, s_size);
 	memset(reloc_contents + reloc_size, '\0', pad);
@@ -2485,12 +2510,12 @@ struct arch *arch)
 	 */
 	debug_size = sizeof(struct debug_directory_entry) +
 		     sizeof(struct mtoc_debug_info) +
-		     strlen(debug_filename) + 1;
+		     (uint32_t)strlen(debug_filename) + 1;
 	/*
 	 * The make the debug buffer the s_size rounded to the file_alignment
          * and also zero out the padding
          */
-	s_size = rnd(debug_size, file_alignment);
+	s_size = rnd32(debug_size, file_alignment);
 	debug_contents = allocate(s_size);
 	memset(debug_contents, '\0', s_size);
 	/*
@@ -2503,12 +2528,12 @@ struct arch *arch)
 	p += sizeof(struct mtoc_debug_info);
 
 	dde->Characteristics = 0;
-	dde->TimeDateStamp = time(NULL);
+	dde->TimeDateStamp = (uint32_t)time(NULL);
 	dde->MajorVersion = 0;
 	dde->MinorVersion = 0;
 	dde->Type = IMAGE_DEBUG_TYPE_CODEVIEW;
 	dde->SizeOfData = sizeof(struct mtoc_debug_info) +
-			  strlen(debug_filename) + 1;
+			  (uint32_t)strlen(debug_filename) + 1;
 	/*
 	 * These two will be filled in later when address and offsets
 	 * are known.

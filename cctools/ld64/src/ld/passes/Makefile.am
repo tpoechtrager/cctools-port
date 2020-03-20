@@ -41,5 +41,6 @@ libPasses_la_SOURCES =  \
 	stubs/stubs.cpp \
 	bitcode_bundle.cpp \
 	code_dedup.cpp \
-	thread_starts.cpp
+	thread_starts.cpp \
+        inits.cpp
 

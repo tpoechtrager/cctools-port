@@ -16,8 +16,7 @@
 #include "arm64_disasm.h"
 #include "cxa_demangle.h"
 
-static /* cctools-port */
-struct disassemble_info {
+static struct disassemble_info {
   /* otool(1) specific stuff */
   enum bool verbose;
   /* Relocation information.  */
@@ -54,12 +53,12 @@ struct disassemble_info {
   uint64_t adrp_addr;
   uint32_t adrp_inst;
   char *object_addr;
-  uint32_t object_size;
+  uint64_t object_size;
   const char *class_name;
   const char *selector_name;
   char *method;
   char *demangled_name;
-  enum bool ThreadedRebaseBind;
+  enum chain_format_t chain_format;
 } dis_info;
 
 /*
@@ -170,7 +169,7 @@ void *TagBuf)
 	    return(0);
 
 	/* First look in the section relocations if any. */
-	sect_offset = Pc - dis_info->sect_addr;
+	sect_offset = (uint32_t)(Pc - dis_info->sect_addr);
 	for(i = 0; i < dis_info->nrelocs; i++){
 	    if(dis_info->relocs[i].r_address == sect_offset){
 		if(dis_info->relocs[i].r_type == ARM64_RELOC_ADDEND){
@@ -505,7 +504,7 @@ struct disassemble_info *info)
 	     * will be set by dyld as part of the "bind information".
 	     */
 	    name = get_dyld_bind_info_symbolname(value, info->dbi, info->ndbi,
-						 info->ThreadedRebaseBind,
+						 info->chain_format,
 						 NULL);
 	    if(name != NULL){
 		*reference_type =
@@ -723,7 +722,7 @@ const char **ReferenceName)
 	 * we see and add immediate instruction.
 	 */
 	else if(*ReferenceType == LLVMDisassembler_ReferenceType_In_ARM64_ADRP){
-	    info->adrp_inst = SymbolValue;
+	    info->adrp_inst = (uint32_t)SymbolValue;
 	    info->adrp_addr = ReferencePC;
 	    symbol_name = NULL;
 	    *ReferenceName = NULL;
@@ -741,7 +740,7 @@ const char **ReferenceName)
 		ReferencePC - 4 == info->adrp_addr &&
 		(info->adrp_inst & 0x9f000000) == 0x90000000 &&
 		(info->adrp_inst & 0x1f) == ((SymbolValue >> 5) & 0x1f) ){
-	    uint32_t addxri_inst;
+	    uint64_t addxri_inst;
 	    uint64_t adrp_imm, addxri_imm;
 
 	    adrp_imm = ((info->adrp_inst & 0x00ffffe0) >> 3) |
@@ -774,7 +773,7 @@ const char **ReferenceName)
 		ReferencePC - 4 == info->adrp_addr &&
 		(info->adrp_inst & 0x9f000000) == 0x90000000 &&
 		(info->adrp_inst & 0x1f) == ((SymbolValue >> 5) & 0x1f) ){
-	    uint32_t ldrxui_inst;
+	    uint64_t ldrxui_inst;
 	    uint64_t adrp_imm, ldrxui_imm;
 
 	    adrp_imm = ((info->adrp_inst & 0x00ffffe0) >> 3) |
@@ -879,7 +878,7 @@ struct relocation_info *loc_relocs,
 uint32_t nloc_relocs,
 struct dyld_bind_info *dbi,
 uint64_t ndbi,
-enum bool ThreadedRebaseBind,
+enum chain_format_t chain_format,
 struct nlist *symbols,
 struct nlist_64 *symbols64,
 uint32_t nsymbols,
@@ -894,7 +893,7 @@ struct load_command *load_commands,
 uint32_t ncmds,
 uint32_t sizeofcmds,
 char *object_addr,
-uint32_t object_size,
+uint64_t object_size,
 enum bool verbose,
 LLVMDisasmContextRef dc)
 {
@@ -906,7 +905,7 @@ LLVMDisasmContextRef dc)
 
 	host_byte_sex = get_host_byte_sex();
 	swapped = host_byte_sex != object_byte_sex;
-	sect_offset = addr - sect_addr;
+	sect_offset = (uint32_t)(addr - sect_addr);
 
 	if(left < sizeof(uint32_t)){
 	   if(left != 0){
@@ -953,11 +952,11 @@ LLVMDisasmContextRef dc)
 	dis_info.object_size = object_size;
 	dis_info.sect = sect;
 	dis_info.left = left;
-	dis_info.addr = addr;
+	dis_info.addr = (uint32_t)addr;
 	dis_info.sect_addr = sect_addr;
 	dis_info.method = NULL;
 	dis_info.demangled_name = NULL;
-	dis_info.ThreadedRebaseBind = ThreadedRebaseBind;
+	dis_info.chain_format = chain_format;
 
 	dst[4095] = '\0';
 	if(llvm_disasm_instruction(dc, (uint8_t *)sect, 4, addr, dst, 4095) != 0)

@@ -36,6 +36,7 @@
 #include <mach-o/loader.h>
 #include <mach-o/getsect.h>
 #include <mach-o/dyld_priv.h>
+#include <Availability.h>
 
 #if defined(__arm__) || defined(__arm64__) // ld64-port
 #undef THREAD_STATE_NONE
@@ -43,9 +44,6 @@
 #undef MACHINE_THREAD_STATE
 #undef MACHINE_THREAD_STATE_COUNT
 #endif
-
-#include <mach/i386/thread_status.h>
-#include <Availability.h>
 
 #include "FileAbstraction.hpp"
 #include "libunwind.h"

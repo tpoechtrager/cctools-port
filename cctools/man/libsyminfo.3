@@ -136,13 +136,13 @@
 .\" ======================================================================
 .\"
 .IX Title "libsyminfo 3"
-.TH libsyminfo 3 
+.TH libsyminfo 3
 .UC
 .SH "NAME"
 libsyminfo \- Library for accessing symbol information
 .SH "DESCRIPTION"
 .IX Header "DESCRIPTION"
-Typically access to symbol information from a mach-o is done via the command line tool nm.  This data can be examined and processed to determine what a binary exports or imports.  With the advent of Symdex(A symbol index used by Mac OS X Build & Integration), there was desire to avoid constant invocations to a command line tool.  libsyminfo gives a object oriented approach written in C to allow clients to extract import and export information from a mach-o binary.   
+Typically access to symbol information from a mach-o is done via the command line tool nm.  This data can be examined and processed to determine what a binary exports or imports.  With the advent of Symdex(A symbol index used by Mac OS X Build & Integration), there was desire to avoid constant invocations to a command line tool.  libsyminfo gives a object oriented approach written in C to allow clients to extract import and export information from a mach-o binary.
 
 .SH "API"
 .IX Header "API"
@@ -222,8 +222,8 @@ Function used to create NMSymbols.
 
 .B NMDependencies NMCreateDependencies(char **subUmbrellas, char **subFrameworks, int nSubUmbrellas,int nSubFrameworks)
 
-Function used to create NMDependencies.  
+Function used to create NMDependencies.
 
-.SH "SEE ALSO"  
+.SH "SEE ALSO"
 .IX Header "SEE ALSO"
 nm(1)

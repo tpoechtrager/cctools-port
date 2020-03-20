@@ -1365,7 +1365,7 @@ expressionS *expressionP) /* Deliver result here. */
 			while(!fail && frag != NULL &&
 			      frag != add_symbol->sy_frag){
 			    if(frag->fr_type == rs_align)
-				size = rnd(size + frag->fr_fix,
+				size = rnd32(size + frag->fr_fix,
 					     1 << frag->fr_offset);
 			    else if(frag->fr_type == rs_fill)
 				size += frag->fr_fix +

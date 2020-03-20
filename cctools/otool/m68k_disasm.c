@@ -2239,6 +2239,7 @@ enum bool swapped)
 	length = 0;
 	bd_addr = 0;
 	od_addr = 0;
+	od = bd = 0;
 	switch(mode){
 	case 0:
 	    printf("%s", dregs[reg]);

@@ -333,7 +333,7 @@ static void get_objc_sections(
     uint32_t sizeofcmds,
     enum byte_sex object_byte_sex,
     char *object_addr,
-    uint32_t object_size,
+    uint64_t object_size,
     struct section_info **objc_sections,
     uint32_t *nobjc_sections,
     char *sectname,
@@ -347,7 +347,7 @@ static void get_cstring_section(
     uint32_t sizeofcmds,
     enum byte_sex object_byte_sex,
     char *object_addr,
-    uint32_t object_size,
+    uint64_t object_size,
     struct section_info *cstring_section_ptr);
 
 static enum bool print_method_list(
@@ -513,7 +513,7 @@ uint32_t ncmds,
 uint32_t sizeofcmds,
 enum byte_sex object_byte_sex,
 char *object_addr,
-uint32_t object_size,
+uint64_t object_size,
 struct symbol *sorted_symbols,
 uint32_t nsorted_symbols,
 enum bool verbose)
@@ -566,7 +566,7 @@ enum bool verbose)
 	    m = (struct objc_module_t *)((char *)m + module.size) ){
 
 	    memset(&module, '\0', sizeof(struct objc_module_t));
-	    left = modules_size - (m - modules); 
+	    left = (uint32_t)(modules_size - (m - modules));
 	    size = left < sizeof(struct objc_module_t) ?
 		   left : sizeof(struct objc_module_t);
 	    memcpy(&module, m, size);
@@ -899,7 +899,7 @@ uint32_t ncmds,
 uint32_t sizeofcmds,
 enum byte_sex object_byte_sex,
 char *object_addr,
-uint32_t object_size,
+uint64_t object_size,
 enum bool verbose)
 {
     enum byte_sex host_byte_sex;
@@ -926,7 +926,7 @@ enum bool verbose)
 	for(p = protocols; (char *)p < (char *)protocols + protocols_size; p++){
 
 	    memset(&protocol, '\0', sizeof(struct objc_protocol_t));
-	    left = protocols_size - (p - protocols); 
+	    left = (uint32_t)(protocols_size - (p - protocols));
 	    size = left < sizeof(struct objc_protocol_t) ?
 		   left : sizeof(struct objc_protocol_t);
 	    memcpy(&protocol, p, size);
@@ -951,7 +951,7 @@ uint32_t ncmds,
 uint32_t sizeofcmds,
 enum byte_sex object_byte_sex,
 char *object_addr,
-uint32_t object_size,
+uint64_t object_size,
 enum bool verbose)
 {
     enum byte_sex host_byte_sex;
@@ -981,7 +981,7 @@ enum bool verbose)
 	    s++){
 
 	    memset(&string_object, '\0', sizeof(struct objc_string_object_t));
-	    left = string_objects_size - (s - string_objects); 
+	    left = (uint32_t)(string_objects_size - (s - string_objects));
 	    size = left < sizeof(struct objc_string_object_t) ?
 		   left : sizeof(struct objc_string_object_t);
 	    memcpy(&string_object, s, size);
@@ -1023,7 +1023,7 @@ uint32_t ncmds,
 uint32_t sizeofcmds,
 enum byte_sex object_byte_sex,
 char *object_addr,
-uint32_t object_size,
+uint64_t object_size,
 enum bool verbose)
 {
 
@@ -1110,7 +1110,7 @@ uint32_t ncmds,
 uint32_t sizeofcmds,
 enum byte_sex object_byte_sex,
 char *object_addr,
-uint32_t object_size,
+uint64_t object_size,
 struct section_info **objc_sections,
 uint32_t *nobjc_sections,
 char *sectname,
@@ -1152,7 +1152,7 @@ uint32_t *sect_size)
 	       (char *)load_commands + sizeofcmds)
 		printf("load command %u extends past end of load "
 		       "commands\n", i);
-	    left = sizeofcmds - ((char *)lc - (char *)load_commands);
+	    left = (uint32_t)(sizeofcmds - ((char *)lc-(char *)load_commands));
 
 	    switch(lcmd.cmd){
 	    case LC_SEGMENT:
@@ -1170,7 +1170,7 @@ uint32_t *sect_size)
 			printf("section structure command extends past "
 			       "end of load commands\n");
 		    }
-		    left = sizeofcmds - (p - (char *)load_commands);
+		    left = (uint32_t)(sizeofcmds - (p - (char *)load_commands));
 		    memset((char *)&s, '\0', sizeof(struct section));
 		    size = left < sizeof(struct section) ?
 			   left : sizeof(struct section);
@@ -1197,7 +1197,7 @@ uint32_t *sect_size)
 				   "is past end of file\n",
 				   s.segname, s.sectname);
 			    (*objc_sections)[*nobjc_sections].size =
-				object_size - s.offset;
+				(uint32_t)(object_size - s.offset);
 			}
 			else
 			    (*objc_sections)[*nobjc_sections].size = s.size;
@@ -1304,7 +1304,7 @@ uint32_t ncmds,
 uint32_t sizeofcmds,
 enum byte_sex object_byte_sex,
 char *object_addr,
-uint32_t object_size,
+uint64_t object_size,
 struct section_info *cstring_section)
 {
     enum byte_sex host_byte_sex;
@@ -1333,7 +1333,7 @@ struct section_info *cstring_section)
 	       (char *)load_commands + sizeofcmds)
 		printf("load command %u extends past end of load "
 		       "commands\n", i);
-	    left = sizeofcmds - ((char *)lc - (char *)load_commands);
+	    left = (uint32_t)(sizeofcmds - ((char *)lc-(char *)load_commands));
 
 	    switch(lcmd.cmd){
 	    case LC_SEGMENT:
@@ -1351,7 +1351,7 @@ struct section_info *cstring_section)
 			printf("section structure command extends past "
 			       "end of load commands\n");
 		    }
-		    left = sizeofcmds - (p - (char *)load_commands);
+		    left = (uint32_t)(sizeofcmds - (p - (char *)load_commands));
 		    memset((char *)&s, '\0', sizeof(struct section));
 		    size = left < sizeof(struct section) ?
 			   left : sizeof(struct section);
@@ -1372,7 +1372,8 @@ struct section_info *cstring_section)
 			    printf("part of section contents of: (%.16s,%.16s) "
 				   "is past end of file\n",
 				   s.segname, s.sectname);
-			    cstring_section->size = object_size - s.offset;
+			    cstring_section->size =
+				(uint32_t)(object_size - s.offset);
 			}
 			else
 			    cstring_section->size = s.size;

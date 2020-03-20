@@ -123,7 +123,8 @@ am_libstuff_la_OBJECTS = libstuff_la-allocate.lo \
 	libstuff_la-symbol_list.lo libstuff_la-SymLoc.lo \
 	libstuff_la-unix_standard_mode.lo \
 	libstuff_la-version_number.lo libstuff_la-writeout.lo \
-	libstuff_la-write64.lo libstuff_la-coff_bytesex.lo
+	libstuff_la-write64.lo libstuff_la-coff_bytesex.lo \
+	libstuff_la-args.lo
 libstuff_la_OBJECTS = $(am_libstuff_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -276,6 +277,7 @@ PATH_SEPARATOR = @PATH_SEPARATOR@
 PROGRAM_PREFIX = @PROGRAM_PREFIX@
 PTHREAD_FLAGS = @PTHREAD_FLAGS@
 RANLIB = @RANLIB@
+REALLOCF_LIB = @REALLOCF_LIB@
 SED = @SED@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
@@ -385,7 +387,8 @@ libstuff_la_SOURCES = \
 	version_number.c  \
 	writeout.c \
 	write64.c \
-	coff_bytesex.c
+	coff_bytesex.c \
+	args.c
 
 all: all-am
 
@@ -569,6 +572,9 @@ libstuff_la-write64.lo: write64.c
 
 libstuff_la-coff_bytesex.lo: coff_bytesex.c
 	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libstuff_la_CFLAGS) $(CFLAGS) -c -o libstuff_la-coff_bytesex.lo `test -f 'coff_bytesex.c' || echo '$(srcdir)/'`coff_bytesex.c
+
+libstuff_la-args.lo: args.c
+	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libstuff_la_CFLAGS) $(CFLAGS) -c -o libstuff_la-args.lo `test -f 'args.c' || echo '$(srcdir)/'`args.c
 
 mostlyclean-libtool:
 	-rm -f *.lo

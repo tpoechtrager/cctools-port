@@ -12,7 +12,7 @@ operation with out problems
 exits with zero status.  Else it exits with a non-zero status and prints an
 error message about the problem.
 .PP
-The Apple Build and Integration team uses the segment address table in 
+The Apple Build and Integration team uses the segment address table in
 /AppleInternal/Developer/seg_addr_table to set the preferred addresses of
 dynamic libraries.  See the
 .IR ld (1)
@@ -67,14 +67,14 @@ assignment is based on the special entries in the table for the next addresses
 to assign.
 .TP
 .B \-update_overlaps
-Detects overlaps in the table and reassigns the lower of the two addresses.  The address 
+Detects overlaps in the table and reassigns the lower of the two addresses.  The address
 assignment is based on the special entries in the table for the next addresses
 to assign.  This action is similar to detecting overlaps with -checkonly, setting
-the overlapping library to 0x00000000 and running with -update. 
+the overlapping library to 0x00000000 and running with -update.
 .TP
 .B \-relayout_nonsplit
 Similar to relayout except it only causes all the non split libraries to
-re-laied out and all non-split dynamic libraries to be assigned addresses.  The 
+re-laied out and all non-split dynamic libraries to be assigned addresses.  The
 addresses are assigned in order specified and the space given to each is based
 on the libraries virtual address sizes.
 .TP
@@ -171,7 +171,7 @@ Specifies the architecture,
 .I arch_type,
 in the files to use for the sizes.  More than one
 .BI \-arch " arch_type"
-can be specified.  The default is 
+can be specified.  The default is
 .BI \-arch " all"
 which uses all architectures in the file.  See
 .IR arch (3)

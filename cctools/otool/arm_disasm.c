@@ -64,8 +64,7 @@ typedef char bfd_byte;
 
 /* HACKS to avoid pulling in all of FSF binutils include/dis-asm.h */
 typedef int (*fprintf_ftype) (void *, const char*, ...);
-static /* cctools-port */
-struct disassemble_info { /* HACK'ed up for just what we need here */
+static struct disassemble_info { /* HACK'ed up for just what we need here */
   fprintf_ftype fprintf_func;
   void *stream;
 
@@ -156,7 +155,7 @@ struct disassemble_info { /* HACK'ed up for just what we need here */
   LLVMDisasmContextRef arm_dc;
   LLVMDisasmContextRef thumb_dc;
   char *object_addr;
-  uint32_t object_size;
+  uint64_t object_size;
   struct inst *inst;
   struct inst *insts;
   uint32_t ninsts;
@@ -191,8 +190,8 @@ void *TagBuf)
 {
     struct disassemble_info *info;
     struct LLVMOpInfo1 *op_info;
-    unsigned int value;
-    int32_t low, high, mid, reloc_found, offset;
+    uint64_t value, offset;
+    int32_t low, high, mid, reloc_found;
     uint32_t sect_offset, i, r_address, r_symbolnum, r_type, r_extern, r_length,
 	     r_value, r_scattered, pair_r_type, pair_r_value;
     uint32_t other_half;
@@ -214,7 +213,7 @@ void *TagBuf)
 	   info->verbose == FALSE)
 	    return(0);
 
-	sect_offset = Pc - info->sect_addr;
+	sect_offset = (uint32_t)(Pc - info->sect_addr);
 	relocs = info->relocs;
 	nrelocs = info->nrelocs;
 	symbols = info->symbols;
@@ -458,7 +457,7 @@ const uint32_t sizeofcmds,
 const struct load_command *load_commands,
 const enum byte_sex load_commands_byte_sex,
 const char *object_addr,
-const uint32_t object_size)
+const uint64_t object_size)
 {
     enum byte_sex host_byte_sex;
     enum bool swapped;
@@ -674,7 +673,7 @@ struct disassemble_info *info)
 	sect_addr = info->sect_addr;
 	object_byte_sex = info->object_byte_sex;
 	object_addr = info->object_addr;
-	object_size = info->object_size;
+	object_size = (uint32_t)info->object_size;
 
 	host_byte_sex = get_host_byte_sex();
 	swapped = host_byte_sex != object_byte_sex;
@@ -850,7 +849,8 @@ const char **ReferenceName)
 	    }
 	}
 	else if(*ReferenceType == LLVMDisassembler_ReferenceType_In_PCrel_Load){
-	    *ReferenceName = guess_literal_pointer(SymbolValue, ReferencePC,
+	    *ReferenceName = guess_literal_pointer((uint32_t)SymbolValue,
+						   (uint32_t)ReferencePC,
 						   ReferenceType, info);
 	    if(*ReferenceName == NULL)
 		*ReferenceType = LLVMDisassembler_ReferenceType_InOut_None;
@@ -4886,7 +4886,7 @@ print_insn (bfd_vma pc, struct disassemble_info *info, bfd_boolean little)
   unsigned int	size = 4;
   void	 	(*printer) (bfd_vma, struct disassemble_info *, int32_t);
   char		*llvm_arch_name;
-  LLVMDisasmContextRef dc;
+  LLVMDisasmContextRef dc = NULL;
 
 #ifdef NOTDEF
   bfd_boolean   found = FALSE;
@@ -5794,7 +5794,7 @@ enum bool verbose,
 LLVMDisasmContextRef arm_dc,
 LLVMDisasmContextRef thumb_dc,
 char *object_addr,
-uint32_t object_size,
+uint64_t object_size,
 struct data_in_code_entry *dices,
 uint32_t ndices,
 uint64_t seg_addr,
@@ -5875,7 +5875,7 @@ uint32_t ninsts)
             /* Note: in final linked images, offset is from the base address */
             /* Note: in object files, offset is from first section address */
             if(nrelocs == 0) /* TODO better test for final linked image */
-                offset = addr - seg_addr; 
+                offset = (uint32_t)(addr - seg_addr); 
             else
                 offset = addr - sect_addr; 
             for(i = 0; i < ndices; i++){

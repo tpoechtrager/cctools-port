@@ -17,12 +17,13 @@
 #include "stuff/errors.h"
 #include "stuff/execute.h"
 #include "stuff/allocate.h"
+#include "stuff/port.h" /* cctools-port: find_clang() */
 #include <mach-o/dyld.h>
 
 /* used by error calls (exported) */
 char *progname = NULL;
 
-char *find_clang(); /* cctools-port */
+
 
 int
 main(

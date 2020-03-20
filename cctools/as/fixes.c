@@ -133,7 +133,7 @@ fix_new_exp (fragS *frag,		/* Which frag?  */
 {
   symbolS *add = NULL;
   symbolS *sub = NULL;
-  offsetT off = 0;
+  signed_target_addr_t off = 0;
 
   switch (exp->X_op)
     {
@@ -187,7 +187,7 @@ fix_new_exp (fragS *frag,		/* Which frag?  */
       add = exp->X_add_symbol;
       /* Fall through.  */
     case O_constant:
-      off = exp->X_add_number;
+      off = (signed_target_addr_t)exp->X_add_number;
       break;
 
     default:

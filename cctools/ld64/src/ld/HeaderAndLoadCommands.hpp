@@ -112,14 +112,16 @@ private:
 	uint8_t*					copySingleSegmentLoadCommand(uint8_t* p) const;
 	uint8_t*					copySegmentLoadCommands(uint8_t* p, uint8_t* base) const;
 	uint8_t*					copyDyldInfoLoadCommand(uint8_t* p) const;
+	uint8_t*					copyExportsTrieLoadCommand(uint8_t* p) const;
+	uint8_t*					copyChainedFixupsLoadCommand(uint8_t* p) const;
 	uint8_t*					copySymbolTableLoadCommand(uint8_t* p, uint8_t* base) const;
 	uint8_t*					copyDynamicSymbolTableLoadCommand(uint8_t* p) const;
 	uint8_t*					copyDyldLoadCommand(uint8_t* p) const;
 	uint8_t*					copyDylibIDLoadCommand(uint8_t* p) const;
 	uint8_t*					copyRoutinesLoadCommand(uint8_t* p) const;
 	uint8_t*					copyUUIDLoadCommand(uint8_t* p) const;
-	uint8_t*					copyVersionLoadCommand(uint8_t* p, const ld::Platform& platform, uint32_t minVersion, uint32_t sdkVersion) const;
-	uint8_t*					copyBuildVersionLoadCommand(uint8_t* p, const ld::Platform& platform, uint32_t minVersion, uint32_t sdkVersion) const;
+	uint8_t*					copyVersionLoadCommand(uint8_t* p, ld::Platform platform, uint32_t minVersion, uint32_t sdkVersion) const;
+	uint8_t*					copyBuildVersionLoadCommand(uint8_t* p, ld::Platform platform, uint32_t minVersion, uint32_t sdkVersion) const;
 	uint8_t*					copySourceVersionLoadCommand(uint8_t* p) const;
 	uint8_t*					copyThreadsLoadCommand(uint8_t* p) const;
 	uint8_t*					copyEntryPointLoadCommand(uint8_t* p) const;
@@ -163,6 +165,8 @@ private:
 	bool						_hasDataInCodeLoadCommand;
 	bool						_hasSourceVersionLoadCommand;
 	bool						_hasOptimizationHints;
+	bool						_hasExportsTrieLoadCommand;
+	bool						_hasChainedFixupsLoadCommand;
 	bool						_simulatorSupportDylib;
 	ld::VersionSet			 	_platforms;
 	uint32_t					_dylibLoadCommmandsCount;
@@ -205,10 +209,13 @@ HeaderAndLoadCommandsAtom<A>::HeaderAndLoadCommandsAtom(const Options& opts, ld:
 	_hasEntryPointLoadCommand = _options.needsEntryPointLoadCommand();
 	_hasEncryptionLoadCommand = opts.makeEncryptable();
 	_hasSplitSegInfoLoadCommand = opts.sharedRegionEligible();
-	_hasRoutinesLoadCommand = (opts.initFunctionName() != NULL);
+	_hasRoutinesLoadCommand = (opts.initFunctionName() != NULL) && (state.entryPoint != NULL);
 	_hasSymbolTableLoadCommand = true;
 	_hasUUIDLoadCommand = (opts.UUIDMode() != Options::kUUIDNone);
 	_hasOptimizationHints = (_state.someObjectHasOptimizationHints && (opts.outputKind() == Options::kObjectFile));
+	_hasExportsTrieLoadCommand = opts.makeChainedFixups() && opts.dyldLoadsOutput();
+	_hasChainedFixupsLoadCommand = opts.makeChainedFixups() && opts.dyldLoadsOutput();
+
 	switch ( opts.outputKind() ) {
 		case Options::kDynamicExecutable:
 		case Options::kDynamicLibrary:
@@ -252,8 +259,6 @@ HeaderAndLoadCommandsAtom<A>::HeaderAndLoadCommandsAtom(const Options& opts, ld:
 	_hasRPathLoadCommands = (_options.rpaths().size() != 0);
 	_hasSubFrameworkLoadCommand = (_options.umbrellaName() != NULL);
 	_platforms = _options.platforms();
-	if ( _platforms.empty() && (!_state.derivedPlatforms.empty()) )
-		_platforms = _state.derivedPlatforms;
 	_hasVersionLoadCommand = _options.addVersionLoadCommand();
 	// in ld -r mode, only if all input .o files have load command, then add one to output
 	if ( !_hasVersionLoadCommand && (_options.outputKind() == Options::kObjectFile) && !state.objectFileFoundWithNoVersion )
@@ -413,7 +418,13 @@ uint64_t HeaderAndLoadCommandsAtom<A>::size() const
 		
 	if ( _hasDyldInfoLoadCommand )
 		sz += sizeof(macho_dyld_info_command<P>);
-	
+
+	if ( _hasChainedFixupsLoadCommand )
+		sz += sizeof(linkedit_data_command);
+
+	if ( _hasExportsTrieLoadCommand )
+		sz += sizeof(linkedit_data_command);
+
 	if ( _hasSymbolTableLoadCommand )
 		sz += sizeof(macho_symtab_command<P>);
 		
@@ -431,8 +442,8 @@ uint64_t HeaderAndLoadCommandsAtom<A>::size() const
 
 	if ( _hasVersionLoadCommand ) {
 		if ( _hasVersionLoadCommand ) {
-			_options.platforms().forEach(^(ld::Platform platform, uint32_t version, bool &stop) {
-				if (_options.shouldUseBuildVersion(platform, version)) {
+			_options.platforms().forEach(^(ld::Platform platform, uint32_t minVersion, uint32_t sdkVersion, bool &stop) {
+				if (_options.shouldUseBuildVersion(platform, minVersion)) {
 					sz += alignedSize(sizeof(macho_build_version_command<P>) + sizeof(macho_build_tool_version<P>)*_toolsVersions.size());
 				} else {
 					sz += sizeof(macho_version_min_command<P>);
@@ -526,6 +537,12 @@ uint32_t HeaderAndLoadCommandsAtom<A>::commandsCount() const
 	if ( _hasDyldInfoLoadCommand )
 		++count;
 	
+	if ( _hasChainedFixupsLoadCommand )
+		++count;
+
+	if ( _hasExportsTrieLoadCommand )
+		++count;
+
 	if ( _hasSymbolTableLoadCommand )
 		++count;
 		
@@ -769,13 +786,16 @@ struct SegInfo {
 	uint32_t									nonSectCreateSections;
 	uint32_t									maxProt;
 	uint32_t									initProt;
+	uint32_t									flags;
 	std::vector<ld::Internal::FinalSection*>	sections;
 };
 
 
 SegInfo::SegInfo(const char* n, const Options& opts) 
-	: segName(n), nonHiddenSectionCount(0), nonSectCreateSections(0), maxProt(opts.maxSegProtection(n)), initProt(opts.initialSegProtection(n))
-{ 
+	: segName(n), nonHiddenSectionCount(0), nonSectCreateSections(0), maxProt(opts.maxSegProtection(n)), initProt(opts.initialSegProtection(n)), flags(0)
+{
+	if ( opts.readOnlyDataSegment(n) )
+		flags = SG_READ_ONLY;
 }
 
 
@@ -855,6 +875,7 @@ uint32_t HeaderAndLoadCommandsAtom<A>::sectionFlags(ld::Internal::FinalSection* 
 		case ld::Section::typeUnwindInfo:
 			return S_REGULAR;
 		case ld::Section::typeThreadStarts:
+		case ld::Section::typeChainStarts:
 			return S_REGULAR;
 		case ld::Section::typeObjCClassRefs:
 		case ld::Section::typeObjC2CategoryList:
@@ -922,6 +943,8 @@ uint32_t HeaderAndLoadCommandsAtom<A>::sectionFlags(ld::Internal::FinalSection* 
 			return S_REGULAR | S_ATTR_DEBUG;
 		case ld::Section::typeSectCreate:
 			return S_REGULAR;
+		case ld::Section::typeInitOffsets:
+			return S_INIT_FUNC_OFFSETS;
 	}
 	return S_REGULAR;
 }
@@ -1005,7 +1028,7 @@ uint8_t* HeaderAndLoadCommandsAtom<A>::copySegmentLoadCommands(uint8_t* p, uint8
 		segCmd->set_maxprot(si.maxProt);
 		segCmd->set_initprot(si.initProt);
 		segCmd->set_nsects(si.nonHiddenSectionCount);
-		segCmd->set_flags(si.nonSectCreateSections ? 0 : SG_NORELOC); // FIXME, really should check all References
+		segCmd->set_flags(si.flags | (si.nonSectCreateSections ? 0 : SG_NORELOC)); // FIXME, really should check all References
 		if ( strcmp(segCmd->segname(), "__LINKEDIT") == 0 )
 			_linkeditCmdOffset = p - base;
 		p += sizeof(macho_segment_command<P>);
@@ -1121,6 +1144,34 @@ uint8_t* HeaderAndLoadCommandsAtom<A>::copyDyldInfoLoadCommand(uint8_t* p) const
 	return p + sizeof(macho_dyld_info_command<P>);
 }
 
+template <typename A>
+uint8_t* HeaderAndLoadCommandsAtom<A>::copyExportsTrieLoadCommand(uint8_t* p) const
+{
+	// build LC_DYLD_EXPORTS_TRIE command
+	linkedit_data_command*  cmd = (linkedit_data_command*)p;
+
+	cmd->cmd 		= LC_DYLD_EXPORTS_TRIE;
+	cmd->cmdsize	= sizeof(linkedit_data_command);
+	cmd->dataoff 	= _writer.exportSection->fileOffset;
+	cmd->datasize   = _writer.exportSection->size;
+
+	return p + sizeof(linkedit_data_command);
+}
+
+template <typename A>
+uint8_t* HeaderAndLoadCommandsAtom<A>::copyChainedFixupsLoadCommand(uint8_t* p) const
+{
+	// build LC_DYLD_CHAINED_FIXUPS command
+	linkedit_data_command*  cmd = (linkedit_data_command*)p;
+
+	cmd->cmd 		= LC_DYLD_CHAINED_FIXUPS;
+	cmd->cmdsize	= sizeof(linkedit_data_command);
+	cmd->dataoff 	= _writer.chainInfoSection->fileOffset;
+	cmd->datasize   = _writer.chainInfoSection->size;
+
+	return p + sizeof(linkedit_data_command);
+}
+
 
 template <typename A>
 uint8_t* HeaderAndLoadCommandsAtom<A>::copyDyldLoadCommand(uint8_t* p) const
@@ -1188,60 +1239,32 @@ uint8_t* HeaderAndLoadCommandsAtom<A>::copyUUIDLoadCommand(uint8_t* p) const
 
 
 template <typename A>
-uint8_t* HeaderAndLoadCommandsAtom<A>::copyVersionLoadCommand(uint8_t* p, const ld::Platform& platform, uint32_t minVersion, uint32_t sdkVersion) const
+uint8_t* HeaderAndLoadCommandsAtom<A>::copyVersionLoadCommand(uint8_t* p, ld::Platform platform, uint32_t minVersion, uint32_t sdkVersion) const
 {
 	macho_version_min_command<P>* cmd = (macho_version_min_command<P>*)p;
-	switch (platform) {
-		case ld::kPlatform_macOS:
-			cmd->set_cmd(LC_VERSION_MIN_MACOSX);
-			cmd->set_cmdsize(sizeof(macho_version_min_command<P>));
-			cmd->set_version(minVersion);
-			cmd->set_sdk(sdkVersion);
-			break;
-		case ld::kPlatform_iOS:
-		case ld::kPlatform_iOSSimulator:
-			cmd->set_cmd(LC_VERSION_MIN_IPHONEOS);
-			cmd->set_cmdsize(sizeof(macho_version_min_command<P>));
-			cmd->set_version(minVersion);
-			cmd->set_sdk(sdkVersion);
-			break;
-		case ld::kPlatform_watchOS:
-		case ld::kPlatform_watchOSSimulator:
-			cmd->set_cmd(LC_VERSION_MIN_WATCHOS);
-			cmd->set_cmdsize(sizeof(macho_version_min_command<P>));
-			cmd->set_version(minVersion);
-			cmd->set_sdk(sdkVersion);
-			break;
-		case ld::kPlatform_tvOS:
-		case ld::kPlatform_tvOSSimulator:
-			cmd->set_cmd(LC_VERSION_MIN_TVOS);
-			cmd->set_cmdsize(sizeof(macho_version_min_command<P>));
-			cmd->set_version(minVersion);
-			cmd->set_sdk(sdkVersion);
-			break;
-		case ld::kPlatform_unknown:
-			assert(0 && "unknown platform");
-			break;
-		case ld::kPlatform_iOSMac:
-			assert(0 && "iOSMac uses LC_BUILD_VERSION");
-			break;
-		case ld::kPlatform_bridgeOS:
-			assert(0 && "bridgeOS uses LC_BUILD_VERSION");
-			break;
-	}
+	const PlatformInfo& info = platformInfo(platform);
+	assert(info.loadCommandIfNotUsingBuildVersionLC != 0 && "platform requires LC_BUILD_VERSION");
+	cmd->set_cmd(info.loadCommandIfNotUsingBuildVersionLC);
+	cmd->set_cmdsize(sizeof(macho_version_min_command<P>));
+	cmd->set_version(minVersion);
+	cmd->set_sdk(sdkVersion);
 	return p + sizeof(macho_version_min_command<P>);
 }
 
 
 
 template <typename A>
-	uint8_t* HeaderAndLoadCommandsAtom<A>::copyBuildVersionLoadCommand(uint8_t* p, const ld::Platform& platform, uint32_t minVersion, uint32_t sdkVersion) const
+	uint8_t* HeaderAndLoadCommandsAtom<A>::copyBuildVersionLoadCommand(uint8_t* p, ld::Platform platform, uint32_t minVersion, uint32_t sdkVersion) const
 {
 	macho_build_version_command<P>* cmd = (macho_build_version_command<P>*)p;
-	
+
+	// temp hack until iOSMac SDK version plumbed through
+	if (platform == ld::Platform::iOSMac)
+		sdkVersion = 0x000D0000;
+
 	cmd->set_cmd(LC_BUILD_VERSION);
 	cmd->set_cmdsize(alignedSize(sizeof(macho_build_version_command<P>) + sizeof(macho_build_tool_version<P>)*_toolsVersions.size()));
-	cmd->set_platform(platform);
+	cmd->set_platform((uint32_t)platform);
 	cmd->set_minos(minVersion);
 	cmd->set_sdk(sdkVersion);
 	cmd->set_ntools(_toolsVersions.size());
@@ -1593,6 +1616,12 @@ void HeaderAndLoadCommandsAtom<A>::copyRawContent(uint8_t buffer[]) const
 	if ( _hasDyldInfoLoadCommand )
 		p = this->copyDyldInfoLoadCommand(p);
 		
+	if ( _hasChainedFixupsLoadCommand )
+		p = this->copyChainedFixupsLoadCommand(p);
+
+	if ( _hasExportsTrieLoadCommand )
+		p = this->copyExportsTrieLoadCommand(p);
+
 	if ( _hasSymbolTableLoadCommand )
 		p = this->copySymbolTableLoadCommand(p, buffer);
 
@@ -1609,27 +1638,13 @@ void HeaderAndLoadCommandsAtom<A>::copyRawContent(uint8_t buffer[]) const
 		p = this->copyUUIDLoadCommand(p);
 
 	if ( _hasVersionLoadCommand ) {
-		//FIXME: Hack to allow make binaries old cctools understand, remove later
-#if 0
-		_options.platforms().forEach(^(ld::Platform platform, uint32_t version, bool &stop) {
-			if (_options.shouldUseBuildVersion(platform, version)) {
-				p = this->copyBuildVersionLoadCommand(p, platform, version, _options.sdkVersion());
+		_options.platforms().forEach(^(ld::Platform platform, uint32_t minVersion, uint32_t sdkVersion, bool &stop) {
+			if (_options.shouldUseBuildVersion(platform, minVersion)) {
+				p = this->copyBuildVersionLoadCommand(p, platform, minVersion, sdkVersion);
 			} else {
-				p = this->copyVersionLoadCommand(p, platform, version, _options.sdkVersion());
+				p = this->copyVersionLoadCommand(p, platform, minVersion, sdkVersion);
 			}
 		});
-#else
-		_options.platforms().forEach(^(ld::Platform platform, uint32_t version, bool &stop) {
-			if (_options.shouldUseBuildVersion(platform, version)) {
-				p = this->copyBuildVersionLoadCommand(p, platform, version, _options.sdkVersion());
-			}
-		});
-		_options.platforms().forEach(^(ld::Platform platform, uint32_t version, bool &stop) {
-			if (!_options.shouldUseBuildVersion(platform, version)) {
-				p = this->copyVersionLoadCommand(p, platform, version, _options.sdkVersion());
-			}
-		});
-#endif
 	}
 
 	if ( _hasSourceVersionLoadCommand )

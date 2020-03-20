@@ -94,12 +94,13 @@ int argc,
 char **argv,
 char **envp)
 {
-    int i;
+    int i,j;
     enum bool args_left;
     struct flags flag;
     struct arch_flag *arch_flags;
     uint32_t narch_flags;
     enum bool all_archs;
+    char **files;
 
 	progname = argv[0];
 	arch_flags = NULL;
@@ -111,27 +112,14 @@ char **envp)
 	flag.l = FALSE;
 	flag.x = FALSE;
 
+	files = allocate(sizeof(char *) * argc);
 	for(i = 1; i < argc; i++){
 	    if(argv[i][0] == '-'){
-		if(argv[i][1] == '\0'){
-		    flag.nfiles += argc - i - 1;
-		    break;
-		}
-		if(strcmp(argv[i], "-m") == 0){
-		    flag.m = TRUE;
+		if(argv[i][1] == '\0' ||
+		   0 == strcmp("--", argv[i])){
 		    continue;
 		}
-		if(strcmp(argv[i], "-l") == 0){
-		    flag.l = TRUE;
-		    flag.m = TRUE;
-		    continue;
-		}
-		if(strcmp(argv[i], "-x") == 0){
-		    flag.x = TRUE;
-		    flag.m = TRUE;
-		    continue;
-		}
-		if(strcmp(argv[i], "-arch") == 0){
+		else if(strcmp(argv[i], "-arch") == 0){
 		    if(i + 1 == argc){
 			error("missing argument(s) to %s option", argv[i]);
 			usage();
@@ -154,37 +142,43 @@ char **envp)
 		    i++;
 		    continue;
 		}
+		else {
+		    for(j = 1; argv[i][j] != '\0'; j++){
+			switch(argv[i][j]){
+			    case 'l':
+				flag.l = TRUE;
+				break;
+			    case 'm':
+				flag.m = TRUE;
+				break;
+			    case 'x':
+				flag.x = TRUE;
+				break;
+			    default:
+				error("invalid argument -%c", argv[i][j]);
+				usage();
+			}
+		    }
+		    continue;
+		}
 	    }
-	    flag.nfiles++;
+	    files[flag.nfiles++] = argv[i];
 	}
 
 	if(flag.m == FALSE)
 	    printf("__TEXT\t__DATA\t__OBJC\tothers\tdec\thex\n");
 
 	args_left = TRUE;
-	for (i = 1; i < argc; i++) {
-	    if(args_left == TRUE && argv[i][0] == '-'){
-		if(argv[i][1] == '\0'){
-		    args_left = FALSE;
-		    continue;
-		}
-		if(strcmp(argv[i], "-m") == 0)
-		    continue;
-		if(strcmp(argv[i], "-l") == 0)
-		    continue;
-		if(strcmp(argv[i], "-x") == 0)
-		    continue;
-		if(strcmp(argv[i], "-arch") == 0){
-		    i++;
-		    continue;
-		}
-	    }
-	    ofile_process(argv[i], arch_flags, narch_flags, all_archs, FALSE,
+	for (i = 0; i < flag.nfiles; i++) {
+	    ofile_process(files[i], arch_flags, narch_flags, all_archs, FALSE,
 			  TRUE, TRUE, size, &flag);
 	}
 	if(flag.nfiles == 0)
 	    ofile_process("a.out", arch_flags, narch_flags, all_archs, FALSE,
 			  TRUE, TRUE, size, &flag);
+
+	free(files);
+
 	if(errors == 0)
 	    return(EXIT_SUCCESS);
 	else

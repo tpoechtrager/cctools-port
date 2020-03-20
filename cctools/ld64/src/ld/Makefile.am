@@ -7,7 +7,6 @@ ld_LDADD =  \
 	$(top_builddir)/ld64/src/ld/parsers/libParsers.la \
 	$(top_builddir)/ld64/src/ld/passes/libPasses.la \
 	$(UUID_LIB) \
-	$(LTO_LIB) \
 	$(LTO_RPATH) \
 	$(XAR_LIB) \
 	$(DL_LIB) \
@@ -59,4 +58,5 @@ ld_SOURCES =  \
 	Resolver.cpp  \
 	Snapshot.cpp  \
 	SymbolTable.cpp \
+	PlatformSupport.cpp \
 	code-sign-blobs/blob.cpp

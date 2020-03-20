@@ -26,6 +26,7 @@
 #include "stuff/openstep_mach.h"
 #include <libc.h>
 #ifndef __OPENSTEP__
+#include <time.h>
 #include <utime.h>
 #endif
 #include "stuff/ofile.h"
@@ -125,29 +126,58 @@ uint32_t *throttle)
     uint32_t fsync;
     int fd;
 #ifndef __OPENSTEP__
-    struct utimbuf timep;
+    struct timeval toc_timeval;
+    struct timespec toc_timespec;
 #else
     time_t timep[2];
+    time_t toc_time;
 #endif
     mach_port_t my_mach_host_self;
     char *file, *p;
     uint64_t file_size;
-    time_t toc_time;
     enum bool seen_archive;
     kern_return_t r;
-   
+    int time_result;
+
 	seen_archive = FALSE;
+
+#ifndef __OPENSTEP__
+	/* cctools-port: replaced __builtin_available */
+#if 0
+	if (__builtin_available(macOS 10.12, *)) {
+#endif /* 0 */
+#ifdef HAVE_CLOCK_GETTIME
+	    if (clock_gettime(CLOCK_REALTIME, &toc_timespec)) {
+		system_error("clock_gettime failed");
+		return;
+	    }
+#endif /* HAVE_CLOCK_GETTIME */
+#if 0
+	} else {
+#endif /* 0 */
+#ifndef HAVE_CLOCK_GETTIME
+	    if (gettimeofday(&toc_timeval, NULL)) {
+		system_error("gettimeofday failed");
+		return;
+	    }
+#endif /* !HAVE_CLOCK_GETTIME */
+#if 0
+	}
+#endif /* 0 */
+#else
 	/*
 	 * The environment variable ZERO_AR_DATE is used here and other
 	 * places that write archives to allow testing and comparing
 	 * things for exact binary equality.
 	 */
-	if(getenv("ZERO_AR_DATE") == NULL)
-	    toc_time = time(0);
-	else
+	if (getenv("ZERO_AR_DATE") == NULL) {
+	    toc_time = time(NULL);
+	} else {
 	    toc_time = 0;
+	}
+#endif /* !defined(__OPENSTEP__) */
 
-	writeout_to_mem(archs, narchs, output, (void **)&file, &file_size, 
+	writeout_to_mem(archs, narchs, output, (void **)&file, &file_size,
                         sort_toc, commons_in_toc, force_64bit_toc,
 			library_warnings, &seen_archive);
 
@@ -202,7 +232,7 @@ uint32_t *throttle)
 #undef THROTTLE_DEBUG
             do {
                 if((file + file_size) - p < WRITE_SIZE)
-                    write_size = (file + file_size) - p;
+                    write_size = (uint32_t)((file + file_size) - p);
                 else
                     write_size = WRITE_SIZE;
                 /* MDT: write(2) is OK here, write_size is less than 2^31-1 */
@@ -267,29 +297,40 @@ no_throttle:
 	if(seen_archive == TRUE){
 #ifndef __OPENSTEP__
 	    /*
-	     * The environment variable ZERO_AR_DATE is used here and other
-	     * places that write archives to allow testing and comparing
-	     * things for exact binary equality.
+	     * If ZERO_AR_DATE is set here, writeout_to_mem has zeroed the
+	     * SYMDEF mod time; the other ar content objects are assumed to
+	     * have been zeroed out when the library was created. writeout
+	     * will not zero out the modification time in the filesystem.
 	     */
-	    if(getenv("ZERO_AR_DATE") == NULL){
-		timep.actime = toc_time - 5;
-		timep.modtime = toc_time - 5;
-	    }else{
-		timep.actime = time(0);
-		timep.modtime = time(0);
+		/* cctools-port: replaced __builtin_available */
+#if 0
+	    if (__builtin_available(macOS 10.12, *)) {
+#endif /* 0 */
+#ifdef HAVE_UTIMESAT
+		struct timespec times[2] = {0};
+		memcpy(&times[0], &toc_timespec, sizeof(struct timespec));
+		memcpy(&times[1], &toc_timespec, sizeof(struct timespec));
+		time_result = utimensat(AT_FDCWD, output, times, 0);
+#endif /* HAVE_UTIMESAT */
+#if 0
 	    }
-	    if(utime(output, &timep) == -1)
+	    else {
+#endif /* 0 */
+#ifndef HAVE_UTIMESAT
+		struct timeval times[2] = {0};
+		memcpy(&times[0], &toc_timeval, sizeof(struct timeval));
+		memcpy(&times[1], &toc_timeval, sizeof(struct timeval));
+		time_result = utimes(output, times);
+#endif /* !HAVE_UTIMESAT */
+#if 0
+	    }
+#endif /* 0 */
 #else
-	    if(getenv("ZERO_AR_DATE") == NULL){
-		timep[0] = toc_time - 5;
-		timep[1] = toc_time - 5;
-	    }else{
-		timep[0] = time(0);
-		timep[1] = time(0);
-            }
-	    if(utime(output, timep) == -1)
+	    timep[0] = toc_time;
+	    timep[1] = toc_time;
+	    time_result = utime(output, timep);
 #endif
-	    {
+	    if (time_result) {
 		system_fatal("can't set the modifiy times in output file: %s",
 			     output);
 		goto cleanup;
@@ -369,10 +410,10 @@ enum bool *seen_archive)
 	 * places that write archives to allow testing and comparing
 	 * things for exact binary equality.
 	 */
-	if(getenv("ZERO_AR_DATE") == NULL)
-	    toc_time = time(0);
-	else
+	if (getenv("ZERO_AR_DATE") != NULL)
 	    toc_time = 0;
+	else
+	    toc_time = time(0) + 5;
 
 	fat_arch = NULL; /* here to quite compiler maybe warning message */
 	fat_arch64 = NULL;
@@ -402,6 +443,10 @@ enum bool *seen_archive)
 	for(i = 0; i < narchs; i++){
 	    /*
 	     * For each arch that is an archive recreate the table of contents.
+	     *
+	     * Remember, for historical reasons the table of contents is
+	     * time-shifted 5 seconds into the future. This 5 second offset is
+	     * not applied when zeroing out ar dates.
 	     */
 	    if(archs[i].type == OFILE_ARCHIVE){
 		*seen_archive = TRUE;
@@ -416,8 +461,16 @@ enum bool *seen_archive)
 		file_size += archs[i].library_size;
 		if(archs[i].fat_arch64 != NULL)
 		    archs[i].fat_arch64->size = archs[i].library_size;
-		else if(archs[i].fat_arch != NULL)
-		    archs[i].fat_arch->size = archs[i].library_size;
+		else if(archs[i].fat_arch != NULL) {
+		    if (archs[i].library_size > 0xFFFFFFFF) {
+			error("file too large to create as a fat file because "
+			      "size field in struct fat_arch is only 32-bits "
+			      "and library_size (%llu) of file %s exceeds that",
+			      archs[i].unknown_size, archs[i].file_name);
+			return;
+		    }
+		    archs[i].fat_arch->size = (uint32_t)archs[i].library_size;
+		}
 	    }
 	    else if(archs[i].type == OFILE_Mach_O){
 		size = archs[i].object->object_size
@@ -442,8 +495,16 @@ enum bool *seen_archive)
 		file_size += archs[i].unknown_size;
 		if(archs[i].fat_arch64 != NULL)
 		    archs[i].fat_arch64->size = archs[i].unknown_size;
-		else if(archs[i].fat_arch != NULL)
-		    archs[i].fat_arch->size = archs[i].unknown_size;
+		else if(archs[i].fat_arch != NULL) {
+		    if (archs[i].unknown_size > 0xFFFFFFFF) {
+			error("file too large to create as a fat file because "
+			      "size field in struct fat_arch is only 32-bits "
+			      "and unknown_size (%llu) of file %s exceeds that",
+			      archs[i].unknown_size, archs[i].file_name);
+			return;
+		    }
+		    archs[i].fat_arch->size = (uint32_t)archs[i].unknown_size;
+		}
 	    }
 	}
 
@@ -506,7 +567,7 @@ enum bool *seen_archive)
 		}
 		else{
 		    offset = rnd(offset, 1 << archs[i].fat_arch->align);
-		    fat_arch[i].offset = offset;
+		    fat_arch[i].offset = (uint32_t)offset;
 		    fat_arch[i].size = archs[i].fat_arch->size;
 		    fat_arch[i].align = archs[i].fat_arch->align;
 		    offset += archs[i].fat_arch->size;
@@ -602,20 +663,43 @@ enum bool *seen_archive)
 		}
 
 		if(archs[i].using_64toc == FALSE){
-		    i32 = archs[i].ntocs * sizeof(struct ranlib);
+		    if (archs[i].ntocs > 0xFFFFFFFF) {
+			error("file too large to create because there are more "
+			      "than 2^32 entries (%llu) in the toc for file %s",
+			      archs[i].ntocs, archs[i].file_name);
+			return;
+		    }
+		    if (archs[i].ntocs * sizeof(struct ranlib) > 0xFFFFFFFF) {
+			error("file too large to create because the library "
+			      "toc size is only 32-bits and the required toc "
+			      "size (%llu) for file %s exceeds that",
+			      archs[i].ntocs * sizeof(struct ranlib),
+			      archs[i].file_name);
+			return;
+		    }
+		    if (archs[i].toc_strsize > 0xFFFFFFFF) {
+			error("file too large to create because toc symbol "
+			      "name length is only 32-bits and the required "
+			      "toc symbol name length (%llu) for file %s "
+			      "exceeds that",
+			      archs[i].toc_strsize, archs[i].file_name);
+			return;
+		    }
+		    i32 = (uint32_t)(archs[i].ntocs * sizeof(struct ranlib));
 		    if(target_byte_sex != host_byte_sex)
 			i32 = SWAP_INT(i32);
 		    memcpy(p, (char *)&i32, sizeof(uint32_t));
 		    p += sizeof(uint32_t);
 
 		    if(target_byte_sex != host_byte_sex)
-			swap_ranlib(archs[i].toc_ranlibs, archs[i].ntocs,
+			swap_ranlib(archs[i].toc_ranlibs,
+				    (uint32_t)archs[i].ntocs,
 				    target_byte_sex);
 		    memcpy(p, (char *)archs[i].toc_ranlibs,
 			   archs[i].ntocs * sizeof(struct ranlib));
 		    p += archs[i].ntocs * sizeof(struct ranlib);
 
-		    i32 = archs[i].toc_strsize;
+		    i32 = (uint32_t)archs[i].toc_strsize;
 		    if(target_byte_sex != host_byte_sex)
 			i32 = SWAP_INT(i32);
 		    memcpy(p, (char *)&i32, sizeof(uint32_t));
@@ -731,14 +815,15 @@ enum bool *seen_archive)
 				archs[i].members[j].object);
 			}
 			p += size;
-			pad = rnd(size, 8) - size;
+			pad = (uint32_t)rnd(size, 8) - size;
 		    }
 		    else{
 			memcpy(p, archs[i].members[j].unknown_addr, 
 			       archs[i].members[j].unknown_size);
 			p += archs[i].members[j].unknown_size;
-			pad = rnd(archs[i].members[j].unknown_size, 8) -
-				    archs[i].members[j].unknown_size;
+			pad = (uint32_t)
+			    (rnd(archs[i].members[j].unknown_size, 8) -
+			     archs[i].members[j].unknown_size);
 		    }
 		    /* as with the UNIX ar(1) program pad with '\n' chars */
 		    for(k = 0; k < pad; k++)
@@ -790,7 +875,7 @@ enum bool *seen_archive)
 			}
 		    }
 		    if(timestamp == 0)
-			timestamp = toc_time;
+			timestamp = (uint32_t)toc_time;
 		    lcp = archs[i].object->load_commands;
 		    if(archs[i].object->mh != NULL)
 			ncmds = archs[i].object->mh->ncmds;
@@ -890,6 +975,18 @@ struct object *object)
 			   object->output_dyld_info_size);
 		*size += object->output_dyld_info_size;
 	    }
+	    if(object->output_dyld_chained_fixups_data_size != 0){
+		if(object->output_dyld_chained_fixups_data != NULL)
+		    memcpy(p + *size, object->output_dyld_chained_fixups_data,
+			   object->output_dyld_chained_fixups_data_size);
+		*size += object->output_dyld_chained_fixups_data_size;
+	    }
+	    if(object->output_dyld_exports_trie_data_size != 0){
+		if(object->output_dyld_exports_trie_data != NULL)
+		    memcpy(p + *size, object->output_dyld_exports_trie_data,
+			   object->output_dyld_exports_trie_data_size);
+		*size += object->output_dyld_exports_trie_data_size;
+	    }
 	    memcpy(p + *size, object->output_loc_relocs,
 		   dyst->nlocrel * sizeof(struct relocation_info));
 	    *size += dyst->nlocrel *
@@ -976,7 +1073,7 @@ struct object *object)
 	    memset(p + *size, '\0', object->output_strings_size_pad);
 	    *size += object->output_strings_size_pad;
 	    if(object->output_code_sig_data_size != 0){
-		*size = rnd(*size, 16);
+		*size = (uint32_t)rnd(*size, 16);
 		if(object->output_code_sig_data != NULL)
 		    memcpy(p + *size, object->output_code_sig_data,
 			   object->output_code_sig_data_size);
@@ -1020,7 +1117,7 @@ struct object *object)
 	    memset(p + *size, '\0', object->output_strings_size_pad);
 	    *size += object->output_strings_size_pad;
 	    if(object->output_code_sig_data_size != 0){
-		*size = rnd(*size, 16);
+		*size = (uint32_t)rnd(*size, 16);
 		if(object->output_code_sig_data != NULL)
 		    memcpy(p + *size, object->output_code_sig_data,
 			   object->output_code_sig_data_size);
@@ -1371,11 +1468,12 @@ enum bool library_warnings)
 	    arch->toc_name_size = 16;
 	    arch->toc_name = SYMDEF "\0\0\0\0\0\0\0";
 	}
-	arch->toc_size = sizeof(struct ar_hdr) +
-			 sizeof(uint32_t) +
-			 arch->ntocs * sizeof(struct ranlib) +
-			 sizeof(uint32_t) +
-			 arch->toc_strsize;
+	arch->toc_size = (uint32_t)
+			(sizeof(struct ar_hdr) +
+			sizeof(uint32_t) +
+			arch->ntocs * sizeof(struct ranlib) +
+			sizeof(uint32_t) +
+			arch->toc_strsize);
 	if(arch->toc_long_name == TRUE)
 	    arch->toc_size += arch->toc_name_size +
 			      (rnd(sizeof(struct ar_hdr), 8) -
@@ -1442,11 +1540,12 @@ enum bool library_warnings)
 	     *   a uint64_t for the number of bytes of the strings
 	     *   the strings
 	     */
-	    arch->toc_size = sizeof(struct ar_hdr) +
-			     sizeof(uint64_t) +
-			     arch->ntocs * sizeof(struct ranlib_64) +
-			     sizeof(uint64_t) +
-			     arch->toc_strsize;
+	    arch->toc_size = (uint32_t)
+		    (sizeof(struct ar_hdr) +
+		     sizeof(uint64_t) +
+		     arch->ntocs * sizeof(struct ranlib_64) +
+		     sizeof(uint64_t) +
+		     arch->toc_strsize);
 	    /* add the size of the name as a long name is always used */
 	    arch->toc_size += arch->toc_name_size +
 			      (rnd(sizeof(struct ar_hdr), 8) -
@@ -1464,9 +1563,9 @@ enum bool library_warnings)
 		    arch->members[arch->toc_entries[i].member_index - 1].offset;
 	    }
 	    else{
-		arch->toc_ranlibs[i].ran_un.ran_strx =
-		    arch->toc_entries[i].symbol_name - arch->toc_strings;
-		arch->toc_ranlibs[i].ran_off =
+		arch->toc_ranlibs[i].ran_un.ran_strx = (uint32_t)
+		    (arch->toc_entries[i].symbol_name - arch->toc_strings);
+		arch->toc_ranlibs[i].ran_off = (uint32_t)
 		    arch->members[arch->toc_entries[i].member_index - 1].offset;
 	    }
 	}

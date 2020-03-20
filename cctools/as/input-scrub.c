@@ -141,7 +141,7 @@ char *filename)
   if (filename[0])
     {
       char *p;
-      int len;
+      long len;
 
       p = strrchr(filename, '/');
       if (p != NULL && p[1] != '\0')
@@ -197,7 +197,7 @@ get_more:
       ++ p;
       if (p <= buffer_start + BEFORE_SIZE)
 	{
-	  int new;
+	  long new;
 	
 	  new = limit - (buffer_start + BEFORE_SIZE + partial_size);
 	  partial_size += new;
@@ -219,7 +219,7 @@ get_more:
 	  goto get_more;
 	}
       partial_where = p;
-      partial_size = limit - p;
+      partial_size = (int)(limit - p);
       memcpy(save_source, partial_where, (int)AFTER_SIZE);
       memcpy(partial_where, AFTER_STRING, (int)AFTER_SIZE);
     }

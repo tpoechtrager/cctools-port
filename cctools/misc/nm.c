@@ -531,10 +531,6 @@ void *cookie)
 
 	/* cctools-port start */
 	memset(&process_flags, '\0', sizeof(process_flags));
-#ifdef LTO_SUPPORT
-	llvm_bundle_pointer = NULL;
-	llvm_bundle_size = 0;
-#endif /* LTO_SUPPORT */
 	/* cctools-port end */
 
 	cmd_flags = (struct cmd_flags *)cookie;
@@ -550,6 +546,11 @@ void *cookie)
 	process_flags.bss_nsect = NO_SECT;
 	process_flags.nlibs = 0;
 	process_flags.lib_names = NULL;
+
+#ifdef LTO_SUPPORT
+	llvm_bundle_pointer = NULL;
+	llvm_bundle_size = 0;
+#endif /* LTO_SUPPORT */
 
 	if(ofile->mh == NULL && ofile->mh64 == NULL){
 #ifdef LTO_SUPPORT
@@ -1775,6 +1776,11 @@ char *arch_name)
 	       ((symbols[i].nl.n_type & N_TYPE) != N_UNDF) &&
 	       (symbols[i].nl.n_desc & N_ALT_ENTRY) == N_ALT_ENTRY)
 		    printf("[alt entry] ");
+
+	    if(ofile->mh_filetype == MH_OBJECT &&
+	       ((symbols[i].nl.n_type & N_TYPE) != N_UNDF) &&
+	       (symbols[i].nl.n_desc & N_COLD_FUNC) == N_COLD_FUNC)
+		    printf("[cold func] ");
 
 	    if((symbols[i].nl.n_desc & N_ARM_THUMB_DEF) == N_ARM_THUMB_DEF)
 		    printf("[Thumb] ");

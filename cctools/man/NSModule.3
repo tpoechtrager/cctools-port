@@ -9,16 +9,16 @@ NSModule \- programmatic interface for working with modules and symbols
 typedef void * NSModule;
 .sp .5
 extern NSModule NSLinkModule(
-	NSObjectFileImage objectFileImage, 
+	NSObjectFileImage objectFileImage,
 	const char *moduleName,
 	unsigned long options);
 .sp .5
 extern enum DYLD_BOOL NSUnLinkModule(
-	NSModule module, 
+	NSModule module,
 	unsigned long options);
 .sp .5
 extern const char * NSNameOfModule(
-	NSModule m); 
+	NSModule m);
 .sp .5
 extern const char * NSLibraryNameForModule(
 	NSModule m);
@@ -31,7 +31,7 @@ extern enum DYLD_BOOL NSIsSymbolNameDefined(
 extern enum DYLD_BOOL NSIsSymbolNameDefinedWithHint(
 	const char *symbolName
 	const char *libraryNameHint);
-.sp .5 
+.sp .5
 extern enum DYLD_BOOL NSIsSymbolNameDefinedInImage(
 	const struct mach_header *image,
 	const char *symbolName);
@@ -86,7 +86,7 @@ extern void NSInstallLinkEditErrorHandlers(
 .sp .5
 extern void NSLinkEditError(
 	NSLinkEditErrors *c,
-	int *errorNumber, 
+	int *errorNumber,
 	const char **fileName,
 	const char **errorString);
 .if
@@ -95,7 +95,7 @@ extern void NSLinkEditError(
 .PP
 extern NSModule NSReplaceModule(
 	NSModule moduleToReplace,
-	NSObjectFileImage newObjectFileImage, 
+	NSObjectFileImage newObjectFileImage,
 	unsigned long options);
 .fi
 .PP
@@ -129,7 +129,7 @@ are used for plugins.
 A module name is specified when a module is linked so that later
 .I NSNameOfModule
 can be used with the module handle and to do things like report errors.
-If you want 
+If you want
 .IR gdb (1)
 to be able to debug your module, when calling
 .I NSLinkModule
@@ -183,7 +183,7 @@ name of the object file tailing after the NULL character of the logical name.
 This is only useful to the zero-link implementation.
 .PP
 .I NSUnLinkModule
-unlinks the specified module handle from the program.  Currently the 
+unlinks the specified module handle from the program.  Currently the
 implementation is limited to only allow modules linked with
 .I NSLinkModule
 to be unlinked.  The parameter,
@@ -255,7 +255,7 @@ If the program was built with the
 flag or executed with the environment variable
 .SM DYLD_FORCE_FLAT_NAMESPACE
 set and the pointer to a mach_header structure is not of a bundle loaded with
-the 
+the
 .B NSLINKMODULE_OPTION_PRIVATE
 option of
 .IR NSLinkModule (3)
@@ -277,7 +277,7 @@ Also the
 .IR dyld (3)
 routine
 .IR _dyld_get_image_header (3)
-and the mach_header pointer arguments to the call back routines called from 
+and the mach_header pointer arguments to the call back routines called from
 .IR _dyld_register_func_for_add_image (3)
 routines can also be used.
 .PP
@@ -318,7 +318,7 @@ If the program was built with the
 flag or executed with the environment variable
 .SM DYLD_FORCE_FLAT_NAMESPACE
 set and the pointer to a mach_header structure is not of a bundle loaded with
-the 
+the
 .B NSLINKMODULE_OPTION_PRIVATE
 option of
 .IR NSLinkModule (3)
@@ -476,7 +476,7 @@ functions are given in the following typedef:
 .nf
 typedef struct {
      void     (*undefined)(const char *symbolName);
-     NSModule (*multiple)(NSSymbol s, NSModule oldModule, NSModule newModule); 
+     NSModule (*multiple)(NSSymbol s, NSModule oldModule, NSModule newModule);
      void     (*linkEdit)(NSLinkEditErrors errorClass, int errorNumber,
                           const char *fileName, const char *errorString);
 } NSLinkEditErrorHandlers;
@@ -534,7 +534,7 @@ further link editing, either the
 .I oldModule
 or the
 .I newModule.
-It may also record one of the module handles to later take action after the 
+It may also record one of the module handles to later take action after the
 runtime linking process has completed (for example later unlink the module).
 The dynamic link editor updates the references to the symbol if the handler
 specifies the new symbol is to be used.
@@ -584,7 +584,7 @@ parameter will be a one of the following values:
 .RS
 .nf
 typedef enum {
-    NSOtherErrorRelocation, 
+    NSOtherErrorRelocation,
     NSOtherErrorLazyBind,
     NSOtherErrorIndrLoop,
     NSOtherErrorLazyInit,
@@ -601,7 +601,7 @@ In those cases the
 parameter will be
 .sm NULL.
 .PP
-For file access errors and file format errors, an attempt to return a file name 
+For file access errors and file format errors, an attempt to return a file name
 will also be passed, and if that is not possible the
 .I filename
 parameter will be

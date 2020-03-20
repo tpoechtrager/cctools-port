@@ -20,6 +20,8 @@
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
+/* NOTE: This is no longer compiled into libstuff as of 2/27/2019 */
+/* cctools-port: We still use this. */
 #ifndef RLD
 #include <fcntl.h>
 #include <unistd.h>
@@ -96,20 +98,26 @@ uint32_t *table_size)
 		    file_name, flag, argument);
 	/*
 	 * For some reason mapping files with zero size fails
-	 * so it has to be handled specially.
+	 * so it has to be handled specially. Also, deal with files that are
+	 * too large to be valid seg_addr tables.
 	 */
 	file_addr = NULL;
-	if(stat_buf.st_size != 0){
+	if (stat_buf.st_size > 0xFFFFFFFF) {
+	    fatal("File too large (%llu): %s for %s %s", stat_buf.st_size,
+		  file_name, flag, argument);
+	}
+	else if (stat_buf.st_size == 0) {
+	    fatal("Empty file: %s for %s %s", file_name, flag, argument);
+	}
+	else {
 	    file_addr = mmap(0, stat_buf.st_size, PROT_READ|PROT_WRITE,
 			     MAP_FILE|MAP_PRIVATE, fd, 0);
 	    if((intptr_t)file_addr == -1)
 		system_error("can't map file: %s for %s %s", file_name, flag,
 			     argument);
 	}
-	else
-	    fatal("Empty file: %s for %s %s", file_name, flag, argument);
 	close(fd);
-	file_size = stat_buf.st_size;
+	file_size = (uint32_t)stat_buf.st_size;
 
 	/*
 	 * Got the file mapped now parse it.
@@ -145,11 +153,11 @@ uint32_t *table_size)
 		continue;
 	    }
 	    new_seg_addr_table[k].seg1addr =
-		strtoul(file_addr + j, &endp, 16);
+		(uint32_t)strtoul(file_addr + j, &endp, 16);
 	    if(endp == NULL)
 		fatal("improper hexadecimal number on line %u in "
 		      "file: %s for %s %s", j, file_name, flag, argument);
-	    j = endp - file_addr;
+	    j = (uint32_t)(endp - file_addr);
 	    if(j == file_size)
 		fatal("missing library install name on line %u in file: "
 		      "%s for %s %s", j, file_name, flag, argument);
@@ -164,13 +172,13 @@ uint32_t *table_size)
 		      "%s for %s %s", j, file_name, flag, argument);
 
 	    new_seg_addr_table[k].segs_read_write_addr =
-		strtoul(file_addr + j, &endp, 16);
+		(uint32_t)strtoul(file_addr + j, &endp, 16);
 	    if(endp == NULL || endp == file_addr + j){
 		new_seg_addr_table[k].split = FALSE;
 		new_seg_addr_table[k].segs_read_write_addr = UINT_MAX;
 	    }
 	    else{
-		j = endp - file_addr;
+		j = (uint32_t)(endp - file_addr);
 		new_seg_addr_table[k].split = TRUE;
 		new_seg_addr_table[k].segs_read_only_addr =
 		    new_seg_addr_table[k].seg1addr;
@@ -240,29 +248,31 @@ void *cookie)
 {
     int fd;
     struct stat stat_buf;
-    uint32_t i, file_size, line, comment_prefix_length;
+    uint32_t i, file_size, line;
+    size_t comment_prefix_length;
     char *file_addr, *endp;
     struct seg_addr_table entry;
 
-	file_addr = NULL;
 	if((fd = open(file_name, O_RDONLY, 0)) == -1)
 	    system_fatal("can't open file: %s", file_name);
 	if(fstat(fd, &stat_buf) == -1)
 	    system_fatal("can't stat file: %s", file_name);
-	/*
-	 * For some reason mapping files with zero size fails
-	 * so it has to be handled specially.
-	 */
-	if(stat_buf.st_size != 0){
+	file_addr = NULL;
+	if (stat_buf.st_size > 0xFFFFFFFF) {
+	    fatal("File too large (%llu): %s", stat_buf.st_size,
+		  file_name);
+	}
+	else if (stat_buf.st_size == 0) {
+	    fatal("Empty file: %s", file_name);
+	}
+	else {
 	    file_addr = mmap(0, stat_buf.st_size, PROT_READ|PROT_WRITE,
 			     MAP_FILE|MAP_PRIVATE, fd, 0);
 	    if((intptr_t)file_addr == -1)
 		system_error("can't map file: %s", file_name);
 	}
-	else
-	    fatal("empty file: %s ", file_name);
 	close(fd);
-	file_size = stat_buf.st_size;
+	file_size = (uint32_t)stat_buf.st_size;
 
 	/*
 	 * Got the file mapped now parse and process it.
@@ -305,11 +315,11 @@ void *cookie)
 		line++;
 		continue;
 	    }
-	    entry.seg1addr = strtoul(file_addr + i, &endp, 16);
+	    entry.seg1addr = (uint32_t)strtoul(file_addr + i, &endp, 16);
 	    if(endp == NULL)
 		fatal("improper hexadecimal number on line %u in file: %s",
 		      line, file_name);
-	    i = endp - file_addr;
+	    i = (uint32_t)(endp - file_addr);
 	    if(i == file_size)
 		fatal("missing library install name on line %u in file: %s",
 		      line, file_name);
@@ -323,13 +333,13 @@ void *cookie)
 		fatal("missing library install name on line %u in file: %s",
 		      line, file_name);
 
-	    entry.segs_read_write_addr = strtoul(file_addr + i, &endp, 16);
+	    entry.segs_read_write_addr = (uint32_t)strtoul(file_addr + i, &endp, 16);
 	    if(endp == NULL || endp == file_addr + i){
 		entry.split = FALSE;
 		entry.segs_read_write_addr = UINT_MAX;
 	    }
 	    else{
-		i = endp - file_addr;
+		i = (uint32_t)(endp - file_addr);
 		entry.split = TRUE;
 		entry.segs_read_only_addr = entry.seg1addr;
 		entry.seg1addr = UINT_MAX;

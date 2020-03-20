@@ -82,7 +82,7 @@ buffer with a
 .SM NULL
 terminated string with the error message.  For all functions
 when they return they release all resources (memory, open file descriptors,
-etc). 
+etc).
 .PP
 The file_name parameter for these functions may be of the form
 .I foo(bar)
@@ -99,13 +99,13 @@ it is used for any dependent library has a path that starts with
 Then
 .I @executable_path
 is replaced with
-.I executable_path. 
+.I executable_path.
 .PP
 If the
 .I root_dir
 parameter is not
 .SM NULL
-it is prepended to all the rooted dependent library paths. 
+it is prepended to all the rooted dependent library paths.
 .PP
 .IR dependent_libs ()
 takes a
@@ -161,7 +161,7 @@ is successful it returns
 .SM REDO_PREBINDING_SUCCESS
 otherwise it returns
 .SM REDO_PREBINDING_FAILURE.
-If the 
+If the
 .I slide_to_address
 parameter is non-zero and the binary is a dynamic library it is relocated to
 have that has its prefered address.
@@ -173,7 +173,7 @@ nothing is done and this returns
 If the parameter
 .I allow_missing_architectures
 is non-zero then only problems with missing architectures for the architecure
-of the cputype specified by 
+of the cputype specified by
 .I allow_missing_architectures
 will cause this call to fail.  Other architectures that could not be prebound
 due to missing architectures in depending libraries will not have their
@@ -201,7 +201,7 @@ tools and never set by the
 .IR update_prebinding (1)
 command).
 If
-.I throttle 
+.I throttle
 is non-NULL it points to a value of the maximum bytes per second to use for
 writting the output.  If the value is ULONG_MAX then the actual bytes per
 second is returned indirectly through *throttle.
@@ -223,9 +223,9 @@ is successful it returns
 .SM REDO_PREBINDING_SUCCESS
 otherwise it returns
 .SM REDO_PREBINDING_FAILURE.
-If the binary is already unprebound (it has the 
+If the binary is already unprebound (it has the
 .SM MH_PREBINDABLE
-flag set) then 
+flag set) then
 .SM REDO_PREBINDING_NOT_NEEDED
 is returned.  If
 .I zero_out_prebind_checksum
@@ -236,22 +236,22 @@ load command (if any) is set to zero on output, otherwise it is left alone
 are the same - minus prebinding - the unprebinding process produces binaries
 that are identical).
 Unprebinding slides dynamic libraries to address zero, resets prebound symbols
-to address zero and type undefined, resets symbol pointers, removes 
+to address zero and type undefined, resets symbol pointers, removes
 .SM LC_PREBOUND_DYLIB
-commands, resets library timestamps, resets two-level hints, and updates 
-relocation entries if necessary.  Unprebound binaries have the 
+commands, resets library timestamps, resets two-level hints, and updates
+relocation entries if necessary.  Unprebound binaries have the
 .SM MH_PREBINDABLE
-flag set, but not 
+flag set, but not
 .SM MH_PREBOUND.
 It will also set the the
 .SM MH_ALLMODSBOUND
 flag if all two-level libraries were used and all modules were found to be
 bound in the
 .SM LC_PREBOUND_DYLIB
-commands.  As unprebinding is intended to produce a canonical Mach-O 
-binary, bundles and non-prebound executables and dylibs are acceptable 
-as input.  For these files, the  unprebind operation will zero library time 
-stamps and version numbers and zero entries in the two-level hints 
+commands.  As unprebinding is intended to produce a canonical Mach-O
+binary, bundles and non-prebound executables and dylibs are acceptable
+as input.  For these files, the  unprebind operation will zero library time
+stamps and version numbers and zero entries in the two-level hints
 table.  These files will not gain the
 .SM MH_PREBINDABLE
 flag.  All resulting binaries successfully processed by unprebind() will have

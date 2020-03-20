@@ -81,9 +81,7 @@ static char rcsid[] = "$OpenBSD: contents.c,v 1.2 1996/06/26 05:31:19 deraadt Ex
 #include "archive.h"
 #include "extern.h"
 
-#ifndef HAVE_STRMODE /* cctools-port */
-extern void strmode(int mode, char *p);
-#endif
+#include "stuff/port.h" /* cctools-port: strmode */
 
 /*
  * contents --

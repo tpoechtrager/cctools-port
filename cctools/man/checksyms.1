@@ -1,4 +1,4 @@
-.TH CHECKSYMS 1 "September 10, 2000" "Apple Computer, Inc."
+.TH CHECKSYMS 1 "February 28, 2019" "Apple Computer, Inc."
 .SH NAME
 checksyms \- check Mach-O production binary for proper conventions
 .SH SYNOPSIS
@@ -21,7 +21,7 @@ proper stripping of symbols for the file type (and whether is is using the
 dynamic linker),
 if the file is a dynamic library then it checks for
 the preferred linked address, setting of compatibility and
-current versions, 
+current versions,
 proper prebinding and objcunique if is uses the dynamic linker,
 and proper code generation if a dynamic binary so that there are no
 relocation entries in read-only sections.
@@ -48,7 +48,7 @@ Allow all symbols except debugging symbols (those created by the compiler's
 option).
 .TP
 .B \-b
-Check the binaries that use the dynamic linker to see that they do not have 
+Check the binaries that use the dynamic linker to see that they do not have
 relocation entries in read-only sections, are prebound and had objcunique run
 on them.  This is now the default.
 .TP
@@ -61,7 +61,7 @@ Specifies the architecture,
 .I arch_type,
 in the file to check.  More than one
 .BI \-arch " arch_type"
-can be specified.  The default is 
+can be specified.  The default is
 .BI \-arch " all"
 which checks all architectures in the file.  See
 .IR arch (3)
@@ -69,15 +69,19 @@ for the currently known
 .IR arch_type s.
 .TP
 .BI \-dylib_table " filename"
-This specifies the filename of the table of dynamic libraries and their
-addresses.  If not specified the default is ~rc/Data/DylibTable.  The format
-of the table is lines of a dynamic library name and an address in hex separated
-by spaces and or tabs.
+This option has been removed. In previous versions of
+.B checksyms
+it specifies the filename of the table of dynamic libraries and their addresses.
+If not specified the default is ~rc/Data/DylibTable.
+The format of the table is lines of a dynamic library name and an address in hex
+separated by spaces and / or tabs.
 .TP
 .BI \-seg_addr_table " filename"
-This specifies the filename of the segment address table of dynamic library
-install names and their addresses.  The format of this table is lines of two
-forms.
+This option has been removed. In previous versions of
+.B checksyms
+it specifies the filename of the segment address table of dynamic library
+install names and their addresses.
+The format of this table is lines of two forms.
 The entries in the table are lines containing either a single hex address and an
 install name or two hex addresses and an install name.  In the first form the
 single hex address is used for ``flat'' libraries and is the
@@ -101,7 +105,9 @@ is set it is also used instead of the table specified with the
 option.
 .TP
 .BI "\-seg_addr_table_filename" " pathname"
-Use
+This option has been removed. In previous versions it instructs
+.B checksyms
+to use
 .B pathname
 instead of the install name of the library for matching an entry in the segment
 address table.

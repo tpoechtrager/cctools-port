@@ -1,13 +1,16 @@
 .TH LLVM-OTOOL 1 "July 31, 2018" "Apple Inc."
+.\" NAME
 .SH NAME
 llvm-otool \- the otool-compatible command line parser for llvm-objdump
+.\" SYNOPSIS
 .SH SYNOPSIS
 .B llvm-otool
-[ 
+[
 .I "option \&..."
-] [ 
+] [
 .I "file \&..."
-] 
+]
+.\" DESCRIPTION
 .SH DESCRIPTION
 The command line shim
 .I llvm-otool
@@ -34,6 +37,7 @@ Print the
 command that
 .IR llvm-otool (1)
 will execute.
+.\" "NOTES FOR SPECIFIC OPTIONS"
 .SH "NOTES FOR SPECIFIC OPTIONS"
 .TP
 .B \-l
@@ -48,11 +52,12 @@ prints both the mach header and load commands.
 .B \-S
 To display the contents of the `\_\^\_.SYMDEF' archive file, use
 .IR llvm-nm (1)
-with the 
+with the
 .B \-print-armap
 option.
+.\" "GENERAL NOTES"
 .SH "GENERAL NOTES"
-Many of the older options in 
+Many of the older options in
 .IR otool(1)
 are obsolete as they print parts of the object file that are no longer in use.
 When used with
@@ -85,6 +90,7 @@ commands in some cases.  As the
 command is not meant to produce the exact same output as
 .IR otool (1)
 in all cases where the functionality is very similar.
+.\" "SPECIFIC TRANSLATIONS OF OPTIONS"
 .SH "SPECIFIC TRANSLATIONS OF OPTIONS"
 Below is the list of
 .IR otool (1)
@@ -124,7 +130,7 @@ There is no
 option to display  the contents of the `\_\^\_.SYMDEF' file, if the file is an
 archive.  For that use
 .IR llvm-nm (1)
-with the 
+with the
 .B \-print-armap
 option.
 .TP
@@ -195,6 +201,29 @@ options will do.  If this is not wanted then the
 .B \-no-symbolic-operands
 option can be used.
 .TP
+.B \-x
+The
+.IR objdump (1)
+option to display the contents of every \_\^\_text section defined in a Mach-O
+file is
+.BI \-section " ,\_\^\_text" .
+Note that an empty segment name means all segments. If disassembly is wanted as
+with the
+.B \-xv
+.IR otool (1)
+options then
+.IR objdump (1)
+.B \-disassemble-all
+is used.  By default
+.IR objdump (1)
+also symbolically disassembles the operands as the
+.IR otool (1)
+.B \-xV
+options will do.  If this is not wanted then the
+.IR objdump (1)
+.B \-no-symbolic-operands
+option can be used.
+.TP
 .B \-d
 The
 .IR objdump (1)
@@ -219,13 +248,13 @@ Note that the default relocation entry format is different between
 .IR objdump (1)
 and
 .IR otool (1).
-When 
+When
 .BR \-r
 is combined with the
 .BR \-macho
 option,
 .IR objdump (1)
-will display the relocation entries in the classic 
+will display the relocation entries in the classic
 .IR otool (1)
 format.
 .TP

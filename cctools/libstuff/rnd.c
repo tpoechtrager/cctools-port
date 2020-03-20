@@ -27,17 +27,27 @@
  */
 #include <stdint.h>
 #include "stuff/rnd.h"
+
 /*
  * rnd() rounds v to a multiple of r.
  */
-__private_extern__
-uint64_t
-rnd(
-uint64_t v,
-uint64_t r)
+__private_extern__ uint64_t rnd(uint64_t v, uint64_t r)
 {
-	r--;
-	v += r;
-	v &= ~(int64_t)r;
-	return(v);
+    return rnd64(v, r);
+}
+
+__private_extern__ uint64_t rnd64(uint64_t v, uint64_t r)
+{
+    r--;
+    v += r;
+    v &= ~(int64_t)r;
+    return(v);
+}
+
+__private_extern__ uint32_t rnd32(uint32_t v, uint32_t r)
+{
+    r--;
+    v += r;
+    v &= ~(uint32_t)r;
+    return(v);
 }

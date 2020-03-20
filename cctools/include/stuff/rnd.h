@@ -33,7 +33,9 @@
 
 /*
  * rnd() rounds v to a multiple of r.
+ *
+ * r must be a non-zero power of 2.
  */
-__private_extern__ uint64_t rnd(
-    uint64_t v,
-    uint64_t r);
+__private_extern__ uint64_t rnd(uint64_t v, uint64_t r);
+__private_extern__ uint64_t rnd64(uint64_t v, uint64_t r);
+__private_extern__ uint32_t rnd32(uint32_t v, uint32_t r);

@@ -49,12 +49,12 @@ XXX.framework/Versions/YYY/XXX or XXX.framework/XXX, where XXX and YYY are any
 name.)
 .IP
 For each framework that a program uses, the dynamic linker looks for the
-framework in each directory in 
+framework in each directory in
 .SM DYLD_FRAMEWORK_PATH
 in turn. If it looks in all the directories and can't find the framework, it
-searches the directories in  
+searches the directories in
 .SM DYLD_LIBRARY_PATH
-in turn. If it still can't find the framework, it then searches 
+in turn. If it still can't find the framework, it then searches
 .SM DYLD_FALLBACK_FRAMEWORK_PATH
 and
 .SM DYLD_FALLBACK_LIBRARY_PATH
@@ -62,7 +62,7 @@ in turn.
 .IP
 Use the
 .B \-L
-option to 
+option to
 .IR otool (1).
 to discover the frameworks and shared libraries that the executable
 is linked against.
@@ -80,12 +80,12 @@ $(HOME)/Library/Frameworks:/Library/Frameworks:/Network/Library/Frameworks:
 This is a colon separated list of directories that contain libraries. The
 dynamic linker searches these directories before it searches the default
 locations for libraries. It allows you to test new versions of existing
-libraries. 
+libraries.
 .IP
 For each library that a program uses, the dynamic linker looks for it in each
-directory in 
+directory in
 .SM DYLD_LIBRARY_PATH
-in turn. If it still can't find the library, it then searches 
+in turn. If it still can't find the library, it then searches
 .SM DYLD_FALLBACK_FRAMEWORK_PATH
 and
 .SM DYLD_FALLBACK_LIBRARY_PATH
@@ -93,7 +93,7 @@ in turn.
 .IP
 Use the
 .B \-L
-option to 
+option to
 .IR otool (1).
 to discover the frameworks and shared libraries that the executable
 is linked against.
@@ -164,7 +164,7 @@ This lets you attach a debugger to the process instead of letting the process
 exit.
 .TP
 .B DYLD_PREBIND_DEBUG
-When this is set, the dynamic linker prints diagnostics about 
+When this is set, the dynamic linker prints diagnostics about
 launching prebound programs and libraries. This lets you determine why a
 program is not being launched prebound.
 You can view the recorded library time stamps with the
@@ -187,7 +187,7 @@ variables.  This is so that if a program is
 .IR exec (2)'ed
 from a secure program too will not have it's libraries searched for, as well.
 For statically linked secure programs that
-.IR exec (2) 
+.IR exec (2)
 other programs that might use the dynamic linker, they too should clear out the
 values of the dyld path and insertion environment variables.
 .TP

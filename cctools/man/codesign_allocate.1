@@ -6,7 +6,7 @@ codesign_allocate \-  add code signing data to a Mach-O file
 \-i oldfile [ \-a arch size ]... [ \-A cputype cpusubtype size ]... \-o newfile
 .SH DESCRIPTION
 .I codesign_allocate
-sets up a Mach-O file used by the dynamic linker so space for code signing data 
+sets up a Mach-O file used by the dynamic linker so space for code signing data
 of the specified size for the specified architecture is embedded in the Mach-O
 file.  The program must be passed one \-a argument or one \-A argument for each
 architecture in a universal file, or exactly one \-a or \-A for a thin file.
@@ -37,7 +37,7 @@ The value of
 must be a multiple of 16.
 .TP
 .BI \-r
-remove the code signature date and the LC_CODE_SIGNATURE load command.  This
+remove the code signature data and the LC_CODE_SIGNATURE load command.  This
 is the same as specifiying the
 .B -a
 or

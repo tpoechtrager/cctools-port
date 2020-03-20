@@ -23,6 +23,8 @@
 #include <architecture/byte_order.h>
 #include <mach/i386/thread_status.h>
 
+struct i386_float_state;
+
 extern void swap_i386_thread_state(
     i386_thread_state_t *cpu,
     enum NXByteOrder target_byte_order);

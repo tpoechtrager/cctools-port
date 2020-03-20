@@ -29,6 +29,7 @@
  * @APPLE_LICENSE_HEADER_END@
  */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <mach-o/loader.h>
 #include <mach-o/nlist.h>
@@ -40,9 +41,6 @@
 #include "dyld_bind_info.h"
 #include "ofile_print.h"
 #include "../as/sparc-opcode.h"
-
-#define DEBUG
-
 
 /* Sign-extend a value which is N bits long.  */
 #define	SEX(value, bits) \
@@ -153,8 +151,7 @@ union sparc_insn
 				      strings_size, verbose)
 
 static int opcodes_sorted = 0;
-extern void qsort();
-static int compare_opcodes ();
+static int compare_opcodes (const void* a, const void* b);
 
 #ifdef NOT_USED
 /* Nonzero if INSN is the opcode for a delayed branch.  */
@@ -809,7 +806,7 @@ enum bool verbose)
 
 static int
 compare_opcodes (a, b)
-     char *a, *b;
+     const void *a, *b;
 {
   struct sparc_opcode *op0 = (struct sparc_opcode *) a;
   struct sparc_opcode *op1 = (struct sparc_opcode *) b;
@@ -882,7 +879,7 @@ compare_opcodes (a, b)
 
   /* Fewer arguments are preferred.  */
   {
-    int length_diff = strlen (op0->args) - strlen (op1->args);
+    int length_diff = (int)(strlen(op0->args)) - ((int)strlen(op1->args));
     if (length_diff != 0)
       /* Put the one with fewer arguments first.  */
       return length_diff;

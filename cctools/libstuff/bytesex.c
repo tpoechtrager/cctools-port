@@ -2979,7 +2979,7 @@ enum byte_sex target_byte_sex)
 	    mods[i].objc_module_info_addr =
 				  SWAP_LONG_LONG(mods[i].objc_module_info_addr);
 	    mods[i].objc_module_info_size =
-				  SWAP_LONG_LONG(mods[i].objc_module_info_size);
+				  SWAP_INT(mods[i].objc_module_info_size);
 	}
 }
 

@@ -144,7 +144,7 @@ has been compiled for debugging (for example), it can take orders of magnitude
 longer.
 .PP
 Since the objects loaded with
-.I kld_load 
+.I kld_load
 or
 .I kld_load_from_memory
 can only use symbols that appear in the executable program,
@@ -181,25 +181,25 @@ This file can be used with the
 .IR gdb (1)
 .I add-file
 command to debug the code in the dynamically loaded object.
-The 
+The
 .I kld_load
-function returns 1 for success and 0 for failure.  If a fatal system error 
-(out of memory, etc.) occurs, all future calls to 
-.I kld_load 
+function returns 1 for success and 0 for failure.  If a fatal system error
+(out of memory, etc.) occurs, all future calls to
+.I kld_load
 and the other routines described here will fail.
 .PP
 .I kld_load_from_memory()
 is similar to
 .IR kld_load() ,
-but works on memory rather than a file.  The argument 
-.I object_name 
+but works on memory rather than a file.  The argument
+.I object_name
 is the name associated with the memory and is used for messages.
 (It must not be NULL.) The
-arguments 
-.I object_addr 
-and 
-.I object_size 
-are the memory address and size of the object file.  
+arguments
+.I object_addr
+and
+.I object_size
+are the memory address and size of the object file.
 .I kld_load_from_memory()
 only allows one thin object file (not an archive or ``universal'' file) to be
 loaded.
@@ -226,11 +226,11 @@ routine (For this routine, only internal errors can result.)
 clears out all allocated data structures used by these routines.  If the
 parameter
 .I deallocate_sets
-is non-zero, the function also unloads all objects that were loaded.  
+is non-zero, the function also unloads all objects that were loaded.
 If
 .I deallocate_sets
 is zero the object sets aren't unloaded, and the program can continue to use
-the code and data loaded.  However, further calls to the routines 
+the code and data loaded.  However, further calls to the routines
 described here will no longer know
 about the symbols in those objects.  If objects aren't to be allowed access
 to each other's symbols, an
@@ -253,19 +253,19 @@ basis for subsequent
 .IR kld_load_basefile_from_memory
 is an alternate interface that allows mapped ``thin'' object image to be
 specified rather than a file.  The base file may be a ``universal'' file, and
-must contain an architecture that would execute on the host; 
-otherwise, it is an error.  
+must contain an architecture that would execute on the host;
+otherwise, it is an error.
 If the file is a universal file, the ``best'' architecture (as defined by
-what the kernel 
-.IR exec (2) 
+what the kernel
+.IR exec (2)
 would select) is used as the base file.
 .I kld_load_basefile
-must be invoked before any call to 
+must be invoked before any call to
 .I kld_load.
 Alternatively, it can be called after
 .IR kld_unload_all ,
 which unloads the base file.  This call is intended to be used when a program
-is dynamically loading object sets into a program other than itself, where 
+is dynamically loading object sets into a program other than itself, where
 .I base_filename
 contains the symbol table of the target program.  The routine
 .IR kld_address_func ,
@@ -287,7 +287,7 @@ calculation of
 The function
 specified by
 .I func
-should return the address where the output is to be link edited.  
+should return the address where the output is to be link edited.
 .I kld_address_func
 is
 intended to be used when a program is dynamically loading objects into a
@@ -299,12 +299,12 @@ is passed a mask of options,
 .IR link_options ,
 that are used to control some aspects of the following
 .I kld_load
-operations. Passing 
+operations. Passing
 .I KLD_STRIP_NONE
 will stop kld from stripping symbols from the output in all cases. By default
-all symbols are stripped for kernel loads and when 
+all symbols are stripped for kernel loads and when
 .I output_filename
-is NULL for 
+is NULL for
 .I kld_load()
 and
 .I kld_load_from_memory()
@@ -327,7 +327,7 @@ symbols have been merged,
 has to allocate storage for these symbols
 for the code to run without error.  The problem occurs if, on a later call to
 .IR kld_load ,
-one of the common symbols that 
+one of the common symbols that
 .I kld_load
 allocated appears in an object
 file as a defining symbol (not a common or undefined symbol).  In this case,

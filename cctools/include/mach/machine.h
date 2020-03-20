@@ -159,6 +159,7 @@ extern vm_offset_t		interrupt_stack[];
 #define CPU_TYPE_POWERPC	((cpu_type_t) 18)
 #define CPU_ARCH_ABI64		 0x1000000
 #define CPU_ARCH_ABI64_32	 0x2000000
+#define CPU_ARCH_MASK        0xff000000      /* cctools-port */
 #define CPU_TYPE_POWERPC64	((cpu_type_t)(CPU_TYPE_POWERPC | CPU_ARCH_ABI64))
 #define CPU_TYPE_VEO		((cpu_type_t) 255)
 #define CPU_TYPE_ARM64		((cpu_type_t)(CPU_TYPE_ARM | CPU_ARCH_ABI64))

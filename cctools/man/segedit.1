@@ -11,7 +11,7 @@ segedit \- extract and replace sections from object files
 .SH DESCRIPTION
 .B segedit
 extracts or replaces named sections from the \fIinput_file\fR. When extracting
-sections, 
+sections,
 .B segedit
 will write the contents of each requested section into \fIdata_file\fR. When
 replacing sections,
@@ -25,7 +25,7 @@ with the
 option.  The segment and section names of an object file can be examined with
 the
 .I \-l
-option to 
+option to
 .BR otool (1).
 Only sections in segments that have no relocation to or from them (i.e., segments
 marked with the
@@ -63,7 +63,7 @@ marked with the
 flag) can be replaced.
 .PP
 .B segedit
-will not extract or replace sections from universal files. If necessary, use 
+will not extract or replace sections from universal files. If necessary, use
 .BR lipo (1)
 to extract the desired Mach-O files from a universal file before running
 .B segedit.

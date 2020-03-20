@@ -196,7 +196,7 @@ uint32_t narchs)
 		    archs[i].members[j].offset = offset;
 		    size = 0;
 		    if(archs[i].members[j].member_long_name == TRUE){
-			size = rnd(archs[i].members[j].member_name_size,
+			size = rnd32(archs[i].members[j].member_name_size,
 				     sizeof(long));
 			archs[i].toc_long_name = TRUE;
 		    }

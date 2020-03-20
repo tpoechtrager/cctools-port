@@ -12,7 +12,7 @@ extern NSObjectFileImageReturnCode NSCreateObjectFileImageFromFile(
 .sp .5
 extern NSObjectFileImageReturnCode NSCreateObjectFileImageFromMemory(
 	void *address,
-	unsigned long size, 
+	unsigned long size,
 	NSObjectFileImage *objectFileImage);
 .sp .5
 extern NSObjectFileImageReturnCode NSCreateCoreFileImageFromFile(
@@ -89,29 +89,29 @@ task with
 to determine what libraries were loaded and which modules were linked.
 .PP
 .I NSSymbolDefinitionCountInObjectFileImage
-returns the number of symbol definitions in the NSObjectFileImage. 
+returns the number of symbol definitions in the NSObjectFileImage.
 .PP
 .I NSSymbolDefinitionNameInObjectFileImage
-returns the name of the i'th symbol definitions in the NSObjectFileImage. 
+returns the name of the i'th symbol definitions in the NSObjectFileImage.
 The 'C' string returned should not be freed.  If the ordinal specified is
 outside the range [0..NSSymbolDefinitionCountInObjectFileImage], NULL will be
-returned. 
+returned.
 .PP
 .I NSSymbolReferenceCountInObjectFileImage
-returns the number of references to undefined symbols the NSObjectFileImage. 
+returns the number of references to undefined symbols the NSObjectFileImage.
 .PP
 .I NSSymbolReferenceNameInObjectFileImage
-returns the name of the i'th undefined symbol in the NSObjectFileImage. 
+returns the name of the i'th undefined symbol in the NSObjectFileImage.
 The 'C' string returned should not be freed.  If the ordinal specified is
 outside the range [0..NSSymbolReferenceCountInObjectFileImage], NULL will be
-returned. 
+returned.
 .PP
 .I NSIsSymbolDefinedInObjectFileImage
 returns TRUE if the specified symbol name has a definition in the
-NSObjectFileImage. 
+NSObjectFileImage.
 .PP
 .I NSGetSectionDataInObjectFileImage
-returns the address of the data for the named section in the named segment in 
+returns the address of the data for the named section in the named segment in
 the NSObjectFileImage.  If the parameter size is not NULL, the size of the
 section is returned in size.  If the section cannot be found or a zerofill
 section, NULL is returned and the size returned is zero.
@@ -130,7 +130,7 @@ the host machine's cpu architecture.
 .TP
 .B NSObjectFileImageFailure
 Indicates the API failed and no NSObjectFileImage was returned.  If this is
-returned an error message is printed on stderr as to the reason for the 
+returned an error message is printed on stderr as to the reason for the
 failure.
 .TP
 .B NSObjectFileImageInappropriateFile

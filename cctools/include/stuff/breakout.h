@@ -94,7 +94,7 @@ struct arch {
 
     /* if this is an unknown file: the addr and size of the file */
     char *unknown_addr;
-    uint32_t unknown_size;
+    uint64_t unknown_size;
 
     /* don't update LC_ID_DYLIB timestamp */
     enum bool dont_update_LC_ID_DYLIB_timestamp;
@@ -104,7 +104,7 @@ struct member {
     enum ofile_type type;	/* the type of this member can be OFILE_Mach_O*/
 				/*  OFILE_LLVM_BITCODE or OFILE_UNKNOWN */
     struct ar_hdr *ar_hdr;	/* the archive header for this member */
-    uint32_t offset;		/* current working offset and final offset */
+    uint64_t offset;		/* current working offset and final offset */
 				/*  use in creating the table of contents */
 
     /* the name of the member in the output */
@@ -123,7 +123,7 @@ struct member {
 
     /* if this member is an unknown file: the addr and size of the member */
     char *unknown_addr;
-    uint32_t unknown_size;
+    uint64_t unknown_size;
 
     /*
      * If this member was created from a file then input_file_name is set else
@@ -177,9 +177,9 @@ struct object {
     struct dyld_info_command
 	*dyld_info;		    /* the LC_DYLD_INFO command,if any */
     struct linkedit_data_command
-	*dyld_chained_fixups;	    /* the fixups */
-    struct linkedit_data_command
 	*dyld_exports_trie;	    /* the exports trie */
+    struct linkedit_data_command
+	*dyld_chained_fixups;	    /* the fixups */
 
     /*
      * This is only used for redo_prebinding and is calculated by breakout()
@@ -231,6 +231,10 @@ struct object {
     uint32_t      output_code_sign_drs_info_data_size;
     char *output_link_opt_hint_info_data;
     uint32_t      output_link_opt_hint_info_data_size;
+    char *output_dyld_chained_fixups_data;
+    uint32_t      output_dyld_chained_fixups_data_size;
+    char *output_dyld_exports_trie_data;
+    uint32_t      output_dyld_exports_trie_data_size;
 
     uint32_t      output_ilocalsym;
     uint32_t      output_nlocalsym;

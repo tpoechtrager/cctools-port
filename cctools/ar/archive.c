@@ -239,8 +239,9 @@ get_arobj(fd)
 	int fd;
 {
 	struct ar_hdr *hdr;
-	int len, nr;
+	size_t len, nr;
 	char *p, buf[20];
+	long longval;
 
 	nr = read(fd, hb, sizeof(HDR));
 	if (nr != sizeof(HDR)) {
@@ -260,8 +261,10 @@ get_arobj(fd)
 #define	OCTAL	 8
 
 	AR_ATOI(hdr->ar_date, chdr.date, sizeof(hdr->ar_date), DECIMAL);
-	AR_ATOI(hdr->ar_uid, chdr.uid, sizeof(hdr->ar_uid), DECIMAL);
-	AR_ATOI(hdr->ar_gid, chdr.gid, sizeof(hdr->ar_gid), DECIMAL);
+	AR_ATOI(hdr->ar_uid, longval, sizeof(hdr->ar_uid), DECIMAL);
+	chdr.uid = (uid_t)longval;
+	AR_ATOI(hdr->ar_gid, longval, sizeof(hdr->ar_gid), DECIMAL);
+	chdr.gid = (gid_t)longval;
 	AR_ATOI(hdr->ar_mode, chdr.mode, sizeof(hdr->ar_mode), OCTAL);
 	AR_ATOI(hdr->ar_size, chdr.size, sizeof(hdr->ar_size), DECIMAL);
 
@@ -296,7 +299,7 @@ get_arobj(fd)
 	return (1);
 }
 
-static int already_written;
+static size_t already_written;
 
 /*
  * put_arobj --
@@ -307,7 +310,7 @@ put_arobj(cfp, sb)
 	CF *cfp;
 	struct stat *sb;
 {
-	unsigned int lname;
+	size_t lname;
 	char *name;
 	struct ar_hdr *hdr;
 	off_t size;
@@ -353,7 +356,8 @@ put_arobj(cfp, sb)
 			    sb->st_mode, (int64_t)sb->st_size, ARFMAG);
 			lname = 0;
 		} else if (lname > sizeof(hdr->ar_name) || strchr(name, ' '))
-			(void)sprintf(hb, HDR1, AR_EFMT1, (lname + 3) & ~3,
+			(void)sprintf(hb, HDR1, AR_EFMT1,
+			    (int)((lname + 3) & ~3),
 			    (long int)tv_sec,
 			    (unsigned int)(u_short)sb->st_uid,
 			    (unsigned int)(u_short)sb->st_gid,
@@ -428,7 +432,8 @@ copy_ar(cfp, size)
 {
 	static char pad = '\n';
 	off_t sz;
-	int from, nr, nw, off, to;
+	ssize_t nr, nw;
+	int from, off, to;
 	char buf[8*1024];
 
 	nr = 0;

@@ -482,6 +482,6 @@ __private_extern__ enum bool swap_object_headers(
  */
 __private_extern__ enum byte_sex get_toc_byte_sex(
     char *addr,
-    uint32_t size);
+    uint64_t size);
 
 #endif /* _STUFF_BYTESEX_H_ */

@@ -194,9 +194,11 @@ char *out_file_name)
 	 */
 	nsects = 0;
 	for(frchainP = frchain_root; frchainP; frchainP = frchainP->frch_next){
-	    frchainP->frch_section.addr = frchainP->frch_root->fr_address;
-	    frchainP->frch_section.size = frchainP->frch_last->fr_address -
-		   			  frchainP->frch_root->fr_address;
+	    frchainP->frch_section.addr = (uint32_t)
+		frchainP->frch_root->fr_address;
+	    frchainP->frch_section.size = (uint32_t)
+		(frchainP->frch_last->fr_address -
+		 frchainP->frch_root->fr_address);
 	    nsects++;
 	}
 
@@ -284,9 +286,10 @@ char *out_file_name)
 		    break;
 	    }
 	    if(p != NULL)
-		i = p->frch_section.addr - frchainP->frch_section.addr;
+		i = (uint32_t)(p->frch_section.addr -
+			       frchainP->frch_section.addr);
 	    else
-		i = frchainP->frch_section.size;
+		i = (uint32_t)frchainP->frch_section.size;
 	    reloc_segment.filesize += i;
 	    frchainP->frch_section.offset = offset;
 	    offset += i;
@@ -301,7 +304,7 @@ char *out_file_name)
 	    reloc_segment.vmsize = frchainP->frch_section.addr +
 				   frchainP->frch_section.size;
 	}
-	offset = rnd(offset, sizeof(int32_t));
+	offset = rnd32(offset, sizeof(int32_t));
 
 	/*
 	 * Count the number of relocation entries for each section.
@@ -316,7 +319,7 @@ char *out_file_name)
 	/*
 	 * Fill in the offset to the relocation entries of the sections.
 	 */
-	offset = rnd(offset, sizeof(int32_t));
+	offset = rnd32(offset, sizeof(int32_t));
 	reloff = offset;
 	nrelocs = 0;
 	for(frchainP = frchain_root; frchainP; frchainP = frchainP->frch_next){
@@ -378,7 +381,7 @@ char *out_file_name)
 	    symbol_table.stroff = 0;
 	else
 	    symbol_table.stroff = offset;
-	symbol_table.strsize = rnd(strsize, sizeof(uint32_t));
+	symbol_table.strsize = rnd32(strsize, sizeof(uint32_t));
 	offset += rnd(strsize, sizeof(uint32_t));
 
 	/*
@@ -1122,6 +1125,9 @@ uint32_t debug_section)
     uint32_t left21, right14;
 #endif
 
+/* the pragmas that follow silence a noisy clang warning  */
+#pragma unused (sri)
+#pragma unused (sectdiff)
 	/*
 	 * If fx_addsy is NULL then this fix needs no relocation entry.
 	 */
@@ -1172,8 +1178,8 @@ uint32_t debug_section)
 			 fixP->fx_size);
 	}
 	riP->r_pcrel = fixP->fx_pcrel;
-	riP->r_address = fixP->fx_frag->fr_address + fixP->fx_where -
-			 sect_addr;
+	riP->r_address = (int32_t)(fixP->fx_frag->fr_address + fixP->fx_where -
+			 sect_addr);
 #ifdef ARM
 	if(fixP->fx_r_type == ARM_RELOC_LO16 ||
 	   fixP->fx_r_type == ARM_RELOC_HI16 ||
@@ -1259,6 +1265,8 @@ uint32_t debug_section)
 		riP->r_type = X86_64_RELOC_UNSIGNED;
 		return(2 * sizeof(struct relocation_info));
 #endif
+/* the #if that follows is to silence a noisy "unreachable code" warning */
+#if defined(ARM) || defined(SPARC) || defined(HPPA) || defined (PPC)
 #ifdef PPC
 		if(fixP->fx_r_type == PPC_RELOC_HI16)
 		    sectdiff = PPC_RELOC_HI16_SECTDIFF;
@@ -1385,6 +1393,7 @@ uint32_t debug_section)
 #endif
 		*riP = *((struct relocation_info *)&sri);
 		return(2 * sizeof(struct relocation_info));
+#endif /* unreachable code */
 	    }
 	    /*
 	     * Determine if this is left as a local relocation entry or must be

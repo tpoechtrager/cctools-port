@@ -116,7 +116,7 @@ char **envp)
 	 * If this is being run via the symbolic link named codesign_allocate-p
 	 * then set the pflag.
 	 */
-	i = strlen(argv[0]);
+	i = (uint32_t)strlen(argv[0]);
 	if(i >= sizeof("codesign_allocate-p") - 1 &&
 	   strcmp(argv[0] + i-2, "-p") == 0)
 	    pflag = TRUE;
@@ -161,7 +161,7 @@ char **envp)
 			usage();
 		    }
 		    arch_signs[narch_signs].datasize =
-			strtoul(argv[i+2], &endp, 0);
+			(uint32_t)strtoul(argv[i+2], &endp, 0);
 		    if(*endp != '\0')
 			fatal("size for '-a %s %s' not a proper number",
 			      argv[i+1], argv[i+2]);
@@ -183,13 +183,13 @@ char **envp)
 			    (narch_signs + 1) * sizeof(struct arch_sign));
 
 		    arch_signs[narch_signs].arch_flag.cputype = 
-			strtoul(argv[i+1], &endp, 0);
+			(uint32_t)strtoul(argv[i+1], &endp, 0);
 		    if(*endp != '\0')
 			fatal("cputype for '-A %s %s %s' not a proper number",
 			      argv[i+1], argv[i+2], argv[i+3]);
 
 		    arch_signs[narch_signs].arch_flag.cpusubtype = 
-			strtoul(argv[i+2], &endp, 0);
+			(uint32_t)strtoul(argv[i+2], &endp, 0);
 		    if(*endp != '\0')
 			fatal("cpusubtype for '-A %s %s %s' not a proper "
 			      "number", argv[i+1], argv[i+2], argv[i+3]);
@@ -200,7 +200,7 @@ char **envp)
 			    arch_signs[narch_signs].arch_flag.cpusubtype);
 
 		    arch_signs[narch_signs].datasize =
-			strtoul(argv[i+3], &endp, 0);
+			(uint32_t)strtoul(argv[i+3], &endp, 0);
 		    if(*endp != '\0')
 			fatal("size for '-A %s %s %s' not a proper number",
 			      argv[i+1], argv[i+2], argv[i+3]);
@@ -306,7 +306,7 @@ uint32_t narchs)
 		    archs[i].members[j].offset = offset;
 		    size = 0;
 		    if(archs[i].members[j].member_long_name == TRUE){
-			size = rnd(archs[i].members[j].member_name_size,
+			size = rnd32(archs[i].members[j].member_name_size,
 				     sizeof(long));
 			archs[i].toc_long_name = TRUE;
 		    }
@@ -491,6 +491,18 @@ struct object *object)
 		object->output_link_opt_hint_info_data_size = 
 		    object->link_opt_hint_cmd->datasize;
 	    }
+	    if(object->dyld_chained_fixups != NULL){
+		object->output_dyld_chained_fixups_data =
+		(object->object_addr + object->dyld_chained_fixups->dataoff);
+		object->output_dyld_chained_fixups_data_size =
+		    object->dyld_chained_fixups->datasize;
+	    }
+	    if(object->dyld_exports_trie != NULL){
+		object->output_dyld_exports_trie_data =
+		(object->object_addr + object->dyld_exports_trie->dataoff);
+		object->output_dyld_exports_trie_data_size =
+		    object->dyld_exports_trie->datasize;
+	    }
 	    object->output_ext_relocs = (struct relocation_info *)
 		(object->object_addr + object->dyst->extreloff);
 	    object->output_tocs =
@@ -546,6 +558,12 @@ struct object *object)
 	    if(object->link_opt_hint_cmd != NULL)
 		object->input_sym_info_size +=
 		    object->link_opt_hint_cmd->datasize;
+	    if(object->dyld_chained_fixups != NULL)
+		object->input_sym_info_size +=
+		    object->dyld_chained_fixups->datasize;
+	    if(object->dyld_exports_trie != NULL)
+		object->input_sym_info_size +=
+		    object->dyld_exports_trie->datasize;
 	    if(object->mh != NULL){
 		object->input_sym_info_size +=
 		    object->dyst->nmodtab *
@@ -577,8 +595,8 @@ struct object *object)
 	     * string table size before it is adjusted and there is no padding.
 	     */
 	    if(filetype != MH_OBJECT)
-		object->input_sym_info_size = rnd(object->input_sym_info_size,
-						  16);
+		object->input_sym_info_size = rnd32(object->input_sym_info_size,
+						    16);
 	    object->input_sym_info_size += object->code_sig_cmd->datasize;
 	}
 
@@ -619,7 +637,7 @@ struct object *object)
 		    if(object->seg_linkedit->filesize >
 		       object->seg_linkedit->vmsize)
 			object->seg_linkedit->vmsize =
-			    rnd(object->seg_linkedit->filesize,
+			    rnd32(object->seg_linkedit->filesize,
 		                get_segalign_from_flag(&arch_flag));
 		}
 		else if(object->seg_linkedit64 != NULL){
@@ -688,10 +706,10 @@ struct object *object)
 		old_align_delta = object->code_sig_cmd->dataoff - dataoff;
 			
 		if(pflag)
-		    rnd_dataoff = rnd(dataoff, 
+		    rnd_dataoff = rnd32(dataoff,
 			    get_segalign_from_flag(&arch_signs[i].arch_flag));
 		else
-		    rnd_dataoff = rnd(dataoff, 16);
+		    rnd_dataoff = rnd32(dataoff, 16);
 		align_delta = rnd_dataoff - dataoff;
 
 		object->code_sig_cmd->dataoff = rnd_dataoff;
@@ -707,7 +725,7 @@ struct object *object)
 		if(object->seg_linkedit->filesize >
 		   object->seg_linkedit->vmsize)
 		    object->seg_linkedit->vmsize =
-			rnd(object->seg_linkedit->filesize,
+			rnd32(object->seg_linkedit->filesize,
 			      get_segalign_from_flag(&arch_signs[i].arch_flag));
 	    }
 	    else if(object->seg_linkedit64 != NULL){
@@ -748,8 +766,8 @@ struct object *object)
 		linkedit_end = object->seg_linkedit->fileoff +
 			       object->seg_linkedit->filesize;
 	    else if(object->seg_linkedit64 != NULL)
-		linkedit_end = object->seg_linkedit64->fileoff +
-			       object->seg_linkedit64->filesize;
+		linkedit_end = (uint32_t)(object->seg_linkedit64->fileoff +
+					  object->seg_linkedit64->filesize);
 	    else if(object->mh_filetype == MH_OBJECT)
 		linkedit_end = object->object_size;
 	    else
@@ -765,14 +783,14 @@ struct object *object)
 	     * byte alignment.
 	     */
 	    if(object->st != NULL && pflag) {
-		object->code_sig_cmd->dataoff = rnd(linkedit_end,
+		object->code_sig_cmd->dataoff = rnd32(linkedit_end,
 			      get_segalign_from_flag(&arch_signs[i].arch_flag));
 		object->output_strings_size_pad =
 		    object->code_sig_cmd->dataoff - linkedit_end;
 		object->st->strsize += object->output_strings_size_pad;
 	    }
 	    else {
-		object->code_sig_cmd->dataoff = rnd(linkedit_end, 16);
+		object->code_sig_cmd->dataoff = rnd32(linkedit_end, 16);
 	    }
 	    align_delta = object->code_sig_cmd->dataoff - linkedit_end;
 	    object->output_code_sig_data_size = arch_signs[i].datasize;
@@ -789,7 +807,7 @@ struct object *object)
 		if(object->seg_linkedit->filesize >
 		   object->seg_linkedit->vmsize)
 		    object->seg_linkedit->vmsize =
-			rnd(object->seg_linkedit->filesize,
+			rnd32(object->seg_linkedit->filesize,
 			      get_segalign_from_flag(&arch_signs[i].arch_flag));
 	    }
 	    else if(object->seg_linkedit64 != NULL){
@@ -891,7 +909,7 @@ struct object *object)
 		else{
 		    if(sg64->fileoff != 0 && sg64->filesize != 0 &&
 		       sg64->fileoff < low_fileoff)
-			low_fileoff = sg64->fileoff;
+			low_fileoff = (uint32_t)sg64->fileoff;
 		}
 	    }
 	    lc = (struct load_command *)((char *)lc + lc->cmdsize);
@@ -1007,7 +1025,14 @@ struct object *object)
         }
 	free(new_load_commands);
 
-	/* reset the pointers into the load commands */
+	/*
+	 * reset the pointers into the load commands
+	 *
+	 * Recall that the LC_CODE_SIGNATURE load command can be anywhere in
+	 * the load command array. We've just removed LC_CODE_SIGNATURE and
+	 * compacted the array, and if any of the following load commands
+	 * followed the code signature cmd their pointers are invalid.
+	 */
 	object->code_sig_cmd = NULL;
 	lc1 = arch->object->load_commands;
 	for(i = 0; i < ncmds; i++){
@@ -1046,6 +1071,14 @@ struct object *object)
 		break;
 	    case LC_LINKER_OPTIMIZATION_HINT:
 		object->link_opt_hint_cmd =
+				         (struct linkedit_data_command *)lc1;
+		break;
+	    case LC_DYLD_EXPORTS_TRIE:
+		object->dyld_exports_trie =
+				         (struct linkedit_data_command *)lc1;
+		break;
+	    case LC_DYLD_CHAINED_FIXUPS:
+		object->dyld_chained_fixups =
 				         (struct linkedit_data_command *)lc1;
 		break;
 	    }

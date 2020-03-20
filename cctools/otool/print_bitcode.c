@@ -454,7 +454,7 @@ xar_t xar)
 		    name = val;
 	    }
 	    if(mode != NULL){
-		mode_value = strtoul(mode, &endp, 8);
+		mode_value = (uint32_t)strtoul(mode, &endp, 8);
 		if(*endp != '\0')
 		    printf("(mode: \"%s\" contains non-octal chars) ", mode);
 		if(strcmp(type, "file") == 0)

@@ -3,30 +3,30 @@
 as \- Mac OS X Mach-O GNU-based assemblers
 .SH SYNOPSIS
 .B as
-[ 
+[
 .I "option \&..."
-] [ 
+] [
 .I "file \&..."
-] 
+]
 .SH DESCRIPTION
 The
 .I as
-command translates assembly code in the named files to object code.  If no files are specified, 
+command translates assembly code in the named files to object code.  If no files are specified,
 .I as
-reads from 
+reads from
 .BR stdin .
 All undefined symbols in the assembly are treated as
 global.  The output of the assembly is left in the file
 .B a.out
 by default.
 .PP
-The program 
-.B /usr/bin/as 
+The program
+.B /usr/bin/as
 is actually a driver that executes assemblers for specific target
-architectures.  If no target architecture is specified, it defaults to the 
+architectures.  If no target architecture is specified, it defaults to the
 architecture of the host it is running on.
 .SH OPTIONS
-.TP 
+.TP
 .BI  \-o " name"
 Name the output file
 .I name
@@ -43,8 +43,8 @@ or
 .BI /usr/local/libexec/gcc/darwin/ arch_type /as .
 There is only one assembler for an architecture family.  If the
 specified target architecture is a machine-specific implementation,
-the assembler for that architecture family is executed (e.g., 
-.B /usr/libexec/gcc/darwin/ppc/as 
+the assembler for that architecture family is executed (e.g.,
+.B /usr/libexec/gcc/darwin/ppc/as
 for
 .BR "\-arch ppc604e" ).
 See
@@ -60,14 +60,14 @@ and the architecture (from the
 flag), to distinguish which architecture the error messages refer to.
 When the
 .IR cc (1)
-driver program 
+driver program
 is run with multiple
-.B \-arch 
+.B \-arch
 flags, it invokes
 .I as
-with the 
+with the
 .B \-arch_multiple
-option. 
+option.
 .TP
 .BI \-force_cpusubtype_ALL
 By default, the assembler will produce the CPU subtype ALL for the object file
@@ -82,10 +82,10 @@ the ALL subtype.
 If the target architecture specified is a machine-specific implementation
 (e.g.,
 .BR "\-arch ppc603" ,
-.BR "\-arch i486" ), 
+.BR "\-arch i486" ),
 the assembler will flag as errors
 instructions that are not supported on that architecture, and it will produce an object
-file with the CPU subtype for that specific implementation (even if no 
+file with the CPU subtype for that specific implementation (even if no
 implementation-specific instructions are used).
 The
 .B \-force_cpusubtype_ALL
@@ -96,19 +96,19 @@ Enables dynamic linking features.
 This is the default.
 .TP
 .B \-static
-Causes the assembler to treat as an error any features for dynamic 
+Causes the assembler to treat as an error any features for dynamic
 linking.  Also causes the .text directive to not include the pure_instructions
 section attribute.
 .TP
 .B \-\|\-
-Use 
-.B stdin 
+Use
+.B stdin
 for the assembly source input.
 .TP
 .B \-n
-Instructs the assembler not to assume that the assembly file starts 
-with a 
-.B \.text 
+Instructs the assembler not to assume that the assembly file starts
+with a
+.B \.text
 directive.  Use this option
 when an output file is not to contain a (_\|_TEXT,_\|_text) section or this
 section is not to be first one in the output file.
@@ -118,8 +118,8 @@ Fast; no need for the assembler preprocessor (``app'').  The assembler
 preprocessor can also be turned off by starting the assembly file with
 "#NO_APP\\n".  This is intended for use by compilers which produce assembly
 code in a strict "clean" format that specifies exactly where whitespace
-can go.  The assembler preprocessor needs to be run on hand-written assembly 
-files and/or files that have been preprocessed by the C preprocessor 
+can go.  The assembler preprocessor needs to be run on hand-written assembly
+files and/or files that have been preprocessed by the C preprocessor
 .B cpp.
 This is typically needed when assembler files are assembled through the use of
 the
@@ -127,22 +127,22 @@ the
 command, which automatically runs the C preprocessor on assembly
 source files.  The assembler preprocessor strips out excess
 spaces, turns single-quoted characters into a decimal constants, and turns
-# <number> <filename> <level> 
+# <number> <filename> <level>
 into .line <number>;.file <filename>  pairs.
 When the assembler preprocessor has been turned off by a "#NO_APP\\n" at the
 start of a file, it can be turned back on and off again with pairs of "#APP\\n" and
 "#NO_APP\\n" at the beginnings of lines.  This is used by the compiler to wrap
-assembly statements produced from 
-.B asm() 
+assembly statements produced from
+.B asm()
 statements.
 .TP
 .B \-g
 Produce debugging information for the symbolic debugger
 .IR gdb (1)
-so that the assembly source can be debugged symbolically.  The debugger depends on correct use of the C preprocessor's #include directive 
+so that the assembly source can be debugged symbolically.  The debugger depends on correct use of the C preprocessor's #include directive
 or the assembler's .include directive:  Any include file
-that produces instructions in the (_\|_TEXT,_\|_text) section must be included 
-while a .text directive is in 
+that produces instructions in the (_\|_TEXT,_\|_text) section must be included
+while a .text directive is in
 effect.  In other words, there must be a .text directive before the include,
 and the .text directive must still be in effect at the end of the include file.
 Otherwise, the debugger will get confused when in that assembly file.
@@ -161,7 +161,7 @@ Add the directory
 to the list of directories to search for files included with the .include
 directive.  The default place to search is the current directory.
 .TP
-.B \-W 
+.B \-W
 Suppress warnings.
 .TP
 .B \-L

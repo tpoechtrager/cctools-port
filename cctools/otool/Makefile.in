@@ -122,7 +122,8 @@ am__DEPENDENCIES_1 =
 @ISDARWIN_FALSE@	$(top_builddir)/libstuff/libstuff.la \
 @ISDARWIN_FALSE@	$(top_builddir)/libobjc2/libobjc.la \
 @ISDARWIN_FALSE@	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
-@ISDARWIN_FALSE@	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
+@ISDARWIN_FALSE@	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+@ISDARWIN_FALSE@	$(am__DEPENDENCIES_1)
 @ISDARWIN_TRUE@otool_DEPENDENCIES =  \
 @ISDARWIN_TRUE@	$(top_builddir)/libstuff/libstuff.la \
 @ISDARWIN_TRUE@	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
@@ -278,6 +279,7 @@ PATH_SEPARATOR = @PATH_SEPARATOR@
 PROGRAM_PREFIX = @PROGRAM_PREFIX@
 PTHREAD_FLAGS = @PTHREAD_FLAGS@
 RANLIB = @RANLIB@
+REALLOCF_LIB = @REALLOCF_LIB@
 SED = @SED@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
@@ -347,7 +349,7 @@ top_srcdir = @top_srcdir@
 @ISDARWIN_FALSE@otool_LDADD = \
 @ISDARWIN_FALSE@$(top_builddir)/libstuff/libstuff.la \
 @ISDARWIN_FALSE@$(top_builddir)/libobjc2/libobjc.la \
-@ISDARWIN_FALSE@$(PTHREAD_FLAGS) $(CXXABI_LIB) $(DL_LIB) $(GCC_LIB)
+@ISDARWIN_FALSE@$(PTHREAD_FLAGS) $(CXXABI_LIB) $(DL_LIB) $(REALLOCF_LIB) $(GCC_LIB)
 
 @ISDARWIN_TRUE@otool_LDADD = \
 @ISDARWIN_TRUE@$(top_builddir)/libstuff/libstuff.la \
