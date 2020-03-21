@@ -5143,9 +5143,12 @@ void OutputFile::addDyldInfo(ld::Internal& state,  ld::Internal::FinalSection* s
 				}
 				// Have direct reference to weak-global.  This should be an indrect reference
 				const char* demangledName = strdup(_options.demangleSymbol(atom->name()));
+				// ld64-port: [OSXCROSS] Silence 'operator new[]' warning when linking GCC libsdtc++ statically
+				if (!getenv("OSXCROSS") || strncmp(atom->name(), "__Zna", 5)) {
 				warning("direct access in function '%s' from file '%s' to global weak symbol '%s' from file '%s' means the weak symbol cannot be overridden at runtime. "
 						"This was likely caused by different translation units being compiled with different visibility settings.",
 						  demangledName, atom->safeFilePath(), _options.demangleSymbol(target->name()), target->safeFilePath());
+				} // ld64-port
 			}
 			return;
 		}
