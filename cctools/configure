@@ -17466,7 +17466,7 @@ fi
 ### Check for supported warning options ###
 
 ORIGCFLAGS=$CFLAGS
-CFLAGS="$CFLAGS -Werror -Wno-shift-negative-value"
+CFLAGS="$CFLAGS -Wno-shift-negative-value"
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether $CC supports -Wno-shift-negative-value" >&5
 $as_echo_n "checking whether $CC supports -Wno-shift-negative-value... " >&6; }
 cat confdefs.h - <<_ACEOF >conftest.$ac_ext
@@ -17475,6 +17475,26 @@ int dummy;
 _ACEOF
 if ac_fn_c_try_compile "$LINENO"; then :
   WARNINGS="$WARNINGS -Wno-shift-negative-value"
+   { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+$as_echo "yes" >&6; }
+else
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+CFLAGS=$ORIGCFLAGS
+
+ORIGCFLAGS=$CFLAGS
+CFLAGS="$CFLAGS -Wno-misleading-indentation"
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether $CC supports -Wno-misleading-indentation" >&5
+$as_echo_n "checking whether $CC supports -Wno-misleading-indentation... " >&6; }
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+int dummy;
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"; then :
+  WARNINGS="$WARNINGS -Wno-misleading-indentation"
    { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
 $as_echo "yes" >&6; }
 else
