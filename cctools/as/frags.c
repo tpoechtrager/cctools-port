@@ -18,6 +18,7 @@ along with GAS; see the file COPYING.  If not, write to
 the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.  */
 
 #include <string.h>
+#include <stdint.h> /* cctools-port: for intptr_t */
 #include "as.h"
 #include "sections.h"
 #include "obstack.h"
@@ -113,13 +114,14 @@ int old_frags_var_max_size)	/* Number of chars (already allocated on obstack
     register    frchainS * frchP;
     int32_t	tmp;		/* JF */
 
+
     if(frags.chunk_size == 0){
        know(flagseen['n']);
        as_fatal("with -n a section directive must be seen before assembly "
 		"can begin");
     }
-
-    frag_now->fr_fix = (int)((char *) (obstack_next_free (&frags)) -
+    /* cctools-port: Added (intptr_t) cast to silence warning */
+    frag_now->fr_fix = (int)(intptr_t)((char *) (obstack_next_free (&frags)) -
 			     (long)(frag_now->fr_literal) -
 			     old_frags_var_max_size);
  /* Fix up old frag's fr_fix. */
