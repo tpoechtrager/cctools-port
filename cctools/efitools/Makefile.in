@@ -89,8 +89,8 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
-bin_PROGRAMS = ld$(EXEEXT)
-subdir = ld64/src/ld
+bin_PROGRAMS = makerelocs$(EXEEXT) mtoc$(EXEEXT) mtor$(EXEEXT)
+subdir = efitools
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/libtool.m4 \
 	$(top_srcdir)/m4/llvm.m4 $(top_srcdir)/m4/ltoptions.m4 \
@@ -104,28 +104,26 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)"
 PROGRAMS = $(bin_PROGRAMS)
-am__dirstamp = $(am__leading_dot)dirstamp
-am_ld_OBJECTS = ld-debugline.$(OBJEXT) ld-InputFiles.$(OBJEXT) \
-	ld-ld.$(OBJEXT) ld-Options.$(OBJEXT) ld-OutputFile.$(OBJEXT) \
-	ld-Resolver.$(OBJEXT) ld-Snapshot.$(OBJEXT) \
-	ld-SymbolTable.$(OBJEXT) ld-PlatformSupport.$(OBJEXT) \
-	code-sign-blobs/ld-blob.$(OBJEXT)
-ld_OBJECTS = $(am_ld_OBJECTS)
+am_makerelocs_OBJECTS = makerelocs.$(OBJEXT)
+makerelocs_OBJECTS = $(am_makerelocs_OBJECTS)
+makerelocs_LDADD = $(LDADD)
 am__DEPENDENCIES_1 =
-ld_DEPENDENCIES = $(top_builddir)/ld64/src/3rd/libhelper.la \
-	$(top_builddir)/ld64/src/3rd/BlocksRuntime/libBlocksRuntime.la \
-	$(top_builddir)/ld64/src/ld/parsers/libParsers.la \
-	$(top_builddir)/ld64/src/ld/passes/libPasses.la \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+makerelocs_DEPENDENCIES = $(top_builddir)/libstuff/libstuff.la \
 	$(am__DEPENDENCIES_1)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
-ld_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) \
-	$(LIBTOOLFLAGS) --mode=link $(CXXLD) $(ld_CXXFLAGS) \
-	$(CXXFLAGS) $(ld_LDFLAGS) $(LDFLAGS) -o $@
+am_mtoc_OBJECTS = mtoc.$(OBJEXT)
+mtoc_OBJECTS = $(am_mtoc_OBJECTS)
+mtoc_LDADD = $(LDADD)
+mtoc_DEPENDENCIES = $(top_builddir)/libstuff/libstuff.la \
+	$(am__DEPENDENCIES_1)
+am_mtor_OBJECTS = mtor.$(OBJEXT)
+mtor_OBJECTS = $(am_mtor_OBJECTS)
+mtor_LDADD = $(LDADD)
+mtor_DEPENDENCIES = $(top_builddir)/libstuff/libstuff.la \
+	$(am__DEPENDENCIES_1)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -159,47 +157,13 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-CXXCOMPILE = $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
-	$(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS)
-LTCXXCOMPILE = $(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) \
-	$(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) \
-	$(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) \
-	$(AM_CXXFLAGS) $(CXXFLAGS)
-AM_V_CXX = $(am__v_CXX_@AM_V@)
-am__v_CXX_ = $(am__v_CXX_@AM_DEFAULT_V@)
-am__v_CXX_0 = @echo "  CXX     " $@;
-am__v_CXX_1 = 
-CXXLD = $(CXX)
-CXXLINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) \
-	$(LIBTOOLFLAGS) --mode=link $(CXXLD) $(AM_CXXFLAGS) \
-	$(CXXFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@
-AM_V_CXXLD = $(am__v_CXXLD_@AM_V@)
-am__v_CXXLD_ = $(am__v_CXXLD_@AM_DEFAULT_V@)
-am__v_CXXLD_0 = @echo "  CXXLD   " $@;
-am__v_CXXLD_1 = 
-SOURCES = $(ld_SOURCES)
-DIST_SOURCES = $(ld_SOURCES)
-RECURSIVE_TARGETS = all-recursive check-recursive cscopelist-recursive \
-	ctags-recursive dvi-recursive html-recursive info-recursive \
-	install-data-recursive install-dvi-recursive \
-	install-exec-recursive install-html-recursive \
-	install-info-recursive install-pdf-recursive \
-	install-ps-recursive install-recursive installcheck-recursive \
-	installdirs-recursive pdf-recursive ps-recursive \
-	tags-recursive uninstall-recursive
+SOURCES = $(makerelocs_SOURCES) $(mtoc_SOURCES) $(mtor_SOURCES)
+DIST_SOURCES = $(makerelocs_SOURCES) $(mtoc_SOURCES) $(mtor_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
     *) (install-info --version) >/dev/null 2>&1;; \
   esac
-RECURSIVE_CLEAN_TARGETS = mostlyclean-recursive clean-recursive	\
-  distclean-recursive maintainer-clean-recursive
-am__recursive_targets = \
-  $(RECURSIVE_TARGETS) \
-  $(RECURSIVE_CLEAN_TARGETS) \
-  $(am__extra_recursive_targets)
-AM_RECURSIVE_TARGETS = $(am__recursive_targets:-recursive=) TAGS CTAGS \
-	distdir distdir-am
 am__tagged_files = $(HEADERS) $(SOURCES) $(TAGS_FILES) $(LISP)
 # Read a list of newline-separated strings from the standard input,
 # and print each of them once, without duplicates.  Input order is
@@ -219,34 +183,8 @@ am__define_uniq_tagged_files = \
   done | $(am__uniquify_input)`
 ETAGS = etags
 CTAGS = ctags
-DIST_SUBDIRS = $(SUBDIRS)
 am__DIST_COMMON = $(srcdir)/Makefile.in
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
-am__relativize = \
-  dir0=`pwd`; \
-  sed_first='s,^\([^/]*\)/.*$$,\1,'; \
-  sed_rest='s,^[^/]*/*,,'; \
-  sed_last='s,^.*/\([^/]*\)$$,\1,'; \
-  sed_butlast='s,/*[^/]*$$,,'; \
-  while test -n "$$dir1"; do \
-    first=`echo "$$dir1" | sed -e "$$sed_first"`; \
-    if test "$$first" != "."; then \
-      if test "$$first" = ".."; then \
-        dir2=`echo "$$dir0" | sed -e "$$sed_last"`/"$$dir2"; \
-        dir0=`echo "$$dir0" | sed -e "$$sed_butlast"`; \
-      else \
-        first2=`echo "$$dir2" | sed -e "$$sed_first"`; \
-        if test "$$first2" = "$$first"; then \
-          dir2=`echo "$$dir2" | sed -e "$$sed_rest"`; \
-        else \
-          dir2="../$$dir2"; \
-        fi; \
-        dir0="$$dir0"/"$$first"; \
-      fi; \
-    fi; \
-    dir1=`echo "$$dir1" | sed -e "$$sed_rest"`; \
-  done; \
-  reldir="$$dir2"
 ACLOCAL = @ACLOCAL@
 AMTAR = @AMTAR@
 AM_DEFAULT_VERBOSITY = @AM_DEFAULT_VERBOSITY@
@@ -397,70 +335,18 @@ target_vendor = @target_vendor@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-SUBDIRS = parsers passes
-ld_LDADD = \
-	$(top_builddir)/ld64/src/3rd/libhelper.la  \
-	$(top_builddir)/ld64/src/3rd/BlocksRuntime/libBlocksRuntime.la  \
-	$(top_builddir)/ld64/src/ld/parsers/libParsers.la \
-	$(top_builddir)/ld64/src/ld/passes/libPasses.la \
-	$(UUID_LIB) \
-	$(LTO_RPATH) \
-	$(XAR_LIB) \
-	$(DL_LIB) \
-	$(TAPI_LIB) 
+LDADD = \
+	$(top_builddir)/libstuff/libstuff.la \
+	$(REALLOCF_LIB)
 
-ld_LDFLAGS = $(PTHREAD_FLAGS) $(EXECINFO_LIB)
-ld_CXXFLAGS = \
-	-D__DARWIN_UNIX03 \
-	$(WARNINGS) \
-	$(LTO_DEF) \
-	$(TAPI_DEF) \
-	$(ENDIAN_FLAG) \
-	-I$(top_srcdir)/include \
-	-I$(top_srcdir)/include/foreign \
-	-I$(top_srcdir)/ld64/src \
-	-I$(top_srcdir)/ld64/src/abstraction \
-	-I$(top_srcdir)/ld64/src/3rd \
-	-I$(top_srcdir)/ld64/src/3rd/BlocksRuntime \
-	-I$(top_srcdir)/ld64/src/3rd/include \
-	-I$(top_srcdir)/ld64/src/ld \
-	-I$(top_srcdir)/ld64/src/ld/parsers \
-	-I$(top_srcdir)/ld64/src/ld/passes \
-	-DPROGRAM_PREFIX="\"$(PROGRAM_PREFIX)\""
-
-ld_CFLAGS = \
-	-D__DARWIN_UNIX03 \
-	$(WARNINGS) \
-	$(LTO_DEF) \
-	$(TAPI_DEF) \
-	$(ENDIAN_FLAG) \
-	-I$(top_srcdir)/include \
-	-I$(top_srcdir)/include/foreign \
-	-I$(top_srcdir)/ld64/src \
-	-I$(top_srcdir)/ld64/src/abstraction \
-	-I$(top_srcdir)/ld64/src/3rd \
-	-I$(top_srcdir)/ld64/src/3rd/BlocksRuntime \
-	-I$(top_srcdir)/ld64/src/ld \
-	-I$(top_srcdir)/ld64/src/ld/parsers \
-	-I$(top_srcdir)/ld64/src/ld/passes \
-	-DPROGRAM_PREFIX="\"$(PROGRAM_PREFIX)\"" 
-
-ld_SOURCES = \
-	debugline.c  \
-	InputFiles.cpp  \
-	ld.cpp  \
-	Options.cpp  \
-	OutputFile.cpp  \
-	Resolver.cpp  \
-	Snapshot.cpp  \
-	SymbolTable.cpp \
-	PlatformSupport.cpp \
-	code-sign-blobs/blob.cpp
-
-all: all-recursive
+AM_CFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/include/foreign -I$(top_srcdir)/libstuff $(WARNINGS) $(LTO_DEF) -D__DARWIN_UNIX03 $(ENDIAN_FLAG)
+makerelocs_SOURCES = makerelocs.c
+mtoc_SOURCES = mtoc.c
+mtor_SOURCES = mtor.c
+all: all-am
 
 .SUFFIXES:
-.SUFFIXES: .c .cpp .lo .o .obj
+.SUFFIXES: .c .lo .o .obj
 $(srcdir)/Makefile.in: @MAINTAINER_MODE_TRUE@ $(srcdir)/Makefile.am  $(am__configure_deps)
 	@for dep in $?; do \
 	  case '$(am__configure_deps)' in \
@@ -470,9 +356,9 @@ $(srcdir)/Makefile.in: @MAINTAINER_MODE_TRUE@ $(srcdir)/Makefile.am  $(am__confi
 	      exit 1;; \
 	  esac; \
 	done; \
-	echo ' cd $(top_srcdir) && $(AUTOMAKE) --gnu --ignore-deps ld64/src/ld/Makefile'; \
+	echo ' cd $(top_srcdir) && $(AUTOMAKE) --gnu --ignore-deps efitools/Makefile'; \
 	$(am__cd) $(top_srcdir) && \
-	  $(AUTOMAKE) --gnu --ignore-deps ld64/src/ld/Makefile
+	  $(AUTOMAKE) --gnu --ignore-deps efitools/Makefile
 Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
 	@case '$?' in \
 	  *config.status*) \
@@ -539,18 +425,21 @@ clean-binPROGRAMS:
 	list=`for p in $$list; do echo "$$p"; done | sed 's/$(EXEEXT)$$//'`; \
 	echo " rm -f" $$list; \
 	rm -f $$list
-code-sign-blobs/$(am__dirstamp):
-	@$(MKDIR_P) code-sign-blobs
-	@: > code-sign-blobs/$(am__dirstamp)
-code-sign-blobs/ld-blob.$(OBJEXT): code-sign-blobs/$(am__dirstamp)
 
-ld$(EXEEXT): $(ld_OBJECTS) $(ld_DEPENDENCIES) $(EXTRA_ld_DEPENDENCIES) 
-	@rm -f ld$(EXEEXT)
-	$(AM_V_CXXLD)$(ld_LINK) $(ld_OBJECTS) $(ld_LDADD) $(LIBS)
+makerelocs$(EXEEXT): $(makerelocs_OBJECTS) $(makerelocs_DEPENDENCIES) $(EXTRA_makerelocs_DEPENDENCIES) 
+	@rm -f makerelocs$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(makerelocs_OBJECTS) $(makerelocs_LDADD) $(LIBS)
+
+mtoc$(EXEEXT): $(mtoc_OBJECTS) $(mtoc_DEPENDENCIES) $(EXTRA_mtoc_DEPENDENCIES) 
+	@rm -f mtoc$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(mtoc_OBJECTS) $(mtoc_LDADD) $(LIBS)
+
+mtor$(EXEEXT): $(mtor_OBJECTS) $(mtor_DEPENDENCIES) $(EXTRA_mtor_DEPENDENCIES) 
+	@rm -f mtor$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(mtor_OBJECTS) $(mtor_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
-	-rm -f code-sign-blobs/*.$(OBJEXT)
 
 distclean-compile:
 	-rm -f *.tab.c
@@ -564,136 +453,20 @@ distclean-compile:
 .c.lo:
 	$(AM_V_CC)$(LTCOMPILE) -c -o $@ $<
 
-ld-debugline.o: debugline.c
-	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(ld_CFLAGS) $(CFLAGS) -c -o ld-debugline.o `test -f 'debugline.c' || echo '$(srcdir)/'`debugline.c
-
-ld-debugline.obj: debugline.c
-	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(ld_CFLAGS) $(CFLAGS) -c -o ld-debugline.obj `if test -f 'debugline.c'; then $(CYGPATH_W) 'debugline.c'; else $(CYGPATH_W) '$(srcdir)/debugline.c'; fi`
-
-.cpp.o:
-	$(AM_V_CXX)$(CXXCOMPILE) -c -o $@ $<
-
-.cpp.obj:
-	$(AM_V_CXX)$(CXXCOMPILE) -c -o $@ `$(CYGPATH_W) '$<'`
-
-.cpp.lo:
-	$(AM_V_CXX)$(LTCXXCOMPILE) -c -o $@ $<
-
-ld-InputFiles.o: InputFiles.cpp
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(ld_CXXFLAGS) $(CXXFLAGS) -c -o ld-InputFiles.o `test -f 'InputFiles.cpp' || echo '$(srcdir)/'`InputFiles.cpp
-
-ld-InputFiles.obj: InputFiles.cpp
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(ld_CXXFLAGS) $(CXXFLAGS) -c -o ld-InputFiles.obj `if test -f 'InputFiles.cpp'; then $(CYGPATH_W) 'InputFiles.cpp'; else $(CYGPATH_W) '$(srcdir)/InputFiles.cpp'; fi`
-
-ld-ld.o: ld.cpp
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(ld_CXXFLAGS) $(CXXFLAGS) -c -o ld-ld.o `test -f 'ld.cpp' || echo '$(srcdir)/'`ld.cpp
-
-ld-ld.obj: ld.cpp
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(ld_CXXFLAGS) $(CXXFLAGS) -c -o ld-ld.obj `if test -f 'ld.cpp'; then $(CYGPATH_W) 'ld.cpp'; else $(CYGPATH_W) '$(srcdir)/ld.cpp'; fi`
-
-ld-Options.o: Options.cpp
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(ld_CXXFLAGS) $(CXXFLAGS) -c -o ld-Options.o `test -f 'Options.cpp' || echo '$(srcdir)/'`Options.cpp
-
-ld-Options.obj: Options.cpp
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(ld_CXXFLAGS) $(CXXFLAGS) -c -o ld-Options.obj `if test -f 'Options.cpp'; then $(CYGPATH_W) 'Options.cpp'; else $(CYGPATH_W) '$(srcdir)/Options.cpp'; fi`
-
-ld-OutputFile.o: OutputFile.cpp
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(ld_CXXFLAGS) $(CXXFLAGS) -c -o ld-OutputFile.o `test -f 'OutputFile.cpp' || echo '$(srcdir)/'`OutputFile.cpp
-
-ld-OutputFile.obj: OutputFile.cpp
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(ld_CXXFLAGS) $(CXXFLAGS) -c -o ld-OutputFile.obj `if test -f 'OutputFile.cpp'; then $(CYGPATH_W) 'OutputFile.cpp'; else $(CYGPATH_W) '$(srcdir)/OutputFile.cpp'; fi`
-
-ld-Resolver.o: Resolver.cpp
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(ld_CXXFLAGS) $(CXXFLAGS) -c -o ld-Resolver.o `test -f 'Resolver.cpp' || echo '$(srcdir)/'`Resolver.cpp
-
-ld-Resolver.obj: Resolver.cpp
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(ld_CXXFLAGS) $(CXXFLAGS) -c -o ld-Resolver.obj `if test -f 'Resolver.cpp'; then $(CYGPATH_W) 'Resolver.cpp'; else $(CYGPATH_W) '$(srcdir)/Resolver.cpp'; fi`
-
-ld-Snapshot.o: Snapshot.cpp
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(ld_CXXFLAGS) $(CXXFLAGS) -c -o ld-Snapshot.o `test -f 'Snapshot.cpp' || echo '$(srcdir)/'`Snapshot.cpp
-
-ld-Snapshot.obj: Snapshot.cpp
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(ld_CXXFLAGS) $(CXXFLAGS) -c -o ld-Snapshot.obj `if test -f 'Snapshot.cpp'; then $(CYGPATH_W) 'Snapshot.cpp'; else $(CYGPATH_W) '$(srcdir)/Snapshot.cpp'; fi`
-
-ld-SymbolTable.o: SymbolTable.cpp
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(ld_CXXFLAGS) $(CXXFLAGS) -c -o ld-SymbolTable.o `test -f 'SymbolTable.cpp' || echo '$(srcdir)/'`SymbolTable.cpp
-
-ld-SymbolTable.obj: SymbolTable.cpp
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(ld_CXXFLAGS) $(CXXFLAGS) -c -o ld-SymbolTable.obj `if test -f 'SymbolTable.cpp'; then $(CYGPATH_W) 'SymbolTable.cpp'; else $(CYGPATH_W) '$(srcdir)/SymbolTable.cpp'; fi`
-
-ld-PlatformSupport.o: PlatformSupport.cpp
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(ld_CXXFLAGS) $(CXXFLAGS) -c -o ld-PlatformSupport.o `test -f 'PlatformSupport.cpp' || echo '$(srcdir)/'`PlatformSupport.cpp
-
-ld-PlatformSupport.obj: PlatformSupport.cpp
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(ld_CXXFLAGS) $(CXXFLAGS) -c -o ld-PlatformSupport.obj `if test -f 'PlatformSupport.cpp'; then $(CYGPATH_W) 'PlatformSupport.cpp'; else $(CYGPATH_W) '$(srcdir)/PlatformSupport.cpp'; fi`
-
-code-sign-blobs/ld-blob.o: code-sign-blobs/blob.cpp
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(ld_CXXFLAGS) $(CXXFLAGS) -c -o code-sign-blobs/ld-blob.o `test -f 'code-sign-blobs/blob.cpp' || echo '$(srcdir)/'`code-sign-blobs/blob.cpp
-
-code-sign-blobs/ld-blob.obj: code-sign-blobs/blob.cpp
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(ld_CXXFLAGS) $(CXXFLAGS) -c -o code-sign-blobs/ld-blob.obj `if test -f 'code-sign-blobs/blob.cpp'; then $(CYGPATH_W) 'code-sign-blobs/blob.cpp'; else $(CYGPATH_W) '$(srcdir)/code-sign-blobs/blob.cpp'; fi`
-
 mostlyclean-libtool:
 	-rm -f *.lo
 
 clean-libtool:
 	-rm -rf .libs _libs
 
-# This directory's subdirectories are mostly independent; you can cd
-# into them and run 'make' without going through this Makefile.
-# To change the values of 'make' variables: instead of editing Makefiles,
-# (1) if the variable is set in 'config.status', edit 'config.status'
-#     (which will cause the Makefiles to be regenerated when you run 'make');
-# (2) otherwise, pass the desired values on the 'make' command line.
-$(am__recursive_targets):
-	@fail=; \
-	if $(am__make_keepgoing); then \
-	  failcom='fail=yes'; \
-	else \
-	  failcom='exit 1'; \
-	fi; \
-	dot_seen=no; \
-	target=`echo $@ | sed s/-recursive//`; \
-	case "$@" in \
-	  distclean-* | maintainer-clean-*) list='$(DIST_SUBDIRS)' ;; \
-	  *) list='$(SUBDIRS)' ;; \
-	esac; \
-	for subdir in $$list; do \
-	  echo "Making $$target in $$subdir"; \
-	  if test "$$subdir" = "."; then \
-	    dot_seen=yes; \
-	    local_target="$$target-am"; \
-	  else \
-	    local_target="$$target"; \
-	  fi; \
-	  ($(am__cd) $$subdir && $(MAKE) $(AM_MAKEFLAGS) $$local_target) \
-	  || eval $$failcom; \
-	done; \
-	if test "$$dot_seen" = "no"; then \
-	  $(MAKE) $(AM_MAKEFLAGS) "$$target-am" || exit 1; \
-	fi; test -z "$$fail"
-
 ID: $(am__tagged_files)
 	$(am__define_uniq_tagged_files); mkid -fID $$unique
-tags: tags-recursive
+tags: tags-am
 TAGS: tags
 
 tags-am: $(TAGS_DEPENDENCIES) $(am__tagged_files)
 	set x; \
 	here=`pwd`; \
-	if ($(ETAGS) --etags-include --version) >/dev/null 2>&1; then \
-	  include_option=--etags-include; \
-	  empty_fix=.; \
-	else \
-	  include_option=--include; \
-	  empty_fix=; \
-	fi; \
-	list='$(SUBDIRS)'; for subdir in $$list; do \
-	  if test "$$subdir" = .; then :; else \
-	    test ! -f $$subdir/TAGS || \
-	      set "$$@" "$$include_option=$$here/$$subdir/TAGS"; \
-	  fi; \
-	done; \
 	$(am__define_uniq_tagged_files); \
 	shift; \
 	if test -z "$(ETAGS_ARGS)$$*$$unique"; then :; else \
@@ -706,7 +479,7 @@ tags-am: $(TAGS_DEPENDENCIES) $(am__tagged_files)
 	      $$unique; \
 	  fi; \
 	fi
-ctags: ctags-recursive
+ctags: ctags-am
 
 CTAGS: ctags
 ctags-am: $(TAGS_DEPENDENCIES) $(am__tagged_files)
@@ -719,7 +492,7 @@ GTAGS:
 	here=`$(am__cd) $(top_builddir) && pwd` \
 	  && $(am__cd) $(top_srcdir) \
 	  && gtags -i $(GTAGS_ARGS) "$$here"
-cscopelist: cscopelist-recursive
+cscopelist: cscopelist-am
 
 cscopelist-am: $(am__tagged_files)
 	list='$(am__tagged_files)'; \
@@ -771,48 +544,22 @@ distdir-am: $(DISTFILES)
 	    || exit 1; \
 	  fi; \
 	done
-	@list='$(DIST_SUBDIRS)'; for subdir in $$list; do \
-	  if test "$$subdir" = .; then :; else \
-	    $(am__make_dryrun) \
-	      || test -d "$(distdir)/$$subdir" \
-	      || $(MKDIR_P) "$(distdir)/$$subdir" \
-	      || exit 1; \
-	    dir1=$$subdir; dir2="$(distdir)/$$subdir"; \
-	    $(am__relativize); \
-	    new_distdir=$$reldir; \
-	    dir1=$$subdir; dir2="$(top_distdir)"; \
-	    $(am__relativize); \
-	    new_top_distdir=$$reldir; \
-	    echo " (cd $$subdir && $(MAKE) $(AM_MAKEFLAGS) top_distdir="$$new_top_distdir" distdir="$$new_distdir" \\"; \
-	    echo "     am__remove_distdir=: am__skip_length_check=: am__skip_mode_fix=: distdir)"; \
-	    ($(am__cd) $$subdir && \
-	      $(MAKE) $(AM_MAKEFLAGS) \
-	        top_distdir="$$new_top_distdir" \
-	        distdir="$$new_distdir" \
-		am__remove_distdir=: \
-		am__skip_length_check=: \
-		am__skip_mode_fix=: \
-	        distdir) \
-	      || exit 1; \
-	  fi; \
-	done
 check-am: all-am
-check: check-recursive
+check: check-am
 all-am: Makefile $(PROGRAMS)
-installdirs: installdirs-recursive
-installdirs-am:
+installdirs:
 	for dir in "$(DESTDIR)$(bindir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
 	done
-install: install-recursive
-install-exec: install-exec-recursive
-install-data: install-data-recursive
-uninstall: uninstall-recursive
+install: install-am
+install-exec: install-exec-am
+install-data: install-data-am
+uninstall: uninstall-am
 
 install-am: all-am
 	@$(MAKE) $(AM_MAKEFLAGS) install-exec-am install-data-am
 
-installcheck: installcheck-recursive
+installcheck: installcheck-am
 install-strip:
 	if test -z '$(STRIP)'; then \
 	  $(MAKE) $(AM_MAKEFLAGS) INSTALL_PROGRAM="$(INSTALL_STRIP_PROGRAM)" \
@@ -830,95 +577,93 @@ clean-generic:
 distclean-generic:
 	-test -z "$(CONFIG_CLEAN_FILES)" || rm -f $(CONFIG_CLEAN_FILES)
 	-test . = "$(srcdir)" || test -z "$(CONFIG_CLEAN_VPATH_FILES)" || rm -f $(CONFIG_CLEAN_VPATH_FILES)
-	-rm -f code-sign-blobs/$(am__dirstamp)
 
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
 	@echo "it deletes files that may require special tools to rebuild."
-clean: clean-recursive
+clean: clean-am
 
 clean-am: clean-binPROGRAMS clean-generic clean-libtool mostlyclean-am
 
-distclean: distclean-recursive
+distclean: distclean-am
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-tags
 
-dvi: dvi-recursive
+dvi: dvi-am
 
 dvi-am:
 
-html: html-recursive
+html: html-am
 
 html-am:
 
-info: info-recursive
+info: info-am
 
 info-am:
 
 install-data-am:
 
-install-dvi: install-dvi-recursive
+install-dvi: install-dvi-am
 
 install-dvi-am:
 
 install-exec-am: install-binPROGRAMS
 
-install-html: install-html-recursive
+install-html: install-html-am
 
 install-html-am:
 
-install-info: install-info-recursive
+install-info: install-info-am
 
 install-info-am:
 
 install-man:
 
-install-pdf: install-pdf-recursive
+install-pdf: install-pdf-am
 
 install-pdf-am:
 
-install-ps: install-ps-recursive
+install-ps: install-ps-am
 
 install-ps-am:
 
 installcheck-am:
 
-maintainer-clean: maintainer-clean-recursive
+maintainer-clean: maintainer-clean-am
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 
-mostlyclean: mostlyclean-recursive
+mostlyclean: mostlyclean-am
 
 mostlyclean-am: mostlyclean-compile mostlyclean-generic \
 	mostlyclean-libtool
 
-pdf: pdf-recursive
+pdf: pdf-am
 
 pdf-am:
 
-ps: ps-recursive
+ps: ps-am
 
 ps-am:
 
 uninstall-am: uninstall-binPROGRAMS
 
-.MAKE: $(am__recursive_targets) install-am install-strip
+.MAKE: install-am install-strip
 
-.PHONY: $(am__recursive_targets) CTAGS GTAGS TAGS all all-am check \
-	check-am clean clean-binPROGRAMS clean-generic clean-libtool \
-	cscopelist-am ctags ctags-am distclean distclean-compile \
-	distclean-generic distclean-libtool distclean-tags distdir dvi \
-	dvi-am html html-am info info-am install install-am \
-	install-binPROGRAMS install-data install-data-am install-dvi \
-	install-dvi-am install-exec install-exec-am install-html \
-	install-html-am install-info install-info-am install-man \
-	install-pdf install-pdf-am install-ps install-ps-am \
-	install-strip installcheck installcheck-am installdirs \
-	installdirs-am maintainer-clean maintainer-clean-generic \
-	mostlyclean mostlyclean-compile mostlyclean-generic \
-	mostlyclean-libtool pdf pdf-am ps ps-am tags tags-am uninstall \
-	uninstall-am uninstall-binPROGRAMS
+.PHONY: CTAGS GTAGS TAGS all all-am check check-am clean \
+	clean-binPROGRAMS clean-generic clean-libtool cscopelist-am \
+	ctags ctags-am distclean distclean-compile distclean-generic \
+	distclean-libtool distclean-tags distdir dvi dvi-am html \
+	html-am info info-am install install-am install-binPROGRAMS \
+	install-data install-data-am install-dvi install-dvi-am \
+	install-exec install-exec-am install-html install-html-am \
+	install-info install-info-am install-man install-pdf \
+	install-pdf-am install-ps install-ps-am install-strip \
+	installcheck installcheck-am installdirs maintainer-clean \
+	maintainer-clean-generic mostlyclean mostlyclean-compile \
+	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
+	tags tags-am uninstall uninstall-am uninstall-binPROGRAMS
 
 .PRECIOUS: Makefile
 

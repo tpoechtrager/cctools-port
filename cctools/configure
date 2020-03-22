@@ -18217,6 +18217,8 @@ ac_config_files="$ac_config_files misc/Makefile"
 
 ac_config_files="$ac_config_files otool/Makefile"
 
+ac_config_files="$ac_config_files efitools/Makefile"
+
 ac_config_files="$ac_config_files libobjc2/Makefile"
 
 ac_config_files="$ac_config_files ld64/Makefile"
@@ -19378,6 +19380,7 @@ do
     "man/Makefile") CONFIG_FILES="$CONFIG_FILES man/Makefile" ;;
     "misc/Makefile") CONFIG_FILES="$CONFIG_FILES misc/Makefile" ;;
     "otool/Makefile") CONFIG_FILES="$CONFIG_FILES otool/Makefile" ;;
+    "efitools/Makefile") CONFIG_FILES="$CONFIG_FILES efitools/Makefile" ;;
     "libobjc2/Makefile") CONFIG_FILES="$CONFIG_FILES libobjc2/Makefile" ;;
     "ld64/Makefile") CONFIG_FILES="$CONFIG_FILES ld64/Makefile" ;;
     "ld64/doc/man/Makefile") CONFIG_FILES="$CONFIG_FILES ld64/doc/man/Makefile" ;;
