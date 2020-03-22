@@ -284,7 +284,7 @@ AC_SUBST(GCC_LIB)
 ### Check for supported warning options ###
 
 ORIGCFLAGS=$CFLAGS
-CFLAGS="$CFLAGS -Wno-shift-negative-value"
+CFLAGS="$CFLAGS -Werror -Wno-shift-negative-value"
 AC_MSG_CHECKING([whether $CC supports -Wno-shift-negative-value])
 AC_COMPILE_IFELSE(
   [AC_LANG_SOURCE([[int dummy;]])],
@@ -295,7 +295,7 @@ AC_COMPILE_IFELSE(
 CFLAGS=$ORIGCFLAGS
 
 ORIGCFLAGS=$CFLAGS
-CFLAGS="$CFLAGS -Wno-misleading-indentation"
+CFLAGS="$CFLAGS -Werror -Wno-misleading-indentation"
 AC_MSG_CHECKING([whether $CC supports -Wno-misleading-indentation])
 AC_COMPILE_IFELSE(
   [AC_LANG_SOURCE([[int dummy;]])],

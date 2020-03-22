@@ -17466,7 +17466,7 @@ fi
 ### Check for supported warning options ###
 
 ORIGCFLAGS=$CFLAGS
-CFLAGS="$CFLAGS -Wno-shift-negative-value"
+CFLAGS="$CFLAGS -Werror -Wno-shift-negative-value"
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether $CC supports -Wno-shift-negative-value" >&5
 $as_echo_n "checking whether $CC supports -Wno-shift-negative-value... " >&6; }
 cat confdefs.h - <<_ACEOF >conftest.$ac_ext
@@ -17486,7 +17486,7 @@ rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
 CFLAGS=$ORIGCFLAGS
 
 ORIGCFLAGS=$CFLAGS
-CFLAGS="$CFLAGS -Wno-misleading-indentation"
+CFLAGS="$CFLAGS -Werror -Wno-misleading-indentation"
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether $CC supports -Wno-misleading-indentation" >&5
 $as_echo_n "checking whether $CC supports -Wno-misleading-indentation... " >&6; }
 cat confdefs.h - <<_ACEOF >conftest.$ac_ext
