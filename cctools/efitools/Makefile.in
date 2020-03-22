@@ -109,7 +109,7 @@ makerelocs_OBJECTS = $(am_makerelocs_OBJECTS)
 makerelocs_LDADD = $(LDADD)
 am__DEPENDENCIES_1 =
 makerelocs_DEPENDENCIES = $(top_builddir)/libstuff/libstuff.la \
-	$(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
@@ -118,12 +118,12 @@ am_mtoc_OBJECTS = mtoc.$(OBJEXT)
 mtoc_OBJECTS = $(am_mtoc_OBJECTS)
 mtoc_LDADD = $(LDADD)
 mtoc_DEPENDENCIES = $(top_builddir)/libstuff/libstuff.la \
-	$(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
 am_mtor_OBJECTS = mtor.$(OBJEXT)
 mtor_OBJECTS = $(am_mtor_OBJECTS)
 mtor_LDADD = $(LDADD)
 mtor_DEPENDENCIES = $(top_builddir)/libstuff/libstuff.la \
-	$(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -337,7 +337,8 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 LDADD = \
 	$(top_builddir)/libstuff/libstuff.la \
-	$(REALLOCF_LIB)
+	$(REALLOCF_LIB) \
+	$(DL_LIB)
 
 AM_CFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/include/foreign -I$(top_srcdir)/libstuff $(WARNINGS) $(LTO_DEF) -D__DARWIN_UNIX03 $(ENDIAN_FLAG)
 makerelocs_SOURCES = makerelocs.c
