@@ -9,6 +9,12 @@
 #include "dyld_bind_info.h"
 #include "fixup-chains.h"
 
+/* cctools-port start */
+#undef swap16
+#undef swap32
+#undef swap64
+/* cctools-port end */
+
 /*****************************************************************************
  *
  *   LC_DYLD_INFO, LC_DYLD_INFO_ONLY

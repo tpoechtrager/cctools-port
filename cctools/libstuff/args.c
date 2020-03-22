@@ -12,6 +12,7 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <errno.h> /* cctools-port */
 #include <sys/errno.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
