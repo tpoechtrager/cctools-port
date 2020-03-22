@@ -95,11 +95,6 @@
 
 const ld::VersionSet ld::File::_platforms;
 
-#include "parsers/lto_file.h"
-#include "parsers/opaque_section_file.h"
-
-// ld64-port: Moved basePlatform to ld.hpp
-
 struct PerformanceStatistics {
 	uint64_t						startTool;
 	uint64_t						startInputFileProcessing;
