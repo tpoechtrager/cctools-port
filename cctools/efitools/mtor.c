@@ -25,6 +25,7 @@
 #include "stuff/errors.h"
 #include "stuff/ofile.h"
 #include "stuff/write64.h"
+#include "stuff/port.h" /* cctools-port */
 
 #include <fcntl.h>
 #include <mach-o/loader.h>
