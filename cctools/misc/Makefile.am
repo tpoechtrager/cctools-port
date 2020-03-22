@@ -24,8 +24,8 @@ bin_PROGRAMS =  \
 	vtool
 
 LDADD =  \
+        $(top_builddir)/libmacho/libmacho.la \
 	$(top_builddir)/libstuff/libstuff.la \
-	$(top_builddir)/libmacho/libmacho.la \
 	$(DL_LIB) \
 	$(LTO_RPATH) \
 	$(MATH_LIB) \
