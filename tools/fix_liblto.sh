@@ -30,7 +30,24 @@ if [ -n "$V" ]; then
   exit 1
 fi
 
+if readelf -p .comment $LIBDIR/libLTO.so | grep clang &>/dev/null; then
+  CC=clang
+  CXX=clang++
+else
+  CC=gcc
+  CXX=g++
+fi
+
+
 VERSION=$($LLVM_CONFIG --version | awk -F \. {'print $1$2'} | sed 's/svn//g')
+
+if [ $VERSION -le 39 ]; then
+  BRANCH=$($LLVM_CONFIG --version| tr '.' ' ' | awk '{print $1, $2}' | tr ' ' '.')
+else
+  BRANCH=$($LLVM_CONFIG --version| tr '.' ' ' | awk '{print $1}' | tr ' ' '.')
+fi
+
+BRANCH+=".x"
 
 if [ $VERSION -lt 34 ]; then
   echo "This tool requires LLVM 3.4 or later." 1>&2
@@ -45,14 +62,27 @@ if [ $VERSION -ge 35 ]; then
   SYSLIBS+=" -ledit"
 fi
 
+echo "int main(){Z3_mk_config();} " | \
+  $CC -Wno-implicit-function-declaration -o /dev/null -xc - -lz3
+
+if [ $? -eq 0 ]; then
+  SYSLIBS+=" -lz3"
+fi
+
+
 set -e
+
 TMP=$(mktemp -d)
-set +e
 
 pushd $TMP &>/dev/null
-wget https://raw.githubusercontent.com/llvm-mirror/llvm/release_$VERSION/tools/lto/lto.cpp
-wget https://raw.githubusercontent.com/llvm-mirror/llvm/release_$VERSION/tools/lto/LTODisassembler.cpp
-wget https://raw.githubusercontent.com/llvm-mirror/llvm/release_$VERSION/tools/lto/lto.exports
+
+function download_sources() {
+  wget https://raw.githubusercontent.com/llvm/llvm-project/$1/llvm/tools/lto/lto.cpp
+  wget https://raw.githubusercontent.com/llvm/llvm-project/$1/llvm/tools/lto/LTODisassembler.cpp
+  wget https://raw.githubusercontent.com/llvm/llvm-project/$1/llvm/tools/lto/lto.exports
+}
+
+download_sources "release/$BRANCH" || download_sources "master"
 
 echo "{" > lto.ls
 echo "  global:" >> lto.ls
@@ -66,8 +96,8 @@ popd &>/dev/null
 
 set -x
 
-clang++ -shared \
- -L$LIBDIR -I$INCDIR -Wl,--whole-archive $LIBS -Wl,--no-whole-archive $SYSLIBS   \
+$CXX -shared \
+ -L$LIBDIR -I$INCDIR -Wl,--whole-archive $LIBS -Wl,--no-whole-archive $SYSLIBS \
  $CXXFLAGS $TMP/lto.cpp $TMP/LTODisassembler.cpp -Wl,-version-script,$TMP/lto.ls \
  -Wl,-no-undefined -fno-rtti -fPIC -o libLTO.so
 
