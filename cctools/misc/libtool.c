@@ -3092,7 +3092,7 @@ struct ofile *ofile)
 	times[1].tv_sec = stat_buf.st_mtime;
 	times[0].tv_nsec = 0;
 #endif
-	if(utimens(output, times) == -1)
+	if(utimens(tempfile, times) == -1)
 	{
 	    system_fatal("can't set the modifiy times in output file: %s",
 			 tempfile ? tempfile : output);
