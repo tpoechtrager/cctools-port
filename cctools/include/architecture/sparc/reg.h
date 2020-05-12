@@ -40,7 +40,7 @@
  * Usage is u.u_ar0[XX].
  */
 #define	PSR	(0)
-#define	PC	(1)
+#define	SPARC_PC	(1)
 #define	nPC	(2)
 #define	SPARC_Y	(3)
 #define	G1	(4)
