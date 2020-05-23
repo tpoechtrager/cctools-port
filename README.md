@@ -76,4 +76,4 @@ If you get compile errors because of `unistd.h`, then please run
 
 ## TRAVIS CI ##
 
-[![Build Status](https://travis-ci.org/tpoechtrager/cctools-port.svg?branch=949.0.1-ld64-512.4)](https://travis-ci.org/tpoechtrager/cctools-port)
+[![Build Status](https://travis-ci.org/tpoechtrager/cctools-port.svg?branch=949.0.1-ld64-530)](https://travis-ci.org/tpoechtrager/cctools-port)
