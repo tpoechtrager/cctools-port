@@ -45,7 +45,7 @@ Optional, but recommended:
 `uuid-devel`               (For ld64 `-random_uuid` Support)  
 `llvm-devel` + `xar-devel` (For ld64 `-bitcode_bundle` Support)
 
-You can find xar [here](https://github.com/mackyle/xar).  
+You can find xar [here](https://github.com/tpoechtrager/xar).  
 Do not install libxar-dev on Ubuntu, it's a different package.
 
 ## INSTALLATION ##
