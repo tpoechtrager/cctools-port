@@ -41,23 +41,35 @@ AC_DEFUN([CHECK_LLVM],
         LDFLAGS="$LDFLAGS -L${LLVM_LIB_DIR}"
 
         AC_CHECK_LIB([LTO],[lto_get_version], [
-          LTO_LIB="-L${LLVM_LIB_DIR} -lLTO"
-          if test "x$rpathlink" = "xyes"; then
-            LTO_RPATH="-Wl,-rpath,$LLVM_LIB_DIR,--enable-new-dtags"
-          fi
-          if test "x$isdarwin" = "xyes"; then
-            LTO_RPATH="-Wl,-rpath,$LLVM_LIB_DIR"
-          fi
-          LTO_DEF=-DLTO_SUPPORT
+
           # DO NOT include the LLVM include dir directly,
           # it may cause the build to fail.
-          cp -f $LLVM_INCLUDE_DIR/llvm-c/lto.h `dirname ${0}`/include/llvm-c
-          if test -e $LLVM_INCLUDE_DIR/llvm-c/ExternC.h; then
-            cp -f $LLVM_INCLUDE_DIR/llvm-c/ExternC.h `dirname ${0}`/include/llvm-c
+
+          if test -e $LLVM_INCLUDE_DIR/llvm-c/lto.h; then
+            cp -f $LLVM_INCLUDE_DIR/llvm-c/lto.h `dirname ${0}`/include/llvm-c
+
+            if test -e $LLVM_INCLUDE_DIR/llvm-c/ExternC.h; then
+              cp -f $LLVM_INCLUDE_DIR/llvm-c/ExternC.h `dirname ${0}`/include/llvm-c
+            fi
+
+            LTO_DEF=-DLTO_SUPPORT
+            LTO_LIB="-L${LLVM_LIB_DIR} -lLTO"
+
+            if test "x$rpathlink" = "xyes"; then
+              LTO_RPATH="-Wl,-rpath,$LLVM_LIB_DIR,--enable-new-dtags"
+            fi
+
+            if test "x$isdarwin" = "xyes"; then
+              LTO_RPATH="-Wl,-rpath,$LLVM_LIB_DIR"
+            fi
+          else
+            AC_MSG_WARN([<llvm-c/lto.h> header file not found, disabling LTO support])
           fi
+
           AC_SUBST([LTO_DEF])
           AC_SUBST([LTO_RPATH])
           AC_SUBST([LTO_LIB])
+
         ])
 
         LDFLAGS=$ORIGLDFLAGS

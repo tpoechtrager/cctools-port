@@ -17662,20 +17662,33 @@ fi
 $as_echo "$ac_cv_lib_LTO_lto_get_version" >&6; }
 if test "x$ac_cv_lib_LTO_lto_get_version" = xyes; then :
 
-          LTO_LIB="-L${LLVM_LIB_DIR} -lLTO"
-          if test "x$rpathlink" = "xyes"; then
-            LTO_RPATH="-Wl,-rpath,$LLVM_LIB_DIR,--enable-new-dtags"
-          fi
-          if test "x$isdarwin" = "xyes"; then
-            LTO_RPATH="-Wl,-rpath,$LLVM_LIB_DIR"
-          fi
-          LTO_DEF=-DLTO_SUPPORT
+
           # DO NOT include the LLVM include dir directly,
           # it may cause the build to fail.
-          cp -f $LLVM_INCLUDE_DIR/llvm-c/lto.h `dirname ${0}`/include/llvm-c
-          if test -e $LLVM_INCLUDE_DIR/llvm-c/ExternC.h; then
-            cp -f $LLVM_INCLUDE_DIR/llvm-c/ExternC.h `dirname ${0}`/include/llvm-c
+
+          if test -e $LLVM_INCLUDE_DIR/llvm-c/lto.h; then
+            cp -f $LLVM_INCLUDE_DIR/llvm-c/lto.h `dirname ${0}`/include/llvm-c
+
+            if test -e $LLVM_INCLUDE_DIR/llvm-c/ExternC.h; then
+              cp -f $LLVM_INCLUDE_DIR/llvm-c/ExternC.h `dirname ${0}`/include/llvm-c
+            fi
+
+            LTO_DEF=-DLTO_SUPPORT
+            LTO_LIB="-L${LLVM_LIB_DIR} -lLTO"
+
+            if test "x$rpathlink" = "xyes"; then
+              LTO_RPATH="-Wl,-rpath,$LLVM_LIB_DIR,--enable-new-dtags"
+            fi
+
+            if test "x$isdarwin" = "xyes"; then
+              LTO_RPATH="-Wl,-rpath,$LLVM_LIB_DIR"
+            fi
+          else
+            { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: <llvm-c/lto.h> header file not found, disabling LTO support" >&5
+$as_echo "$as_me: WARNING: <llvm-c/lto.h> header file not found, disabling LTO support" >&2;}
           fi
+
+
 
 
 
