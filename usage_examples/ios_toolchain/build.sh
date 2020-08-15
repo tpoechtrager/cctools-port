@@ -180,7 +180,7 @@ echo "*** building apple-libtapi ***"
 echo ""
 
 pushd tmp &>/dev/null
-git_clone_repository https://github.com/tpoechtrager/apple-libtapi.git 1000.10.8
+git_clone_repository https://github.com/tpoechtrager/apple-libtapi.git 1100.0.11
 pushd apple-libtapi &>/dev/null
 INSTALLPREFIX=$TARGETDIR ./build.sh
 ./install.sh
