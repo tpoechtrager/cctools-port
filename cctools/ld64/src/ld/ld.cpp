@@ -1434,7 +1434,7 @@ int main(int argc, const char* argv[])
 			fprintf(stderr, "processed %3u dylib files\n", inputFiles._totalDylibsLoaded);
 			fprintf(stderr, "wrote output file            totaling %15s bytes\n", commatize(out.fileSize(), temp));
 		}
-		if ( getenv("IOS_SIGN_CODE_WHEN_BUILD") || getenv("IOS_FAKE_CODE_SIGN") ) { // ld64-port   (keep IOS_SIGN_CODE_WHEN_BUILD for compatibility with the 'iOS toolchain based on clang for linux' project)
+		if ( getenv("IOS_SIGN_CODE_WHEN_BUILD") || getenv("IOS_FAKE_CODE_SIGN") || strcmp(archName, "arm64") == 0) { // ld64-port   (keep IOS_SIGN_CODE_WHEN_BUILD for compatibility with the 'iOS toolchain based on clang for linux' project)
 			std::string ldid = std::string("ldid -S ") + std::string(options.outputFilePath());
 			system(ldid.c_str());
 		}
