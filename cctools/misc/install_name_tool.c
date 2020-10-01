@@ -131,6 +131,8 @@ char **envp)
     uint32_t narchs;
     char *input;
     char *output;
+    char *ldidcommand;
+    int isarm64;
 
 	output = NULL;
 	progname = argv[0];
@@ -312,11 +314,33 @@ char **envp)
 	if(errors)
 	    exit(EXIT_FAILURE);
 
+    isarm64 = 0;
+    for (i = 0; i < narchs; i++) {
+        if (archs[i].object->mh != NULL) {
+            if (archs[i].object->mh->cputype == CPU_TYPE_ARM64) {
+                isarm64 = 1;
+            }
+        } else {
+            if (archs[i].object->mh64->cputype == CPU_TYPE_ARM64) {
+                isarm64 = 1;
+            }
+	    }
+    }
+
 	if(output != NULL)
 	    writeout(archs, narchs, output, 0777, TRUE, FALSE, FALSE, FALSE,
 		     NULL);
-	else
+	else {
 	    write_on_input(archs, narchs, input);
+        output = input;
+    }
+
+    if (isarm64 == 1) {
+        ldidcommand = allocate(strlen(output) + 9);
+        memcpy(ldidcommand, "ldid -S ", 8);
+        memcpy(ldidcommand + 8, input, strlen(output) + 1);
+        system(ldidcommand);
+    }
 
 	if(errors)
 	    return(EXIT_FAILURE);
