@@ -108,7 +108,8 @@ libhelper_la_LIBADD =
 am_libhelper_la_OBJECTS = libhelper_la-helper.lo \
 	libhelper_la-qsort_r.lo libhelper_la-strlcat.lo \
 	libhelper_la-strlcpy.lo libhelper_la-eprintf.lo \
-	libhelper_la-md5.lo libhelper_la-mkpath_np.lo
+	libhelper_la-md5.lo libhelper_la-mkpath_np.lo \
+	libhelper_la-find_executable.lo
 libhelper_la_OBJECTS = $(am_libhelper_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -382,7 +383,8 @@ libhelper_la_SOURCES = \
 	strlcpy.c \
 	eprintf.c \
 	md5.c \
-	mkpath_np.c
+	mkpath_np.c \
+	find_executable.c
 
 all: all-recursive
 
@@ -467,6 +469,9 @@ libhelper_la-md5.lo: md5.c
 
 libhelper_la-mkpath_np.lo: mkpath_np.c
 	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libhelper_la_CFLAGS) $(CFLAGS) -c -o libhelper_la-mkpath_np.lo `test -f 'mkpath_np.c' || echo '$(srcdir)/'`mkpath_np.c
+
+libhelper_la-find_executable.lo: find_executable.c
+	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libhelper_la_CFLAGS) $(CFLAGS) -c -o libhelper_la-find_executable.lo `test -f 'find_executable.c' || echo '$(srcdir)/'`find_executable.c
 
 mostlyclean-libtool:
 	-rm -f *.lo

@@ -5,61 +5,7 @@
 #include <stdio.h>
 #include <sys/stat.h>
 #include <sys/param.h>
-
-char *find_executable_next_to_cctools(const char *name)
-{
-    int bufsize = MAXPATHLEN;
-    char *p, *prefix, buf[MAXPATHLEN], resolved_name[PATH_MAX];
-    struct stat st;
-    p = buf;
-    int i = _NSGetExecutablePath(p, &bufsize);
-    if (i == -1) {
-        p = malloc(bufsize);
-        _NSGetExecutablePath(p, &bufsize);
-    }
-    prefix = realpath(p, resolved_name);
-    p = rindex(prefix, '/');
-    if(p != NULL)
-        p[1] = '\0';
-    memcpy(buf, prefix, strlen(prefix) + 1);
-    strcat(buf, name);
-    if (stat(buf, &st) == 0 && access(buf, F_OK|X_OK) == 0)
-        return strdup(buf);
-    return NULL;
-}
-
-char *find_executable(const char *name)
-{
-    char *next_to_cctools = find_executable_next_to_cctools(name);
-    if (next_to_cctools != NULL)
-        return next_to_cctools;
-    char *p, *path = getenv("PATH");
-    char epath[MAXPATHLEN];
-    struct stat st;
-
-    if (!path)
-        return NULL;
-
-    path = strdup(path);
-
-    if (!path)
-        return NULL;
-
-    p = strtok(path, ":");
-
-    while (p != NULL)
-    {
-        snprintf(epath, sizeof(epath), "%s/%s", p, name);
-
-        if (stat(epath, &st) == 0 && access(epath, F_OK|X_OK) == 0)
-            return strdup(epath);
-
-        p = strtok(NULL, ":");
-    }
-
-    free(path);
-    return NULL;
-}
+#include <mach-o/dyld.h>
 
 #ifndef HAVE_UTIMENS
 /*
@@ -515,3 +461,47 @@ void *reallocf(void *ptr, size_t size)
 #endif /* !HAVE_REALLOCF */
 
 #endif /* !__APPLE__ */
+
+char *find_executable(const char *name)
+{
+    char *p;
+    char path[8192];
+    char epath[MAXPATHLEN];
+    char cctools_path[MAXPATHLEN];
+    const char *env_path = getenv("PATH");
+    struct stat st;
+
+    if (!env_path)
+        return NULL;
+
+    unsigned int bufsize = MAXPATHLEN;
+
+    if (_NSGetExecutablePath(cctools_path, &bufsize) == -1)
+        cctools_path[0] = '\0';
+
+    if ((p = strrchr(cctools_path, '/')))
+        *p = '\0';
+
+    snprintf(path, sizeof(path), "%s:%s", cctools_path, env_path);
+
+    p = strtok(path, ":");
+
+    while (p != NULL)
+    {
+        snprintf(epath, sizeof(epath), "%s/%s", p, name);
+
+        if ((p = realpath(epath, NULL)))
+        {
+            strlcpy(epath, p, sizeof(epath));
+            free(p);
+        }
+
+        if (stat(epath, &st) == 0 && access(epath, F_OK|X_OK) == 0)
+            return strdup(epath);
+
+        p = strtok(NULL, ":");
+    }
+
+    free(path);
+    return NULL;
+}

@@ -32,7 +32,6 @@ typedef char uuid_string_t__[37];
 #endif
 
 int _NSGetExecutablePath(char *path, unsigned int *size);
-char *find_executable(const char *name);
 int _dyld_find_unwind_sections(void* i, struct dyld_unwind_sections* sec);
 mach_port_t mach_host_self(void);
 kern_return_t host_statistics ( host_t host_priv, host_flavor_t flavor, host_info_t host_info_out, mach_msg_type_number_t *host_info_outCnt);

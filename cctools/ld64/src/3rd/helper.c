@@ -50,61 +50,6 @@ void __assert_rtn(const char *func, const char *file, int line, const char *msg)
 #endif /* __FreeBSD__ */
 }
 
-char *find_executable_next_to_cctools(const char *name)
-{
-    int bufsize = MAXPATHLEN;
-    char *p, *prefix, buf[MAXPATHLEN], resolved_name[PATH_MAX];
-    struct stat st;
-    p = buf;
-    int i = _NSGetExecutablePath(p, &bufsize);
-    if (i == -1) {
-        p = malloc(bufsize);
-        _NSGetExecutablePath(p, &bufsize);
-    }
-    prefix = realpath(p, resolved_name);
-    p = rindex(prefix, '/');
-    if(p != NULL)
-        p[1] = '\0';
-    memcpy(buf, prefix, strlen(prefix) + 1);
-    strcat(buf, name);
-    if (stat(buf, &st) == 0 && access(buf, F_OK|X_OK) == 0)
-        return strdup(buf);
-    return NULL;
-}
-
-char *find_executable(const char *name)
-{
-    char *next_to_cctools = find_executable_next_to_cctools(name);
-    if (next_to_cctools != NULL)
-        return next_to_cctools;
-    char *p, *path = getenv("PATH");
-    char epath[MAXPATHLEN];
-    struct stat st;
-
-    if (!path)
-        return NULL;
-
-    path = strdup(path);
-
-    if (!path)
-        return NULL;
-
-    p = strtok(path, ":");
-
-    while (p != NULL)
-    {
-        snprintf(epath, sizeof(epath), "%s/%s", p, name);
-
-        if (stat(epath, &st) == 0 && access(epath, F_OK|X_OK) == 0)
-            return strdup(epath);
-
-        p = strtok(NULL, ":");
-    }
-
-    free(path);
-    return NULL;
-}
-
 int _NSGetExecutablePath(char *epath, unsigned int *size)
 {
 #if defined(__FreeBSD__) || defined(__DragonFly__)

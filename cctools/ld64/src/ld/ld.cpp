@@ -39,6 +39,7 @@
 #if HAVE_EXECINFO_H // ld64-port
 #include <execinfo.h>
 #endif // HAVE_EXECINFO_H
+#include "find_executable.h" // ld64-port
 #include <mach/mach_time.h>
 #include <mach/vm_statistics.h>
 #include <mach/mach_init.h>

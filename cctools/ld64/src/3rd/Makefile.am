@@ -10,4 +10,5 @@ libhelper_la_SOURCES =  \
 	strlcpy.c \
 	eprintf.c \
 	md5.c \
-	mkpath_np.c
+	mkpath_np.c \
+	find_executable.c
