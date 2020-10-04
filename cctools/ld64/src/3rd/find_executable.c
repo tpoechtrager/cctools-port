@@ -4,6 +4,7 @@
 #include <sys/param.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <mach-o/dyld.h>
 
 #include "find_executable.h"
