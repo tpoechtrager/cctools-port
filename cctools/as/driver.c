@@ -17,7 +17,7 @@
 #include "stuff/errors.h"
 #include "stuff/execute.h"
 #include "stuff/allocate.h"
-#include "stuff/port.h" /* cctools-port: find_clang() */
+#include "stuff/port.h" /* cctools-port: find_executable() */
 #include <mach-o/dyld.h>
 
 /* used by error calls (exported) */
@@ -310,7 +310,7 @@ char **envp)
 #ifndef __APPLE__
 	    char *target_triple = getenv("CCTOOLS_CLANG_AS_TARGET_TRIPLE");
 #endif /* ! __APPLE__ */
-	    as = find_clang();
+	    as = find_executable("clang");
 	    /* cctools-port end */
 	    if(!as || access(as, F_OK) != 0){ /* cctools-port: added  !as || */
 		printf("%s: assembler (%s) not installed\n", progname,

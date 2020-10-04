@@ -1977,7 +1977,8 @@ int file_write(const char* path, struct file* fb)
 {
     int res = 0;
     bool warn = true;
-    
+    bool fake_sign = false;  /* cctools-port */
+
     // warn if any Mach-O files source file contain code signatures.
     for (uint32_t iarch = 0; 0 == res && warn && iarch < fb->nfat_arch; ++iarch)
     {
@@ -1994,6 +1995,7 @@ int file_write(const char* path, struct file* fb)
 		fprintf(stderr, "%s warning: code signature will be invalid "
 			"for %s\n", gProgramName, path);
 		warn = false;
+		fake_sign = true; /* cctools-port */
 	    }
 	}
     }
@@ -2049,6 +2051,11 @@ int file_write(const char* path, struct file* fb)
 		tmppath, strerror(errno));
 	res = -1;
     }
+
+    /* cctools-port */
+    if (0 == res && fake_sign)
+		FAKE_SIGN_BINARY(path, 1);
+    /* cctools-port end */
     
     // try to lean up if something went wrong
     if (res) {

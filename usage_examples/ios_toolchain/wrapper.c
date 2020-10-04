@@ -135,7 +135,6 @@ int main(int argc, char *argv[])
 
     char execpath[PATH_MAX+1];
     char sdkpath[PATH_MAX+1];
-    char codesign_allocate[64];
     char osvermin[64];
 
     char *compiler;
@@ -148,12 +147,6 @@ int main(int argc, char *argv[])
     target_info(argv, &target, &compiler);
     if (!get_executable_path(execpath, sizeof(execpath))) abort();
     snprintf(sdkpath, sizeof(sdkpath) - 1, "%s/../SDK/" SDK_DIR, execpath);
-
-    snprintf(codesign_allocate, sizeof(codesign_allocate),
-             "%s-codesign_allocate", target);
-
-    setenv("CODESIGN_ALLOCATE", codesign_allocate, 1);
-    setenv("IOS_FAKE_CODE_SIGN", "1", 1);
 
     env(&sdk, "IOS_SDK_SYSROOT", sdkpath);
     env(&cpu, "IOS_TARGET_CPU", TARGET_CPU);

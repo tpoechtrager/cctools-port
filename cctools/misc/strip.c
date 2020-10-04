@@ -38,6 +38,7 @@
 #include <mach-o/reloc.h>
 #include <mach-o/nlist.h>
 #include <mach-o/stab.h>
+#include "stuff/port.h" /* cctools-port: fake signing */
 #include "stuff/breakout.h"
 #include "stuff/allocate.h"
 #include "stuff/errors.h"
@@ -726,6 +727,7 @@ enum bool all_archs)
 		     toc64flag,
 #endif
 		     FALSE, NULL);
+		FAKE_SIGN_ARM_BINARY(archs, narchs, output_file); /* cctools-port */
 	}
 	else{
 	    unix_standard_mode = get_unix_standard_mode();

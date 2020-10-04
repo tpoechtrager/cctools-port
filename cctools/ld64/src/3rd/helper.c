@@ -5,21 +5,23 @@ const char ldVersionString[] = "@(#)PROGRAM:ld  PROJECT:ld64-" STRINGIFY(LD64_VE
 
 #ifndef __APPLE__
 
-#include <unistd.h> 
-#include <mach/mach.h>
-#include <mach/mach_error.h>
+#include <unistd.h>
+#include <inttypes.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/types.h>
 #include <sys/mman.h>
 #include <sys/attr.h>
+#include <sys/param.h>
+#include <sys/time.h>
+#include <sys/stat.h>
 #include <errno.h>
-#include <inttypes.h>
+#include <assert.h>
+#include <mach/mach.h>
+#include <mach/mach_error.h>
 #include <mach/mach_time.h>
 #include <mach/mach_host.h>
 #include <mach/host_info.h>
-#include <sys/time.h>
-#include <assert.h>
 
 #if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__DragonFly__)
 #include <sys/sysctl.h>
@@ -46,6 +48,36 @@ void __assert_rtn(const char *func, const char *file, int line, const char *msg)
     fflush(NULL);
     abort();
 #endif /* __FreeBSD__ */
+}
+
+char *find_executable(const char *name)
+{
+    char *p, *path = getenv("PATH");
+    char epath[MAXPATHLEN];
+    struct stat st;
+
+    if (!path)
+        return NULL;
+
+    path = strdup(path);
+
+    if (!path)
+        return NULL;
+
+    p = strtok(path, ":");
+
+    while (p != NULL)
+    {
+        snprintf(epath, sizeof(epath), "%s/%s", p, name);
+
+        if (stat(epath, &st) == 0 && access(epath, F_OK|X_OK) == 0)
+            return strdup(epath);
+
+        p = strtok(NULL, ":");
+    }
+
+    free(path);
+    return NULL;
 }
 
 int _NSGetExecutablePath(char *epath, unsigned int *size)

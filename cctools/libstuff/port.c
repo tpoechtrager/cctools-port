@@ -6,11 +6,10 @@
 #include <sys/stat.h>
 #include <sys/param.h>
 
-#ifndef DISABLE_CLANG_AS
-char *find_clang()
+char *find_executable(const char *name)
 {
     char *p, *path = getenv("PATH");
-    char clang[MAXPATHLEN];
+    char epath[MAXPATHLEN];
     struct stat st;
 
     if (!path)
@@ -25,10 +24,10 @@ char *find_clang()
 
     while (p != NULL)
     {
-        snprintf(clang, sizeof(clang), "%s/clang", p);
+        snprintf(epath, sizeof(epath), "%s/%s", p, name);
 
-        if (stat(clang, &st) == 0 && access(clang, F_OK|X_OK) == 0)
-            return strdup(clang);
+        if (stat(epath, &st) == 0 && access(epath, F_OK|X_OK) == 0)
+            return strdup(epath);
 
         p = strtok(NULL, ":");
     }
@@ -36,7 +35,6 @@ char *find_clang()
     free(path);
     return NULL;
 }
-#endif /* ! DISABLE_CLANG_AS */
 
 #ifndef HAVE_UTIMENS
 /*

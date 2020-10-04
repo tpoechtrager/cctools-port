@@ -1434,9 +1434,16 @@ int main(int argc, const char* argv[])
 			fprintf(stderr, "processed %3u dylib files\n", inputFiles._totalDylibsLoaded);
 			fprintf(stderr, "wrote output file            totaling %15s bytes\n", commatize(out.fileSize(), temp));
 		}
-		if ( getenv("IOS_SIGN_CODE_WHEN_BUILD") || getenv("IOS_FAKE_CODE_SIGN") || strcmp(archName, "arm64") == 0) { // ld64-port   (keep IOS_SIGN_CODE_WHEN_BUILD for compatibility with the 'iOS toolchain based on clang for linux' project)
-			std::string ldid = std::string("ldid -S ") + std::string(options.outputFilePath());
-			system(ldid.c_str());
+		if ( strncmp(archName, "arm", 3) == 0 && !getenv("NO_LDID") ) { // ld64-port: fake sign arm binaries
+			char *ldid = find_executable("ldid");
+			if ( ldid ) {
+				std::string ldidCommand = std::string(ldid) + std::string(" -S ") + std::string(options.outputFilePath());
+				if (getenv("LDID_DEBUG")) {
+					fprintf(stderr, "\n%s\n", ldidCommand.c_str());
+				}
+				system(ldidCommand.c_str());
+				free(ldid);
+			}
 		}
 		// <rdar://problem/6780050> Would like linker warning to be build error.
 		if ( options.errorBecauseOfWarnings() ) {
