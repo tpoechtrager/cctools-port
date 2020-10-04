@@ -321,7 +321,7 @@ char **envp)
         output = input;
     }
 
-	FAKE_SIGN_ARM_BINARY(archs, narchs, input, 0); /* cctools-port */
+	FAKE_SIGN_ARM_BINARY(archs, narchs, input); /* cctools-port */
 
 	if(errors)
 	    return(EXIT_FAILURE);

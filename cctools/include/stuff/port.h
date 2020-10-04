@@ -69,7 +69,7 @@ do { \
 	free(ldid); \
 } while (0)
 
-#define FAKE_SIGN_ARM_BINARY(archs, narchs, filename, verbose) \
+#define FAKE_SIGN_ARM_BINARY(archs, narchs, filename) \
 do { \
 	if (getenv("NO_LDID")) { \
 		break; \

@@ -727,7 +727,7 @@ enum bool all_archs)
 		     toc64flag,
 #endif
 		     FALSE, NULL);
-	    FAKE_SIGN_ARM_BINARY(archs, narchs, output_file, 1); /* cctools-port */
+	    FAKE_SIGN_ARM_BINARY(archs, narchs, output_file); /* cctools-port */
 	}
 	else{
 	    unix_standard_mode = get_unix_standard_mode();
@@ -786,7 +786,7 @@ enum bool all_archs)
 		     toc64flag,
 #endif
 		     FALSE, NULL);
-	    FAKE_SIGN_ARM_BINARY(archs, narchs, output_file, 1); /* cctools-port */
+	    FAKE_SIGN_ARM_BINARY(archs, narchs, output_file); /* cctools-port */
 	    if(rename_file != NULL){
 		if(rename(output_file, rename_file) == -1)
 		    system_error("can't move temporary file: %s to file: %s",
