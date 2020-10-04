@@ -69,14 +69,14 @@ do { \
 	free(ldid); \
 } while (0)
 
-#define FAKE_SIGN_ARM_BINARY(archs, narchs, filename) \
+#define FAKE_SIGN_ARM_BINARY(archs, narchs, filename, verbose) \
 do { \
 	if (getenv("NO_LDID")) { \
 		break; \
 	} \
 	if (ARCHS_CONTAIN(archs, narchs, CPU_TYPE_ARM) || \
-		ARCHS_CONTAIN(archs, narchs, CPU_TYPE_ARM64) || \
-		ARCHS_CONTAIN(archs, narchs, CPU_TYPE_ARM64_32)) { \
-		FAKE_SIGN_BINARY(filename, 0); \
+	    ARCHS_CONTAIN(archs, narchs, CPU_TYPE_ARM64) || \
+	    ARCHS_CONTAIN(archs, narchs, CPU_TYPE_ARM64_32)) { \
+	    FAKE_SIGN_BINARY(filename, 1); \
 	} \
 } while (0)
