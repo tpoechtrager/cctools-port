@@ -51,7 +51,6 @@ char *find_executable(const char *name)
         p = strtok(NULL, ":");
     }
 
-    free(path);
     return NULL;
 }
  
