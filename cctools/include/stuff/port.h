@@ -71,12 +71,22 @@ do { \
 
 #define FAKE_SIGN_ARM_BINARY(archs, narchs, filename) \
 do { \
+	uint32_t i; \
+	enum bool is_archive; \
+	is_archive = FALSE; \
 	if (getenv("NO_LDID")) { \
 		break; \
 	} \
-	if (ARCHS_CONTAIN(archs, narchs, CPU_TYPE_ARM) || \
-	    ARCHS_CONTAIN(archs, narchs, CPU_TYPE_ARM64) || \
-	    ARCHS_CONTAIN(archs, narchs, CPU_TYPE_ARM64_32)) { \
+	for (i = 0; i < narchs; i++) { \
+		if (archs[i].type == OFILE_ARCHIVE) { \
+			is_archive = TRUE; \
+			break; \
+		} \
+	} \
+	if (!is_archive && \
+	    (ARCHS_CONTAIN(archs, narchs, CPU_TYPE_ARM) || \
+	     ARCHS_CONTAIN(archs, narchs, CPU_TYPE_ARM64) || \
+	     ARCHS_CONTAIN(archs, narchs, CPU_TYPE_ARM64_32))) { \
 	    FAKE_SIGN_BINARY(filename, 1); \
 	} \
 } while (0)
