@@ -26,7 +26,7 @@
 #include <limits.h>
 #include <unistd.h>
 #include <fcntl.h>
-#if defined(__APPLE__) && __aarch64__
+#if defined(__APPLE__) && __aarch64__ /* cctools-port: copy before modification */
 #include <copyfile.h>
 #endif
 #include "stuff/port.h" /* cctools-port: fake signing */
@@ -391,7 +391,7 @@ char *input)
     struct load_command *lc;
     enum byte_sex host_byte_sex;
 
-#if defined(__APPLE__) && __aarch64__
+#if defined(__APPLE__) && __aarch64__ /* cctools-port: copy before modification */
         char tempfile[PATH_MAX];
 
 	snprintf(tempfile, PATH_MAX, "%sXXXXXX", input);
@@ -471,7 +471,7 @@ char *input)
 	if(close(fd) == -1)
 	    system_error("can't close written on input file: %s", input);
 
-#if defined(__APPLE__) && __aarch64__
+#if defined(__APPLE__) && __aarch64__ /* cctools-port: copy before modification */
 	if (rename(tempfile, input) == -1)
 	  system_error("can't rename tempfile to %s", input);
 #endif
