@@ -38,7 +38,7 @@ typedef void *LLVMDisasmContextRef;
  * is at the PC parameter.  For some instruction sets, there can be more than
  * one operand with symbolic information.  To determine the symbolic operand
  * information for each operand, the bytes for the specific operand in the
- * instruction are specified by the Offset parameter and its byte widith is the
+ * instruction are specified by the Offset parameter and its byte width is the
  * size parameter.  For instructions sets with fixed widths and one symbolic
  * operand per instruction, the Offset parameter will be zero and Size parameter
  * will be the instruction width.  The information is returned in TagBuf and is 
