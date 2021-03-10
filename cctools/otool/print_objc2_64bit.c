@@ -29,7 +29,6 @@
  * @APPLE_LICENSE_HEADER_END@
  */
 #include "stdio.h"
-#include "stdlib.h"
 #include "stddef.h"
 #include "string.h"
 #include <strings.h> /* cctools-port: For bcmp, bzero ... */
@@ -41,10 +40,14 @@
 #include "stuff/reloc.h"
 #include "dyld_bind_info.h"
 #include "ofile_print.h"
+#include "print_objc2_util.h"
 
 #include <stdarg.h>
+#include <stdlib.h>
 
 extern char *oname;
+
+extern uint64_t addr_slide;
 
 /*
  * Here we need structures that have the same memory layout and size as the
@@ -88,7 +91,7 @@ struct class_ro_t {
     uint64_t ivars; 		/* const ivar_list_t * (64-bit pointer) */
     uint64_t weakIvarLayout; 	/* const uint8_t * (64-bit pointer) */
     uint64_t baseProperties; 	/* const struct objc_property_list *
-							(64-bit pointer) */
+                            	   (64-bit pointer) */
 };
 
 /* Values for class_ro_t->flags */
@@ -116,10 +119,15 @@ enum byte_sex target_byte_sex)
 }
 
 struct method_list_t {
-    uint32_t entsize;
+    uint32_t entsize; /* 16-bits of flags, 16-bits of value, see below. */
     uint32_t count;
-    /* struct method_t first;  These structures follow inline */
+    /* struct method_t or struct method_rel_t follow inline */
 };
+
+#define METHOD_LIST_ENTSIZE_FLAGS_MASK		0xFFFF0000
+#define METHOD_LIST_ENTSIZE_VALUE_MASK		0x0000FFFF
+#define METHOD_LIST_ENTSIZE_FLAG_RELATIVE	0x80000000
+#define METHOD_LIST_ENTSIZE_FLAG_DIRECT_SEL	0x40000000
 
 static
 void
@@ -137,6 +145,12 @@ struct method_t {
     uint64_t imp;	/* IMP (64-bit pointer) */
 };
 
+struct method_rel_t {
+    int32_t name;	/* SEL (signed 32-bit offset from this field) */
+    int32_t types;	/* const char* (signed 32-bit offset from this field) */
+    int32_t imp;	/* IMP (signed 32-bit offset from this field) */
+};
+
 static
 void
 swap_method_t(
@@ -146,6 +160,17 @@ enum byte_sex target_byte_sex)
     m->name = SWAP_LONG_LONG(m->name);
     m->types = SWAP_LONG_LONG(m->types);
     m->imp = SWAP_LONG_LONG(m->imp);
+}
+
+static
+void
+swap_method_rel_t(
+struct method_rel_t *m,
+enum byte_sex target_byte_sex)
+{
+    m->name = SWAP_INT(m->name);
+    m->types = SWAP_INT(m->types);
+    m->imp = SWAP_INT(m->imp);
 }
 
 struct ivar_list_t {
@@ -203,13 +228,13 @@ struct protocol_t {
     uint64_t isa;			/* id * (64-bit pointer) */
     uint64_t name;			/* const char * (64-bit pointer) */
     uint64_t protocols;			/* struct protocol_list_t *
-							(64-bit pointer) */
+                                    	   (64-bit pointer) */
     uint64_t instanceMethods;		/* method_list_t * (64-bit pointer) */
     uint64_t classMethods;		/* method_list_t * (64-bit pointer) */
     uint64_t optionalInstanceMethods;	/* method_list_t * (64-bit pointer) */
     uint64_t optionalClassMethods;	/* method_list_t * (64-bit pointer) */
     uint64_t instanceProperties;	/* struct objc_property_list *
-							   (64-bit pointer) */
+                                    	   (64-bit pointer) */
 };
 
 static
@@ -266,7 +291,7 @@ struct category_t {
     uint64_t classMethods;	/* struct method_list_t * (64-bit pointer) */
     uint64_t protocols;		/* struct protocol_list_t * (64-bit pointer) */
     uint64_t instanceProperties; /* struct objc_property_list *
-				    (64-bit pointer) */
+                                    (64-bit pointer) */
 };
 
 static
@@ -355,8 +380,6 @@ enum byte_sex target_byte_sex)
     cfstring->length = SWAP_LONG_LONG(cfstring->length);
 }
 
-#define MAXINDENT 10
-
 struct info {
     char *object_addr;
     uint64_t object_size;
@@ -380,11 +403,11 @@ struct info {
     uint32_t nloc_relocs;
     struct dyld_bind_info *dbi;
     uint64_t ndbi;
+    struct dyld_bind_info **dbi_index;
     enum chain_format_t chain_format;
     enum bool verbose;
     enum bool Vflag;
-    uint32_t indent_level;
-    uint32_t indent_widths[MAXINDENT];
+    struct indent indent;
 };
 
 struct section_info_64 {
@@ -445,6 +468,10 @@ static void print_protocol_t(
     struct info *info);
 
 static void print_message_refs(
+    struct section_info_64 *s,
+    struct info *info);
+
+static void print_selector_refs(
     struct section_info_64 *s,
     struct info *info);
 
@@ -510,22 +537,28 @@ static void print_field_value(
     uint64_t *out_n_value,
     int64_t *out_addend);
 
-static void print_field_label(
-    struct info *info,
-    const char* label,
-    ...);
+enum rel32_value_type {
+    REL32_VALUE_NONE,	/* print no value */
+    REL32_VALUE_OFFT,	/* value is a file offset pointer to a C string */
+    REL32_VALUE_CSTR,	/* value is a C string */
+};
 
-static void print_field_scalar(
+static void print_field_rel32(
+    uint64_t base,
+    uint32_t fieldoff,
+    int32_t rel32,
+    const char* suffix,
     struct info *info,
-    const char* label,
-    const char* fmt,...);
+    uint64_t *out_n_value,
+    int64_t *out_addend,
+    enum rel32_value_type value_type);
 
-static void indent_push(
-    struct info *info,
-    uint32_t width);
-
-static void indent_pop(
-    struct info *info);
+static int warn_about_zerofill_64(
+    struct section_info_64 *s,
+    const char* typename,
+    struct indent* indent,
+    enum bool indentFlag,
+    enum bool newline);
 
 /*
  * Print the objc2 meta data in 64-bit Mach-O files.
@@ -577,6 +610,7 @@ enum bool Vflag)
     info.nloc_relocs = nloc_relocs;
     info.dbi = dbi;
     info.ndbi = ndbi;
+    info.dbi_index = get_dyld_bind_info_index(dbi, ndbi);
     info.chain_format = chain_format;
     info.verbose = verbose;
     info.Vflag = Vflag;
@@ -662,7 +696,17 @@ enum bool Vflag)
         s = get_section_64(info.sections, info.nsections,
                            "__DATA_DIRTY", "__objc_msgrefs");
     print_message_refs(s, &info);
-    
+
+    s = get_section_64(info.sections, info.nsections,
+                       "__DATA", "__objc_selrefs");
+    if (!s)
+        s = get_section_64(info.sections, info.nsections,
+                           "__DATA_CONST", "__objc_selrefs");
+    if (!s)
+        s = get_section_64(info.sections, info.nsections,
+                           "__DATA_DIRTY", "__objc_selrefs");
+    print_selector_refs(s, &info);
+
     s = get_section_64(info.sections, info.nsections,
                        "__OBJC", "__image_info");
     if(s == NULL)
@@ -675,6 +719,8 @@ enum bool Vflag)
         s = get_section_64(info.sections, info.nsections,
                            "__DATA_DIRTY", "__objc_imageinfo");
     print_image_info(s, &info);
+
+    free(info.dbi_index);
 }
 
 static
@@ -691,9 +737,8 @@ void (*func)(uint64_t, struct info *))
     
     if(s == NULL)
         return;
-    
-    info->indent_level = 0;
-    info->indent_widths[info->indent_level] = 0;
+
+    indent_reset(&info->indent);
 
     printf("Contents of (%.16s,%.16s) section\n", s->segname, s->sectname);
     for(i = 0; i < s->size; i += sizeof(uint64_t))
@@ -707,7 +752,7 @@ void (*func)(uint64_t, struct info *))
         if(i + sizeof(uint64_t) > s->size)
             printf("%s list pointer extends past end of (%s,%s) "
                    "section\n", listname, s->segname, s->sectname);
-        printf("%016llx ", s->addr + i);
+        printf("%016llx ", s->addr + i + addr_slide);
 
         memset(&p, '\0', sizeof(uint64_t));
         memcpy(&p, s->contents + i, size);
@@ -763,8 +808,16 @@ cpu_type_t cputype)
                     &textbase, &database);
     
     r = get_pointer_64(p, &offset, &left, &s, sections, nsections);
-    if(r == NULL || left < sizeof(struct cfstring_t))
+    if(r == NULL || left < sizeof(struct cfstring_t)) {
+        if(sections != NULL)
+            free(sections);
         return(NULL);
+    }
+    if (s && (s->zerofill || (0 != s->size && 0 == s->offset))) {
+        if(sections != NULL)
+            free(sections);
+        return NULL;
+    }
 
     memcpy(&cfs, r, sizeof(struct cfstring_t));
     if(get_host_byte_sex() != object_byte_sex)
@@ -781,8 +834,13 @@ cpu_type_t cputype)
     }
     cfs_characters = n_value + addend;
 
-    name = get_pointer_64(cfs_characters, NULL, &left, NULL,
+    name = get_pointer_64(cfs_characters, NULL, &left, &s,
                           sections, nsections);
+    if (s && (s->zerofill || (0 != s->size && 0 == s->offset))) {
+        if(sections != NULL)
+            free(sections);
+        return NULL;
+    }
 
     if(sections != NULL)
         free(sections);
@@ -844,6 +902,11 @@ cpu_type_t cputype)
                 free(sections);
             return(NULL);
         }
+        if (s && (s->zerofill || (0 != s->size && 0 == s->offset))) {
+            if(sections != NULL)
+                free(sections);
+            return NULL;
+        }
 
         symbol_name = get_symbol_64(offset, s->addr, textbase, database,
                                     address_of_p, s->relocs, s->nrelocs,
@@ -868,11 +931,16 @@ cpu_type_t cputype)
         }
     }
 
-    r = get_pointer_64(p, NULL, &left, NULL, sections, nsections);
+    r = get_pointer_64(p, NULL, &left, &s, sections, nsections);
     if(r == NULL || left < sizeof(struct class_t)){
         if(sections != NULL)
             free(sections);
         return(NULL);
+    }
+    if (s && (s->zerofill || (0 != s->size && 0 == s->offset))) {
+        if(sections != NULL)
+            free(sections);
+        return NULL;
     }
 
     memcpy(&c, r, sizeof(struct class_t));
@@ -885,11 +953,16 @@ cpu_type_t cputype)
         return(NULL);
     }
     
-    r = get_pointer_64(c.data, NULL, &left, NULL, sections, nsections);
+    r = get_pointer_64(c.data, NULL, &left, &s, sections, nsections);
     if(r == NULL || left < sizeof(struct class_ro_t)){
         if(sections != NULL)
             free(sections);
         return(NULL);
+    }
+    if (s && (s->zerofill || (0 != s->size && 0 == s->offset))) {
+        if(sections != NULL)
+            free(sections);
+        return NULL;
     }
 
     memcpy(&cro, r, sizeof(struct class_ro_t));
@@ -902,7 +975,10 @@ cpu_type_t cputype)
         return(NULL);
     }
 
-    name = get_pointer_64(cro.name, NULL, &left, NULL, sections, nsections);
+    name = get_pointer_64(cro.name, NULL, &left, &s, sections, nsections);
+    if (s && (s->zerofill || (0 != s->size && 0 == s->offset))) {
+        name = NULL;
+    }
 
     if(sections != NULL)
         free(sections);
@@ -959,6 +1035,11 @@ cpu_type_t cputype)
             free(sections);
         return(0);
     }
+    if (s && (s->zerofill || (0 != s->size && 0 == s->offset))) {
+        if(sections != NULL)
+            free(sections);
+        return 0;
+    }
 
     symbol_name = get_symbol_64(offset, s->addr, textbase, database,
                                 address_of_p, s->relocs, s->nrelocs,
@@ -993,6 +1074,8 @@ struct info *info)
                        info->sections, info->nsections);
     if(r == NULL)
         return;
+    if (warn_about_zerofill_64(s, "class_t", &info->indent, TRUE, TRUE))
+        return;
 
     memset(&c, '\0', sizeof(struct class_t));
     if(left < sizeof(struct class_t)){
@@ -1004,26 +1087,26 @@ struct info *info)
     if(info->swapped)
         swap_class_t(&c, info->host_byte_sex);
 
-    indent_push(info, sizeof("superclass") - 1);
+    indent_push(&info->indent, sizeof("superclass") - 1);
 
-    print_field_label(info, "isa");
+    print_field_label(&info->indent, "isa");
     print_field_value(offset + offsetof(struct class_t, isa), c.isa,
                       FALSE, NULL, "\n", info, s, &isa_n_value, &isa_addend);
 
-    print_field_label(info, "superclass");
+    print_field_label(&info->indent, "superclass");
     print_field_value(offset + offsetof(struct class_t, superclass),
                       c.superclass, FALSE, NULL, "\n", info, s,
                       &n_value, &addend);
 
-    print_field_label(info, "cache");
+    print_field_label(&info->indent, "cache");
     print_field_value(offset + offsetof(struct class_t, cache),
                       c.cache, FALSE, NULL, "\n", info, s, &n_value, &addend);
 
-    print_field_label(info, "vtable");
+    print_field_label(&info->indent, "vtable");
     print_field_value(offset + offsetof(struct class_t, vtable),
                       c.vtable, FALSE, NULL, "\n", info, s, &n_value, &addend);
 
-    print_field_label(info, "data");
+    print_field_label(&info->indent, "data");
     print_field_value(offset + offsetof(struct class_t, data), c.data, FALSE,
                     "(struct class_ro_t *)", NULL, info, s, &n_value, &addend);
     /*
@@ -1041,7 +1124,7 @@ struct info *info)
     /* Descend into the read only data */
     print_class_ro_t((n_value + addend) & ~0x7, info, &is_meta_class);
 
-    indent_pop(info);
+    indent_pop(&info->indent);
 
     /* Walk the class hierarchy, but be wary of cycles or bad chains */
     if(is_meta_class == FALSE &&
@@ -1075,6 +1158,8 @@ enum bool *is_meta_class)
                        info->nsections);
     if(r == NULL)
         return;
+    if (warn_about_zerofill_64(s, "class_ro_t", &info->indent, TRUE, TRUE))
+        return;
 
     memset(&cro, '\0', sizeof(struct class_ro_t));
     if(left < sizeof(struct class_ro_t)){
@@ -1086,9 +1171,9 @@ enum bool *is_meta_class)
     if(info->swapped)
         swap_class_ro_t(&cro, info->host_byte_sex);
 
-    indent_push(info, sizeof("weakIvarLayout") - 1);
+    indent_push(&info->indent, sizeof("weakIvarLayout") - 1);
 
-    print_field_scalar(info, "flags", "0x%x", cro.flags);
+    print_field_scalar(&info->indent, "flags", "0x%x", cro.flags);
 
     if(info->verbose){
         if(cro.flags & RO_META)
@@ -1100,28 +1185,31 @@ enum bool *is_meta_class)
     }
     printf("\n");
 
-    print_field_scalar(info, "instanceStart", "%u\n", cro.instanceStart);
-    print_field_scalar(info, "instanceSize", "%u\n", cro.instanceSize);
-    print_field_scalar(info, "reserved", "0x%x\n", cro.reserved);
+    print_field_scalar(&info->indent, "instanceStart","%u\n",cro.instanceStart);
+    print_field_scalar(&info->indent, "instanceSize", "%u\n", cro.instanceSize);
+    print_field_scalar(&info->indent, "reserved", "0x%x\n", cro.reserved);
 
-    print_field_label(info, "ivarLayout");
+    print_field_label(&info->indent, "ivarLayout");
     print_field_value(offset + offsetof(struct class_ro_t, ivarLayout),
                       cro.ivarLayout, FALSE, NULL, "\n", info, s,
                       &n_value, &addend);
     print_layout_map(n_value + addend, info);
 
-    print_field_label(info, "name");
+    print_field_label(&info->indent, "name");
     print_field_value(offset + offsetof(struct class_ro_t, name),
                       cro.name, FALSE, NULL, NULL, info, s, &n_value, &addend);
     if (info->verbose) {
-        name = get_pointer_64(n_value + addend, NULL, &left, NULL,
+        struct section_info_64 *t;
+        name = get_pointer_64(n_value + addend, NULL, &left, &t,
                               info->sections, info->nsections);
+        if (t && (t->zerofill || (0 != t->size && 0 == t->offset)))
+            name = NULL;
         if (name != NULL)
             printf(" %.*s", (int)left, name);
     }
     printf("\n");
 
-    print_field_label(info, "baseMethods");
+    print_field_label(&info->indent, "baseMethods");
     print_field_value(offset + offsetof(struct class_ro_t, baseMethods),
                       cro.baseMethods, FALSE, "(struct method_list_t *)", "\n",
                       info, s, &n_value, &addend);
@@ -1129,7 +1217,7 @@ enum bool *is_meta_class)
         print_method_list_t(n_value + addend, info);
     }
 
-    print_field_label(info, "baseProtocols");
+    print_field_label(&info->indent, "baseProtocols");
     print_field_value(offset + offsetof(struct class_ro_t, baseProtocols),
                       cro.baseProtocols, FALSE, "(struct protocol_list_t *)",
                       "\n", info, s, &n_value, &addend);
@@ -1137,7 +1225,7 @@ enum bool *is_meta_class)
         print_protocol_list_t(n_value + addend, info);
     }
 
-    print_field_label(info, "ivars");
+    print_field_label(&info->indent, "ivars");
     print_field_value(offset + offsetof(struct class_ro_t, ivars),
                       cro.ivars, FALSE, "(struct ivar_list_t *)", "\n", info, s,
                       &n_value, &addend);
@@ -1145,13 +1233,13 @@ enum bool *is_meta_class)
         print_ivar_list_t(n_value + addend, info);
     }
 
-    print_field_label(info, "weakIvarLayout");
+    print_field_label(&info->indent, "weakIvarLayout");
     print_field_value(offset + offsetof(struct class_ro_t, weakIvarLayout),
                       cro.weakIvarLayout, FALSE, NULL, "\n", info, s,
                       &n_value, &addend);
     print_layout_map(n_value + addend, info);
 
-    print_field_label(info, "baseProperties");
+    print_field_label(&info->indent, "baseProperties");
     print_field_value(offset + offsetof(struct class_ro_t, baseProperties),
                       cro.baseProperties, FALSE,
                       "(struct objc_property_list *)", "\n", info, s,
@@ -1163,7 +1251,7 @@ enum bool *is_meta_class)
     if(is_meta_class)
         *is_meta_class = (cro.flags & RO_META) ? TRUE : FALSE;
 
-    indent_pop(info);
+    indent_pop(&info->indent);
 }
 
 static
@@ -1181,8 +1269,11 @@ struct info *info)
     
     layout_map = get_pointer_64(p, &offset, &left, &s,
                                 info->sections, info->nsections);
+    if (warn_about_zerofill_64(s, "layout map", &info->indent, TRUE, TRUE))
+        return;
+
     if(layout_map != NULL){
-        print_field_label(info, "layout map");
+        print_field_label(&info->indent, "layout map");
         do{
             printf("0x%02x ", (*layout_map) & 0xff);
             left--;
@@ -1199,69 +1290,176 @@ uint64_t p,
 struct info *info)
 {
     struct method_list_t ml;
-    struct method_t m;
     void *r;
     uint32_t offset, left, i;
     struct section_info_64 *s;
     uint64_t n_value;
     int64_t addend;
-    
+    uint32_t entsize;
+    enum bool relative = FALSE;
+    enum bool direct_sel = FALSE;
+    const char* desc = "";
+
     r = get_pointer_64(p, &offset, &left, &s, info->sections, info->nsections);
     if(r == NULL)
+        return;
+    if (warn_about_zerofill_64(s, "method_list_t", &info->indent, TRUE, TRUE))
         return;
 
     memset(&ml, '\0', sizeof(struct method_list_t));
     if(left < sizeof(struct method_list_t)){
         memcpy(&ml, r, left);
-        print_field_scalar(info, "", "(method_list_t entends past the end "
-                           "of the section)\n)");
+        print_field_scalar(&info->indent, "", "(method_list_t entends past the "
+                           "end of the section)\n)");
     }
     else
         memcpy(&ml, r, sizeof(struct method_list_t));
     if(info->swapped)
         swap_method_list_t(&ml, info->host_byte_sex);
 
-    indent_push(info, sizeof("entsize") - 1);
+    indent_push(&info->indent, sizeof("entsize") - 1);
 
-    print_field_scalar(info, "entsize", "%u\n", ml.entsize);
-    print_field_scalar(info, "count", "%u\n", ml.count);
+    entsize = ml.entsize & METHOD_LIST_ENTSIZE_VALUE_MASK;
+    relative = (ml.entsize & METHOD_LIST_ENTSIZE_FLAG_RELATIVE) != 0;
+    direct_sel = (ml.entsize & METHOD_LIST_ENTSIZE_FLAG_DIRECT_SEL) != 0;
+    if (relative == TRUE && direct_sel == FALSE && entsize == 12)
+        desc = " (relative)";
+    else if (relative == TRUE && direct_sel == TRUE && entsize == 12)
+        desc = " (relative, direct SEL)";
+    else if (relative == TRUE && direct_sel == TRUE && entsize != 12)
+        desc = " (relative, direct SEL, invalid)";
+    else if ((relative == FALSE && direct_sel == TRUE) || entsize != 24)
+        desc = " (invalid)";
+
+    print_field_scalar(&info->indent, "entsize", "%u%s\n", entsize, desc);
+    print_field_scalar(&info->indent, "count", "%u\n", ml.count);
 
     p += sizeof(struct method_list_t);
     offset += sizeof(struct method_list_t);
-    for(i = 0; i < ml.count; i++){
-        r = get_pointer_64(p, &offset, &left, &s,
-                           info->sections, info->nsections);
-        if(r == NULL)
-            break;
 
-        memset(&m, '\0', sizeof(struct method_t));
-        if(left < sizeof(struct method_t)){
-            memcpy(&m, r, left);
-            print_field_scalar(info, "", "(method_t entends past the end "
-                               "of the section)\n)");
+    if (relative == FALSE && entsize == 24) {
+        struct method_t m;
+        for(i = 0; i < ml.count; i++){
+            r = get_pointer_64(p, &offset, &left, &s,
+                               info->sections, info->nsections);
+            if(r == NULL)
+                break;
+            if (warn_about_zerofill_64(s, "method_t", &info->indent,
+                                       FALSE, TRUE))
+                break;
+
+            memset(&m, '\0', sizeof(struct method_t));
+            if(left < sizeof(struct method_t)){
+                memcpy(&m, r, left);
+                print_field_scalar(&info->indent, "", "(method_t entends past "
+                                   "the end of the section)\n)");
+            }
+            else
+                memcpy(&m, r, sizeof(struct method_t));
+            if(info->swapped)
+                swap_method_t(&m, info->host_byte_sex);
+
+            print_field_label(&info->indent, "name");
+            print_field_value(offset + offsetof(struct method_t, name),
+                              m.name, TRUE, NULL, "\n", info, s,
+                              &n_value, &addend);
+
+            print_field_label(&info->indent, "types");
+            print_field_value(offset + offsetof(struct method_t, types),
+                              m.types, TRUE, NULL, "\n", info, s,
+                              &n_value,&addend);
+
+            print_field_label(&info->indent, "imp");
+            print_field_value(offset + offsetof(struct method_t, imp),
+                              m.imp, FALSE, NULL, "\n", info, s,
+                              &n_value, &addend);
+
+            p += sizeof(struct method_t);
+            offset += sizeof(struct method_t);
         }
-        else
-            memcpy(&m, r, sizeof(struct method_t));
-        if(info->swapped)
-            swap_method_t(&m, info->host_byte_sex);
+    }
+    else if (relative == TRUE && entsize == 12) {
+        struct method_rel_t m;
+        for(i = 0; i < ml.count; i++){
+            r = get_pointer_64(p, &offset, &left, &s,
+                               info->sections, info->nsections);
+            if(r == NULL)
+                break;
+            if (warn_about_zerofill_64(s, "method_rel_t", &info->indent,
+                                       FALSE, TRUE))
+                break;
 
-        print_field_label(info, "name");
-        print_field_value(offset + offsetof(struct method_t, name),
-                          m.name, TRUE, NULL, "\n", info, s, &n_value, &addend);
+            memset(&m, '\0', sizeof(struct method_rel_t));
+            if(left < sizeof(struct method_rel_t)){
+                memcpy(&m, r, left);
+                print_field_scalar(&info->indent, "", "(method_rel_t entends "
+                                   "past the end of the section)\n)");
+            }
+            else
+                memcpy(&m, r, sizeof(struct method_rel_t));
+            if(info->swapped)
+                swap_method_rel_t(&m, info->host_byte_sex);
 
-        print_field_label(info, "types");
-        print_field_value(offset + offsetof(struct method_t, types),
-                          m.types, TRUE, NULL, "\n", info, s, &n_value,&addend);
+            print_field_label(&info->indent, "name");
+            print_field_rel32(p, offsetof(struct method_rel_t, name), m.name,
+                              "\n", info, NULL, NULL,
+                              direct_sel ? REL32_VALUE_CSTR : REL32_VALUE_OFFT);
 
-        print_field_label(info, "imp");
-        print_field_value(offset + offsetof(struct method_t, imp),
-                          m.imp, FALSE, NULL, "\n", info, s, &n_value, &addend);
+            print_field_label(&info->indent, "types");
+            print_field_rel32(p, offsetof(struct method_rel_t, types), m.types,
+                              "\n", info, NULL, NULL, REL32_VALUE_CSTR);
 
-        p += sizeof(struct method_t);
-        offset += sizeof(struct method_t);
+            print_field_label(&info->indent, "imp");
+            print_field_rel32(p, offsetof(struct method_rel_t, imp), m.imp,
+                              "\n", info, NULL, NULL, REL32_VALUE_NONE);
+
+            p += sizeof(struct method_rel_t);
+            offset += sizeof(struct method_rel_t);
+        }
+    }
+    else {
+        unsigned char* q;
+        char* space;
+        uint32_t nbyte;
+        for(i = 0; i < ml.count; i++){
+            r = get_pointer_64(p, &offset, &left, &s,
+                               info->sections, info->nsections);
+            if(r == NULL)
+                break;
+            if (warn_about_zerofill_64(s, "method data", &info->indent,
+                                       FALSE, TRUE))
+                break;
+
+            if(left < entsize){
+                nbyte = left;
+                print_field_scalar(&info->indent, "", "(method data entends "
+                                   "past the end of the section)\n)");
+            }
+            else
+                nbyte = entsize;
+
+            q = (unsigned char*)r;
+            for (uint32_t ibyte = 0; ibyte < nbyte; ++ibyte) {
+                if (0 == (ibyte%16)) {
+                    if (0 != ibyte)
+                        printf("\n");
+                    print_field_label(&info->indent, "");
+                    space = "";
+                } else if (0 == (ibyte%8)) {
+                    space = "  ";
+                } else {
+                    space = " ";
+                }
+                printf("%s%02x", space, q[ibyte]);
+            }
+            printf("\n");
+
+            p += entsize;
+            offset += entsize;
+        }
     }
 
-    indent_pop(info);
+    indent_pop(&info->indent);
 }
 
 static
@@ -1283,6 +1481,8 @@ struct info *info)
                        info->nsections);
     if(r == NULL)
         return;
+    if (warn_about_zerofill_64(s, "ivar_list_t", &info->indent, TRUE, TRUE))
+        return;
 
     memset(&il, '\0', sizeof(struct ivar_list_t));
     if(left < sizeof(struct ivar_list_t)){
@@ -1294,10 +1494,10 @@ struct info *info)
     if(info->swapped)
         swap_ivar_list_t(&il, info->host_byte_sex);
 
-    indent_push(info, sizeof("alignment") - 1);
+    indent_push(&info->indent, sizeof("alignment") - 1);
 
-    print_field_scalar(info, "entsize", "%u\n", il.entsize);
-    print_field_scalar(info, "count", "%u\n", il.count);
+    print_field_scalar(&info->indent, "entsize", "%u\n", il.entsize);
+    print_field_scalar(&info->indent, "count", "%u\n", il.count);
 
     p += sizeof(struct ivar_list_t);
     offset += sizeof(struct ivar_list_t);
@@ -1305,6 +1505,8 @@ struct info *info)
         r = get_pointer_64(p, &offset, &left, &s, info->sections,
                            info->nsections);
         if(r == NULL)
+            break;
+        if (warn_about_zerofill_64(s, "ivar_t", &info->indent, FALSE, TRUE))
             break;
 
         memset(&i, '\0', sizeof(struct ivar_t));
@@ -1317,13 +1519,16 @@ struct info *info)
         if(info->swapped)
             swap_ivar_t(&i, info->host_byte_sex);
 
-        print_field_label(info, "offset");
+        print_field_label(&info->indent, "offset");
         print_field_value(offset + offsetof(struct ivar_t, offset),
                           i.offset, FALSE, NULL, NULL, info, s,
                           &n_value, &addend);
         if (info->verbose) {
-            ivar_offset_p = get_pointer_64(n_value + addend, NULL, &left, NULL,
+            ivar_offset_p = get_pointer_64(n_value + addend, NULL, &left, &s,
                                            info->sections, info->nsections);
+            if (s && (s->zerofill || (0 != s->size && 0 == s->offset))) {
+                ivar_offset_p = NULL;
+            }
             if(ivar_offset_p != NULL && left >= sizeof(ivar_offset)){
                 memcpy(&ivar_offset, ivar_offset_p, sizeof(ivar_offset));
                 if(info->swapped)
@@ -1333,22 +1538,22 @@ struct info *info)
         }
         printf("\n");
 
-        print_field_label(info, "name");
+        print_field_label(&info->indent, "name");
         print_field_value(offset + offsetof(struct ivar_t, name),
                           i.name, TRUE, NULL, "\n", info, s, &n_value, &addend);
 
-        print_field_label(info, "type");
+        print_field_label(&info->indent, "type");
         print_field_value(offset + offsetof(struct ivar_t, type),
                           i.type, TRUE, NULL, "\n", info, s, &n_value, &addend);
 
-        print_field_scalar(info, "alignment", "%u\n", i.alignment);
-        print_field_scalar(info, "size", "%u\n", i.size);
+        print_field_scalar(&info->indent, "alignment", "%u\n", i.alignment);
+        print_field_scalar(&info->indent, "size", "%u\n", i.size);
 
         p += sizeof(struct ivar_t);
         offset += sizeof(struct ivar_t);
     }
 
-    indent_pop(info);
+    indent_pop(&info->indent);
 }
 
 static
@@ -1369,6 +1574,8 @@ struct info *info)
                        info->nsections);
     if(r == NULL)
         return;
+    if (warn_about_zerofill_64(s, "protocol_list_t", &info->indent, TRUE, TRUE))
+        return;
 
     memset(&pl, '\0', sizeof(struct protocol_list_t));
     if(left < sizeof(struct protocol_list_t)){
@@ -1381,9 +1588,9 @@ struct info *info)
     if(info->swapped)
         swap_protocol_list_t(&pl, info->host_byte_sex);
 
-    indent_push(info, sizeof("list[99]") - 1);
+    indent_push(&info->indent, sizeof("list[99]") - 1);
 
-    print_field_scalar(info, "count", "%llu\n", pl.count);
+    print_field_scalar(&info->indent, "count", "%llu\n", pl.count);
 
     p += sizeof(struct protocol_list_t);
     offset += sizeof(struct protocol_list_t);
@@ -1391,6 +1598,8 @@ struct info *info)
         r = get_pointer_64(p, &offset, &left, &s, info->sections,
                            info->nsections);
         if(r == NULL)
+            break;
+        if (warn_about_zerofill_64(s, "protocol_t", &info->indent, FALSE, TRUE))
             break;
 
         q = 0;
@@ -1404,7 +1613,7 @@ struct info *info)
         if(info->swapped)
             q = SWAP_LONG_LONG(q);
 
-        print_field_label(info, "list[%u]", i);
+        print_field_label(&info->indent, "list[%u]", i);
         print_field_value(offset, q, FALSE, "(struct protocol_t *)", "\n",
                           info, s, &n_value, &addend);
         
@@ -1420,7 +1629,7 @@ struct info *info)
         offset += sizeof(uint64_t);
     }
 
-    indent_pop(info);
+    indent_pop(&info->indent);
 }
 
 static
@@ -1440,6 +1649,9 @@ struct info *info)
     r = get_pointer_64(p, &offset, &left, &s, info->sections, info->nsections);
     if(r == NULL)
         return;
+    if (warn_about_zerofill_64(s, "objc_property_list", &info->indent,
+                               TRUE, TRUE))
+        return;
 
     memset(&opl, '\0', sizeof(struct objc_property_list));
     if(left < sizeof(struct objc_property_list)){
@@ -1452,10 +1664,10 @@ struct info *info)
     if(info->swapped)
         swap_objc_property_list(&opl, info->host_byte_sex);
 
-    indent_push(info, sizeof("attributes") - 1);
+    indent_push(&info->indent, sizeof("attributes") - 1);
 
-    print_field_scalar(info, "entsize", "%u\n", opl.entsize);
-    print_field_scalar(info, "count", "%u\n", opl.count);
+    print_field_scalar(&info->indent, "entsize", "%u\n", opl.entsize);
+    print_field_scalar(&info->indent, "count", "%u\n", opl.count);
 
     p += sizeof(struct objc_property_list);
     offset += sizeof(struct objc_property_list);
@@ -1463,6 +1675,9 @@ struct info *info)
         r = get_pointer_64(p, &offset, &left, &s,
                            info->sections, info->nsections);
         if(r == NULL)
+            break;
+        if (warn_about_zerofill_64(s, "objc_property", &info->indent,
+                                   FALSE, TRUE))
             break;
 
         memset(&op, '\0', sizeof(struct objc_property));
@@ -1476,12 +1691,12 @@ struct info *info)
         if(info->swapped)
             swap_objc_property(&op, info->host_byte_sex);
 
-        print_field_label(info, "name");
+        print_field_label(&info->indent, "name");
         print_field_value(offset + offsetof(struct objc_property, name),
                           op.name, TRUE, NULL, "\n", info, s,
                           &n_value, &addend);
 
-        print_field_label(info, "attributes");
+        print_field_label(&info->indent, "attributes");
         print_field_value(offset + offsetof(struct objc_property, attributes),
                           op.attributes, TRUE, NULL, "\n", info, s,
                           &n_value, &addend);
@@ -1490,7 +1705,7 @@ struct info *info)
         offset += sizeof(struct objc_property);
     }
 
-    indent_pop(info);
+    indent_pop(&info->indent);
 }
 
 static
@@ -1510,6 +1725,8 @@ struct info *info)
                        info->sections, info->nsections);
     if(r == NULL)
         return;
+    if (warn_about_zerofill_64(s, "category_t", &info->indent, TRUE, TRUE))
+        return;
 
     memset(&c, '\0', sizeof(struct category_t));
     if(left < sizeof(struct category_t)){
@@ -1528,13 +1745,13 @@ struct info *info)
      * which is just too great. Pick a middle-length field to align this
      * structure, such as "protocols"
      */
-    indent_push(info, sizeof("protocols") - 1);
+    indent_push(&info->indent, sizeof("protocols") - 1);
 
-    print_field_label(info, "name");
+    print_field_label(&info->indent, "name");
     print_field_value(offset + offsetof(struct category_t, name),
                       c.name, TRUE, NULL, "\n", info, s, &n_value, &addend);
 
-    print_field_label(info, "cls");
+    print_field_label(&info->indent, "cls");
     print_field_value(offset + offsetof(struct category_t, cls),
                       c.cls, FALSE, "(struct class_t *)", "\n", info, s,
                       &n_value, &addend);
@@ -1542,7 +1759,7 @@ struct info *info)
         print_class_t(n_value + addend, info);
     }
 
-    print_field_label(info, "instanceMethods");
+    print_field_label(&info->indent, "instanceMethods");
     print_field_value(offset + offsetof(struct category_t, instanceMethods),
                       c.instanceMethods, FALSE, "(struct method_list_t *)",
                       "\n", info, s, &n_value, &addend);
@@ -1550,7 +1767,7 @@ struct info *info)
         print_method_list_t(n_value + addend, info);
     }
 
-    print_field_label(info, "classMethods");
+    print_field_label(&info->indent, "classMethods");
     print_field_value(offset + offsetof(struct category_t, classMethods),
                       c.classMethods, FALSE, "(struct method_list_t *)",
                       "\n", info, s, &n_value, &addend);
@@ -1558,7 +1775,7 @@ struct info *info)
         print_method_list_t(n_value + addend, info);
     }
 
-    print_field_label(info, "protocols");
+    print_field_label(&info->indent, "protocols");
     print_field_value(offset + offsetof(struct category_t, protocols),
                       c.protocols, FALSE, "(struct protocol_list_t *)", "\n",
                       info, s, &n_value, &addend);
@@ -1566,7 +1783,7 @@ struct info *info)
         print_protocol_list_t(n_value + addend, info);
     }
 
-    print_field_label(info, "instanceProperties");
+    print_field_label(&info->indent, "instanceProperties");
     print_field_value(offset + offsetof(struct category_t, instanceProperties),
                       c.instanceProperties, FALSE,
                       "(struct objc_property_list *)", "\n", info, s,
@@ -1575,7 +1792,7 @@ struct info *info)
         print_objc_property_list(n_value + addend, info);
     }
 
-    indent_pop(info);
+    indent_pop(&info->indent);
 }
 
 void
@@ -1592,7 +1809,9 @@ print_protocol_t(uint64_t p,
     r = get_pointer_64(p, &offset, &left, &s, info->sections, info->nsections);
     if(r == NULL)
         return;
-    
+    if (warn_about_zerofill_64(s, "protocol_t", &info->indent, TRUE, TRUE))
+        return;
+
     memset(&pt, '\0', sizeof(struct protocol_t));
     if(left < sizeof(struct protocol_t)){
         memcpy(&pt, r, left);
@@ -1610,17 +1829,17 @@ print_protocol_t(uint64_t p,
      * which is just too great. Pick a middle-length field to align this
      * structure, such as "protocols"
      */
-    indent_push(info, sizeof("protocols") - 1);
+    indent_push(&info->indent, sizeof("protocols") - 1);
 
-    print_field_label(info, "isa");
+    print_field_label(&info->indent, "isa");
     print_field_value(offset + offsetof(struct protocol_t, isa),
                     pt.isa, TRUE, NULL, "\n", info, s, &n_value, &addend);
 
-    print_field_label(info, "name");
+    print_field_label(&info->indent, "name");
     print_field_value(offset + offsetof(struct protocol_t, name),
                     pt.name, TRUE, NULL, "\n", info, s, &n_value, &addend);
 
-    print_field_label(info, "protocols");
+    print_field_label(&info->indent, "protocols");
     print_field_value(offset + offsetof(struct protocol_t, protocols),
                       pt.protocols, FALSE, "(struct protocol_list_t *)", "\n",
                       info, s, &n_value, &addend);
@@ -1628,7 +1847,7 @@ print_protocol_t(uint64_t p,
         print_protocol_list_t(n_value + addend, info);
     }
     
-    print_field_label(info, "instanceMethods");
+    print_field_label(&info->indent, "instanceMethods");
     print_field_value(offset + offsetof(struct protocol_t, instanceMethods),
                       pt.instanceMethods, FALSE, "(struct method_list_t *)",
                       "\n", info, s, &n_value, &addend);
@@ -1636,7 +1855,7 @@ print_protocol_t(uint64_t p,
         print_method_list_t(n_value + addend, info);
     }
     
-    print_field_label(info, "classMethods");
+    print_field_label(&info->indent, "classMethods");
     print_field_value(offset + offsetof(struct protocol_t, classMethods),
                       pt.classMethods, FALSE, "(struct method_list_t *)",
                       "\n", info, s, &n_value, &addend);
@@ -1644,7 +1863,7 @@ print_protocol_t(uint64_t p,
         print_method_list_t(n_value + addend, info);
     }
     
-    print_field_label(info, "optionalInstanceMethods");
+    print_field_label(&info->indent, "optionalInstanceMethods");
     print_field_value(offset + offsetof(struct protocol_t,
                                       optionalInstanceMethods),
                       pt.optionalInstanceMethods, FALSE,
@@ -1654,7 +1873,7 @@ print_protocol_t(uint64_t p,
         print_method_list_t(n_value + addend, info);
     }
     
-    print_field_label(info, "optionalClassMethods");
+    print_field_label(&info->indent, "optionalClassMethods");
     print_field_value(offset + offsetof(struct protocol_t,
                                         optionalClassMethods),
                       pt.optionalClassMethods, FALSE,
@@ -1664,7 +1883,7 @@ print_protocol_t(uint64_t p,
         print_method_list_t(n_value + addend, info);
     }
     
-    print_field_label(info, "instanceProperties");
+    print_field_label(&info->indent, "instanceProperties");
     print_field_value(offset + offsetof(struct protocol_t,
                                       instanceProperties),
                       pt.instanceProperties, FALSE,
@@ -1675,7 +1894,7 @@ print_protocol_t(uint64_t p,
         print_objc_property_list(n_value + addend, info);
     }
 
-    indent_pop(info);
+    indent_pop(&info->indent);
 }
 
 static
@@ -1693,12 +1912,11 @@ struct info *info)
     if(s == NULL)
         return;
 
-    info->indent_level = 0;
-    info->indent_widths[info->indent_level] = 0;
+    indent_reset(&info->indent);
 
     printf("Contents of (%.16s,%.16s) section\n", s->segname, s->sectname);
 
-    indent_push(info, sizeof("imp") - 1);
+    indent_push(&info->indent, sizeof("imp") - 1);
 
     offset = 0;
     for(i = 0; i < s->size; i += sizeof(struct message_ref)){
@@ -1706,6 +1924,9 @@ struct info *info)
         r = get_pointer_64(p, &offset, &left, &s,
                            info->sections, info->nsections);
         if(r == NULL)
+            break;
+        if (warn_about_zerofill_64(s, "message_ref", &info->indent,
+                                   FALSE, TRUE))
             break;
 
         memset(&mr, '\0', sizeof(struct message_ref));
@@ -1718,18 +1939,70 @@ struct info *info)
         if(info->swapped)
             swap_message_ref(&mr, info->host_byte_sex);
 
-        print_field_label(info, "imp");
+        print_field_label(&info->indent, "imp");
         print_field_value(offset + offsetof(struct message_ref, imp),
                         mr.imp, FALSE, NULL, "\n", info, s, &n_value, &addend);
 
-        print_field_label(info, "sel");
+        print_field_label(&info->indent, "sel");
         print_field_value(offset + offsetof(struct message_ref, sel),
                         mr.sel, FALSE, NULL, "\n", info, s, &n_value, &addend);
 
         offset += sizeof(struct message_ref);
     }
 
-    indent_pop(info);
+    indent_pop(&info->indent);
+}
+
+static
+void
+print_selector_refs(
+struct section_info_64 *s,
+struct info *info)
+{
+    uint32_t i, left, offset;
+    uint64_t p, n_value;
+    int64_t addend;
+    uint64_t sr;
+    void *r;
+
+    if(s == NULL)
+        return;
+
+    indent_reset(&info->indent);
+
+    printf("Contents of (%.16s,%.16s) section\n", s->segname, s->sectname);
+
+    indent_push(&info->indent, 0);
+
+    offset = 0;
+    for(i = 0; i < s->size; i += sizeof(uint64_t)){
+        p = s->addr + i;
+        r = get_pointer_64(p, &offset, &left, &s,
+                           info->sections, info->nsections);
+        if(r == NULL)
+            continue;
+        if (warn_about_zerofill_64(s, "selector_ref", &info->indent,
+                                   FALSE, TRUE))
+            continue;
+
+        memset(&sr, '\0', sizeof(uint64_t));
+        if(left < sizeof(uint64_t)){
+            memcpy(&sr, r, left);
+            printf(" (selector_ref entends past the end of the section)\n");
+        }
+        else
+            memcpy(&sr, r, sizeof(uint64_t));
+        if(info->swapped)
+            sr = SWAP_LONG_LONG(sr);
+
+        print_field_label(&info->indent, NULL);
+        print_field_value(offset, sr, TRUE, NULL, "\n", info, s,
+                          &n_value, &addend);
+
+        offset += sizeof(uint64_t);
+    }
+
+    indent_pop(&info->indent);
 }
 
 static
@@ -1746,14 +2019,15 @@ struct info *info)
     if(s == NULL)
         return;
 
-    info->indent_level = 0;
-    info->indent_widths[info->indent_level] = 0;
+    indent_reset(&info->indent);
 
     printf("Contents of (%.16s,%.16s) section\n", s->segname, s->sectname);
     p = s->addr;
     r = get_pointer_64(p, &offset, &left, &s,
                        info->sections, info->nsections);
     if(r == NULL)
+        return;
+    if (warn_about_zerofill_64(s, "objc_image_info", &info->indent, TRUE, TRUE))
         return;
 
     memset(&o, '\0', sizeof(struct objc_image_info));
@@ -1766,10 +2040,10 @@ struct info *info)
     if(info->swapped)
         swap_objc_image_info(&o, info->host_byte_sex);
 
-    indent_push(info, sizeof("version") - 1);
+    indent_push(&info->indent, sizeof("version") - 1);
 
-    print_field_scalar(info, "version", "%u\n", o.version);
-    print_field_scalar(info, "flags", "0x%x", o.flags);
+    print_field_scalar(&info->indent, "version", "%u\n", o.version);
+    print_field_scalar(&info->indent, "flags", "0x%x", o.flags);
 
     if(o.flags & OBJC_IMAGE_IS_REPLACEMENT)
         printf(" OBJC_IMAGE_IS_REPLACEMENT");
@@ -1796,7 +2070,7 @@ struct info *info)
     }
     printf("\n");
 
-    indent_pop(info);
+    indent_pop(&info->indent);
 }
 
 void
@@ -1839,8 +2113,7 @@ enum bool verbose)
     info.sorted_symbols = sorted_symbols;
     info.nsorted_symbols = nsorted_symbols;
     info.verbose = verbose;
-    info.indent_level = 0;
-    info.indent_widths[info.indent_level] = 0;
+    indent_reset(&info.indent);
 
     get_sections_64(load_commands, ncmds, sizeofcmds, object_byte_sex,
                     object_addr, object_size, &info.sections,
@@ -1874,11 +2147,11 @@ enum bool verbose)
                    sectname);
         }
 
-        indent_push(&info, sizeof("characters") - 1);
+        indent_push(&info.indent, sizeof("characters") - 1);
 
         printf("String Object 0x%llx\n",
                string_objects_addr + ((char *)s - (char *)string_objects));
-        print_field_scalar(&info, "isa", "0x%llx", string_object.isa);
+        print_field_scalar(&info.indent, "isa", "0x%llx", string_object.isa);
 
         name = get_symbol_64((uintptr_t)s - (uintptr_t)string_objects,
                              o->addr, info.textbase, info.database,
@@ -1889,20 +2162,23 @@ enum bool verbose)
         else
             printf("\n");
 
-        print_field_scalar(&info, "characters", "0x%llx",
+        print_field_scalar(&info.indent, "characters", "0x%llx",
                            string_object.characters);
         if(verbose){
             p = get_pointer_64(string_object.characters, NULL, &left32,
-                               NULL, info.sections, info.nsections);
+                               &o, info.sections, info.nsections);
+            if (!o || o->zerofill || (0 != o->size && 0 == o->offset)) {
+                p = NULL;
+            }
             if(p != NULL)
                 printf(" %.*s", (int)left32, p);
         }
         printf("\n");
 
-        print_field_scalar(&info, "_length", "%u\n", string_object._length);
-        print_field_scalar(&info, "_pad", "%u\n", string_object._pad);
+        print_field_scalar(&info.indent,"_length","%u\n",string_object._length);
+        print_field_scalar(&info.indent,"_pad",   "%u\n",string_object._pad);
 
-        indent_pop(&info);
+        indent_pop(&info.indent);
     }
 }
 
@@ -2321,13 +2597,11 @@ int64_t *addend)
     unsigned int r_symbolnum;
     uint32_t n_strx;
     const char *name;
-    enum bool has_auth;
 
     if(n_value != NULL)
         *n_value = 0;
     if(addend != NULL)
         *addend = value;
-    has_auth = FALSE;
 
     /*
      * In the info->verbose == FALSE case we can't simply return now as for
@@ -2408,8 +2682,9 @@ int64_t *addend)
      * the modern fully linked dyld image case to find the name and added.
      */
     name = get_dyld_bind_info_symbolname(sect_addr + sect_offset,
-                                         info->dbi, info->ndbi,
+                                         info->dbi, info->ndbi, info->dbi_index,
                                          info->chain_format, addend);
+
     /*
      * If we find a bind entry we return the name which may not be printed
      * if not in verbose mode.  But we needed to make the call above to
@@ -2417,25 +2692,24 @@ int64_t *addend)
      */
     if(name != NULL)
         return(name);
-    
+
     /*
      * Fully linked modern images for dyld get will get here if it is has
      * a rebase entry, and the pointer value in "value" would be what this
      * pointer is pointing to in this image normally.
      *
-     * But if info->ThreadedRebaseBind is true, to get the correct pointer
-     * value we need to know to mask off the upper bits and only keep the
-     * low 51-bits.
+     * In the modern chained fixup world (previously known as Threade Rebase)
+     * the pointer's VM address value is encoded in one of several different
+     * ways, depending on the pointer format and the values within that format.
+     * The get_chained_rebase_value() call will interpret the rebase value and
+     * return the rebase's target VM address.
+     *
+     * So at this point, we set n_value as the VM address pointer value and
+     * set addend to 0. This allows callers to perform valid pointer arithmetic
+     * on (n_value + addend). We will also use guess_symbol() to check if a
+     * symbol exists for this VM address.
      */
-    /*
-     * Unless this is arm64e we have to look for the high authenticated bit
-     * to know to use only the low 32-bits as the pointer value.
-     */
-    /* So at this point, we set n_value as the masked pointer value
-     * and zero as the addend for return or the value to call guess_symbol()
-     * with for a guess at which symbol has this address.
-     */
-    value = get_chained_rebase_value(value, info->chain_format, &has_auth);
+    value = get_chained_rebase_value(value, info->chain_format, textbase);
     if(n_value != NULL)
         *n_value = value;
     if(addend != NULL)
@@ -2448,114 +2722,8 @@ int64_t *addend)
     if(value == 0)
         return(NULL);
     
-    /*
-     * Remember that authenticated Threaded Rebase Value is a relative
-     * vmaddr to the start of text. So a symbol may be encoded as 0x7d70
-     * when it really represents 0x0000000100007d70. So we need to add the
-     * start of text to "value" before guessing the symbol name.
-     *
-     * Also note that we're returning the raw, unadjusted value in *n_value
-     * so that otool continues to print the bits as they are ...
-     */
-    if(info->chain_format && has_auth == TRUE){
-        value += textbase;
-    }
-    
     return(guess_symbol(value, info->sorted_symbols, info->nsorted_symbols,
                         info->verbose));
-}
-
-/*
- * print_field_scalar() prints a label followed by a formatted value. the label
- * is idented to fit within the info's indent state.
- */
-static
-void
-print_field_scalar(
-struct info *info,
-const char* label,
-const char* fmt,
-...)
-{
-    /* print the label */
-    print_field_label(info, label);
-    
-    /* print the data, if any */
-    if (fmt) {
-        va_list ap;
-        va_start(ap, fmt);
-        vprintf(fmt, ap);
-        va_end(ap);
-    }
-}
-
-/*
- * print_field_label() prints a formatted label. the label is indented to fit
- * within the info's indent state. A single space character will follow the
- * label so that the next value can simply be printed.
- */
-static
-void
-print_field_label(
-struct info *info,
-const char* label,
-...)
-{
-    va_list ap;
-    int width = 0;
-    uint32_t label_indent;
-    uint32_t label_width;
-    
-    /* get the current label field width from the indent state */
-    label_indent = info->indent_level * 4;
-#if 1
-    /*
-     * use the curent indent width. if the indent level is too deep, just print
-     * the value immediately after the label.
-     */
-    label_width = (info->indent_level < MAXINDENT ?
-                   info->indent_widths[info->indent_level] : 0);
-#else
-    /*
-     * use the current indent width unless that would cause the value at this
-     * level to print to the left of the previous value. In practice, we need
-     * to loop over all the indent widths, compute the right edge of the label
-     * field, and use the largest such value.
-     */
-    uint32_t right = 0;
-    for (uint32_t i = 0; i < MAXINDENT; ++i) {
-        if (i > info->indent_level)
-            break;
-        
-        uint32_t r = i * 4 + info->indent_widths[i];
-        if (r > right)
-            right = r;
-    }
-    label_width = right - label_indent;
-#endif
-    
-    /* measure the width of the string data */
-    va_start(ap, label);
-    if (label) {
-        width = vsnprintf(NULL, 0, label, ap);
-    }
-    va_end(ap);
-    
-    /* adjust the width to represent the space following the label */
-    width = width < label_width ? label_width - width : 0;
-    
-    /* print the indent spaces */
-    printf("%*s", label_indent, "");
-    
-    /* print the label */
-    if (label) {
-        va_start(ap, label);
-        vprintf(label, ap);
-        va_end(ap);
-    }
-    
-    /* print right padding */
-    printf("%*s", width + 1, "");
 }
 
 /*
@@ -2594,26 +2762,41 @@ int64_t *out_addend)
     const char* sym_name;
 
     /* read the symbol name, n_value, and addend. */
-    sym_name = get_symbol_64(offset, s->addr, info->textbase, info->database,
-                             p, s->relocs, s->nrelocs, info, &n_value, &addend);
+    sym_name = NULL;
+    n_value = 0;
+    addend = 0;
+    if (s) {
+        sym_name = get_symbol_64(offset, s->addr,
+                                 info->textbase, info->database, p,
+                                 s->relocs, s->nrelocs, info,
+                                 &n_value, &addend);
+    }
 
     /* print the numeric pointer value */
     if (info->verbose) {
-        printf("0x%llx", n_value);
+        if (n_value)
+            printf("0x%llx", n_value + addr_slide);
+        else
+            printf("0x%llx", (unsigned long long)0);
         if (addend)
             printf(" + 0x%llx", addend);
         if (sym_name)
             printf(" %s", sym_name);
     }
     else {
-        printf("0x%llx", p);
+        if (p)
+            printf("0x%llx", p + addr_slide);
+        else
+            printf("0x%llx", (unsigned long long)0);
     }
 
     /* print the pointer data if any, if requested */
     if (info->verbose && print_data) {
         const char* ptr_data;
-        ptr_data = get_pointer_64(n_value + addend, NULL, NULL, NULL,
+        ptr_data = get_pointer_64(n_value + addend, NULL, NULL, &s,
                                   info->sections, info->nsections);
+        if (warn_about_zerofill_64(s, "value", &info->indent, FALSE, FALSE))
+            ptr_data = NULL;
         if (ptr_data)
             printf(" %s", ptr_data);
     }
@@ -2635,20 +2818,94 @@ int64_t *out_addend)
         *out_addend = addend;
 }
 
+static
 void
-indent_push(
+print_field_rel32(
+uint64_t base,
+uint32_t fieldoff,
+int32_t rel32,
+const char* suffix,
 struct info *info,
-uint32_t width)
+uint64_t *out_n_value,
+int64_t *out_addend,
+enum rel32_value_type value_type)
 {
-    info->indent_level += 1;
-    if (info->indent_level < MAXINDENT)
-        info->indent_widths[info->indent_level] = width;
+    uint64_t valoff = 0;
+    void *valptr = NULL;
+    uint32_t sectoff = 0;
+    struct section_info_64* sectptr = NULL;
+
+    /*
+     * convert the relative offset to a file offset. relative offsets of 0
+     * are always ignored.
+     */
+    if (rel32 != 0)
+        valoff = base + fieldoff + (int64_t)rel32;
+
+    /* locate the value at the relative offset, and find its section. */
+    if (rel32 != 0 && valoff < info->object_size)
+        valptr = get_pointer_64(valoff, &sectoff, NULL, &sectptr,
+                                info->sections, info->nsections);
+
+    /* print relative offset and file offset */
+    printf("0x%x", rel32);
+    if (rel32 != 0) {
+        printf(" (0x%llx", valoff);
+        if (valoff >= info->object_size)
+            printf(" extends past end of file");
+        printf(")");
+    }
+
+    /* print value, if any. */
+    if (info->verbose && valptr) {
+        const char* value = NULL;
+        if (REL32_VALUE_OFFT == value_type) {
+            uint64_t *offset_ptr = (uint64_t*)valptr;
+            value = get_pointer_64(*offset_ptr, NULL, NULL, NULL,
+                                   info->sections, info->nsections);
+        }
+        else if (REL32_VALUE_CSTR == value_type) {
+            value = (const char*)valptr;
+        }
+        if (value)
+            printf(" %s", value);
+    }
+
+    /* print any symbol information at the data location. */
+    if (info->verbose && sectptr) {
+        const char* selsym;
+        selsym = get_symbol_64(sectoff, sectptr->addr, info->textbase,
+                               info->database, valoff,
+                               sectptr->relocs, sectptr->nrelocs,
+                               info, NULL, NULL);
+        if (selsym)
+            printf(" %s", selsym);
+    }
+
+    printf("%s", suffix);
 }
 
-void
-indent_pop(
-struct info *info)
+/*
+ * warn_about_zerofill_64() is a 64-bit specific helper function for
+ * warn_about_zerofill() that prints a warning if a section is zerofilled.
+ * Returns 1 if a warning is printed, otherwise returns 0.
+ *
+ * Expected usage:
+ *
+ *   if (warn_about_zerofill_64(s, "method_t", indent, TRUE, TRUE))
+ *     return;
+ */
+int warn_about_zerofill_64(
+struct section_info_64 *s,
+const char* typename,
+struct indent* indent,
+enum bool indentFlag,
+enum bool newline)
 {
-    if (info->indent_level)
-        info->indent_level -= 1;
+    if (s && (s->zerofill || (0 != s->size && 0 == s->offset))) {
+        warn_about_zerofill(s->segname, s->sectname, typename, indent,
+                            indentFlag, newline);
+        return 1;
+    }
+    return 0;
 }

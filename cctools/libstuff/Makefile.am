@@ -21,6 +21,7 @@ libstuff_la_SOURCES =  \
 	execute.c  \
 	fatal_arch.c  \
 	fatals.c  \
+	diagnostics.c \
 	get_arch_from_host.c  \
 	get_toc_byte_sex.c  \
 	guess_short_name.c  \
@@ -45,6 +46,9 @@ libstuff_la_SOURCES =  \
 	writeout.c \
 	write64.c \
 	coff_bytesex.c \
-	args.c
+	args.c \
+	align.c \
+	depinfo.c \
+	xcode.c
 
 

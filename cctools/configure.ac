@@ -1,4 +1,4 @@
-AC_INIT([cctools], [949.0.1], [t.poechtrager@gmail.com])
+AC_INIT([cctools], [973.0.1], [t.poechtrager@gmail.com])
 
 AC_CANONICAL_BUILD
 AC_CANONICAL_HOST
@@ -22,7 +22,7 @@ if test "x$OBJCFLAGS" = "x"; then
   OBJCFLAGS="-O3"
 fi
 
-CXXFLAGS="$CXXFLAGS -std=c++0x"
+CXXFLAGS="$CXXFLAGS -std=c++1z"
 
 if test "x$build" = "x$host"; then
   CFLAGS="$CFLAGS -isystem /usr/local/include -isystem /usr/pkg/include"
@@ -80,16 +80,17 @@ case "$CCVERSION" in
   ;;
 esac
 
-EXTRAFLAGS="$EXTRAFLAGS -DLD64_VERSION_NUM=530"
+EXTRAFLAGS="$EXTRAFLAGS -DLD64_VERSION_NUM=609"
 
 case "$CXXVERSION" in
   *clang* )
     if test "x$isdarwin" = "xyes"; then
       CXXFLAGS="$CXXFLAGS -stdlib=libc++"
     fi
-    EXTRACXXFLAGS="$EXTRACXXFLAGS -fblocks"
   ;;
 esac
+
+EXTRAFLAGS="$EXTRAFLAGS -fblocks"
 
 case $host_cpu in
   powerpc)
@@ -300,6 +301,17 @@ AC_MSG_CHECKING([whether $CC supports -Wno-misleading-indentation])
 AC_COMPILE_IFELSE(
   [AC_LANG_SOURCE([[int dummy;]])],
   [WARNINGS="$WARNINGS -Wno-misleading-indentation"
+   AC_MSG_RESULT([yes])],
+  [AC_MSG_RESULT([no])]
+)
+CFLAGS=$ORIGCFLAGS
+
+ORIGCFLAGS=$CFLAGS
+CFLAGS="$CFLAGS -Werror -Wno-gnu-folding-constant"
+AC_MSG_CHECKING([whether $CC supports -Wno-gnu-folding-constant])
+AC_COMPILE_IFELSE(
+  [AC_LANG_SOURCE([[int dummy;]])],
+  [WARNINGS="$WARNINGS -Wno-gnu-folding-constant"
    AC_MSG_RESULT([yes])],
   [AC_MSG_RESULT([no])]
 )

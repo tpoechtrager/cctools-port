@@ -1,4 +1,4 @@
-.TH LIBTOOL 1 "January 27, 2014" "Apple Inc."
+.TH LIBTOOL 1 "June 23, 2020" "Apple Inc."
 .SH NAME
 libtool \- create libraries
 .br
@@ -212,8 +212,8 @@ option will be used.
 .BI \-compatibility_version " number"
 For a dynamic shared library, this specifies the compatibility version number
 of the library.  When a library is used the compatibility version is checked
-and if the user's version is greater that the library's version, an error message is printed and the using program exits.
-The format of
+and if the user's version is greater that the library's version, an error
+message is printed and the using program exits. The format of
 .I number
 is
 .I X[.Y[.Z]]
@@ -441,7 +441,7 @@ This option used to request that
 only ``touch'' the archives instead of modifying them.
 The option is now ignored, and the table of contents is rebuilt.
 .PP
-One other option applies to both
+Other options applying to both
 .I libtool
 and
 .IR ranlib :
@@ -452,6 +452,11 @@ options.
 .TP
 .B \-no_warning_for_no_symbols
 Don't warn about file that have no symbols.
+.TP
+.BI \-dependency_info " path"
+Write an Xcode dependency info file describing a successful build operation.
+This file describes the inputs directly or indirectly used to create the library
+or dylib.
 .SH "SEE ALSO"
 ld(1), ar(1), otool(1), make(1), redo_prebinding(1), ar(5)
 .SH BUGS

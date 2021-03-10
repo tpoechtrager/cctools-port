@@ -1093,12 +1093,12 @@ int nsect)
     int32_t aim;
 #endif /* !defined(ARM) */
 
-    uint64_t growth;
+    int64_t growth;
     relax_addressT was_address;
     int32_t offset;
     symbolS *symbolP;
     int32_t target;
-    uint64_t after;
+    int64_t after;
     relax_addressT oldoff, newoff;
     int ret;
 

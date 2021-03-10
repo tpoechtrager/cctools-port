@@ -1,4 +1,4 @@
-.TH AS 1 "February 12, 2015" "Apple Inc."
+.TH AS 1 "June 23, 2020" "Apple Inc."
 .SH NAME
 as \- Mac OS X Mach-O GNU-based assemblers
 .SH SYNOPSIS
@@ -176,7 +176,13 @@ integrated assembler instead of the GNU based system assembler.  This is
 the default for the x86 and arm architectures.
 .TP
 .B \-Q
-Use the GNU based system assembler.
+Use the GNU based system assembler. Note that Apple's built-in system
+assemblers are deprecated; programs that rely on these asssemblers should
+move to the
+.IR clang (1)
+integrated assembler instead, using the
+.B \-q
+flag.
 .SH "Assembler options for the PowerPC processors"
 .TP
 .B \-static_branch_prediction_Y_bit
@@ -197,8 +203,4 @@ Treat any PowerPC 601 instructions as an error.
 .SH FILES
 a.out	output file
 .SH "SEE ALSO"
-The Mac OS X Assembler Reference in the Xcode documentation viewer: Perform a title search for "assembler" in Apple > Developer Tools Reference Library.
-.br
-The assembler source in the cctools module of the Darwin sources.
-.br
 cc(1), ld(1), nm(1), otool(1), arch(3), Mach-O(5)

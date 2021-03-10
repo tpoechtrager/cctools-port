@@ -8,6 +8,7 @@
 #include "llvm-c/Disassembler.h"
 #include "stuff/llvm.h"
 #include "stuff/allocate.h"
+#include "stuff/xcode.h"
 #include <mach-o/dyld.h>
 
 /*
@@ -21,7 +22,6 @@
 #define LIB_LLVM "libLTO.so"
 #endif /* __APPLE__ */
 
-static int tried_to_load_llvm = 0;
 static void *llvm_handle = NULL;
 static void (*initialize)(void) = NULL;
 static LLVMDisasmContextRef (*create)(const char *, void *, int,
@@ -35,52 +35,18 @@ static int (*options)(LLVMDisasmContextRef, uint64_t) = NULL;
 static const char * (*version)(void) = NULL;
 
 /*
- * load_llvm() will dynamically load libLTO.dylib if tried_to_load_llvm is 0,
- * and set llvm_handle to the value returned by dlopen() and set the function
- * pointers.
+ * load_llvm_disasm() will try to dynamically load libLTO.dylib once, and on
+ * success set llvm_handle to the value returned by dlopen() and set the disasm
+ * function pointers.
  */
-static void load_llvm(void)
+static void load_llvm_disasm(void)
 {
-   uint32_t bufsize;
-   char *p, *prefix, *llvm_path, buf[MAXPATHLEN], resolved_name[PATH_MAX];
-   int i;
+	static int tried_to_load_llvm;
 
 	if(tried_to_load_llvm == 0){
 	    tried_to_load_llvm = 1;
-	    /*
-	     * Construct the prefix to this executable assuming it is in a bin
-	     * directory relative to a lib directory of the matching lto library
-	     * and first try to load that.  If not then fall back to trying
-	     * "/Applications/Xcode.app/Contents/Developer/Toolchains/
-	     * XcodeDefault.xctoolchain/usr/lib/" LIB_LLVM.
-	     */
-	    bufsize = MAXPATHLEN;
-	    p = buf;
-	    i = _NSGetExecutablePath(p, &bufsize);
-	    if(i == -1){
-		p = allocate(bufsize);
-		_NSGetExecutablePath(p, &bufsize);
-	    }
-	    prefix = realpath(p, resolved_name);
-	    p = rindex(prefix, '/');
-	    if(p != NULL)
-		p[1] = '\0';
-	    llvm_path = makestr(prefix, "../lib/" LIB_LLVM, NULL);
 
-#ifdef __APPLE__ /* cctools-port */
-	    llvm_handle = dlopen(llvm_path, RTLD_NOW);
-	    if(llvm_handle == NULL){
-		free(llvm_path);
-		llvm_path = NULL;
-		llvm_handle = dlopen("/Applications/Xcode.app/Contents/"
-				     "Developer/Toolchains/XcodeDefault."
-				     "xctoolchain/usr/lib/" LIB_LLVM,
-				     RTLD_NOW);
-	    }
-#else
-	    llvm_handle = dlopen(LIB_LLVM, RTLD_NOW);
-#endif /* __APPLE__ */
-
+	    llvm_handle = llvm_load();
 	    if(llvm_handle == NULL)
 		return;
 
@@ -105,8 +71,6 @@ static void load_llvm(void)
 	       disasm == NULL){
 
 		dlclose(llvm_handle);
-		if(llvm_path != NULL)
-		    free(llvm_path);
 		llvm_handle = NULL;
 		create = NULL;
 		createCPU = NULL;
@@ -117,8 +81,94 @@ static void load_llvm(void)
 		return;
 	    }
 	}
-	if(llvm_handle == NULL)
-	    return;
+}
+
+void* llvm_load(void)
+{
+    static int tried_to_load_llvm;
+
+    if (!tried_to_load_llvm) {
+	tried_to_load_llvm = 1;
+
+	/*
+	 * First try to load libLTO.dylib from an environment override. This is
+	 * the full path to the libLTO.dylib. We're keeping this override
+	 * separate from DYLD_LIBRARY_PATH just to be explicit, and make it
+	 * easier to work with tools like Xcode.
+	 */
+	if (llvm_handle == NULL) {
+	    const char* lto_path = getenv("LIBLTO_PATH");
+	    if (lto_path) {
+		llvm_handle = dlopen(lto_path, RTLD_NOW);
+	    }
+	}
+
+	/*
+	 * Next, try to load libLTO.dylib from a location relative to the
+	 * currently running tool. In a sensible install, this the version of
+	 * libLTO.dylib that this tool is most compatible with.
+	 */
+	if (llvm_handle == NULL) {
+	    uint32_t bufsize;
+	    char *p, *prefix, *llvm_path, *exec_path;
+	    char buf[MAXPATHLEN], resolved_name[PATH_MAX];
+	    int i;
+
+	    /* get the executable path. */
+	    bufsize = MAXPATHLEN;
+	    exec_path = buf;
+	    i = _NSGetExecutablePath(exec_path, &bufsize);
+	    if(i == -1){
+		exec_path = allocate(bufsize);
+		_NSGetExecutablePath(exec_path, &bufsize);
+	    }
+
+	    /* now get the real executable path. */
+	    prefix = realpath(exec_path, resolved_name);
+	    if (exec_path != buf)
+		free(exec_path);
+
+	    /*
+	     * create a new path where the executable name is replaced with
+	     * a relative path to the library location.
+	     */
+	    /* cctools-port: added  prefix ? */
+	    p = (prefix ? rindex(prefix, '/') : NULL);
+	    if(p != NULL)
+		p[1] = '\0';
+	    llvm_path = makestr(prefix, "../lib/" LIB_LLVM, NULL);
+
+	    /* LOAD! */
+	    llvm_handle = dlopen(llvm_path, RTLD_NOW);
+	    free(llvm_path);
+	}
+
+#ifdef __APPLE__ /* cctools-port */
+	/* The expected library is missing; fall back to the current Xcode. */
+	if(llvm_handle == NULL){
+	    const char* xcode = xcode_developer_path();
+	    if (xcode) {
+		char* llvm_path;
+
+		llvm_path = makestr(xcode,
+				    "/Toolchains/XcodeDefault.xctoolchain"
+				    "/usr/lib/" LIB_LLVM, NULL);
+		llvm_handle = dlopen(llvm_path, RTLD_NOW);
+		free(llvm_path);
+	    }
+	}
+
+	/* Finally, just try a hardcoded fallback. */
+	if(llvm_handle == NULL){
+	    llvm_handle = dlopen("/Applications/Xcode.app/Contents/"
+				 "Developer/Toolchains/XcodeDefault."
+				 "xctoolchain/usr/lib/" LIB_LLVM,
+				 RTLD_NOW);
+	}
+#endif /* __APPLE__ */
+	}
+
+    return llvm_handle;
 }
 
 /*
@@ -136,9 +186,7 @@ LLVMSymbolLookupCallback SymbolLookUp)
 {
    LLVMDisasmContextRef DC;
 
-	if(tried_to_load_llvm == 0){
-	    load_llvm();
-	}
+	load_llvm_disasm();
 	if(llvm_handle == NULL)
 	    return(NULL);
 
@@ -211,9 +259,7 @@ __private_extern__
 const char *
 llvm_disasm_version_string(void)
 {
-	if(tried_to_load_llvm == 0){
-	    load_llvm();
-	}
+	load_llvm_disasm();
 	if(llvm_handle == NULL)
 	    return(NULL);
 	if(version == NULL)

@@ -104,6 +104,7 @@ private:
 	void					buildArchivesList();
 	void					doLinkerOption(const std::vector<const char*>& linkerOption, const char* fileName);
 	void					dumpAtoms();
+	void					checkChainedFixupsBounds();
 
 	typedef std::unordered_set<const char*, CStringHash, CStringEquals>  StringSet;
 

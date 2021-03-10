@@ -32,6 +32,8 @@
 #include "stuff/errors.h"
 #include "stuff/breakout.h"
 #include "stuff/rnd.h"
+#include "stuff/align.h" /* cctools-port: align.h -> stuff/align.h */
+#include "stuff/diagnostics.h"
 
 /*
  * The structure that holds the -arch <arch> <file> information from the command
@@ -73,6 +75,8 @@ static void add_ctf_section(
 extern char apple_version[];
 char *version = apple_version;
 
+#define DYLD_CACHE_ADJ_V2_FORMAT 0x7F
+
 /*
  * The ctf_insert(1) tool has the following usage:
  *
@@ -93,6 +97,10 @@ char **envp)
     uint32_t narchs;
     struct stat stat_buf;
     int fd;
+
+	diagnostics_enable(getenv("CC_LOG_DIAGNOSTICS") != NULL);
+	diagnostics_output(getenv("CC_LOG_DIAGNOSTICS_FILE"));
+	diagnostics_log_args(argc, argv);
 
 	progname = argv[0];
 	input = NULL;
@@ -178,7 +186,8 @@ char **envp)
 		      arch_ctfs[i].arch_flag.name, arch_ctfs[i].filename);
 	}
 
-	writeout(archs, narchs, output, 0777, TRUE, FALSE, FALSE, FALSE, NULL);
+	writeout(archs, narchs, output, 0777, TRUE, FALSE, FALSE, FALSE, FALSE,
+		 NULL);
 
 	if(errors)
 	    return(EXIT_FAILURE);
@@ -235,6 +244,8 @@ struct object *object)
     cpu_subtype_t cpusubtype;
     uint32_t flags, offset;
     uint64_t addr;
+    uint32_t segalign;
+    char* contents;
 
 	if(object->mh != NULL){
 	    cputype = object->mh->cputype;
@@ -252,6 +263,15 @@ struct object *object)
 	}
 
 	/*
+	 * get the segment alignment from the target Mach-O so we can pad
+	 * the __CTF segment to page boundaries for that platform.
+	 */
+	segalign = get_seg_align(object->mh, object->mh64,
+				 object->load_commands, FALSE,
+				 object->object_size, arch->file_name);
+	segalign = 1 << segalign;
+
+	/*
 	 * Make sure this object is valid to process.  Since the input should
 	 * be a mach_kernel that is statically linked we should not see any
 	 * dynamic symbol table info. Or a code signature at the point this
@@ -259,10 +279,37 @@ struct object *object)
 	 */
 	if((flags & MH_DYLDLINK) == MH_DYLDLINK ||
 	   object->dyld_info != NULL ||
-	   object->split_info_cmd != NULL ||
-	   object->hints_cmd != NULL)
+	   object->hints_cmd != NULL ||
+	   (object->mh_filetype == MH_PRELOAD &&
+	    (object->dyld_chained_fixups != NULL ||
+	    object->dyld_exports_trie != NULL)))
 	     fatal_arch(arch, member, "file is input for the dynamic linker so "
 			"not a valid input for this program to process: ");
+
+	/*
+	 * Writeout does not yet know how to emit LC_NOTE load commands, and
+	 * tools for creating LC_NOTE load commands in files do not yet exist.
+	 * ctf_insert will fail when it encounters notes, to avoid
+	 * corrupting the output binary.
+	 */
+	if (object->nnote > 0)
+	    fatal_arch(arch, member,
+		       "file contains LC_NOTE, which is not supported: ");
+
+	/*
+	 * Modern kernel kexts may have split-seg v2 data, which uses
+	 * segment relative offsets.
+	 */
+	if (object->split_info_cmd) {
+	    if (!(object->split_info_cmd->dataoff &&
+		object->split_info_cmd->datasize > 1 &&
+		object->split_info_cmd->dataoff < object->object_size &&
+		object->object_addr[object->split_info_cmd->dataoff] ==
+		DYLD_CACHE_ADJ_V2_FORMAT))
+		fatal_arch(arch, member, "file for input contains split-seg "
+			   "but only split-seg v2 is supported: ");
+	}
+
 	/*
 	 * Allow a dynamic symbol table load command where it only has an
 	 * indirect symbol table and no other tables.
@@ -407,18 +454,39 @@ struct object *object)
 	    object->input_sym_info_size +=
 		object->link_opt_hint_cmd->datasize;
 	}
+	if (object->split_info_cmd) {
+	    object->output_split_info_data = object->object_addr +
+		object->split_info_cmd->dataoff;
+	    object->output_split_info_data_size =
+		object->split_info_cmd->datasize;
+	    object->input_sym_info_size += object->split_info_cmd->datasize;
+	}
+	if(object->dyld_chained_fixups != NULL) {
+	    object->output_dyld_chained_fixups_data = object->object_addr +
+		    object->dyld_chained_fixups->dataoff;
+	    object->output_dyld_chained_fixups_data_size =
+		    object->dyld_chained_fixups->datasize;
+	    object->input_sym_info_size +=object->dyld_chained_fixups->datasize;
+	}
+	if(object->dyld_exports_trie != NULL) {
+	    object->output_dyld_exports_trie_data = object->object_addr +
+		    object->dyld_exports_trie->dataoff;
+	    object->output_dyld_exports_trie_data_size =
+		    object->dyld_exports_trie->datasize;
+	    object->input_sym_info_size +=object->dyld_exports_trie->datasize;
+	}
 	object->output_sym_info_size = object->input_sym_info_size;
 
 	/*
 	 * Now move the link edit info by the size of the ctf for this arch
-	 * rounded to the load command size for this arch.
+	 * rounded to the target Mach-O's page size.
 	 */
 	if(object->mh != NULL){
-	    move_size = rnd32(arch_ctfs[i].size, sizeof(uint32_t));
+	    move_size = rnd32(arch_ctfs[i].size, segalign);
 	    object->seg_linkedit->fileoff += move_size;
 	}
 	else{
-	    move_size = rnd32(arch_ctfs[i].size, sizeof(uint64_t));
+	    move_size = rnd32(arch_ctfs[i].size, segalign);
 	    object->seg_linkedit64->fileoff += move_size;
 	}
 	if(object->st != NULL && object->st->nsyms != 0){
@@ -439,11 +507,20 @@ struct object *object)
 	    object->code_sign_drs_cmd->dataoff += move_size;
 	if(object->link_opt_hint_cmd != NULL)
 	    object->link_opt_hint_cmd->dataoff += move_size;
+	if(object->split_info_cmd != NULL)
+	    object->split_info_cmd->dataoff += move_size;
+	if(object->dyld_chained_fixups != NULL)
+	    object->dyld_chained_fixups->dataoff += move_size;
+	if(object->dyld_exports_trie != NULL)
+	    object->dyld_exports_trie->dataoff += move_size;
 
 	/*
 	 * Record the new content for writeout() to put in to the output file.
+	 * Pad the contents to the output file page size.
 	 */
-	object->output_new_content = arch_ctfs[i].contents;
+	contents = calloc(1, move_size);
+	memcpy(contents, arch_ctfs[i].contents, arch_ctfs[i].size);
+	object->output_new_content = contents;
 	object->output_new_content_size = move_size;
 }
 
@@ -464,7 +541,7 @@ uint64_t addr,
 uint32_t size)
 {
     uint32_t i, j, low_fileoff, mach_header_size, added_header_size;
-    uint32_t ncmds, sizeofcmds;
+    uint32_t ncmds, sizeofcmds, newsizeofcmds, written, filesize, segalign;
     struct load_command *lc;
     struct segment_command *sg;
     struct segment_command_64 *sg64;
@@ -474,6 +551,8 @@ uint32_t size)
     struct section *s_ctf;
     struct segment_command_64 *sg64_CTF;
     struct section_64 *s64_ctf;
+    uint32_t linkedit_offset;
+    unsigned char* buffer;
 
         if(arch->object->mh != NULL){
             ncmds = arch->object->mh->ncmds;
@@ -499,6 +578,7 @@ uint32_t size)
 	 */
 	low_fileoff = UINT_MAX;
 	lc = arch->object->load_commands;
+	linkedit_offset = 0;
 	for(i = 0; i < ncmds; i++){
 	    if(lc->cmd == LC_SEGMENT){
 		sg = (struct segment_command *)lc;
@@ -506,6 +586,10 @@ uint32_t size)
 		    fatal("can't insert __CTF segment for: %s (for "
 			  "architecture %s) because it already contains "
 			  "this segment", arch->file_name, arch_name);
+		if (strcmp(sg->segname, "__LINKEDIT") == 0)
+		    linkedit_offset = (uint32_t)
+					((char*)lc -
+					 (char*)arch->object->load_commands);
 		s = (struct section *)
 		    ((char *)sg + sizeof(struct segment_command));
 		if(sg->nsects != 0){
@@ -530,6 +614,10 @@ uint32_t size)
 		    fatal("can't insert __CTF segment for: %s (for "
 			  "architecture %s) because it already contains "
 			  "this segment", arch->file_name, arch_name);
+		if (strcmp(sg64->segname, "__LINKEDIT") == 0)
+		    linkedit_offset = (uint32_t)
+					((char*)lc -
+					 (char*)arch->object->load_commands);
 		s64 = (struct section_64 *)
 		    ((char *)sg64 + sizeof(struct segment_command_64));
 		if(sg64->nsects != 0){
@@ -551,21 +639,66 @@ uint32_t size)
 	    lc = (struct load_command *)((char *)lc + lc->cmdsize);
 	}
 	if(sizeofcmds + mach_header_size + added_header_size > low_fileoff)
-{
-printf("added_header_size = %d\n", added_header_size);
-printf("space available = %d\n", low_fileoff - (sizeofcmds + mach_header_size));
+	{
+	    printf("added_header_size = %d\n", added_header_size);
+	    printf("space available = %d\n", low_fileoff - (sizeofcmds + mach_header_size));
 	    fatal("can't insert (__CTF,__ctf) section for: %s (for architecture"
 		  " %s) because larger updated load commands do not fit (the "
-		  "program must be relinked using a larger -headerpad value)", 
+		  "program must be relinked using a larger -headerpad value)",
 		  arch->file_name, arch_name);
-}
+	}
 	/*
-	 * There is space for the new load command. So just use that space for
-	 * the new segment and section and set the fields.
+	 * There is space for the new load command.
+	 *
+	 * The original ctf_insert just appended the __CTF segment and section
+	 * to the end of the load commands buffer, using this unused space.
+	 *
+	 * Now ctf_insert will insert the __CTF segment and section immediately
+	 * before __LINKEDIT, shifting all the remaining load commands into
+	 * the unused space. This has the undesirable effect of invalidating
+	 * all of the object's cached pointers into the load command buffer.
+	 * Luckily, we can reset those cached pointers by calling checkout
+	 * a second time.
+	 *
+	 * As a result, ctf_insert produces a binary that's a little closer
+	 * to what would be produced by ld(1) if the __CTF section was inserted
+	 * via -sectcreate.
 	 */
-        if(arch->object->mh != NULL){
+	/*
+	 * Copy the load commands before __LINKEDIT into a new buffer.
+	 */
+	written = 0;
+	newsizeofcmds = sizeofcmds;
+	if(arch->object->mh != NULL){
+	    newsizeofcmds += (sizeof(struct segment_command) +
+			      sizeof(struct section));
+	}
+	else {
+	    newsizeofcmds += (sizeof(struct segment_command_64) +
+			      sizeof(struct section_64));
+	}
+	buffer = calloc(newsizeofcmds, 1);
+	if (linkedit_offset) {
+	    written = linkedit_offset;
+	}
+	else {
+	    written = sizeofcmds;
+	}
+	memcpy(buffer, arch->object->load_commands, written);
+
+	/* Round the file size to page boundaries. */
+	segalign = get_seg_align(arch->object->mh, arch->object->mh64,
+				 arch->object->load_commands, FALSE,
+				 arch->object->object_size, arch->file_name);
+	segalign = 1 << segalign;
+	filesize = rnd32(size, segalign);
+
+	/*
+	 * Write the new load command into the buffer
+	 */
+	if(arch->object->mh != NULL){
 	    sg_CTF = (struct segment_command *)
-		     ((char *)arch->object->load_commands + sizeofcmds);
+		     &((char *)buffer)[written];
 	    memset(sg_CTF, '\0', sizeof(struct segment_command));
 	    sg_CTF->cmd = LC_SEGMENT;
 	    sg_CTF->cmdsize = sizeof(struct segment_command) +
@@ -574,11 +707,11 @@ printf("space available = %d\n", low_fileoff - (sizeofcmds + mach_header_size));
 	    sg_CTF->vmaddr = (uint32_t)addr;
 	    sg_CTF->vmsize = 0;
 	    sg_CTF->fileoff = offset;
-	    sg_CTF->filesize = size;
+	    sg_CTF->filesize = filesize;
 	    sg_CTF->maxprot = VM_PROT_READ;
 	    sg_CTF->initprot = VM_PROT_READ;
 	    sg_CTF->nsects = 1;
-	    sg_CTF->flags = 0;
+	    sg_CTF->flags = SG_NORELOC;
 	    s_ctf = (struct section *)
 		    ((char *)sg_CTF + sizeof(struct segment_command));
 	    memset(s_ctf, '\0', sizeof(struct section));
@@ -593,14 +726,12 @@ printf("space available = %d\n", low_fileoff - (sizeofcmds + mach_header_size));
 	    s_ctf->flags = S_REGULAR;
 	    s_ctf->reserved1 = 0;
 	    s_ctf->reserved2 = 0;
-            arch->object->mh->sizeofcmds = sizeofcmds +
-					   sizeof(struct segment_command) +
-					   sizeof(struct section);
-            arch->object->mh->ncmds = ncmds + 1;
+	    written += (sizeof(struct segment_command) +
+			sizeof(struct section));
         }
 	else{
 	    sg64_CTF = (struct segment_command_64 *)
-		   ((char *)arch->object->load_commands + sizeofcmds);
+			&((char *)buffer)[written];
 	    memset(sg64_CTF, '\0', sizeof(struct segment_command_64));
 	    sg64_CTF->cmd = LC_SEGMENT_64;
 	    sg64_CTF->cmdsize = sizeof(struct segment_command_64) +
@@ -609,11 +740,11 @@ printf("space available = %d\n", low_fileoff - (sizeofcmds + mach_header_size));
 	    sg64_CTF->vmaddr = addr;
 	    sg64_CTF->vmsize = 0;
 	    sg64_CTF->fileoff = offset;
-	    sg64_CTF->filesize = size;
+	    sg64_CTF->filesize = filesize;
 	    sg64_CTF->maxprot = VM_PROT_READ;
 	    sg64_CTF->initprot = VM_PROT_READ;
 	    sg64_CTF->nsects = 1;
-	    sg64_CTF->flags = 0;
+	    sg64_CTF->flags = SG_NORELOC;
 	    s64_ctf = (struct section_64 *)
 		  ((char *)sg64_CTF + sizeof(struct segment_command_64));
 	    memset(s64_ctf, '\0', sizeof(struct section_64));
@@ -628,9 +759,32 @@ printf("space available = %d\n", low_fileoff - (sizeofcmds + mach_header_size));
 	    s64_ctf->flags = S_REGULAR;
 	    s64_ctf->reserved1 = 0;
 	    s64_ctf->reserved2 = 0;
-            arch->object->mh64->sizeofcmds = sizeofcmds +
-					     sizeof(struct segment_command_64) +
-					     sizeof(struct section_64);
-            arch->object->mh64->ncmds = ncmds + 1;
+	    written += (sizeof(struct segment_command_64) +
+			sizeof(struct section_64));
         }
+
+	/*
+	 * Copy the remaining load commands starting with __LINKEDIT into the
+	 * new load command buffer, if any.
+	 */
+	if (linkedit_offset)
+	    memcpy(&buffer[written],
+		   &((char*)arch->object->load_commands)[linkedit_offset],
+		   sizeofcmds - linkedit_offset);
+
+	/*
+	 * Replace the load commands with our new list, and rerun object
+	 * checkout to reset the cached load command pointers used by writeout.
+	 */
+	memcpy(arch->object->load_commands, buffer, newsizeofcmds);
+	if (arch->object->mh != NULL) {
+	    arch->object->mh->sizeofcmds = newsizeofcmds;
+	    arch->object->mh->ncmds = ncmds + 1;
+	}
+	else {
+	    arch->object->mh64->sizeofcmds = newsizeofcmds;
+	    arch->object->mh64->ncmds = ncmds + 1;
+	}
+	free(buffer);
+	checkout(arch, 1);
 }

@@ -55,7 +55,8 @@ static void make_table_of_contents(
     enum bool sort_toc,
     enum bool commons_in_toc,
     enum bool force_64bit_toc,
-    enum bool library_warnings);
+    enum bool library_warnings,
+    enum bool deterministic);
 
 static enum bool toc_symbol(
     struct nlist *symbol,
@@ -121,6 +122,7 @@ enum bool sort_toc,
 enum bool commons_in_toc,
 enum bool force_64bit_toc,
 enum bool library_warnings,
+enum bool deterministic,
 uint32_t *throttle)
 {
     uint32_t fsync;
@@ -170,7 +172,7 @@ uint32_t *throttle)
 	 * places that write archives to allow testing and comparing
 	 * things for exact binary equality.
 	 */
-	if (getenv("ZERO_AR_DATE") == NULL) {
+	if (deterministic) {
 	    toc_time = time(NULL);
 	} else {
 	    toc_time = 0;
@@ -178,8 +180,8 @@ uint32_t *throttle)
 #endif /* !defined(__OPENSTEP__) */
 
 	writeout_to_mem(archs, narchs, output, (void **)&file, &file_size,
-                        sort_toc, commons_in_toc, force_64bit_toc,
-			library_warnings, &seen_archive);
+			sort_toc, commons_in_toc, force_64bit_toc,
+			library_warnings, deterministic, &seen_archive);
 
 	/*
 	 * Create the output file.  The unlink() is done to handle the problem
@@ -373,6 +375,7 @@ enum bool sort_toc,
 enum bool commons_in_toc,
 enum bool force_64bit_toc,
 enum bool library_warnings,
+enum bool deterministic,
 enum bool *seen_archive)
 {
     uint32_t i, j, k, pad, size;
@@ -410,10 +413,12 @@ enum bool *seen_archive)
 	 * places that write archives to allow testing and comparing
 	 * things for exact binary equality.
 	 */
-	if (getenv("ZERO_AR_DATE") != NULL)
+	if (deterministic) {
 	    toc_time = 0;
-	else
+	}
+	else {
 	    toc_time = time(0) + 5;
+	}
 
 	fat_arch = NULL; /* here to quite compiler maybe warning message */
 	fat_arch64 = NULL;
@@ -452,7 +457,7 @@ enum bool *seen_archive)
 		*seen_archive = TRUE;
 		make_table_of_contents(archs + i, filename, toc_time, sort_toc,
 				       commons_in_toc, force_64bit_toc,
-				       library_warnings);
+				       library_warnings, deterministic);
 		archs[i].library_size += SARMAG + archs[i].toc_size;
 		if(archs[i].fat_arch64 != NULL)
 		    file_size = rnd(file_size, 1 << archs[i].fat_arch64->align);
@@ -611,12 +616,12 @@ enum bool *seen_archive)
 		if(library_warnings == TRUE && archs[i].ntocs == 0){
 		    if(narchs > 1 ||
 		       archs[i].fat_arch != NULL || archs[i].fat_arch64 != NULL)
-			warning("warning library: %s for architecture: %s the "
+			warning("archive library: %s for architecture: %s the "
 			        "table of contents is empty (no object file "
 			        "members in the library)", filename,
 			         archs[i].fat_arch_name);
 		    else
-			warning("warning for library: %s the table of contents "
+			warning("archive library: %s the table of contents "
 				"is empty (no object file members in the "
 				"library)", filename);
 		}
@@ -969,6 +974,15 @@ struct twolevel_hints_command *old_hints_cmd,
 struct object *object)
 {
 	if(old_dyst != NULL){
+	    uint32_t output_indirectsym_pad = object->input_indirectsym_pad;
+
+	    /*
+	     * As a hack, clear the output_indirectsym_pad if there are no
+	     * indirect symbols.
+	     */
+	    if (object->dyst && object->dyst->nindirectsyms == 0)
+		output_indirectsym_pad = 0;
+
 	    if(object->output_dyld_info_size != 0){
 		if(object->output_dyld_info != NULL)
 		    memcpy(p + *size, object->output_dyld_info,
@@ -1046,7 +1060,7 @@ struct object *object)
 	    memcpy(p + *size, object->output_indirect_symtab,
 		   dyst->nindirectsyms * sizeof(uint32_t));
 	    *size += dyst->nindirectsyms * sizeof(uint32_t) +
-		     object->input_indirectsym_pad;
+		     output_indirectsym_pad;
 	    memcpy(p + *size, object->output_tocs,
 		   object->output_ntoc *sizeof(struct dylib_table_of_contents));
 	    *size += object->output_ntoc *
@@ -1140,7 +1154,8 @@ time_t toc_time,
 enum bool sort_toc,
 enum bool commons_in_toc,
 enum bool force_64bit_toc,
-enum bool library_warnings)
+enum bool library_warnings,
+enum bool deterministic)
 {
     uint32_t i, j, k, r, s, nsects;
     struct member *member;
@@ -1160,6 +1175,8 @@ enum bool library_warnings)
     struct section *section;
     struct section_64 *section64;
     uint32_t ncmds;
+    uid_t uid;
+    gid_t gid;
 
 	symbols = NULL; /* here to quite compiler maybe warning message */
 	symbols64 = NULL;
@@ -1570,10 +1587,20 @@ enum bool library_warnings)
 	    }
 	}
 
-	numask = 0;
-	oumask = umask(numask);
-	toc_mode = S_IFREG | (0666 & ~oumask);
-	(void)umask(oumask);
+	if (deterministic) {
+	    toc_mode = S_IFREG | 0644;
+	    uid = 0;
+	    gid = 0;
+	    toc_time = 0; /* just in case */
+	}
+	else {
+	    numask = 0;
+	    oumask = umask(numask);
+	    toc_mode = S_IFREG | (0666 & ~oumask);
+	    (void)umask(oumask);
+	    uid = getuid();
+	    gid = getgid();
+	}
 
 	sprintf((char *)(&arch->toc_ar_hdr), "%-*s%-*ld%-*u%-*u%-*o%-*ld",
 	   (int)sizeof(arch->toc_ar_hdr.ar_name),
@@ -1581,9 +1608,9 @@ enum bool library_warnings)
 	   (int)sizeof(arch->toc_ar_hdr.ar_date),
 	       toc_time,
 	   (int)sizeof(arch->toc_ar_hdr.ar_uid),
-	       (unsigned short)getuid(),
+	       (unsigned short)uid,
 	   (int)sizeof(arch->toc_ar_hdr.ar_gid),
-	       (unsigned short)getgid(),
+	       (unsigned short)gid,
 	   (int)sizeof(arch->toc_ar_hdr.ar_mode),
 	       (unsigned int)toc_mode,
 	   (int)sizeof(arch->toc_ar_hdr.ar_size),
@@ -1789,4 +1816,125 @@ const char *format, ...)
         fprintf(stderr, "\n");
 	va_end(ap);
 }
+
+/*
+ * reset_load_command_pointers walks object's load command buffer and resets
+ * all of object's load command index pointers. If a load command is not
+ * found, its corresponding index pointer will be set to NULL.
+ */
+__private_extern__
+void
+reset_load_command_pointers(
+struct object* object)
+{
+    struct load_command *lc;
+    uint32_t i, ncmds;
+
+    if(object->mh != NULL) {
+	ncmds = object->mh->ncmds;
+    } else {
+	ncmds = object->mh64->ncmds;
+    }
+
+    object->st = NULL;
+    object->dyst = NULL;
+    object->hints_cmd = NULL;
+    object->cs = NULL;
+    object->seg_bitcode = NULL;
+    object->seg_bitcode64 = NULL;
+    object->seg_linkedit = NULL;
+    object->seg_linkedit64 = NULL;
+    object->code_sig_cmd = NULL;
+    object->split_info_cmd = NULL;
+    object->func_starts_info_cmd = NULL;
+    object->data_in_code_cmd = NULL;
+    object->code_sign_drs_cmd = NULL;
+    object->link_opt_hint_cmd = NULL;
+    object->dyld_info = NULL;
+    object->dyld_exports_trie = NULL;
+    object->dyld_chained_fixups = NULL;
+    object->encryption_info_command = NULL;
+    object->encryption_info_command64 = NULL;
+    /* TODO: Consider sections, sections64, notes */
+
+    lc = object->load_commands;
+    for(i = 0; i < ncmds; i++){
+	switch(lc->cmd){
+	    case LC_SYMTAB:
+		object->st = (struct symtab_command *)lc;
+		break;
+	    case LC_DYSYMTAB:
+		object->dyst = (struct dysymtab_command *)lc;
+		break;
+	    case LC_TWOLEVEL_HINTS:
+		object->hints_cmd = (struct twolevel_hints_command *)lc;
+		break;
+	    case LC_PREBIND_CKSUM:
+		object->cs = (struct prebind_cksum_command *)lc;
+		break;
+	    case LC_SEGMENT:
+	    {
+		struct segment_command *sg;
+		sg = (struct segment_command *)lc;
+		if(strcmp(sg->segname, SEG_LINKEDIT) == 0)
+		    object->seg_linkedit = sg;
+		else if (strcmp(sg->segname, "__LLVM") == 0)
+		    object->seg_bitcode = sg;
+	    }
+		break;
+	    case LC_SEGMENT_64:
+	    {
+		struct segment_command_64 *sg;
+		sg = (struct segment_command_64 *)lc;
+		if(strcmp(sg->segname, SEG_LINKEDIT) == 0)
+		    object->seg_linkedit64 = sg;
+		else if (strcmp(sg->segname, "__LLVM") == 0)
+		    object->seg_bitcode64 = sg;
+	    }
+		break;
+	    case LC_CODE_SIGNATURE:
+		object->code_sig_cmd = (struct linkedit_data_command *)lc;
+		break;
+	    case LC_SEGMENT_SPLIT_INFO:
+		object->split_info_cmd = (struct linkedit_data_command *)lc;
+		break;
+	    case LC_FUNCTION_STARTS:
+		object->func_starts_info_cmd =
+		(struct linkedit_data_command *)lc;
+		break;
+	    case LC_DATA_IN_CODE:
+		object->data_in_code_cmd =
+		(struct linkedit_data_command *)lc;
+		break;
+	    case LC_DYLIB_CODE_SIGN_DRS:
+		object->code_sign_drs_cmd =
+		(struct linkedit_data_command *)lc;
+		break;
+	    case LC_LINKER_OPTIMIZATION_HINT:
+		object->link_opt_hint_cmd =
+		(struct linkedit_data_command *)lc;
+		break;
+	    case LC_DYLD_INFO_ONLY:
+	    case LC_DYLD_INFO:
+		object->dyld_info = (struct dyld_info_command *)lc;
+		break;
+	    case LC_DYLD_EXPORTS_TRIE:
+		object->dyld_exports_trie = (struct linkedit_data_command*)lc;
+		break;
+	    case LC_DYLD_CHAINED_FIXUPS:
+		object->dyld_chained_fixups = (struct linkedit_data_command*)lc;
+		break;
+	    case LC_ENCRYPTION_INFO:
+		object->encryption_info_command =
+		    (struct encryption_info_command*)lc;
+		break;
+	    case LC_ENCRYPTION_INFO_64:
+		object->encryption_info_command64 =
+		    (struct encryption_info_command_64*)lc;
+		break;
+	}
+	lc = (struct load_command *)((char *)lc + lc->cmdsize);
+    }
+}
+
 #endif /* !defined(RLD) */

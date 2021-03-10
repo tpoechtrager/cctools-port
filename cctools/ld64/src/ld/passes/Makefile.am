@@ -42,5 +42,6 @@ libPasses_la_SOURCES =  \
 	bitcode_bundle.cpp \
 	code_dedup.cpp \
 	thread_starts.cpp \
-        inits.cpp
+	inits.cpp \
+	objc_constants.cpp
 

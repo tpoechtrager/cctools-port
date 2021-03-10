@@ -10,7 +10,8 @@ ld_LDADD =  \
 	$(LTO_RPATH) \
 	$(XAR_LIB) \
 	$(DL_LIB) \
-	$(TAPI_LIB) 
+	$(TAPI_LIB) \
+	$(REALLOCF_LIB)
 
 ld_LDFLAGS = $(PTHREAD_FLAGS) $(EXECINFO_LIB)
 
@@ -51,6 +52,7 @@ ld_CFLAGS =  \
 
 ld_SOURCES =  \
 	debugline.c  \
+	libcodedirectory.c \
 	InputFiles.cpp  \
 	ld.cpp  \
 	Options.cpp  \
@@ -59,4 +61,5 @@ ld_SOURCES =  \
 	Snapshot.cpp  \
 	SymbolTable.cpp \
 	PlatformSupport.cpp \
+	ResponseFiles.cpp \
 	code-sign-blobs/blob.cpp

@@ -746,7 +746,7 @@ char *buffer)	/* 1st character of each buffer of lines is here. */
 			100 /* N_SO */,
 			text_nsect,
 			0,
-			(int)(obstack_next_free(&frags) - frag_now->fr_literal),
+			(valueT)(obstack_next_free(&frags) - frag_now->fr_literal),
 			frag_now);
 		symbolP = symbol_new(
 			"int:t1=r1;-2147483648;2147483647;",
@@ -790,7 +790,7 @@ char *buffer)	/* 1st character of each buffer of lines is here. */
 			132 /* N_SOL */,
 			text_nsect,
 			0,
-			(int)(obstack_next_free(&frags) - frag_now->fr_literal),
+			(valueT)(obstack_next_free(&frags) - frag_now->fr_literal),
 			frag_now);
 	    }
 	}
@@ -824,7 +824,7 @@ char *buffer)	/* 1st character of each buffer of lines is here. */
 			100 /* N_SO */,
 			text_nsect,
 			0,
-			(int)(obstack_next_free(&frags) - frag_now->fr_literal),
+			(valueT)(obstack_next_free(&frags) - frag_now->fr_literal),
 			frag_now);
 	    }
 	}
@@ -1921,7 +1921,7 @@ uintptr_t value)
 			      132 /* N_SOL */,
 			      text_nsect,
 			      0,
-			      (int)(obstack_next_free(&frags) -
+			      (valueT)(obstack_next_free(&frags) -
 				    frag_now->fr_literal),
 			      frag_now);
 	    }
@@ -2119,7 +2119,7 @@ uintptr_t value)
 	c = get_symbol_end();
 	indirect_symbol_new(name,
 			    frag_now,
-			    (int)(obstack_next_free(&frags) -
+			    (uint32_t)(obstack_next_free(&frags) -
 				  frag_now->fr_literal));
 	*input_line_pointer = c;
 
@@ -2190,7 +2190,7 @@ uintptr_t value)
 	    }
 	    bss->frch_root->fr_address = rnd(bss->frch_root->fr_address,
 					     1 << align);
-	    symbolP->sy_value = (uint32_t)bss->frch_root->fr_address;
+	    symbolP->sy_value = (valueT)bss->frch_root->fr_address;
 	    symbolP->sy_type  = N_SECT;
 	    symbolP->sy_other = bss->frch_nsect;
 	    symbolP->sy_frag  = bss->frch_root;
@@ -2810,7 +2810,7 @@ uintptr_t value)
 	if((symbolP->sy_type & N_TYPE) == N_UNDF && symbolP->sy_value == 0){
 	    frcP->frch_root->fr_address = rnd(frcP->frch_root->fr_address,
 					      1 << align);
-	    symbolP->sy_value = (uint32_t)frcP->frch_root->fr_address;
+	    symbolP->sy_value = (valueT)frcP->frch_root->fr_address;
 	    symbolP->sy_type  = N_SECT | (symbolP->sy_type & (N_EXT | N_PEXT));
 	    symbolP->sy_other = frcP->frch_nsect;
 	    symbolP->sy_frag  = frcP->frch_root;
@@ -3059,7 +3059,7 @@ uintptr_t value)
 			    132 /* N_SOL */,
 			    text_nsect,
 			    0,
-			    (int)(obstack_next_free(&frags) -
+			    (valueT)(obstack_next_free(&frags) -
 				  frag_now->fr_literal),
 			    frag_now);
 	}
@@ -3168,7 +3168,7 @@ uintptr_t what) /* d == .stabd, n == .stabn, and s == .stabs */
 	    switch(what){
 	    case 'd':
 		symbolP->sy_name = NULL; /* .stabd feature. */
-		symbolP->sy_value = (int)(obstack_next_free(&frags) -
+		symbolP->sy_value = (valueT)(obstack_next_free(&frags) -
 				    frag_now->fr_literal);
 		symbolP->sy_frag = frag_now;
 		break;
@@ -3302,14 +3302,14 @@ symbolS *symbolP)
 		as_bad("Complex expression. Absolute segment assumed." );
 	    symbolP->sy_type = N_ABS | ext;
 	    symbolP->sy_other = 0; /* NO_SECT */
-	    symbolP->sy_value = (uint32_t)exp.X_add_number;
+	    symbolP->sy_value = (valueT)exp.X_add_number;
 	    symbolP->sy_frag = &zero_address_frag;
 	    break;
 
 	case SEG_ABSOLUTE:
 	    symbolP->sy_type = N_ABS | ext;
 	    symbolP->sy_other = 0; /* NO_SECT */
-	    symbolP->sy_value = (uint32_t)exp.X_add_number;
+	    symbolP->sy_value = (valueT)exp.X_add_number;
 	    symbolP->sy_frag = &zero_address_frag;
 	    symbolP->expression = NULL;
 	    break;
@@ -3317,7 +3317,7 @@ symbolS *symbolP)
 	case SEG_SECT:
 	    symbolP->sy_type  = N_SECT | ext;
 	    symbolP->sy_other = exp.X_add_symbol->sy_other;
-	    symbolP->sy_value = (uint32_t)exp.X_add_number + exp.X_add_symbol->sy_value;
+	    symbolP->sy_value = (valueT)(exp.X_add_number + exp.X_add_symbol->sy_value);
 	    symbolP->sy_frag  = exp.X_add_symbol->sy_frag;
 	    break;
 	  

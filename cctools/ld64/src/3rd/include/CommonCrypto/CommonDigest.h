@@ -3,6 +3,8 @@
 #include_next <CommonCrypto/CommonDigest.h>
 
 #else
+#ifndef __COMMON_DIGEST__
+#define __COMMON_DIGEST__
 
 #include "md5.h"
 #include "assert.h"
@@ -45,4 +47,5 @@ static unsigned char *CC_MD5(const void *data, unsigned long nbytes,
     return md;
 }
 
+#endif /* __COMMON_DIGEST__ */
 #endif /* __APPLE__ */

@@ -342,6 +342,11 @@ extern void print_note_command(
     struct note_command *nc,
     uint64_t object_size);
 
+extern void print_fileset_entry_command(
+    struct fileset_entry_command* fse,
+    struct load_command *lc,
+    uint64_t object_size);
+
 extern void print_entry_point_command(
     struct entry_point_command *ep);
 
@@ -498,7 +503,8 @@ extern void print_sect(
     enum byte_sex object_byte_sex,
     char *sect,
     uint64_t size,
-    uint64_t addr);
+    uint64_t addr,
+    enum bool Vflag);
 
 extern enum bool print_objc_segment(
     cpu_type_t mh_cputype,

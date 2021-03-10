@@ -609,6 +609,19 @@ enum NXByteOrder target_byte_sex)
 }
 
 void
+swap_fileset_entry_command(
+struct fileset_entry_command *lc,
+enum NXByteOrder target_byte_sex)
+{
+	lc->cmd = OSSwapInt32(lc->cmd);
+	lc->cmdsize = OSSwapInt32(lc->cmdsize);
+	lc->vmaddr = OSSwapInt64(lc->vmaddr);
+	lc->fileoff = OSSwapInt64(lc->fileoff);
+	lc->entry_id.offset = OSSwapInt32(lc->entry_id.offset);
+	lc->reserved = OSSwapInt32(lc->reserved);
+}
+
+void
 swap_nlist(
 struct nlist *symbols,
 uint32_t nsymbols,

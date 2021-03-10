@@ -823,6 +823,11 @@ unknown_flag:
 	}
 	if(flagseen['g'] == TRUE && flagseen['n'] == TRUE)
 	    as_fatal("-g can't be specified if -n is specified");
+
+#if defined(I386) || defined(ARM)
+	as_warn("%s: this system assembler is deprecated. Please migrate to "
+		"the clang integrated assembler (`as -q').", progname);
+#endif
 	/*
 	 * If we haven't seen a -force_cpusubtype_ALL or an -arch flag for a
 	 * specific architecture then let the machine instructions in the

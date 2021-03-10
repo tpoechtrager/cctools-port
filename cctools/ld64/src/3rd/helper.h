@@ -6,6 +6,13 @@
 #endif
 
 #ifdef __cplusplus
+#if !__has_include(<string_view>)
+//#warning does this really work as expected?
+#define string_view string
+#endif
+#endif
+
+#ifdef __cplusplus
 extern "C" {
 #endif
 

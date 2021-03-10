@@ -49,6 +49,7 @@
 #include "stuff/unix_standard_mode.h"
 #include "stuff/execute.h"
 #include "stuff/write64.h"
+#include "stuff/diagnostics.h"
 #ifdef TRIE_SUPPORT
 #include <mach-o/prune_trie.h>
 #endif /* TRIE_SUPPORT */
@@ -62,6 +63,7 @@ static char *Rfile;	/* filename of global symbol names to remove */
 static uint32_t Aflag;	/* save only absolute symbols with non-zero value and
 			   .objc_class_name_* symbols */
 static uint32_t iflag;	/* -i ignore symbols in -s file not in object */
+static uint32_t Dflag;	/* write deterministic archive files */
 #ifdef NMEDIT
 static uint32_t pflag;	/* make all defined global symbols private extern */
 #else /* !defined(NMEDIT) */
@@ -172,6 +174,14 @@ static struct dylib_module *new_mods = NULL;
 static struct dylib_module_64 *new_mods64 = NULL;
 static uint32_t new_nmodtab = 0;
 #endif
+
+/*
+ * The deterministic_archives flag is used to write out static archives with
+ * normalized values for date, group, user, and permissions. strip and nmedit
+ * will use this mode if the ZERO_AR_DATE environment variable is set or if
+ * the "-D" flag is passed on the command line.
+ */
+static enum bool deterministic_archives = FALSE;
 
 #ifndef NMEDIT
 /*
@@ -403,6 +413,10 @@ char *envp[])
     enum bool all_archs;
     struct symbol_list *sp;
 
+	diagnostics_enable(getenv("CC_LOG_DIAGNOSTICS") != NULL);
+	diagnostics_output(getenv("CC_LOG_DIAGNOSTICS_FILE"));
+	diagnostics_log_args(argc, argv);
+
 	progname = argv[0];
 
 	arch_flags = NULL;
@@ -539,6 +553,9 @@ char *envp[])
 			    strip_all = 0;
 			    break;
 #endif /* !defined(NMEDIT) */
+			case 'D':
+			    Dflag = 1;
+			    break;
 			case 'A':
 			    Aflag = 1;
 #ifndef NMEDIT
@@ -623,6 +640,9 @@ char *envp[])
 	    setup_debug_filenames(dfile);
 	}
 #endif /* !defined(NMEDIT) */
+
+	if (Dflag || getenv("ZERO_AR_DATE"))
+	    deterministic_archives = TRUE;
 
 	files_specified = 0;
 	args_left = 1;
@@ -726,7 +746,7 @@ enum bool all_archs)
 #else
 		     toc64flag,
 #endif
-		     FALSE, NULL);
+		     FALSE, deterministic_archives, NULL);
 	    FAKE_SIGN_ARM_BINARY(archs, narchs, output_file); /* cctools-port */
 	}
 	else{
@@ -785,7 +805,7 @@ enum bool all_archs)
 #else
 		     toc64flag,
 #endif
-		     FALSE, NULL);
+		     FALSE, deterministic_archives, NULL);
 	    FAKE_SIGN_ARM_BINARY(archs, narchs, output_file); /* cctools-port */
 	    if(rename_file != NULL){
 		if(rename(output_file, rename_file) == -1)
@@ -842,9 +862,6 @@ enum bool all_archs)
     struct ar_hdr h;
     char size_buf[sizeof(h.ar_size) + 1];
     char date_buf[sizeof(h.ar_date) + 1];
-    enum bool zero_ar_date;
-
-	zero_ar_date = getenv("ZERO_AR_DATE") ? TRUE : FALSE;
 
 	/*
 	 * Using the specified arch_flags process specified objects for those
@@ -998,9 +1015,9 @@ enum bool all_archs)
 		}
 		archs[i].library_size = offset;
 		/*
-		 * Reset the library date, if needed
+		 * Reset the library date, if needed.
 		 */
-		if (zero_ar_date == TRUE) {
+		if (deterministic_archives == TRUE) {
 		    sprintf(date_buf, "%-*ld", (int)sizeof(h.ar_date),
 			    (unsigned long)0);
 		    /*
@@ -1091,28 +1108,50 @@ struct object *object)
 	}
 	if(object->mh_filetype == MH_DSYM)
 	    fatal_arch(arch, member, "can't process dSYM companion file: ");
-	if(object->st == NULL || object->st->nsyms == 0){
-	    warning_arch(arch, member, "input object file stripped: ");
-	    return;
+	if(object->mh_filetype == MH_FILESET)
+	    fatal_arch(arch, member, "can't process fileset: ");
+	/*
+	 * Print a warning when stripping already-stripped files, unless the
+	 * user expects processing unrelated to symbol contents, such as
+	 * converting the file from a MH_DYLIB to a MH_DYLIB_STUB, or removing
+	 * the UUID load command. In either case, proceed with the stripping
+	 * logic even though
+	 */
+	if((object->st == NULL || object->st->nsyms == 0)
+#ifndef NMEDIT
+	   && !cflag && !no_uuid && !no_split_info
+#endif
+	   ) {
+	    warning_arch(arch, member,
+			 "input object file already stripped: ");
 	}
 
-	nsyms = object->st->nsyms;
-	if(object->mh != NULL){
-	    symbols = (struct nlist *)
-		      (object->object_addr + object->st->symoff);
-	    if(object->object_byte_sex != host_byte_sex)
-		swap_nlist(symbols, nsyms, host_byte_sex);
-	    symbols64 = NULL;
+	if (object->st != NULL) {
+	    nsyms = object->st->nsyms;
+	    if(object->mh != NULL){
+		symbols = (struct nlist *)
+		(object->object_addr + object->st->symoff);
+		if(object->object_byte_sex != host_byte_sex)
+		    swap_nlist(symbols, nsyms, host_byte_sex);
+		symbols64 = NULL;
+	    }
+	    else{
+		symbols = NULL;
+		symbols64 = (struct nlist_64 *)
+		(object->object_addr + object->st->symoff);
+		if(object->object_byte_sex != host_byte_sex)
+		    swap_nlist_64(symbols64, nsyms, host_byte_sex);
+	    }
+	    strings = object->object_addr + object->st->stroff;
+	    strsize = object->st->strsize;
 	}
-	else{
+	else {
 	    symbols = NULL;
-	    symbols64 = (struct nlist_64 *)
-		        (object->object_addr + object->st->symoff);
-	    if(object->object_byte_sex != host_byte_sex)
-		swap_nlist_64(symbols64, nsyms, host_byte_sex);
+	    symbols64 = NULL;
+	    nsyms = 0;
+	    strings = NULL;
+	    strsize = 0;
 	}
-	strings = object->object_addr + object->st->stroff;
-	strsize = object->st->strsize;
 
 #ifndef NMEDIT
 	if(object->mh != NULL)
@@ -1357,15 +1396,19 @@ struct object *object)
 #endif /* !defined(NMEDIT) */
 	    {
 #ifdef NMEDIT
-	    if(edit_symtab(arch, member, object, symbols, symbols64, nsyms,
-		strings, strsize, tocs, ntoc, mods, mods64, nmodtab, refs,
-		nextrefsyms) == FALSE)
-		return;
+	    if (object->st != NULL) {
+		if(edit_symtab(arch, member, object, symbols, symbols64, nsyms,
+		    strings, strsize, tocs, ntoc, mods, mods64, nmodtab, refs,
+		    nextrefsyms) == FALSE)
+		    return;
+	    }
 #else /* !defined(NMEDIT) */
-	    if(strip_symtab(arch, member, object, tocs, ntoc, mods, mods64,
-			    nmodtab, refs, nextrefsyms, &swift_version,
-			    &nlist_outofsync_with_dyldinfo) == FALSE)
-		return;
+	    if (object->st != NULL) {
+		if(strip_symtab(arch, member, object, tocs, ntoc, mods, mods64,
+				nmodtab, refs, nextrefsyms, &swift_version,
+				&nlist_outofsync_with_dyldinfo) == FALSE)
+		    return;
+	    }
 	    if(no_uuid == TRUE)
 		strip_LC_UUID_commands(arch, member, object);
 #endif /* !defined(NMEDIT) */
@@ -1599,20 +1642,22 @@ struct object *object)
 		    object->link_opt_hint_cmd->datasize;
 	    }
 
-	    if(object->mh != NULL){
-		object->input_sym_info_size += nsyms * sizeof(struct nlist);
-		object->output_symbols = new_symbols;
-		object->output_sym_info_size +=
+	    if (object->st != NULL) {
+		if(object->mh != NULL){
+		    object->input_sym_info_size += nsyms * sizeof(struct nlist);
+		    object->output_symbols = new_symbols;
+		    object->output_sym_info_size +=
 		    new_nsyms * sizeof(struct nlist);
-	    }
-	    else{
-		object->input_sym_info_size += nsyms * sizeof(struct nlist_64);
-		object->output_symbols64 = new_symbols64;
-		object->output_sym_info_size +=
+		}
+		else{
+		    object->input_sym_info_size += nsyms * sizeof(struct nlist_64);
+		    object->output_symbols64 = new_symbols64;
+		    object->output_sym_info_size +=
 		    new_nsyms * sizeof(struct nlist_64);
+		}
+		object->output_nsymbols = new_nsyms;
+		object->st->nsyms = new_nsyms;
 	    }
-	    object->output_nsymbols = new_nsyms;
-	    object->st->nsyms = new_nsyms; 
 
 	    if(object->hints_cmd != NULL){
 		object->input_sym_info_size +=
@@ -1646,6 +1691,12 @@ struct object *object)
 		 * When stripping out the section contents to create a
 		 * dynamic library stub the indirect symbol table also gets
 		 * stripped.
+		 *
+		 * NOTE: Ideally this is where strip would clear the
+		 * output_indirectsym_pad field, so that minor alignment
+		 * differences in the symbol tables could be normalized away.
+		 * But there is no output_indirectsym_pad field, writeout()
+		 * looks at input_indirectsym_pad...
 		 */
 		if(!cflag) 
 #endif /* !(NMEDIT) */
@@ -1694,11 +1745,13 @@ struct object *object)
 		    object->dyst->nextrefsyms * sizeof(struct dylib_reference);
 	    }
 
-	    object->output_strings = new_strings;
-	    object->output_strings_size = new_strsize;
-	    object->output_sym_info_size += new_strsize;
-	    object->input_sym_info_size += strsize;
-	    object->st->strsize = new_strsize;
+	    if (object->st != NULL) {
+		object->output_strings = new_strings;
+		object->output_strings_size = new_strsize;
+		object->output_sym_info_size += new_strsize;
+		object->input_sym_info_size += strsize;
+		object->st->strsize = new_strsize;
+	    }
 
 	    if(object->code_sig_cmd != NULL){
 #ifndef NMEDIT
@@ -1927,6 +1980,35 @@ struct object *object)
 		    }
 		}
 
+		if(object->encryption_info_command != NULL){
+#ifndef NMEDIT
+		    /*
+		     * When stripping out the section contents to create a
+		     * dynamic library stub the encryption info gets stripped.
+		     */
+		    if(cflag){
+			object->encryption_info_command->cryptoff = 0;
+			object->encryption_info_command->cryptsize = 0;
+			object->encryption_info_command->cryptid = 0;
+		    }
+#endif /* defined(NMEDIT) */
+		}
+
+		if(object->encryption_info_command64 != NULL){
+#ifndef NMEDIT
+		    /*
+		     * When stripping out the section contents to create a
+		     * dynamic library stub the encryption info gets stripped.
+		     */
+		    if(cflag){
+			object->encryption_info_command64->cryptoff = 0;
+			object->encryption_info_command64->cryptsize = 0;
+			object->encryption_info_command64->cryptid = 0;
+			object->encryption_info_command64->pad = 0;
+		    }
+#endif /* defined(NMEDIT) */
+		}
+
 		if(object->code_sign_drs_cmd != NULL){
 		    object->code_sign_drs_cmd->dataoff = offset;
 		    offset += object->code_sign_drs_cmd->datasize;
@@ -1937,19 +2019,21 @@ struct object *object)
 		    offset += object->link_opt_hint_cmd->datasize;
 		}
 
-		if(object->st->nsyms != 0){
-		    object->st->symoff = offset;
-		    if(object->mh != NULL)
-			offset += object->st->nsyms * sizeof(struct nlist);
+		if (object->st != NULL) {
+		    if(object->st->nsyms != 0){
+			object->st->symoff = offset;
+			if(object->mh != NULL)
+			    offset += object->st->nsyms * sizeof(struct nlist);
+			else
+			    offset += object->st->nsyms*sizeof(struct nlist_64);
+		    }
 		    else
-			offset += object->st->nsyms * sizeof(struct nlist_64);
-		}
-		else
 		    /*
 		     * This should be set to zero when nsyms is zero, but dyld
 		     * will think it is malformed.  See rdar://34465083
 		     */
-		    object->st->symoff = offset;
+			object->st->symoff = offset;
+		}
 
 		if(object->hints_cmd != NULL){
 		    if(object->hints_cmd->nhints != 0){
@@ -2067,17 +2151,19 @@ struct object *object)
 		else
 		    object->dyst->extrefsymoff = 0;
 
-		if(object->st->strsize != 0){
-		    object->st->stroff = offset;
-		    offset += object->st->strsize;
-		}
-		else
+		if (object->st != NULL) {
+		    if(object->st->strsize != 0){
+			object->st->stroff = offset;
+			offset += object->st->strsize;
+		    }
+		    else
 		    /*
 		     * This should be set to zero when strsize is zero, but some
 		     * tools will think it is malformed, like machocheck.  See
 		     * rdar://34729011
 		     */
-		    object->st->stroff = offset;
+			object->st->stroff = offset;
+		}
 
 		if(object->code_sig_cmd != NULL){
 		    offset = rnd32(offset, 16);
@@ -2086,18 +2172,43 @@ struct object *object)
 		}
 	    }
 	    else{
-		if(new_strsize != 0){
-		    if(object->mh != NULL)
-			object->st->stroff = object->st->symoff +
-					 new_nsyms * sizeof(struct nlist);
+		offset = get_starting_syminfo_offset(object);
+		if(object->func_starts_info_cmd != NULL)
+		    offset += object->func_starts_info_cmd->datasize;
+		if(object->data_in_code_cmd != NULL)
+		    offset += object->data_in_code_cmd->datasize;
+		if(object->link_opt_hint_cmd != NULL)
+		    offset += object->link_opt_hint_cmd->datasize;
+
+		if (object->st != NULL) {
+		    if(object->st->nsyms != 0){
+			object->st->symoff = offset;
+			if(object->mh != NULL)
+			    offset += object->st->nsyms * sizeof(struct nlist);
+			else
+			    offset += object->st->nsyms*sizeof(struct nlist_64);
+		    }
 		    else
-			object->st->stroff = object->st->symoff +
-					 new_nsyms * sizeof(struct nlist_64);
+		    /*
+		     * This should be set to zero when nsyms is zero, but dyld
+		     * will think it is malformed.  See rdar://34465083
+		     */
+			object->st->symoff = offset;
+
+		    if(new_strsize != 0){
+			if(object->mh != NULL)
+			    object->st->stroff = object->st->symoff +
+				new_nsyms * sizeof(struct nlist);
+			else
+			    object->st->stroff = object->st->symoff +
+				new_nsyms * sizeof(struct nlist_64);
+		    }
+		    else
+			object->st->stroff = 0;
+
+		    if(new_nsyms == 0)
+			object->st->symoff = 0;
 		}
-		else
-		    object->st->stroff = 0;
-		if(new_nsyms == 0)
-		    object->st->symoff = 0;
 	    }
 	}
 #ifndef NMEDIT
@@ -2107,10 +2218,15 @@ struct object *object)
 	     * leave the local relocation entries as well as LOCAL indirect
 	     * symbol table entries.
 	     */
-	    if(saves != NULL)
+	    if(saves != NULL) {
 		free(saves);
-	    saves = (int32_t *)allocate(object->st->nsyms * sizeof(int32_t));
-	    bzero(saves, object->st->nsyms * sizeof(int32_t));
+		saves = NULL;
+	    }
+
+	    if (object->st != NULL) {
+		saves = (int32_t*)allocate(object->st->nsyms * sizeof(int32_t));
+		bzero(saves, object->st->nsyms * sizeof(int32_t));
+	    }
 
 	    /*
 	     * Account for the symbolic info in the input file.
@@ -2144,10 +2260,12 @@ struct object *object)
 	     * For a full symbol strip all these values in the output file are
 	     * set to zero.
 	     */
-	    object->st->symoff = 0;
-	    object->st->nsyms = 0;
-	    object->st->stroff = 0;
-	    object->st->strsize = 0;
+	    if (object->st != NULL) {
+		object->st->symoff = 0;
+		object->st->nsyms = 0;
+		object->st->stroff = 0;
+		object->st->strsize = 0;
+	    }
 	    if(object->dyst != NULL){
 		object->dyst->ilocalsym = 0;
 		object->dyst->nlocalsym = 0;
@@ -2162,6 +2280,47 @@ struct object *object)
 	     * output file.
 	     */
 	    object->output_sym_info_size = 0;
+
+	    /* Move dyld2 and dyld3 structures */
+	    if(object->dyld_info != 0){
+		if (object->dyld_info->rebase_off != 0){
+		    object->dyld_info->rebase_off = offset;
+		    offset += object->dyld_info->rebase_size;
+		}
+		if (object->dyld_info->bind_off != 0){
+		    object->dyld_info->bind_off = offset;
+		    offset += object->dyld_info->bind_size;
+		}
+		if (object->dyld_info->weak_bind_off != 0){
+		    object->dyld_info->weak_bind_off = offset;
+		    offset += object->dyld_info->weak_bind_size;
+		}
+		if (object->dyld_info->lazy_bind_off != 0){
+		    object->dyld_info->lazy_bind_off = offset;
+		    offset += object->dyld_info->lazy_bind_size;
+		}
+		if (object->dyld_info->export_off != 0){
+		    object->dyld_info->export_off = offset;
+		    offset += object->dyld_info->export_size;
+		}
+	    }
+
+	    if(object->dyld_chained_fixups != NULL){
+		if(cflag){
+		    object->dyld_chained_fixups->dataoff = 0;
+		    object->dyld_chained_fixups->datasize = 0;
+		}
+		else
+		{
+		    object->dyld_chained_fixups->dataoff = offset;
+		    offset += object->dyld_chained_fixups->datasize;
+		}
+	    }
+
+	    if(object->dyld_exports_trie != NULL){
+		object->dyld_exports_trie->dataoff = offset;
+		offset += object->dyld_exports_trie->datasize;
+	    }
 
 	    /*
 	     * We set these so that checking can be done below to report the
@@ -2213,6 +2372,39 @@ struct object *object)
 			      object->input_indirectsym_pad;
 		}
 	    }
+
+	    /*
+	     * When stripping out the section contents to create a
+	     * dynamic library stub we also move the linkedit data offsets.
+	     */
+	    if(object->func_starts_info_cmd != NULL){
+		if(cflag) {
+		    object->func_starts_info_cmd->dataoff = offset;
+		    offset += object->func_starts_info_cmd->datasize;
+		}
+	    }
+
+	    if(object->data_in_code_cmd != NULL){
+		if(cflag) {
+		    object->data_in_code_cmd->dataoff = offset;
+		    offset += object->data_in_code_cmd->datasize;
+		}
+	    }
+
+	    if(object->code_sign_drs_cmd != NULL){
+		if(cflag) {
+		    object->code_sign_drs_cmd->dataoff = offset;
+		    offset += object->code_sign_drs_cmd->datasize;
+		}
+	    }
+
+	    if(object->link_opt_hint_cmd != NULL){
+		if(cflag) {
+		    object->link_opt_hint_cmd->dataoff = offset;
+		    offset += object->link_opt_hint_cmd->datasize;
+		}
+	    }
+
 	    if(no_uuid == TRUE)
 		strip_LC_UUID_commands(arch, member, object);
 	    if(no_split_info == TRUE)
@@ -2346,7 +2538,7 @@ struct object *object)
 		    }
 		    if(saves[relocs[i].r_symbolnum] == 0){
 			if(missing_reloc_symbols == 0){
-			    error_arch(arch, member, "error: symbols "
+			    error_arch(arch, member, "symbols "
 			      "referenced by relocation entries that can't be "
 			      "stripped in: ");
 			    missing_reloc_symbols = 1;
@@ -2517,7 +2709,8 @@ struct object *object)
 	       object->link_opt_hint_cmd->datasize != 0 &&
 	       object->link_opt_hint_cmd->dataoff < offset)
 	        offset = object->link_opt_hint_cmd->dataoff;
-	    if(object->st->nsyms != 0 &&
+	    if(object->st != NULL &&
+	       object->st->nsyms != 0 &&
 	       object->st->symoff < offset)
 		offset = object->st->symoff;
 	    if(object->dyst != NULL &&
@@ -2540,7 +2733,8 @@ struct object *object)
 	       object->dyst->nextrefsyms != 0 &&
 	       object->dyst->extrefsymoff < offset)
 		offset = object->dyst->extrefsymoff;
-	    if(object->st->strsize != 0 &&
+	    if(object->st != NULL &&
+	       object->st->strsize != 0 &&
 	       object->st->stroff < offset)
 		offset = object->st->stroff;
 	} 
@@ -2598,7 +2792,7 @@ enum byte_sex host_byte_sex)
 #ifndef NMEDIT
 		if(saves[relocs[k].r_symbolnum] == 0){
 		    if(*missing_reloc_symbols == 0){
-			error_arch(arch, member, "error: symbols referenced by "
+			error_arch(arch, member, "symbols referenced by "
 			    "relocation entries that can't be stripped in: ");
 			*missing_reloc_symbols = 1;
 		    }
@@ -2618,11 +2812,16 @@ enum byte_sex host_byte_sex)
 		    n_ext = new_symbols64[saves[relocs[k].r_symbolnum] - 1].
 				n_type & N_EXT;
 		if(n_ext != N_EXT &&
-		   object->mh_cputype != CPU_TYPE_X86_64){
+		   (object->mh_cputype & CPU_ARCH_ABI64) == 0 &&
+		   (object->mh_cputype & CPU_ARCH_ABI64_32) == 0) {
 		    /*
 		     * We need to do the relocation for this external relocation
 		     * entry so the item to be relocated is correct for a local
-		     * relocation entry. We don't need to do this for x86-64.
+		     * relocation entry.
+		     *
+		     * We don't need to do this for 64-bit architectures, as
+		     * they use local v. extern relocations differently, and
+		     * those relocations aren't trivially exchangeable.
 		     */
 		    if(relocs[k].r_address + sizeof(int32_t) > sectsize){
 			fatal_arch(arch, member, "truncated or malformed "
@@ -2823,7 +3022,7 @@ enum byte_sex host_byte_sex)
 		}
 		else{
 		    if(*missing_reloc_symbols == 0){
-			error_arch(arch, member, "error: symbols referenced by "
+			error_arch(arch, member, "symbols referenced by "
 			    "indirect symbol table entries that can't be "
 			    "stripped in: ");
 			*missing_reloc_symbols = 1;
@@ -3834,27 +4033,13 @@ enum bool *nlist_outofsync_with_dyldinfo)
 	else
 	    new_strsize = rnd32(new_strsize, sizeof(int64_t));
 	new_strings = (char *)allocate(new_strsize);
-	if(object->mh != NULL){
-	    new_strings[new_strsize - 3] = '\0';
-	    new_strings[new_strsize - 2] = '\0';
-	    new_strings[new_strsize - 1] = '\0';
-	}
-	else{
-	    new_strings[new_strsize - 7] = '\0';
-	    new_strings[new_strsize - 6] = '\0';
-	    new_strings[new_strsize - 5] = '\0';
-	    new_strings[new_strsize - 4] = '\0';
-	    new_strings[new_strsize - 3] = '\0';
-	    new_strings[new_strsize - 2] = '\0';
-	    new_strings[new_strsize - 1] = '\0';
-	}
 
-        /*
-         * Zero out the new_strings table, and calculate working pointers:
-         *   p is the location where the next external string will go
-         *   q is the location where the next local string will go
-         */
-	memset(new_strings, '\0', sizeof(int32_t));
+	/*
+	 * Zero out the new_strings table, and calculate working pointers:
+	 *   p is the location where the next external string will go
+	 *   q is the location where the next local string will go
+	 */
+	memset(new_strings, '\0', new_strsize);
 	p = new_strings + sizeof(int32_t);
 	q = p + new_ext_strsize;
 
@@ -4607,7 +4792,6 @@ struct object *object)
 {
     uint32_t i, ncmds, nuuids, mh_sizeofcmds, sizeofcmds;
     struct load_command *lc1, *lc2, *new_load_commands;
-    struct segment_command *sg;
 
 	/*
 	 * See if there are any LC_UUID load commands.
@@ -4675,54 +4859,7 @@ struct object *object)
 	free(new_load_commands);
 
 	/* reset the pointers into the load commands */
-	lc1 = object->load_commands;
-	for(i = 0; i < ncmds; i++){
-	    switch(lc1->cmd){
-	    case LC_SYMTAB:
-		object->st = (struct symtab_command *)lc1;
-	        break;
-	    case LC_DYSYMTAB:
-		object->dyst = (struct dysymtab_command *)lc1;
-		break;
-	    case LC_TWOLEVEL_HINTS:
-		object->hints_cmd = (struct twolevel_hints_command *)lc1;
-		break;
-	    case LC_PREBIND_CKSUM:
-		object->cs = (struct prebind_cksum_command *)lc1;
-		break;
-	    case LC_SEGMENT:
-		sg = (struct segment_command *)lc1;
-		if(strcmp(sg->segname, SEG_LINKEDIT) == 0)
-		    object->seg_linkedit = sg;
-		break;
-	    case LC_SEGMENT_SPLIT_INFO:
-		object->split_info_cmd = (struct linkedit_data_command *)lc1;
-		break;
-	    case LC_FUNCTION_STARTS:
-		object->func_starts_info_cmd =
-				         (struct linkedit_data_command *)lc1;
-		break;
-	    case LC_DATA_IN_CODE:
-		object->data_in_code_cmd =
-				         (struct linkedit_data_command *)lc1;
-		break;
-	    case LC_DYLIB_CODE_SIGN_DRS:
-		object->code_sign_drs_cmd =
-				         (struct linkedit_data_command *)lc1;
-		break;
-	    case LC_LINKER_OPTIMIZATION_HINT:
-		object->link_opt_hint_cmd =
-				         (struct linkedit_data_command *)lc1;
-		break;
-	    case LC_CODE_SIGNATURE:
-		object->code_sig_cmd = (struct linkedit_data_command *)lc1;
-		break;
-	    case LC_DYLD_INFO_ONLY:
-	    case LC_DYLD_INFO:
-		object->dyld_info = (struct dyld_info_command *)lc1;
-	    }
-	    lc1 = (struct load_command *)((char *)lc1 + lc1->cmdsize);
-	}
+	reset_load_command_pointers(object);
 }
 
 /*
@@ -4739,7 +4876,6 @@ struct object *object)
 {
     uint32_t i, ncmds, mh_sizeofcmds, sizeofcmds;
     struct load_command *lc1, *lc2, *new_load_commands;
-    struct segment_command *sg;
 
 	/*
 	 * See if there is a LC_SEGMENT_SPLIT_INFO load command.
@@ -4799,52 +4935,7 @@ struct object *object)
 	free(new_load_commands);
 
 	/* reset the pointers into the load commands */
-	object->split_info_cmd = NULL;
-	lc1 = object->load_commands;
-	for(i = 0; i < ncmds; i++){
-	    switch(lc1->cmd){
-	    case LC_SYMTAB:
-		object->st = (struct symtab_command *)lc1;
-	        break;
-	    case LC_DYSYMTAB:
-		object->dyst = (struct dysymtab_command *)lc1;
-		break;
-	    case LC_TWOLEVEL_HINTS:
-		object->hints_cmd = (struct twolevel_hints_command *)lc1;
-		break;
-	    case LC_PREBIND_CKSUM:
-		object->cs = (struct prebind_cksum_command *)lc1;
-		break;
-	    case LC_SEGMENT:
-		sg = (struct segment_command *)lc1;
-		if(strcmp(sg->segname, SEG_LINKEDIT) == 0)
-		    object->seg_linkedit = sg;
-		break;
-	    case LC_FUNCTION_STARTS:
-		object->func_starts_info_cmd =
-				         (struct linkedit_data_command *)lc1;
-		break;
-	    case LC_DATA_IN_CODE:
-		object->data_in_code_cmd =
-				         (struct linkedit_data_command *)lc1;
-		break;
-	    case LC_DYLIB_CODE_SIGN_DRS:
-		object->code_sign_drs_cmd =
-				         (struct linkedit_data_command *)lc1;
-		break;
-	    case LC_LINKER_OPTIMIZATION_HINT:
-		object->link_opt_hint_cmd =
-				         (struct linkedit_data_command *)lc1;
-		break;
-	    case LC_CODE_SIGNATURE:
-		object->code_sig_cmd = (struct linkedit_data_command *)lc1;
-		break;
-	    case LC_DYLD_INFO_ONLY:
-	    case LC_DYLD_INFO:
-		object->dyld_info = (struct dyld_info_command *)lc1;
-	    }
-	    lc1 = (struct load_command *)((char *)lc1 + lc1->cmdsize);
-	}
+	reset_load_command_pointers(object);
 }
 
 #ifndef NMEDIT
@@ -4861,7 +4952,6 @@ struct object *object)
 {
     uint32_t i, ncmds, mh_sizeofcmds, sizeofcmds;
     struct load_command *lc1, *lc2, *new_load_commands;
-    struct segment_command *sg;
 
 	/*
 	 * See if there is an LC_CODE_SIGNATURE load command and if no command
@@ -4921,49 +5011,7 @@ struct object *object)
 	free(new_load_commands);
 
 	/* reset the pointers into the load commands */
-	object->code_sig_cmd = NULL;
-	lc1 = object->load_commands;
-	for(i = 0; i < ncmds; i++){
-	    switch(lc1->cmd){
-	    case LC_SYMTAB:
-		object->st = (struct symtab_command *)lc1;
-	        break;
-	    case LC_DYSYMTAB:
-		object->dyst = (struct dysymtab_command *)lc1;
-		break;
-	    case LC_TWOLEVEL_HINTS:
-		object->hints_cmd = (struct twolevel_hints_command *)lc1;
-		break;
-	    case LC_PREBIND_CKSUM:
-		object->cs = (struct prebind_cksum_command *)lc1;
-		break;
-	    case LC_SEGMENT:
-		sg = (struct segment_command *)lc1;
-		if(strcmp(sg->segname, SEG_LINKEDIT) == 0)
-		    object->seg_linkedit = sg;
-		break;
-	    case LC_SEGMENT_SPLIT_INFO:
-		object->split_info_cmd = (struct linkedit_data_command *)lc1;
-		break;
-	    case LC_FUNCTION_STARTS:
-		object->func_starts_info_cmd =
-					 (struct linkedit_data_command *)lc1;
-		break;
-	    case LC_DATA_IN_CODE:
-		object->data_in_code_cmd =
-				         (struct linkedit_data_command *)lc1;
-		break;
-	    case LC_DYLIB_CODE_SIGN_DRS:
-		object->code_sign_drs_cmd =
-				         (struct linkedit_data_command *)lc1;
-		break;
-	    case LC_LINKER_OPTIMIZATION_HINT:
-		object->link_opt_hint_cmd =
-				         (struct linkedit_data_command *)lc1;
-		break;
-	    }
-	    lc1 = (struct load_command *)((char *)lc1 + lc1->cmdsize);
-	}
+	reset_load_command_pointers(object);
 
 	/*
 	 * To get the right amount of the file copied out by writeout() for the

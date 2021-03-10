@@ -90,7 +90,7 @@
 static enum bool otool_first_ofile_map = TRUE;
 #else /* !define(OTOOL) */
 
-/* cctools-port: Added    && !defined(__arm64__) && !defined(__aarch64__)  */
+/* cctools-port: Added    && !defined(__aarch64__)  */
 #if (!defined(m68k) && !defined(__i386__) && !defined(__x86_64__) && !defined(__ppc__) && !defined(__arm__) && !defined(__arm64__) && !defined(__aarch64__))
 #define ALIGNMENT_CHECKS_ARCHIVE_64_BIT
 static enum bool archive_64_bit_align_warning = FALSE;
@@ -3931,6 +3931,7 @@ struct ofile *ofile)
     struct entry_point_command *ep;
     struct source_version_command *sv;
     struct note_command *nc;
+    struct fileset_entry_command* fsentry;
     uint32_t flavor, count, nflavor;
     char *p, *state;
     uint32_t sizeof_nlist, sizeof_dylib_module;
@@ -5137,8 +5138,6 @@ check_linkedit_data_command:
 			"dyld export info") == CHECK_BAD)
 		    goto return_bad;
 		break;
-		
-
 
 	    case LC_PREBIND_CKSUM:
 		if(l.cmdsize < sizeof(struct prebind_cksum_command)){
@@ -6671,6 +6670,7 @@ check_dylinker_command:
 		sv = (struct source_version_command *)lc;
 		if(swapped)
 		    swap_source_version_command(sv, host_byte_sex);
+		break; /* MDT: 10/2011 - 8/2019 */
 	    case LC_IDENT:
 		if(l.cmdsize < sizeof(struct ident_command)){
 		    Mach_O_error(ofile, "malformed object (LC_IDENT cmdsize "
@@ -6729,6 +6729,29 @@ check_dylinker_command:
 				 "LC_NOTE command %u offset field "
 				 "plus size field extends past the end of "
 				 "the file)", i);
+		    goto return_bad;
+		}
+		break;
+	    case LC_FILESET_ENTRY:
+		if(l.cmdsize < sizeof(struct fileset_entry_command)){
+		    Mach_O_error(ofile, "malformed object (LC_FILESET_ENTRY: "
+				 "cmdsize too small) in command %u", i);
+		    goto return_bad;
+		}
+		fsentry = (struct fileset_entry_command *)lc;
+		if(swapped)
+		    swap_fileset_entry_command(fsentry, host_byte_sex);
+		if(fsentry->cmdsize < sizeof(struct fileset_entry_command)){
+		    Mach_O_error(ofile, "malformed object (LC_FILESET_ENTRY "
+				 "command %u has too small cmdsize field)",
+				 i);
+		    goto return_bad;
+		}
+		if(fsentry->entry_id.offset >= fsentry->cmdsize){
+		    Mach_O_error(ofile, "truncated or malformed object "
+				 "(entry_id.offset field of LC_FILESET_ENTRY "
+				 "command %u extends past the end of the file)",
+				 i);
 		    goto return_bad;
 		}
 		break;

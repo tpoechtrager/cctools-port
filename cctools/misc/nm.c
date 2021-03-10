@@ -345,6 +345,11 @@ char **envp)
 		    }
 		    i++;
 		}
+		else if (0 == strcmp(argv[i], "-print-file-name") ||
+			 0 == strcmp(argv[i], "--print-file-name")) {
+		    /* allow -print-file-name as a synonym for -o */
+		    cmd_flags.o = TRUE;
+		}
 		else{
 		    for(j = 1; argv[i][j] != '\0'; j++){
 			switch(argv[i][j]){

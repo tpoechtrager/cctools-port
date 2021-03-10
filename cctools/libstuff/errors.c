@@ -30,6 +30,7 @@
 #include <mach/mach_error.h>
 
 #include "stuff/errors.h"
+#include "stuff/diagnostics.h"
 
 __private_extern__ uint32_t errors = 0;	/* number of calls to error() */
 
@@ -45,10 +46,25 @@ const char *format,
     va_list ap;
 
 	va_start(ap, format);
-        fprintf(stderr, "warning: %s: ", progname);
+	fprintf(stderr, "warning: %s: ", progname);
 	vfprintf(stderr, format, ap);
-        fprintf(stderr, "\n");
+	fprintf(stderr, "\n");
 	va_end(ap);
+
+	if (diagnostics_enabled()) {
+	    char* buf;
+	    size_t len;
+
+	    FILE* stream = open_memstream(&buf, &len);
+	    if (stream) {
+		va_start(ap, format);
+		vfprintf(stream, format, ap);
+		va_end(ap);
+		fclose(stream);
+		diagnostics_log_msg(WARNING, buf);
+		free(buf);
+	    }
+	}
 }
 
 /*
@@ -69,6 +85,21 @@ const char *format,
         fprintf(stderr, "\n");
 	va_end(ap);
 	errors++;
+
+	if (diagnostics_enabled()) {
+	    char* buf;
+	    size_t len;
+
+	    FILE* stream = open_memstream(&buf, &len);
+	    if (stream) {
+		va_start(ap, format);
+		vfprintf(stream, format, ap);
+		va_end(ap);
+		fclose(stream);
+		diagnostics_log_msg(ERROR, buf);
+		free(buf);
+	    }
+	}
 }
 
 /*
@@ -92,6 +123,23 @@ const char *format,
         fprintf(stderr, "\n");
 	va_end(ap);
 	errors++;
+
+	if (diagnostics_enabled()) {
+	    char* buf;
+	    size_t len;
+
+	    FILE* stream = open_memstream(&buf, &len);
+	    if (stream) {
+		va_start(ap, format);
+		if(arch_name != NULL)
+		    fprintf(stream, "for architecture: %s ", arch_name);
+		vfprintf(stream, format, ap);
+		va_end(ap);
+		fclose(stream);
+		diagnostics_log_msg(ERROR, buf);
+		free(buf);
+	    }
+	}
 }
 
 /*
@@ -105,6 +153,7 @@ const char *format,
 ...)
 {
     va_list ap;
+    int my_errno = errno;
 
 	va_start(ap, format);
         fprintf(stderr, "error: %s: ", progname);
@@ -112,6 +161,22 @@ const char *format,
 	fprintf(stderr, " (%s)\n", strerror(errno));
 	va_end(ap);
 	errors++;
+
+	if (diagnostics_enabled()) {
+	    char* buf;
+	    size_t len;
+
+	    FILE* stream = open_memstream(&buf, &len);
+	    if (stream) {
+		va_start(ap, format);
+		vfprintf(stream, format, ap);
+		fprintf(stream, " (%s)", strerror(my_errno));
+		va_end(ap);
+		fclose(stream);
+		diagnostics_log_msg(ERROR, buf);
+		free(buf);
+	    }
+	}
 }
 
 /*
@@ -132,5 +197,21 @@ char *format,
 	fprintf(stderr, " (%s)\n", mach_error_string(r));
 	va_end(ap);
 	errors++;
+
+	if (diagnostics_enabled()) {
+	    char* buf;
+	    size_t len;
+
+	    FILE* stream = open_memstream(&buf, &len);
+	    if (stream) {
+		va_start(ap, format);
+		vfprintf(stream, format, ap);
+		fprintf(stream, " (%s)", mach_error_string(r));
+		va_end(ap);
+		fclose(stream);
+		diagnostics_log_msg(ERROR, buf);
+		free(buf);
+	    }
+	}
 }
 #endif /* !defined(RLD) */

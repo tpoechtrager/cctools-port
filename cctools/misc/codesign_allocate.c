@@ -28,6 +28,8 @@
 #include "stuff/breakout.h"
 #include "stuff/rnd.h"
 #include "stuff/allocate.h"
+#include "stuff/align.h"
+#include "stuff/diagnostics.h"
 
 /*
  * The structure that holds the -a <arch> <size> information from the command
@@ -95,17 +97,21 @@ char **envp)
     struct arch *archs;
     uint32_t narchs;
 
-        /* if CS_ALLOC_DEBUG is set print the complete arguments to stderr */
-        cs_alloc_debug = (NULL != getenv("CS_ALLOC_DEBUG"));
-        if (cs_alloc_debug) {
-            for (i = 0; i < argc; ++i) {
-                if (i < (argc-1)) {
-                    fprintf(stderr, "%s ", argv[i]);
-                } else {
-                    fprintf(stderr, "%s\n", argv[i]);
-                }
-            }
-        }
+	/* if CS_ALLOC_DEBUG is set print the complete arguments to stderr */
+	cs_alloc_debug = (NULL != getenv("CS_ALLOC_DEBUG"));
+	if (cs_alloc_debug) {
+	    for (i = 0; i < argc; ++i) {
+		if (i < (argc-1)) {
+		    fprintf(stderr, "%s ", argv[i]);
+		} else {
+		    fprintf(stderr, "%s\n", argv[i]);
+		}
+	    }
+	}
+
+	diagnostics_enable(getenv("CC_LOG_DIAGNOSTICS") != NULL);
+	diagnostics_output(getenv("CC_LOG_DIAGNOSTICS_FILE"));
+	diagnostics_log_args(argc, argv);
 
 	progname = argv[0];
 	input = NULL;
@@ -247,7 +253,8 @@ char **envp)
 		      arch_signs[i].arch_flag.name, arch_signs[i].datasize);
 	}
 
-	writeout(archs, narchs, output, 0777, TRUE, FALSE, FALSE, FALSE, NULL);
+	writeout(archs, narchs, output, 0777, TRUE, FALSE, FALSE, FALSE, FALSE,
+		 NULL);
 
 	if(errors)
 	    return(EXIT_FAILURE);
@@ -358,6 +365,7 @@ struct object *object)
     uint32_t dyld_info_end;
     uint32_t align_delta, old_align_delta;
     uint32_t dataoff, rnd_dataoff;
+    uint32_t segalign, segalignexp;
 
 	linkedit_end = 0;
 	input_sym_info_size_before_code_sig_rnd = 0;
@@ -373,6 +381,13 @@ struct object *object)
 	    filetype = object->mh64->filetype;
 	    flags = object->mh64->flags;
 	}
+
+	/* get the segment alignment from the object file. */
+	segalignexp = get_seg_align(object->mh, object->mh64,
+				    object->load_commands, FALSE,
+                                    object->object_size, arch->file_name);
+	segalign = 1 << segalignexp;
+
 	/*
 	 * First set up all the pointers and sizes of the symbolic info.
 	 */
@@ -638,7 +653,7 @@ struct object *object)
 		       object->seg_linkedit->vmsize)
 			object->seg_linkedit->vmsize =
 			    rnd32(object->seg_linkedit->filesize,
-		                get_segalign_from_flag(&arch_flag));
+		                segalign);
 		}
 		else if(object->seg_linkedit64 != NULL){
 		    object->seg_linkedit64->filesize -=
@@ -649,7 +664,7 @@ struct object *object)
 		       object->seg_linkedit64->vmsize)
 			object->seg_linkedit64->vmsize =
 			    rnd(object->seg_linkedit64->filesize,
-				get_segalign_from_flag(&arch_flag));
+				segalign);
 		}
 	    }
 	    object->output_code_sig_data_size = 0;
@@ -706,8 +721,7 @@ struct object *object)
 		old_align_delta = object->code_sig_cmd->dataoff - dataoff;
 			
 		if(pflag)
-		    rnd_dataoff = rnd32(dataoff,
-			    get_segalign_from_flag(&arch_signs[i].arch_flag));
+		    rnd_dataoff = rnd32(dataoff, segalign);
 		else
 		    rnd_dataoff = rnd32(dataoff, 16);
 		align_delta = rnd_dataoff - dataoff;
@@ -725,8 +739,7 @@ struct object *object)
 		if(object->seg_linkedit->filesize >
 		   object->seg_linkedit->vmsize)
 		    object->seg_linkedit->vmsize =
-			rnd32(object->seg_linkedit->filesize,
-			      get_segalign_from_flag(&arch_signs[i].arch_flag));
+			rnd32(object->seg_linkedit->filesize, segalign);
 	    }
 	    else if(object->seg_linkedit64 != NULL){
 		object->seg_linkedit64->filesize -=
@@ -740,8 +753,7 @@ struct object *object)
 		if(object->seg_linkedit64->filesize >
 		   object->seg_linkedit64->vmsize)
 		    object->seg_linkedit64->vmsize =
-			rnd(object->seg_linkedit64->filesize,
-			      get_segalign_from_flag(&arch_signs[i].arch_flag));
+			rnd(object->seg_linkedit64->filesize, segalign);
 	    }
 
 	    object->code_sig_cmd->datasize = arch_signs[i].datasize;
@@ -784,7 +796,7 @@ struct object *object)
 	     */
 	    if(object->st != NULL && pflag) {
 		object->code_sig_cmd->dataoff = rnd32(linkedit_end,
-			      get_segalign_from_flag(&arch_signs[i].arch_flag));
+                                                      segalign);
 		object->output_strings_size_pad =
 		    object->code_sig_cmd->dataoff - linkedit_end;
 		object->st->strsize += object->output_strings_size_pad;
@@ -807,8 +819,7 @@ struct object *object)
 		if(object->seg_linkedit->filesize >
 		   object->seg_linkedit->vmsize)
 		    object->seg_linkedit->vmsize =
-			rnd32(object->seg_linkedit->filesize,
-			      get_segalign_from_flag(&arch_signs[i].arch_flag));
+			rnd32(object->seg_linkedit->filesize, segalign);
 	    }
 	    else if(object->seg_linkedit64 != NULL){
 		object->seg_linkedit64->filesize +=
@@ -817,8 +828,7 @@ struct object *object)
 		if(object->seg_linkedit64->filesize >
 		   object->seg_linkedit64->vmsize)
 		    object->seg_linkedit64->vmsize =
-			rnd(object->seg_linkedit64->filesize,
-			      get_segalign_from_flag(&arch_signs[i].arch_flag));
+			rnd(object->seg_linkedit64->filesize, segalign);
 	    }
 	}
 }
@@ -966,7 +976,6 @@ struct object *object)
 {
     uint32_t i, ncmds, mh_sizeofcmds, sizeofcmds;
     struct load_command *lc1, *lc2, *new_load_commands;
-    struct segment_command *sg;
 
 	/*
 	 * See if there is an LC_CODE_SIGNATURE load command and if no command
@@ -1025,63 +1034,6 @@ struct object *object)
         }
 	free(new_load_commands);
 
-	/*
-	 * reset the pointers into the load commands
-	 *
-	 * Recall that the LC_CODE_SIGNATURE load command can be anywhere in
-	 * the load command array. We've just removed LC_CODE_SIGNATURE and
-	 * compacted the array, and if any of the following load commands
-	 * followed the code signature cmd their pointers are invalid.
-	 */
-	object->code_sig_cmd = NULL;
-	lc1 = arch->object->load_commands;
-	for(i = 0; i < ncmds; i++){
-	    switch(lc1->cmd){
-	    case LC_SYMTAB:
-		arch->object->st = (struct symtab_command *)lc1;
-	        break;
-	    case LC_DYSYMTAB:
-		arch->object->dyst = (struct dysymtab_command *)lc1;
-		break;
-	    case LC_TWOLEVEL_HINTS:
-		arch->object->hints_cmd = (struct twolevel_hints_command *)lc1;
-		break;
-	    case LC_PREBIND_CKSUM:
-		arch->object->cs = (struct prebind_cksum_command *)lc1;
-		break;
-	    case LC_SEGMENT:
-		sg = (struct segment_command *)lc1;
-		if(strcmp(sg->segname, SEG_LINKEDIT) == 0)
-		    arch->object->seg_linkedit = sg;
-		break;
-	    case LC_SEGMENT_SPLIT_INFO:
-		object->split_info_cmd = (struct linkedit_data_command *)lc1;
-		break;
-	    case LC_FUNCTION_STARTS:
-		object->func_starts_info_cmd =
-					 (struct linkedit_data_command *)lc1;
-		break;
-	    case LC_DATA_IN_CODE:
-		object->data_in_code_cmd =
-				         (struct linkedit_data_command *)lc1;
-		break;
-	    case LC_DYLIB_CODE_SIGN_DRS:
-		object->code_sign_drs_cmd =
-				         (struct linkedit_data_command *)lc1;
-		break;
-	    case LC_LINKER_OPTIMIZATION_HINT:
-		object->link_opt_hint_cmd =
-				         (struct linkedit_data_command *)lc1;
-		break;
-	    case LC_DYLD_EXPORTS_TRIE:
-		object->dyld_exports_trie =
-				         (struct linkedit_data_command *)lc1;
-		break;
-	    case LC_DYLD_CHAINED_FIXUPS:
-		object->dyld_chained_fixups =
-				         (struct linkedit_data_command *)lc1;
-		break;
-	    }
-	    lc1 = (struct load_command *)((char *)lc1 + lc1->cmdsize);
-	}
+	/* reset the pointers into the load commands */
+	reset_load_command_pointers(object);
 }

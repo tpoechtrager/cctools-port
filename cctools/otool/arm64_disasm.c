@@ -49,7 +49,7 @@ static struct disassemble_info {
   char *sect;
   uint32_t left;
   uint32_t addr;
-  uint32_t sect_addr;
+  uint64_t sect_addr;
   uint64_t adrp_addr;
   uint32_t adrp_inst;
   char *object_addr;
@@ -504,7 +504,7 @@ struct disassemble_info *info)
 	     * will be set by dyld as part of the "bind information".
 	     */
 	    name = get_dyld_bind_info_symbolname(value, info->dbi, info->ndbi,
-						 info->chain_format,
+						 NULL, info->chain_format,
 						 NULL);
 	    if(name != NULL){
 		*reference_type =
@@ -828,6 +828,9 @@ cpu_subtype_t cpusubtype)
     LLVMDisasmContextRef dc;
     char *mcpu_default;
 
+	if (*mcpu == '\0')
+	    mcpu = "apple-latest";
+
 	mcpu_default = mcpu;
 	switch(cpusubtype){
 	case CPU_SUBTYPE_ARM64_ALL:
@@ -868,7 +871,7 @@ arm64_disassemble(
 char *sect,
 uint32_t left,
 uint64_t addr,
-uint32_t sect_addr,
+uint64_t sect_addr,
 enum byte_sex object_byte_sex,
 struct relocation_info *relocs,
 uint32_t nrelocs,

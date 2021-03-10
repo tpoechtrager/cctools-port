@@ -30,6 +30,7 @@
 #include <mach/mach_error.h>
 
 #include "stuff/errors.h"
+#include "stuff/diagnostics.h"
 
 /*
  * Print the fatal error message and exit.
@@ -47,6 +48,24 @@ const char *format,
 	vfprintf(stderr, format, ap);
         fprintf(stderr, "\n");
 	va_end(ap);
+
+	if (diagnostics_enabled()) {
+	    char* buf;
+	    size_t len;
+
+	    FILE* stream = open_memstream(&buf, &len);
+	    if (stream) {
+		va_start(ap, format);
+		vfprintf(stream, format, ap);
+		va_end(ap);
+		fclose(stream);
+		diagnostics_log_msg(FATAL, buf);
+		free(buf);
+	    }
+
+	    diagnostics_write();
+	}
+
 	exit(1);
 }
 
@@ -66,6 +85,25 @@ const char *format,
 	vfprintf(stderr, format, ap);
 	fprintf(stderr, " (%s)\n", strerror(errno));
 	va_end(ap);
+
+	if (diagnostics_enabled()) {
+	    char* buf;
+	    size_t len;
+
+	    FILE* stream = open_memstream(&buf, &len);
+	    if (stream) {
+		va_start(ap, format);
+		vfprintf(stream, format, ap);
+		fprintf(stream, " (%s)", strerror(errno));
+		va_end(ap);
+		fclose(stream);
+		diagnostics_log_msg(FATAL, buf);
+		free(buf);
+	    }
+
+	    diagnostics_write();
+	}
+
 	exit(1);
 }
 
@@ -86,6 +124,25 @@ char *format,
 	vfprintf(stderr, format, ap);
 	fprintf(stderr, " (%s)\n", mach_error_string(r));
 	va_end(ap);
+
+	if (diagnostics_enabled()) {
+	    char* buf;
+	    size_t len;
+
+	    FILE* stream = open_memstream(&buf, &len);
+	    if (stream) {
+		va_start(ap, format);
+		vfprintf(stream, format, ap);
+		fprintf(stream, " (%s)", mach_error_string(r));
+		va_end(ap);
+		fclose(stream);
+		diagnostics_log_msg(FATAL, buf);
+		free(buf);
+	    }
+
+	    diagnostics_write();
+	}
+
 	exit(1);
 }
 #endif /* !defined(RLD) */

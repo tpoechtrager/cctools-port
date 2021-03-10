@@ -239,6 +239,8 @@
 /* The maximum section alignment allowed to be specified, as a power of two */
 #define MAXSECTALIGN		15 /* 2**15 or 0x8000 */
 
+extern uint64_t addr_slide;
+
 static void print_arch(
     cpu_type_t cputype,
     cpu_subtype_t cpusubtype);
@@ -410,9 +412,20 @@ enum bool verbose)
 		printf("    cputype %d\n", cputype);
 		printf("    cpusubtype %d\n", cpusubtype & ~CPU_SUBTYPE_MASK);
 	    }
-	    if(verbose && (cpusubtype & CPU_SUBTYPE_MASK) ==
-	       CPU_SUBTYPE_LIB64)
+	    if (verbose &&
+	        (cputype == CPU_TYPE_X86_64 || cputype == CPU_TYPE_POWERPC64) &&
+	        ((cpusubtype & CPU_SUBTYPE_MASK) == CPU_SUBTYPE_LIB64))
 		printf("    capabilities CPU_SUBTYPE_LIB64\n");
+	    else if (verbose && cputype == CPU_TYPE_ARM64 &&
+		     (cpusubtype & CPU_SUBTYPE_ARM64E_VERSIONED_ABI_MASK)) {
+		printf("    capabilities PTR_AUTH_VERSION");
+		if (cpusubtype & CPU_SUBTYPE_ARM64E_KERNEL_ABI_MASK)
+		    printf(" KERNEL");
+		else
+		    printf(" USERSPACE");
+		printf(" %d\n",
+		       cpusubtype & CPU_SUBTYPE_ARM64E_KERNEL_ABI_MASK >> 24);
+	    }
 	    else
 		printf("    capabilities 0x%x\n", (unsigned int)
 		       ((cpusubtype & CPU_SUBTYPE_MASK) >>24));
@@ -620,7 +633,7 @@ cpu_subtype_t cpusubtype)
 	    switch(cpusubtype & ~CPU_SUBTYPE_MASK){
 	    case CPU_SUBTYPE_SPARC_ALL:
 		printf("sparc\n");
-	    break;
+		break;
 	    default:
 		goto print_arch_unknown;
 	    }
@@ -672,11 +685,13 @@ cpu_subtype_t cpusubtype)
 	    switch(cpusubtype & ~CPU_SUBTYPE_MASK){
 	    case CPU_SUBTYPE_ARM64_ALL:
 		printf("arm64\n");
-	    break;
+		break;
 	    case CPU_SUBTYPE_ARM64_V8:
 		printf("arm64v8\n");
+		break;
 	    case CPU_SUBTYPE_ARM64E:
 		printf("arm64e\n");
+		break;
 	    default:
 		goto print_arch_unknown;
 	    }
@@ -685,7 +700,7 @@ cpu_subtype_t cpusubtype)
 	    switch(cpusubtype & ~CPU_SUBTYPE_MASK){
 	    case CPU_SUBTYPE_ARM64_32_V8:
 		printf("arm64_32\n");
-	    break;
+		break;
 	    default:
 		goto print_arch_unknown;
 	    }
@@ -1739,7 +1754,7 @@ enum bool verbose)
     uint32_t f;
 
 	printf("Mach header\n");
-	printf("      magic cputype cpusubtype  caps    filetype ncmds "
+	printf("      magic  cputype cpusubtype  caps    filetype ncmds "
 	       "sizeofcmds      flags\n");
 	if(verbose){
 	    if(magic == MH_MAGIC)
@@ -1748,6 +1763,7 @@ enum bool verbose)
 		printf("%11s", "MH_MAGIC_64");
 	    else
 		printf(" 0x%08x", (unsigned int)magic);
+	    printf(" ");
 	    switch(cputype){
 	    case CPU_TYPE_POWERPC64:
 		printf("   PPC64");
@@ -2112,12 +2128,37 @@ NS32:
 		printf(" %7d %10d", cputype, cpusubtype & ~CPU_SUBTYPE_MASK);
 		break;
 	    }
-	    if((cpusubtype & CPU_SUBTYPE_MASK) == CPU_SUBTYPE_LIB64){
+	    if ((cputype == CPU_TYPE_X86_64 || cputype == CPU_TYPE_POWERPC64) &&
+		(cpusubtype & CPU_SUBTYPE_MASK) == CPU_SUBTYPE_LIB64) {
 		printf(" LIB64 ");
+	    }
+	    else if ((cputype == CPU_TYPE_ARM64) &&
+		     ((cpusubtype & ~CPU_SUBTYPE_MASK) == CPU_SUBTYPE_ARM64E) &&
+		     (cpusubtype & CPU_SUBTYPE_ARM64E_VERSIONED_ABI_MASK)) {
+		int abi = (cpusubtype & CPU_SUBTYPE_ARM64E_PTR_AUTH_MASK) >> 24;
+		if (cpusubtype & CPU_SUBTYPE_ARM64E_KERNEL_ABI_MASK)
+		    printf(" KER%02d ", abi);
+		else
+		    printf(" USR%02d ", abi);
+	    }
+	    else if ((cputype == CPU_TYPE_ARM64) &&
+		     ((cpusubtype & ~CPU_SUBTYPE_MASK) == CPU_SUBTYPE_ARM64E) &&
+		     (cpusubtype & CPU_SUBTYPE_ARM64_PTR_AUTH_MASK) != 0 &&
+		     ((cpusubtype & CPU_SUBTYPE_MASK) &
+		      ~CPU_SUBTYPE_ARM64_PTR_AUTH_MASK) == 0) {
+		/*
+		 * If arch is arm64e, and only the 4 bits of the
+		 * CPU_SUBTYPE_MASK that represent the
+		 * CPU_SUBTYPE_ARM64_PTR_AUTH_MASK are set, display this as a
+		 * ptrauth version. If other bits are set, print the raw value
+		 * as it's not yet clear what this might mean...
+		 */
+		printf(" PAC%02d ", (unsigned int)
+		       ((cpusubtype & CPU_SUBTYPE_ARM64_PTR_AUTH_MASK) >> 24));
 	    }
 	    else{
 		printf("  0x%02x ", (unsigned int)
-		       ((cpusubtype & ~CPU_SUBTYPE_MASK) >> 24));
+		       ((cpusubtype & CPU_SUBTYPE_MASK) >> 24));
 	    }
 	    switch(filetype){
 	    case MH_OBJECT:
@@ -2152,6 +2193,9 @@ NS32:
 		break;
 	    case MH_KEXT_BUNDLE:
 		printf(" KEXTBUNDLE");
+		break;
+	    case MH_FILESET:
+		printf("    FILESET");
 		break;
 	    default:
 		printf(" %10u", filetype);
@@ -2339,6 +2383,7 @@ enum bool very_verbose)
     struct entry_point_command ep;
     struct source_version_command sv;
     struct note_command nc;
+    struct fileset_entry_command fse;
     uint64_t big_load_end;
 
 	host_byte_sex = get_host_byte_sex();
@@ -2810,6 +2855,16 @@ enum bool very_verbose)
 		print_entry_point_command(&ep);
 		break;
 
+	    case LC_FILESET_ENTRY:
+		memset((char*)&fse, '\0', sizeof(struct fileset_entry_command));
+		size = left < sizeof(struct fileset_entry_command) ?
+		       left : sizeof(struct fileset_entry_command);
+		memcpy((char*)&fse, (char*)lc, size);
+		if (swapped)
+		    swap_fileset_entry_command(&fse, host_byte_sex);
+		print_fileset_entry_command(&fse, lc, object_size);
+		break;
+
 	    default:
 		printf("      cmd ?(0x%08x) Unknown load command\n",
 		       (unsigned int)l.cmd);
@@ -2924,15 +2979,25 @@ enum bool verbose)
 		    p = (char *)lc + dl.dylib.name.offset;
 		    if(just_id == TRUE)
 			printf("%s\n", p);
-		    else
+		    else {
 			printf("\t%s (compatibility version %u.%u.%u, "
-			   "current version %u.%u.%u)\n", p,
+			   "current version %u.%u.%u", p,
 			   dl.dylib.compatibility_version >> 16,
 			   (dl.dylib.compatibility_version >> 8) & 0xff,
 			   dl.dylib.compatibility_version & 0xff,
 			   dl.dylib.current_version >> 16,
 			   (dl.dylib.current_version >> 8) & 0xff,
 			   dl.dylib.current_version & 0xff);
+			if (LC_LOAD_WEAK_DYLIB == l.cmd)
+			    printf(", weak");
+			if (LC_REEXPORT_DYLIB == l.cmd)
+			    printf(", reexport");
+			if (LC_LOAD_UPWARD_DYLIB == l.cmd)
+			    printf(", upward");
+			if (LC_LAZY_LOAD_DYLIB == l.cmd)
+			    printf(", lazy");
+			printf(")\n");
+		    }
 		    if(verbose){
 			printf("\ttime stamp %u ", dl.dylib.timestamp);
 			timestamp = (time_t)dl.dylib.timestamp;
@@ -4196,6 +4261,40 @@ uint64_t object_size)
 	    printf(" (past end of file)\n");
 	else
 	    printf("\n");
+}
+
+/*
+ * print a fileset_entry_command. the struct must be aligned correctly and in
+ * host byte order.
+ */
+void
+print_fileset_entry_command(
+struct fileset_entry_command* fse,
+struct load_command *lc,
+uint64_t object_size)
+{
+    char *p;
+
+	printf("       cmd LC_FILESET_ENTRY\n");
+	printf("   cmdsize %u", fse->cmdsize);
+	if(fse->cmdsize < sizeof(struct fileset_entry_command))
+	    printf(" Incorrect size\n");
+	else
+	    printf("\n");
+	printf("    vmaddr 0x%016llx\n", fse->vmaddr);
+	printf("   fileoff %llu", fse->fileoff);
+	if(fse->fileoff > object_size)
+	    printf(" (past end of file)\n");
+	else
+	    printf("\n");
+	if(fse->entry_id.offset < fse->cmdsize){
+	    p = (char *)lc + fse->entry_id.offset;
+	    printf("  entry_id %s (offset %u)\n", p, fse->entry_id.offset);
+	}
+	else{
+	    printf("  entry_id ?(bad offset %u)\n", fse->entry_id.offset);
+	}
+	printf("  reserved %u\n", fse->reserved);
 }
 
 /*
@@ -8311,9 +8410,9 @@ enum bool print_addresses)
 	for(i = 0; i < sect_size ; i++){
 	    if(print_addresses == TRUE){
 	        if(cputype & CPU_ARCH_ABI64)
-		    printf("%016llx  ", sect_addr + i);
+		    printf("%016llx  ", sect_addr + i + addr_slide);
 		else
-		    printf("%08x  ", (unsigned int)(sect_addr + i));
+		    printf("%08x  ", (unsigned int)(sect_addr+i+addr_slide));
 	    }
 
 	    for( ; i < sect_size && sect[i] != '\0'; i++)
@@ -8383,9 +8482,9 @@ enum bool print_addresses)
 	for(i = 0; i < sect_size ; i += sizeof(float)){
 	    if(print_addresses == TRUE){
 	        if(cputype & CPU_ARCH_ABI64)
-		    printf("%016llx  ", sect_addr + i);
+		    printf("%016llx  ", sect_addr + i + addr_slide);
 		else
-		    printf("%08x  ", (unsigned int)(sect_addr + i));
+		    printf("%08x  ", (unsigned int)(sect_addr+i+addr_slide));
 	    }
 	    memcpy((char *)&f, sect + i, sizeof(float));
 	    memcpy((char *)&l, sect + i, sizeof(uint32_t));
@@ -8440,9 +8539,9 @@ enum bool print_addresses)
 	for(i = 0; i < sect_size ; i += sizeof(double)){
 	    if(print_addresses == TRUE){
 	        if(cputype & CPU_ARCH_ABI64)
-		    printf("%016llx  ", sect_addr + i);
+		    printf("%016llx  ", sect_addr + i + addr_slide);
 		else
-		    printf("%08x  ", (unsigned int)(sect_addr + i));
+		    printf("%08x  ", (unsigned int)(sect_addr+i+addr_slide));
 	    }
 	    memcpy((char *)&d, sect + i, sizeof(double));
 	    memcpy((char *)&l0, sect + i, sizeof(uint32_t));
@@ -8510,9 +8609,9 @@ enum bool print_addresses)
 	for(i = 0; i < sect_size ; i += 4 * sizeof(uint32_t)){
 	    if(print_addresses == TRUE){
 	        if(cputype & CPU_ARCH_ABI64)
-		    printf("%016llx  ", sect_addr + i);
+		    printf("%016llx  ", sect_addr + i + addr_slide);
 		else
-		    printf("%08x  ", (unsigned int)(sect_addr + i));
+		    printf("%08x  ", (unsigned int)(sect_addr+i+addr_slide));
 	    }
 	    memcpy((char *)&l0, sect + i, sizeof(uint32_t));
 	    memcpy((char *)&l1, sect + i + sizeof(uint32_t),
@@ -8761,9 +8860,9 @@ enum bool print_addresses)
 	for(i = 0; i < sect_size ; i += lp_size){
 	    if(print_addresses == TRUE){
 	        if(cputype & CPU_ARCH_ABI64)
-		    printf("%016llx  ", sect_addr + i);
+		    printf("%016llx  ", sect_addr + i + addr_slide);
 		else
-		    printf("%08x  ", (unsigned int)(sect_addr + i));
+		    printf("%08x  ", (unsigned int)(sect_addr+i+addr_slide));
 	    }
 	    if(cputype & CPU_ARCH_ABI64){
 		lp = (uint64_t)*((uint64_t *)(sect + i));
@@ -8957,9 +9056,9 @@ enum bool verbose)
 
 	for(i = 0 ; i < sect_size; i += stride){
 	    if(cputype & CPU_ARCH_ABI64)
-		printf("0x%016llx ", sect_addr + i * stride);
+		printf("0x%016llx ", sect_addr + i * stride + addr_slide);
 	    else
-		printf("0x%08x ",(uint32_t)(sect_addr + i * stride));
+		printf("0x%08x ",(uint32_t)(sect_addr + i * stride+addr_slide));
 
 	    if(cputype & CPU_ARCH_ABI64)
 		memcpy(&q, sect + i, stride);
@@ -9417,7 +9516,8 @@ cpu_type_t cputype,
 enum byte_sex object_byte_sex,
 char *sect,
 uint64_t size,
-uint64_t addr)
+uint64_t addr,
+enum bool Vflag)
 {
     enum byte_sex host_byte_sex;
     enum bool swapped;
@@ -9426,62 +9526,107 @@ uint64_t addr)
     unsigned short short_word;
     unsigned char byte_word;
 
-	host_byte_sex = get_host_byte_sex();
-	swapped = host_byte_sex != object_byte_sex;
-
-	if(cputype == CPU_TYPE_I386 ||
-	   cputype == CPU_TYPE_X86_64){
-	    for(i = 0 ; i < size ; i += j , addr += j){
-		if(cputype & CPU_ARCH_ABI64)
-		    printf("%016llx\t", addr);
-		else
-		    printf("%08x\t", (uint32_t)addr);
+	/*
+	 * When invoked with the -V flag, print the section contents in a
+	 * manner similar to hexdump -C, with a column of ASCII characters
+	 * following the hexidecimal bytes.
+	 */
+	if (Vflag) {
+	    for (i = 0; i < size; i +=j, addr += j) {
+		printf("%08llx  ", addr + addr_slide);
 		for(j = 0;
 		    j < 16 * sizeof(char) && i + j < size;
 		    j += sizeof(char)){
 		    byte_word = *(sect + i + j);
-		    printf("%02x ", (unsigned int)byte_word);
+		    printf("%02x", (unsigned int)byte_word);
+		    if ((j+1) % 8)
+			printf(" ");
+		    else
+			printf("  ");
 		}
+		for (k = j; k < 16; ++k) {
+		    printf("  ");
+		    if ((k+1) % 8)
+			printf(" ");
+		    else
+			printf("  ");
+		}
+		printf("|");
+		for(j = 0;
+		    j < 16 * sizeof(char) && i + j < size;
+		    j += sizeof(char)){
+		    byte_word = *(sect + i + j);
+		    if (isprint(byte_word))
+			printf("%c", byte_word);
+		    else
+			printf(".");
+		}
+		printf("|");
 		printf("\n");
 	    }
 	}
-	else if(cputype == CPU_TYPE_MC680x0){
-	    for(i = 0 ; i < size ; i += j , addr += j){
-		printf("%08x ", (unsigned int)addr);
-		for(j = 0;
-		    j < 8 * sizeof(short) && i + j < size;
-		    j += sizeof(short)){
-		    memcpy(&short_word, sect + i + j, sizeof(short));
-		    if(swapped)
-			short_word = SWAP_SHORT(short_word);
-		    printf("%04x ", (unsigned int)short_word);
-		}
-		printf("\n");
-	    }
-	}
-	else{
-	    for(i = 0 ; i < size ; i += j , addr += j){
-		if(cputype & CPU_ARCH_ABI64)
-		    printf("%016llx\t", addr);
-		else
-		    printf("%08x\t", (uint32_t)addr);
-		for(j = 0;
-		    j < 4 * sizeof(int32_t) && i + j < size;
-		    j += sizeof(int32_t)){
-		    if(i + j + sizeof(int32_t) <= size){
-			memcpy(&long_word, sect + i + j, sizeof(int32_t));
-			if(swapped)
-			    long_word = SWAP_INT(long_word);
-			printf("%08x ", (unsigned int)long_word);
+	/*
+	 * And when not using the -V flag, fall back to historical behavior
+	 * based upon the cputype.
+	 */
+	else {
+	    host_byte_sex = get_host_byte_sex();
+	    swapped = host_byte_sex != object_byte_sex;
+
+	    if(cputype == CPU_TYPE_I386 ||
+	       cputype == CPU_TYPE_X86_64){
+		for(i = 0 ; i < size ; i += j , addr += j){
+		    if(cputype & CPU_ARCH_ABI64)
+			printf("%016llx\t", addr + addr_slide);
+		    else
+			printf("%08x\t", (uint32_t)(addr + addr_slide));
+		    for(j = 0;
+			j < 16 * sizeof(char) && i + j < size;
+			j += sizeof(char)){
+			byte_word = *(sect + i + j);
+			printf("%02x ", (unsigned int)byte_word);
 		    }
-		    else{
-			for(k = 0; i + j + k < size; k++){
-			    byte_word = *(sect + i + j + k);
-			    printf("%02x ", (unsigned int)byte_word);
+		    printf("\n");
+		}
+	    }
+	    else if(cputype == CPU_TYPE_MC680x0){
+		for(i = 0 ; i < size ; i += j , addr += j){
+		    printf("%08x ", (unsigned int)(addr + addr_slide));
+		    for(j = 0;
+			j < 8 * sizeof(short) && i + j < size;
+			j += sizeof(short)){
+			memcpy(&short_word, sect + i + j, sizeof(short));
+			if(swapped)
+			    short_word = SWAP_SHORT(short_word);
+			printf("%04x ", (unsigned int)short_word);
+		    }
+		    printf("\n");
+		}
+	    }
+	    else{
+		for(i = 0 ; i < size ; i += j , addr += j){
+		    if(cputype & CPU_ARCH_ABI64)
+			printf("%016llx\t", addr + addr_slide);
+		    else
+			printf("%08x\t", (uint32_t)(addr + addr_slide));
+		    for(j = 0;
+			j < 4 * sizeof(int32_t) && i + j < size;
+			j += sizeof(int32_t)){
+			if(i + j + sizeof(int32_t) <= size){
+			    memcpy(&long_word, sect + i + j, sizeof(int32_t));
+			    if(swapped)
+				long_word = SWAP_INT(long_word);
+			    printf("%08x ", (unsigned int)long_word);
+			}
+			else{
+			    for(k = 0; i + j + k < size; k++){
+				byte_word = *(sect + i + j + k);
+				printf("%02x ", (unsigned int)byte_word);
+			    }
 			}
 		    }
+		    printf("\n");
 		}
-		printf("\n");
 	    }
 	}
 }

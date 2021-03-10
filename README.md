@@ -1,6 +1,6 @@
 # Apple cctools and ld64 port for Linux, *BSD and macOS #
 
-Current Version: cctools: 949.0.1, ld64: 530.  
+Current Version: cctools: 973.0.1, ld64: 609.  
 Originally ported by [cjacker](http://ios-toolchain-based-on-clang-for-linux.googlecode.com).
 
 ## SUPPORTED HOSTS ##
@@ -48,6 +48,16 @@ Optional, but recommended:
 You can find xar [here](https://github.com/tpoechtrager/xar).  
 Do not install libxar-dev on Ubuntu, it's a different package.
 
+## ISSUES ##
+
+* `-adhoc_codesign` is not supported for now.  
+  `-adhoc_codesign` requires stuff from CoreCrypto which is not redistributable.  
+  Patches which implement the missing functionalitiy in `ld64/src/ld/libcodedirectory.c`  
+  are more than welcome.  However, you should only do this if you haven't looked at the  
+  non-distributable original code.
+
+  We use `ldid` instead for now.
+
 ## INSTALLATION ##
 
 ### Install Apple's TAPI library:
@@ -73,4 +83,4 @@ target = `i386-apple-darwin11`, `x86_64-apple-darwin11`, `arm-apple-darwin11`, .
 
 ## TRAVIS CI ##
 
-[![Build Status](https://travis-ci.org/tpoechtrager/cctools-port.svg?branch=949.0.1-ld64-530)](https://travis-ci.org/tpoechtrager/cctools-port)
+[![Build Status](https://travis-ci.org/tpoechtrager/cctools-port.svg?branch=973.0.1-ld64-609)](https://travis-ci.org/tpoechtrager/cctools-port)

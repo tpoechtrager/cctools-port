@@ -22,6 +22,7 @@
  */
 #ifndef RLD
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "../include/xar/xar.h" /* cctools-port: 
 				   force the use of the bundled xar header */
@@ -86,17 +87,29 @@ struct object *object)
     struct dylib_command *dl_id;
 
 	/*
-	 * Set up the symtab load command field and link edit segment feilds in
+	 * Set up the symtab load command field and link edit segment fields in
 	 * the object structure.
 	 */
 	object->st = NULL;
 	object->dyst = NULL;
 	object->hints_cmd = NULL;
+	object->code_sig_cmd = NULL;
+	object->split_info_cmd = NULL;
+	object->func_starts_info_cmd = NULL;
+	object->data_in_code_cmd = NULL;
+	object->code_sign_drs_cmd = NULL;
+	object->link_opt_hint_cmd = NULL;
+	object->dyld_info = NULL;
+	object->dyld_exports_trie = NULL;
+	object->dyld_chained_fixups = NULL;
+	object->encryption_info_command = NULL;
+	object->encryption_info_command64 = NULL;
 	object->seg_bitcode = NULL;
 	object->seg_bitcode64 = NULL;
 	object->seg_linkedit = NULL;
 	object->seg_linkedit64 = NULL;
-	object->code_sig_cmd = NULL;
+	object->notes = NULL;
+	object->nnote = 0;
 	dl_id = NULL;
 	lc = object->load_commands;
 	if(object->mh != NULL){
@@ -184,7 +197,21 @@ struct object *object)
 		    fatal_arch(arch, member, "malformed file (more than one "
 			       "LC_DYLD_CHAINED_FIXUPS load command): ");
 		object->dyld_chained_fixups =
-		(struct linkedit_data_command *)lc;
+		    (struct linkedit_data_command *)lc;
+	    }
+	    else if (lc->cmd == LC_ENCRYPTION_INFO) {
+		if (object->encryption_info_command != NULL)
+		    fatal_arch(arch, member, "malformed file (more than one "
+			       "LC_ENCRYPTION_INFO load command): ");
+		object->encryption_info_command =
+		    (struct encryption_info_command*)lc;
+	    }
+	    else if (lc->cmd == LC_ENCRYPTION_INFO_64) {
+		if (object->encryption_info_command64 != NULL)
+		    fatal_arch(arch, member, "malformed file (more than one "
+			       "LC_ENCRYPTION_INFO_64 load command): ");
+		object->encryption_info_command64 =
+		    (struct encryption_info_command_64*)lc;
 	    }
 	    else if(lc->cmd == LC_SEGMENT){
 		sg = (struct segment_command *)lc;
@@ -225,6 +252,13 @@ struct object *object)
 		    fatal_arch(arch, member, "malformed file (name.offset of "
 			"load command %u extends past the end of the load "
 			"command): ", i);
+	    }
+	    else if (lc->cmd == LC_NOTE) {
+		object->notes =
+		    (struct note_command**)
+		    realloc(object->notes, sizeof(struct note_command*) *
+			    (object->nnote + 1));
+		object->notes[object->nnote++] = (struct note_command*)lc;
 	    }
 	    lc = (struct load_command *)((char *)lc + lc->cmdsize);
 	}
@@ -447,18 +481,22 @@ struct object *object)
 	}
 	if(object->dyld_chained_fixups != NULL){
 	    /* dyld_chained_fixups starts at beginning of __LINKEDIT */
-	    if (object->dyld_chained_fixups->dataoff != offset)
+	    if (object->dyld_chained_fixups->dataoff != 0) {
+		if (object->dyld_chained_fixups->dataoff != offset)
 		    order_error(arch, member, "dyld chained fixups "
 			"out of place");
-	    offset = object->dyld_chained_fixups->dataoff +
-	    		object->dyld_chained_fixups->datasize;
+		offset = object->dyld_chained_fixups->dataoff +
+			 object->dyld_chained_fixups->datasize;
+	    }
 	}
 	if(object->dyld_exports_trie != NULL){
-	    if (object->dyld_exports_trie->dataoff != offset)
+	    if (object->dyld_exports_trie->dataoff != 0) {
+                if (object->dyld_exports_trie->dataoff != offset)
 		    order_error(arch, member, "dyld exports trie "
 			"out of place");
-	    offset = object->dyld_exports_trie->dataoff +
-	    		object->dyld_exports_trie->datasize;
+		offset = object->dyld_exports_trie->dataoff +
+			 object->dyld_exports_trie->datasize;
+	    }
 	}
 	if(object->dyst->nlocrel != 0){
 	    if(object->dyst->locreloff != offset)

@@ -588,7 +588,7 @@ void *cookie)
 	
 	/* Store all this info so that it can be cleaned up later */
 	gInfo->mappedFile = ofile->file_addr;
-	gInfo->mappedFileSize = ofile->file_size;
+	gInfo->mappedFileSize = (vm_size_t)ofile->file_size;
 
 	/* Reallocate the array of SymInfoSymbol export structs in self */
 	self->exports = reallocate(self->exports,

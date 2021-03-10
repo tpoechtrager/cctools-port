@@ -45,6 +45,7 @@
 #include <unistd.h>
 #include "stuff/args.h"
 #include "stuff/bool.h"
+#include "stuff/depinfo.h"
 #include "stuff/ofile.h"
 #include "stuff/rnd.h"
 #include "stuff/errors.h"
@@ -54,6 +55,7 @@
 #include "stuff/unix_standard_mode.h"
 #include "stuff/write64.h"
 #include "stuff/port.h" /* cctools-port */
+#include "stuff/diagnostics.h"
 #ifdef LTO_SUPPORT
 #include "stuff/lto.h"
 #endif /* LTO_SUPPORT */
@@ -174,6 +176,8 @@ struct cmd_flags {
                         /* RC_TRACE_ARCHIVES, or LD_TRACE_DEPENDENTS is set,  */
                         /* or NULL.                                           */
 	trace_file_path;
+    const char*         /* set via -dependency_info */
+	dep_info_path;
     enum bool		/* set if -search_paths_first is specified */
 	search_paths_first;
     enum bool noflush;	/* don't use the output_flush routine to flush the
@@ -197,6 +201,8 @@ char *standard_dirs[] = {
     "/usr/local/lib/",
     NULL
 };
+
+static struct depinfo* gDepInfo = NULL;
 
 /*
  * The input files are broken down in to their object files and then placed in
@@ -401,6 +407,10 @@ char **envp)
     int oumask, numask;
     enum bool bad_flag_seen, Vflag;
 
+	diagnostics_enable(getenv("CC_LOG_DIAGNOSTICS") != NULL);
+	diagnostics_output(getenv("CC_LOG_DIAGNOSTICS_FILE"));
+	diagnostics_log_args(argc, argv);
+
 	Vflag = FALSE;
 	progname = argv[0];
 
@@ -414,8 +424,13 @@ char **envp)
 	    p++;
 	else
 	    p = argv[0];
-	if(strncmp(p, "ranlib", sizeof("ranlib") - 1) == 0)
+	if(strncmp(p, "ranlib", sizeof("ranlib") - 1) == 0) {
 	    cmd_flags.ranlib = TRUE;
+	}
+	else if (getenv("LIBTOOL_FORCE_RANLIB")) {
+	    progname = "ranlib";
+	    cmd_flags.ranlib = TRUE;
+	}
 #endif
 #ifdef RANLIB
     cmd_flags.ranlib = TRUE;
@@ -849,12 +864,32 @@ char **envp)
 			strcmp(argv[i], "-no_uuid") == 0 ||
 			strcmp(argv[i], "-no_dead_strip_inits_and_terms") == 0){
 		    if(cmd_flags.ranlib == TRUE){
-			error("unknown option: %s", argv[i]);
-			usage();
+			/*
+			 * <rdar://problem/65112321> ranlib errors on -t option
+			 *
+			 * If libtool receives "-t" it will pass it on to ld.
+			 * In this form, the flag cannot be combined with other
+			 * ld flags (e.g., "-tx").
+			 *
+			 * If ranlib receives "-t" it will set the touch option
+			 * and print a warning. In this form, "-t" can be
+			 * combined with other ranlib flags.
+			 */
+			if (strcmp(argv[i], "-t") == 0) {
+			    warning("touch option (-t) ignored "
+				    "(table of contents rebuilt anyway)");
+			    cmd_flags.t = TRUE;
+			}
+			else {
+			    error("unknown option: %s", argv[i]);
+			    usage();
+			}
 		    }
-		    cmd_flags.ldflags = reallocate(cmd_flags.ldflags,
-				sizeof(char *) * (cmd_flags.nldflags + 1));
-		    cmd_flags.ldflags[cmd_flags.nldflags++] = argv[i];
+		    else {
+			cmd_flags.ldflags = reallocate(cmd_flags.ldflags,
+				    sizeof(char *) * (cmd_flags.nldflags + 1));
+			cmd_flags.ldflags[cmd_flags.nldflags++] = argv[i];
+		    }
 		}
 		else if(strcmp(argv[i], "-no_arch_warnings") == 0){
 		    if(cmd_flags.ranlib == TRUE){
@@ -1038,6 +1073,17 @@ char **envp)
 		}
 		else if(strcmp(argv[i], "-fat64") == 0){
 		    cmd_flags.fat64 = TRUE;
+		}
+		else if(strcmp(argv[i], "-dependency_info") == 0){
+		    if(i + 1 >= argc){
+			error("not enough arguments follow %s", argv[i]);
+			usage();
+		    }
+		    cmd_flags.dep_info_path = argv[i+1];
+		    i += 1;
+
+		    gDepInfo = depinfo_alloc();
+		    depinfo_add(gDepInfo, DEPINFO_TOOL, apple_version);
 		}
 #ifdef DEBUG
 		else if(strcmp(argv[i], "-debug") == 0){
@@ -1436,10 +1482,13 @@ void)
 		if(cmd_flags.dynamic == TRUE)
 		    continue;
 		file_name = file_name_from_l_flag(cmd_flags.files[i]);
-		if(file_name != NULL)
+		if(file_name != NULL) {
 		    if(ofile_map(file_name, NULL, NULL, ofiles + i, TRUE) ==
 		       FALSE)
 			continue;
+		    if (gDepInfo)
+			depinfo_add(gDepInfo, DEPINFO_INPUT_FOUND, file_name);
+		}
 	    }
 	    else if(strcmp(cmd_flags.files[i], "-framework") == 0 ||
 		    strcmp(cmd_flags.files[i], "-weak_framework") == 0 ||
@@ -1451,6 +1500,11 @@ void)
 		if(ofile_map(cmd_flags.files[i], NULL, NULL, ofiles + i,
 			     TRUE) == FALSE)
 		    continue;
+		if (gDepInfo) {
+		    file_name = realpath(cmd_flags.files[i], NULL);
+		    depinfo_add(gDepInfo, DEPINFO_INPUT_FOUND, file_name);
+		    free(file_name);
+		}
 	    }
 
 	    previous_errors = errors;
@@ -1655,9 +1709,19 @@ ranlib_fat_error:
         if (cmd_flags.ld_trace_archives)
             ld_trace_close();
 
+	if (gDepInfo) {
+	    file_name = realpath(cmd_flags.output, NULL);
+	    depinfo_add(gDepInfo, DEPINFO_OUTPUT, file_name);
+	    free(file_name);
+
+	    depinfo_sort(gDepInfo);
+	    depinfo_write(gDepInfo, cmd_flags.dep_info_path);
+	}
 	/*
 	 * Clean-up of ofiles[] and archs could be done here but since this
 	 * program is now done it is faster to just exit.
+	 *
+	 * ditto for gDepInfo.
 	 */
 }
 
@@ -1728,14 +1792,22 @@ char *base_name)
 	    if(cmd_flags.Ldirs[i][1] != 'L')
 		continue;
 	    file_name = makestr(cmd_flags.Ldirs[i] + 2, "/", base_name, NULL);
-	    if(access(file_name, R_OK) != -1)
+	    if(access(file_name, R_OK) != -1) {
 		return(file_name);
+	    }
+	    else if (gDepInfo) {
+		depinfo_add(gDepInfo, DEPINFO_INPUT_MISSING, file_name);
+	    }
 	    free(file_name);
 	}
 	for(i = 0; standard_dirs[i] != NULL ; i++){
 	    file_name = makestr(standard_dirs[i], base_name, NULL);
-	    if(access(file_name, R_OK) != -1)
+	    if(access(file_name, R_OK) != -1) {
 		return(file_name);
+	    }
+	    else if (gDepInfo) {
+		depinfo_add(gDepInfo, DEPINFO_INPUT_MISSING, file_name);
+	    }
 	    free(file_name);
 	}
 	return(NULL);
@@ -1863,7 +1935,6 @@ struct ofile *ofile)
 	    size = (uint32_t)rnd(ofile->member_size, 8);
 
 	/* select or create an arch type to put this in */
-	i = 0;
 	if(ofile->mh != NULL ||
 	   ofile->mh64 != NULL){
 	    if(ofile->mh_cputype == 0){
@@ -1905,108 +1976,92 @@ struct ofile *ofile)
 		}
 		return;
 	    }
-	    /*
-	     * If -arch_only is specified then only add this file if it matches
-	     * the architecture specified.
-	     */
-	    if(cmd_flags.arch_only_flag.name != NULL){
-		if(cmd_flags.arch_only_flag.cputype != ofile->mh_cputype)
-		    return;
-		if(cmd_flags.arch_only_flag.cputype == CPU_TYPE_ARM ||
-		   cmd_flags.arch_only_flag.cputype == CPU_TYPE_ARM64_32 ||
-		   cmd_flags.arch_only_flag.cputype == CPU_TYPE_X86_64){
-		    if(cmd_flags.arch_only_flag.cpusubtype !=
-							ofile->mh_cpusubtype)
-			return;
-		}
-		if(cmd_flags.arch_only_flag.cputype == CPU_TYPE_ARM64){
-		    if(cmd_flags.arch_only_flag.cpusubtype ==
-		       CPU_SUBTYPE_ARM64_ALL){
-			if(ofile->mh_cpusubtype != CPU_SUBTYPE_ARM64_ALL &&
-			   ofile->mh_cpusubtype != CPU_SUBTYPE_ARM64_V8)
-			    return;
-		    }
-		    else if(cmd_flags.arch_only_flag.cpusubtype !=
-							ofile->mh_cpusubtype)
-			return;
-		}
-	    }
-
-	    for( ; i < narchs; i++){
-		if(archs[i].arch_flag.cputype == ofile->mh_cputype){
-		    if((archs[i].arch_flag.cputype == CPU_TYPE_ARM ||
-		        archs[i].arch_flag.cputype == CPU_TYPE_ARM64 ||
-		        archs[i].arch_flag.cputype == CPU_TYPE_ARM64_32 ||
-		        archs[i].arch_flag.cputype == CPU_TYPE_X86_64) &&
-		       archs[i].arch_flag.cpusubtype != ofile->mh_cpusubtype)
-			continue;
-		    if(cmd_flags.arch_only_flag.cputype == CPU_TYPE_ARM64){
-			if(cmd_flags.arch_only_flag.cpusubtype ==
-			   CPU_SUBTYPE_ARM64_ALL){
-			    if(ofile->mh_cpusubtype != CPU_SUBTYPE_ARM64_ALL &&
-			       ofile->mh_cpusubtype != CPU_SUBTYPE_ARM64_V8)
-				continue;
-			}
-			else if(cmd_flags.arch_only_flag.cpusubtype !=
-							ofile->mh_cpusubtype)
-			    continue;
-		    }
-		    break;
-		}
-	    }
 	}
+
+	i = 0;
+	if(ofile->mh != NULL || ofile->mh64 != NULL
 #ifdef LTO_SUPPORT
-	else if(ofile->lto != NULL){
+	   || ofile->lto != NULL
+#endif /* LTO_SUPPORT */
+	   ){
+	    cpu_type_t member_cputype;
+	    cpu_subtype_t member_cpusubtype;
+	    cpu_type_t only_cputype;
+	    cpu_subtype_t only_cpusubtype;
+
+	    member_cputype = ofile->mh_cputype;
+	    member_cpusubtype = ofile->mh_cpusubtype & ~CPU_SUBTYPE_MASK;
+#ifdef LTO_SUPPORT
+	    if (ofile->lto != NULL) {
+		member_cputype = ofile->lto_cputype;
+		member_cpusubtype = ofile->lto_cpusubtype & ~CPU_SUBTYPE_MASK;
+	    }
+#endif /* LTO_SUPPORT */
+
+	    only_cputype = cmd_flags.arch_only_flag.cputype;
+	    only_cpusubtype = (cmd_flags.arch_only_flag.cpusubtype &
+			       ~CPU_SUBTYPE_MASK);
+
 	    /*
 	     * If -arch_only is specified then only add this file if it matches
 	     * the architecture specified.
 	     */
+	    /*
+	     * The cmd_flags.arch_only_flag should not have capability flags
+	     * set; if it ever did have capability flags we'd have all kinds
+	     * of problems. To make sure this is true, we'll ignore capability
+	     * flags on the arch_only_flag cpusubtype.
+	     */
 	    if(cmd_flags.arch_only_flag.name != NULL){
-		if(cmd_flags.arch_only_flag.cputype != ofile->lto_cputype)
+		if(only_cputype != member_cputype)
 		    return;
-		if(cmd_flags.arch_only_flag.cputype == CPU_TYPE_ARM ||
-		   cmd_flags.arch_only_flag.cputype == CPU_TYPE_ARM64_32 ||
-		   cmd_flags.arch_only_flag.cputype == CPU_TYPE_X86_64){
-		    if(cmd_flags.arch_only_flag.cpusubtype !=
-							ofile->lto_cpusubtype)
+		if(only_cputype == CPU_TYPE_ARM ||
+		   only_cputype == CPU_TYPE_ARM64_32 ||
+		   only_cputype == CPU_TYPE_X86_64){
+		    if(only_cpusubtype != member_cpusubtype)
 			return;
 		}
-		if(cmd_flags.arch_only_flag.cputype == CPU_TYPE_ARM64){
-		    if(cmd_flags.arch_only_flag.cpusubtype ==
-		       CPU_SUBTYPE_ARM64_ALL){
-			if(ofile->lto_cpusubtype != CPU_SUBTYPE_ARM64_ALL &&
-			   ofile->lto_cpusubtype != CPU_SUBTYPE_ARM64_V8)
-			    return;
-		    }
-		    else if(cmd_flags.arch_only_flag.cpusubtype !=
-							ofile->lto_cpusubtype)
+		if(only_cputype == CPU_TYPE_ARM64){
+		    if (only_cpusubtype == CPU_SUBTYPE_ARM64_ALL &&
+			member_cpusubtype != CPU_SUBTYPE_ARM64_ALL &&
+			member_cpusubtype != CPU_SUBTYPE_ARM64_V8 &&
+			member_cpusubtype != CPU_SUBTYPE_ARM64E)
+			return;
+		    else if(only_cpusubtype != member_cpusubtype)
 			return;
 		}
 	    }
 
 	    for( ; i < narchs; i++){
-		if(archs[i].arch_flag.cputype == ofile->lto_cputype){
-		    if((archs[i].arch_flag.cputype == CPU_TYPE_ARM ||
-		        archs[i].arch_flag.cputype == CPU_TYPE_ARM64 ||
-		        archs[i].arch_flag.cputype == CPU_TYPE_ARM64_32 ||
-		        archs[i].arch_flag.cputype == CPU_TYPE_X86_64) &&
-		       archs[i].arch_flag.cpusubtype != ofile->lto_cpusubtype)
+		cpu_type_t arch_cputype;
+		cpu_subtype_t arch_cpusubtype;
+
+		arch_cputype = archs[i].arch_flag.cputype;
+		arch_cpusubtype = (archs[i].arch_flag.cpusubtype &
+				   ~CPU_SUBTYPE_MASK);
+
+		if(arch_cputype == member_cputype){
+		    if((arch_cputype == CPU_TYPE_ARM ||
+			arch_cputype == CPU_TYPE_ARM64 ||
+			arch_cputype == CPU_TYPE_ARM64_32 ||
+			arch_cputype == CPU_TYPE_X86_64) &&
+		       arch_cpusubtype != member_cpusubtype)
 			continue;
-		    if(cmd_flags.arch_only_flag.cputype == CPU_TYPE_ARM64){
-			if(cmd_flags.arch_only_flag.cpusubtype ==
-			   CPU_SUBTYPE_ARM64_ALL &&
-			   (ofile->lto_cpusubtype != CPU_SUBTYPE_ARM64_ALL &&
-			    ofile->lto_cpusubtype != CPU_SUBTYPE_ARM64_V8))
-			    continue;
-			else if(cmd_flags.arch_only_flag.cpusubtype !=
-							ofile->lto_cpusubtype)
+		    /* MDT: Should this really be the arch_only cputype? */
+		    if(only_cputype == CPU_TYPE_ARM64){
+			if(only_cpusubtype == CPU_SUBTYPE_ARM64_ALL &&
+			   member_cpusubtype != CPU_SUBTYPE_ARM64_ALL &&
+			   member_cpusubtype != CPU_SUBTYPE_ARM64_V8 &&
+			   member_cpusubtype != CPU_SUBTYPE_ARM64E)
+				continue;
+			else if (arch_cpusubtype != member_cpusubtype)
 			    continue;
 		    }
 		    break;
 		}
 	    }
 	}
-#endif /* LTO_SUPPORT */
+
 	if(narchs == 1 && archs[0].arch_flag.cputype == 0){
 	    i = 0;
 	}
@@ -2018,12 +2073,14 @@ struct ofile *ofile)
 		if(ofile->mh_cputype == CPU_TYPE_ARM ||
 		   ofile->mh_cputype == CPU_TYPE_ARM64 ||
 		   ofile->mh_cputype == CPU_TYPE_ARM64_32 ||
-		   ofile->mh_cputype == CPU_TYPE_X86_64){
+		   ofile->mh_cputype == CPU_TYPE_X86_64)
+		{
 		    archs[narchs].arch_flag.name = (char *)
-			get_arch_name_from_types(
-				ofile->mh_cputype, ofile->mh_cpusubtype);
+			get_arch_name_from_types(ofile->mh_cputype,
+				    (ofile->mh_cpusubtype & ~CPU_SUBTYPE_MASK));
 		    archs[narchs].arch_flag.cputype = ofile->mh_cputype;
-		    archs[narchs].arch_flag.cpusubtype = ofile->mh_cpusubtype;
+		    archs[narchs].arch_flag.cpusubtype =
+			(ofile->mh_cpusubtype & ~CPU_SUBTYPE_MASK);
 		}
 		else{
 		    family_arch_flag =
@@ -2076,7 +2133,8 @@ struct ofile *ofile)
                             ofile->mh_cputype, ofile->mh_cpusubtype &
 			    ~CPU_SUBTYPE_MASK);
                     arch->arch_flag.cputype = ofile->mh_cputype;
-                    arch->arch_flag.cpusubtype = ofile->mh_cpusubtype;
+                    arch->arch_flag.cpusubtype = (ofile->mh_cpusubtype &
+						  ~CPU_SUBTYPE_MASK);
 	    }
 	}
 #ifdef LTO_SUPPORT
@@ -2881,12 +2939,12 @@ struct ofile *ofile)
 		 */
 		if(arch->toc_nranlibs == 0 && cmd_flags.q == FALSE){
 		    if(narchs > 1)
-			warning("warning for library: %s for architecture: %s "
+			warning("archive library: %s for architecture: %s "
 				"the table of contents is empty (no object "
 				"file members in the library define global "
 				"symbols)", output, arch->arch_flag.name);
 		    else
-			warning("warning for library: %s the table of contents "
+			warning("archive library: %s the table of contents "
 				"is empty (no object file members in the "
 				"library define global symbols)", output);
 		}
@@ -3698,6 +3756,10 @@ char *output)
 		    add_execute_list("-dylib_install_name");
 		    add_execute_list(cmd_flags.output);
 		}
+	    }
+	    if (cmd_flags.dep_info_path) {
+		add_execute_list("-dependency_info");
+		add_execute_list((char*)cmd_flags.dep_info_path);
 	    }
 	    for(j = 0; j < cmd_flags.nldflags; j++)
 		add_execute_list(cmd_flags.ldflags[j]);

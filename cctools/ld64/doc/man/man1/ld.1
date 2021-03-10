@@ -13,7 +13,7 @@ files...
 The
 .Nm ld
 command combines several object files and libraries, resolves references, and
-produces an ouput file.
+produces an output file.
 .Nm ld
 can produce a final linked image (executable, dylib, or bundle), or with the -r
 option, produce another object file.  If the -o option is not used, the output
@@ -130,24 +130,34 @@ Specifies the name and location of the output file.  If not specified, `a.out' i
 This option tells the linker to search for libx.dylib or libx.a in the library search path.
 If string x is of the form y.o, then that file is searched for in the same places, but without
 prepending `lib' or appending `.a' or `.dylib' to the filename.
-.It Fl weak-l Ns Ar x
-This is the same as the -lx but forces the library and all references to it to be marked as weak imports.
-That is, the library is allowed to be missing at runtime.
-.It Fl weak_library Ar path_to_library
-This is the same as listing a file name path to a library on the link line except that it forces the
-library and all references to it to be marked as weak imports.
+.It Fl needed-l Ns Ar x
+This is the same as the -lx but means to really link with the dylib even if no
+symbols are used from it.  Thus, it can be used suppress warnings about unused dylibs.
 .It Fl reexport-l Ns Ar x
 This is the same as the -lx but specifies that the all symbols in library x should be available to
 clients linking to the library being created.  This was previously done with a separate -sub_library option.
+.It Fl upward-l Ns Ar x
+This is the same as the -lx but specifies that the dylib is an upward dependency.
+.It Fl hidden-l Ns Ar x
+This is the same as the -lx for locating a static library, but treats all global symbols from the static library
+as if they are visibility hidden.  Useful when building a dynamic library that uses a static library but does
+not want to export anything from that static library.
+.It Fl weak-l Ns Ar x
+This is the same as the -lx but forces the library and all references to it to be marked as weak imports.
+That is, the library is allowed to be missing at runtime.
+.It Fl needed_library Ar path_to_dylib
+This is the same as placing path_to_dylib on the link line but means to really link with the dylib even if no
+symbols are used from it.  Thus, it can be used suppress warnings about unused dylibs.
 .It Fl reexport_library Ar path_to_library
 This is the same as listing a file name path to a library on the link line and it specifies that the
 all symbols in library path should be available to clients linking to the library being created.
 This was previously done with a separate -sub_library option.
-.It Fl upward-l Ns Ar x
-This is the same as the -lx but specifies that the dylib is an upward dependency.
 .It Fl upward_library Ar path_to_library
 This is the same as listing a file name path to a library on the link line but also marks
 the dylib as an upward dependency.
+.It Fl weak_library Ar path_to_library
+This is the same as listing a file name path to a library on the link line except that it forces the
+library and all references to it to be marked as weak imports.
 .It Fl L Ns dir
 Add
 .Ar dir
@@ -175,9 +185,13 @@ This option restores the search behavior of the linker prior to Xcode4.
 This option tells the linker to search for `name.framework/name' the framework search path.
 If the optional suffix is specified the framework is first searched for the name with the suffix and then without
 (e.g. look for `name.framework/name_suffix' first, if not there try `name.framework/name').
+.It Fl needed_framework Ar name[,suffix]
+This is the same as the -framework name[,suffix] but means to really link with the framework even if no
+symbols are used from it.  Thus, it can be used suppress warnings about unused dylibs.
 .It Fl weak_framework Ar name[,suffix]
 This is the same as the -framework name[,suffix] but forces the framework and all
-references to it to be marked as weak imports.
+references to it to be marked as weak imports.  Note: due to a clang optimizations, if functions
+are not marked weak, the compiler will optimize out any checks if the function address is NULL.
 .It Fl reexport_framework Ar name[,suffix]
 This is the same as the -framework name[,suffix] but also specifies that the
 all symbols in that framework should be available to clients linking to the library being created.
@@ -199,6 +213,10 @@ Loads all members of static archive libraries that implement an Objective-C clas
 .It Fl force_load Ar path_to_archive
 Loads all members of the specified static archive library.  Note: -all_load forces all members of all
 archives to be loaded.  This option allows you to target a specific archive.
+.It Fl load_hidden Ar path_to_archive
+Uses specified static library as usual, but treats all global symbols from the static library to
+as if they are visibility hidden.  Useful when building a dynamic library that uses a static library but does
+not want to export anything from that static library.
 .El
 .Ss Options that control additional content
 .Bl -tag
@@ -260,9 +278,9 @@ is a numeric value as defined in <mach-o/loader.h>, or it may be one of the foll
 .It \(bu watchos
 .It \(bu bridgeos
 .It \(bu mac-catalyst
-.It \(bu ios-sim
-.It \(bu tvos-sim
-.It \(bu watchos-sim
+.It \(bu ios-simulator
+.It \(bu tvos-simulator
+.It \(bu watchos-simulator
 .It \(bu driverkit
 .El
 Specifying a newer min or SDK version enables the linker to assume features of that OS or SDK in the
@@ -359,7 +377,7 @@ will cause a bus error if a NULL pointer is dereferenced.  The argument
 is a hexadecimal number with an optional leading 0x.  If
 .Ar size
 is zero, the linker will not generate a page zero segment.  By default on 32-bit architectures the page zero size
-is 4KB.  On 64-bit architectures, the default size is 4GB. 
+is 4KB.  On 64-bit architectures, the default size is 4GB.
 .It Fl stack_size Ar size
 Specifies the maximum stack size for the main thread in a program.  Without this option a program has a 8MB stack.
 The argument
@@ -500,7 +518,7 @@ Logs information about the processing of a -order_file.
 .It Fl map Ar map_file_path
 Writes a map file to the specified path which details all symbols and their addresses in the output image.
 .El
-.Ss Options for controling symbol table optimizations
+.Ss Options for controlling symbol table optimizations
 .Bl -tag
 .It Fl S
 Do not put debug information (STABS or DWARF) in the output file.
@@ -547,6 +565,10 @@ Otherwise, the reverse map will be written to a file at
 .El
 .Ss Rarely used Options
 .Bl -tag
+.It @response_file_path
+Inserts contents of file at response_file_path into arguments. This allows for linker command line args to be
+store in a file.  Note: ld is normally invoked through clang, and clang also interprets @file on the command line.
+To have clang ignore the @file and pass it through to ld, use -Wl,@file.
 .It Fl v
 Prints the version of the linker.
 .It Fl version_details
@@ -614,7 +636,7 @@ will only allow pages with the x-bit to execute instructions. This option overri
 behavior and allows instructions on any page to be executed.
 .It Fl application_extension
 Specifies that the code is being linked for use in an application extension.  The linker
-will then validiate that any dynamic libraries linked against are safe for use in
+will then validate that any dynamic libraries linked against are safe for use in
 application extensions.
 .It Fl no_application_extension
 Specifies that the code is being linked is not safe for use in an application extension.
@@ -644,6 +666,10 @@ code was built to work the compacting garbage collection.
 Verifies all code was compiled with -fobjc-gc or -fobjc-gc-only.
 .It Fl objc_gc_only
 Verifies all code was compiled with -fobjc-gc-only.
+.It Fl warn_unused_dylibs
+Warn about dylibs that are linked by no symbols are used from them.
+.It Fl no_warn_unused_dylibs
+Don't warn about dylibs that are linked by no symbols are used from them.
 .It Fl dead_strip_dylibs
 Remove dylibs that are unreachable by the entry point or exported symbols. That is,
 suppresses the generation of load command commands for dylibs which supplied no
@@ -654,7 +680,13 @@ Normally the linker considers different cpu-subtype for ARM (e.g. armv4t and arm
 different architectures that cannot be mixed at build time.  This option relaxes that requirement,
 allowing you to mix object files compiled for different ARM subtypes.
 .It Fl no_uuid
-Do not generate an LC_UUID load command in the output file.
+Do not generate an LC_UUID load command in the output file.  Be warned that binaries without UUIDs
+may cause the debugger and crash reporting tools to be unable to track and inspect the binary.
+.It Fl random_uuid
+Generate a random LC_UUID load command in the output file. By default the linker generates the UUID
+of the output file based on a hash of the output file's content. But for very large output files, the
+hash can slow down the link. Using a hash based UUID is important for reproducible builds, but if you
+are just doing rapid debug builds, using -random_uuid may improve turn around time.
 .It Fl root_safe
 Sets the MH_ROOT_SAFE bit in the mach header of the output file.
 .It Fl setuid_safe
@@ -748,7 +780,7 @@ Suppress all warning messages
 Specifies the install name of a dylib if -install_name is not used.  This option is used by compiler driver when it is invoked
 with multiple -arch arguments.
 .It Fl arch_multiple
-Specifes that the linker should augment error and warning messages with the architecture name.  This option is used by compiler
+Specifies that the linker should augment error and warning messages with the architecture name.  This option is used by compiler
 driver when it is invoked with multiple -arch arguments.
 .It Fl twolevel_namespace_hints
 Specifies that hints should be added to the resulting binary that can help speed up runtime binding by dyld as long as the
@@ -761,7 +793,7 @@ Add section based relocation records to a final linked image.  These relocations
 Print a warning when the linker cannot do a BINCL/EINCL optimization because the compiler put a bad stab symbol inside
 a BINCL/EINCL range.
 .It Fl warn_commons
-Print a warning whenever the a tentative definition in an object file is found and a external symbol by the same name
+Print a warning whenever a tentative definition in an object file is found and a external symbol by the same name
 is also found in a linked dylib.  This often means that the extern keyword is missing from a variable declaration
 in a header file.
 .It Fl read_only_stubs
@@ -786,6 +818,14 @@ final linked image.  This option disables that behavior.
 By default when producing final linked image, the linker will optimize Objective-C classes by merging
 any categories on a class into the class.  Both the class and its categories must be defined in the image
 being linked for the optimization to occur.  Using this option disables that behavior.
+.It Fl objc_relative_method_lists
+By default when producing final linked image, if targeting a new enough OS version, the linker will rewrite
+ObjC method lists from the tradition three pointers to use three read-only delta pointers. This option
+allows you to force the use of relative method lists even though the OS version is too low.
+.It Fl no_objc_relative_method_lists
+By default when producing final linked image, if targeting a new enough OS version, the linker will rewrite
+ObjC method lists from the tradition three pointers to use three read-only delta pointers. This option
+allows you to force the use of traditional three pointer method lists.
 .It Fl object_path_lto Ar filename
 When performing Link Time Optimization (LTO) and a temporary mach-o object file is needed, if this
 option is used, the temporary file will be stored at the specified path and remain after the link
@@ -803,11 +843,19 @@ When performing Incremental Link Time Optimization (LTO), the cache will pruned 
 will force pruning to occur and a value of -1 will disable pruning.
 .It Fl prune_after_lto Ar seconds
 When pruning the cache for Incremental Link Time Optimization (LTO), the cache entries are removed after the
-specificied interval.
+specified interval.
 .It Fl max_relative_cache_size_lto Ar percent
 When performing Incremental Link Time Optimization (LTO), the cache will be pruned to not go over this percentage
 of the free space. I.e. a value of 100 would indicate that the cache may fill the disk, and a value of 50 would
 indicate that the cache size will be kept under the free disk space.
+.It Fl fixup_chains_section
+For use with -static or -preload when -pie is used.  Tells the linker to add a __TEXT,__chain_starts
+section which starts with a dyld_chained_starts_offsets struct which specifies the pointer format
+and the offsets to the start of every fixup chain.
+.It Fl threaded_starts_section
+For arm64e only.  For use with -static or -preload when -pie is used.  Tells the linker to add a __TEXT,__thread_starts
+section which starts with a 32-bit flag field, followed by an array 32-bit values.  Each value is
+the offset to the start of a fixup chain. This option is deprecated.
 .It Fl page_align_data_atoms
 During development, this option can be used to space out all global variables so each is on a separate page.
 This is useful when analyzing dirty and resident pages.  The information can then be used to create an

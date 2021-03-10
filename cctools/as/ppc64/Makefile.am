@@ -1,7 +1,7 @@
 libexec_PROGRAMS = ppc64-as
 
 ppc64_as_LDADD =  \
-        $(top_builddir)/libstuff/libstuff.la
+        $(top_builddir)/libstuff/libstuff.la $(REALLOCF_LIB)
 
 ppc64_as_CFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/include/foreign -I$(top_srcdir)/libstuff -I$(top_srcdir)/as $(WARNINGS) $(LTO_DEF) -DNeXT_MOD -DASLIBEXECDIR="\"$(ASLIBEXECDIR)/\"" -D__DARWIN_UNIX03  -DPPC -DARCH64 $(ENDIAN_FLAG)
 

@@ -11,4 +11,5 @@ libhelper_la_SOURCES =  \
 	eprintf.c \
 	md5.c \
 	mkpath_np.c \
-	find_executable.c
+	find_executable.c \
+	reallocf.c

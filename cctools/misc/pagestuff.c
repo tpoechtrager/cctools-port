@@ -148,8 +148,13 @@ uint64_t arch_offset = 0;
 uint64_t arch_size = 0;
 enum bool arch_found = FALSE;
 
+static enum bool opt_aflag = FALSE;
+static enum bool opt_pflag = FALSE;
+
 static struct nlist *sorted_symbols = NULL;
 static struct nlist_64 *sorted_symbols64 = NULL;
+
+static vm_size_t gPageSize;
 
 static void usage(void);
 
@@ -205,39 +210,86 @@ char *version = apple_version;
  *	% pagestuff mach-o [-arch name] [-p] [-a] pagenumber [pagenumber ...]
  *
  * It prints out what stuff is on the page numbers listed.
+ *
+ * The arugment processing is very restrictive: the input mach-o must be the
+ * first argument on the line, the optional -arch flag must immeidately follow
+ * the input path, all other arugments must appear before the first pagenumber.
  */
 int
 main(
 int argc,
 char *argv[])
 {
-    int i, start;
+    int i;
     uint64_t j, page_number;
     char *endp;
     struct arch_flag a;
+    char* input = NULL;
+    char** pages_argv;
+    int pages_argc = 0;
 
+	/*
+	 * Parse arguments before doing any work.
+	 */
+	gPageSize = vm_page_size;
 	progname = argv[0];
-	if(argc < 3)
+	if(argc < 2)
 	    usage();
-	start = 2;
-
-	if(strcmp(argv[start], "-arch") == 0){
-	    if(start + 1 == argc){
-		error("missing argument to -arch option");
-		exit(EXIT_FAILURE);
+	pages_argv = calloc(sizeof(char*), argc);
+	for (i = 1; i < argc; ++i) {
+	    if ('-' == *argv[i]) {
+		if (strcmp(argv[i], "-arch") == 0) {
+		    if (i + 1 == argc) {
+			error("missing argument to -arch option");
+			exit(EXIT_FAILURE);
+		    }
+		    if (get_arch_from_flag(argv[i+1], &a) == 0) {
+			error("unknown architecture specification flag: "
+			      "%s %s", argv[i], argv[i+1]);
+			exit(EXIT_FAILURE);
+		    }
+		    arch_flag = &a;
+		    ++i;
+		}
+		else if (strcmp(argv[i], "-a") == 0) {
+		    opt_aflag = TRUE;
+		}
+		else if (strcmp(argv[i], "-p") == 0) {
+		    opt_pflag = TRUE;
+		}
+		else if (strcmp(argv[i], "-pagesize") == 0) {
+		    if (i + 1 == argc) {
+			error("missing argument to -pagesize option");
+			exit(EXIT_FAILURE);
+		    }
+		    gPageSize = strtoul(argv[i+1], &endp, 0);
+		    if(*endp != '\0') {
+			error("page size %s is not a proper unsigned "
+			      "number", argv[i+1]);
+			exit(EXIT_FAILURE);
+		    }
+		    ++i;
+		}
 	    }
-	    if(get_arch_from_flag(argv[start+1], &a) == 0){
-		error("unknown architecture specification flag: "
-		      "%s %s", argv[start], argv[start+1]);
-		exit(EXIT_FAILURE);
+	    else if (NULL == input) {
+		input = argv[i];
 	    }
-	    arch_flag = &a;
-	    start += 2;
-	    if(argc < 5)
-		usage();
-        }
+	    else {
+		pages_argv[pages_argc++] = argv[i];
+	    }
+	}
+	if (NULL == input) {
+	    error("missing input file");
+	    exit(EXIT_FAILURE);
+	}
+	if (FALSE == opt_aflag && FALSE == opt_pflag && 0 == pages_argc) {
+	    usage();
+	}
 
-	create_file_parts(argv[1]);
+	/*
+	 * Open the input file and break it apart
+	 */
+	create_file_parts(input);
 	if(arch_flag != NULL && arch_found == FALSE){
 	    error("file: %s does not contain architecture: %s", argv[1],
 		  arch_flag->name);
@@ -245,32 +297,30 @@ char *argv[])
 	}
 	if(errors)
 	    exit(EXIT_FAILURE);
-	if(strcmp(argv[start], "-p") == 0){
-	    print_file_parts();
-	    start++;
-	}
-	if(errors)
-	    exit(EXIT_FAILURE);
-	if(start >= argc)
-	    exit(EXIT_SUCCESS);
 
-	if(strcmp(argv[start], "-a") == 0){
+	/*
+	 * Do work, preserving historical order and side-effects
+	 */
+	if (opt_pflag) {
+	    print_file_parts();
+	}
+	if (errors)
+	    exit(EXIT_FAILURE);
+
+	if (opt_aflag) {
 	    if(arch_flag == NULL)
-		page_number = (ofile.file_size + vm_page_size - 1) /
-			      vm_page_size;
+		page_number = (ofile.file_size + gPageSize - 1) /
+			      gPageSize;
 	    else
-		page_number = (arch_size + vm_page_size - 1) /
-			      vm_page_size;
+		page_number = (arch_size + gPageSize - 1) /
+			      gPageSize;
 	    for(j = 0; j < page_number; j++){
 		print_parts_for_page(j);
 	    }
-	    start++;
 	}
-	if(start >= argc)
-	    exit(EXIT_SUCCESS);
 
-	for(i = start; i < argc; i++){
-	    page_number = strtoul(argv[i], &endp, 10);
+	for (i = 0; i < pages_argc; i++) {
+	    page_number = strtoul(pages_argv[i], &endp, 10);
 	    if(*endp != '\0')
 		fatal("page number argument: %s is not a proper unsigned "
 		      "number", argv[i]);
@@ -1212,8 +1262,8 @@ uint64_t page_number)
     enum bool sections, sections64;
     const char *arch_name;
 
-	offset = page_number * vm_page_size;
-	size = vm_page_size;
+	offset = page_number * gPageSize;
+	size = gPageSize;
 	low_addr = 0;
 	high_addr = 0;
 
@@ -1221,8 +1271,8 @@ uint64_t page_number)
 	    if(offset > ofile.file_size){
 		printf("File has no page %llu (file has only %u pages)\n",
 		       page_number, (uint32_t)((ofile.file_size +
-					        vm_page_size -1) /
-					      vm_page_size));
+					        gPageSize -1) /
+					      gPageSize));
 	        return;
 	    }
 	}
@@ -1231,8 +1281,8 @@ uint64_t page_number)
 		printf("File for architecture %s has no page %llu (has only %u "
 		       "pages)\n", arch_flag->name,
 		       page_number, (uint32_t)((arch_size +
-					        vm_page_size -1) /
-					      vm_page_size));
+					        gPageSize -1) /
+					      gPageSize));
 	        return;
 	    }
 	}

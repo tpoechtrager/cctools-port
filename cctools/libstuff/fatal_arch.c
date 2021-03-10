@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include "stuff/breakout.h"
+#include "stuff/diagnostics.h"
 #include "stuff/errors.h"
 
 /*
@@ -41,7 +42,7 @@ char *format,
     va_list ap;
 
 	va_start(ap, format);
-        fprintf(stderr, "%s: ", progname);
+        fprintf(stderr, "%s: warning: ", progname);
 	vfprintf(stderr, format, ap);
 	va_end(ap);
 	if(member != NULL){
@@ -54,7 +55,32 @@ char *format,
 	    fprintf(stderr, " (for architecture %s)\n", arch->fat_arch_name);
 	else
 	    fprintf(stderr, "\n");
-	va_end(ap);
+
+	if (diagnostics_enabled()) {
+	    char* buf;
+	    size_t len;
+
+	    FILE* stream = open_memstream(&buf, &len);
+	    if (stream) {
+		va_start(ap, format);
+		vfprintf(stream, format, ap);
+		va_end(ap);
+
+		if(member != NULL){
+		    fprintf(stream, "%s(%.*s)", arch->file_name,
+			    (int)member->member_name_size, member->member_name);
+		}
+		else
+		    fprintf(stream, "%s", arch->file_name);
+		if(arch->fat_arch_name != NULL)
+		    fprintf(stream, " (for architecture %s)",
+			    arch->fat_arch_name);
+
+		fclose(stream);
+		diagnostics_log_msg(WARNING, buf);
+		free(buf);
+	    }
+	}
 }
 
 /*
@@ -71,7 +97,7 @@ char *format,
     va_list ap;
 
 	va_start(ap, format);
-        fprintf(stderr, "%s: ", progname);
+        fprintf(stderr, "%s: error: ", progname);
 	vfprintf(stderr, format, ap);
 	va_end(ap);
 	if(member != NULL){
@@ -86,6 +112,32 @@ char *format,
 	    fprintf(stderr, "\n");
 	va_end(ap);
 	errors++;
+
+	if (diagnostics_enabled()) {
+	    char* buf;
+	    size_t len;
+
+	    FILE* stream = open_memstream(&buf, &len);
+	    if (stream) {
+		va_start(ap, format);
+		vfprintf(stream, format, ap);
+		va_end(ap);
+
+		if(member != NULL){
+		    fprintf(stream, "%s(%.*s)", arch->file_name,
+			    (int)member->member_name_size, member->member_name);
+		}
+		else
+		    fprintf(stream, "%s", arch->file_name);
+		if(arch->fat_arch_name != NULL)
+		    fprintf(stream, " (for architecture %s)",
+			    arch->fat_arch_name);
+
+		fclose(stream);
+		diagnostics_log_msg(ERROR, buf);
+		free(buf);
+	    }
+	}
 }
 
 /*
@@ -102,7 +154,7 @@ char *format,
     va_list ap;
 
 	va_start(ap, format);
-        fprintf(stderr, "%s: ", progname);
+        fprintf(stderr, "%s: fatal error: ", progname);
 	vfprintf(stderr, format, ap);
 	va_end(ap);
 	if(member != NULL){
@@ -116,6 +168,35 @@ char *format,
 	else
 	    fprintf(stderr, "\n");
 	va_end(ap);
+
+	if (diagnostics_enabled()) {
+	    char* buf;
+	    size_t len;
+
+	    FILE* stream = open_memstream(&buf, &len);
+	    if (stream) {
+		va_start(ap, format);
+		vfprintf(stream, format, ap);
+		va_end(ap);
+
+		if(member != NULL){
+		    fprintf(stream, "%s(%.*s)", arch->file_name,
+			    (int)member->member_name_size, member->member_name);
+		}
+		else
+		    fprintf(stream, "%s", arch->file_name);
+		if(arch->fat_arch_name != NULL)
+		    fprintf(stream, " (for architecture %s)",
+			    arch->fat_arch_name);
+
+		fclose(stream);
+		diagnostics_log_msg(FATAL, buf);
+		free(buf);
+	    }
+
+	    diagnostics_write();
+	}
+
 	exit(EXIT_FAILURE);
 }
 #endif /* !defined(RLD) */

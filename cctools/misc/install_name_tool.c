@@ -35,6 +35,7 @@
 #include "stuff/rnd.h"
 #include "stuff/allocate.h"
 #include "stuff/write64.h"
+#include "stuff/diagnostics.h"
 
 /* used by error routines as the name of the program */
 char *progname = NULL;
@@ -135,6 +136,10 @@ char **envp)
     uint32_t narchs;
     char *input;
     char *output;
+
+	diagnostics_enable(getenv("CC_LOG_DIAGNOSTICS") != NULL);
+	diagnostics_output(getenv("CC_LOG_DIAGNOSTICS_FILE"));
+	diagnostics_log_args(argc, argv);
 
 	output = NULL;
 	progname = argv[0];
@@ -318,7 +323,7 @@ char **envp)
 
 	if(output != NULL)
 	    writeout(archs, narchs, output, 0777, TRUE, FALSE, FALSE, FALSE,
-		     NULL);
+		     FALSE, NULL);
 	else {
 	    write_on_input(archs, narchs, input);
         output = input;
@@ -889,64 +894,5 @@ uint32_t *header_size)
 	free(new_load_commands);
 
 	/* reset the pointers into the load commands */
-	lc1 = arch->object->load_commands;
-	for(i = 0; i < ncmds; i++){
-	    switch(lc1->cmd){
-	    case LC_SYMTAB:
-		arch->object->st = (struct symtab_command *)lc1;
-	        break;
-	    case LC_DYSYMTAB:
-		arch->object->dyst = (struct dysymtab_command *)lc1;
-		break;
-	    case LC_TWOLEVEL_HINTS:
-		arch->object->hints_cmd = (struct twolevel_hints_command *)lc1;
-		break;
-	    case LC_PREBIND_CKSUM:
-		arch->object->cs = (struct prebind_cksum_command *)lc1;
-		break;
-	    case LC_SEGMENT:
-		sg = (struct segment_command *)lc1;
-		if(strcmp(sg->segname, SEG_LINKEDIT) == 0)
-		    arch->object->seg_linkedit = sg;
-		break;
-	    case LC_SEGMENT_64:
-		sg64 = (struct segment_command_64 *)lc1;
-		if(strcmp(sg64->segname, SEG_LINKEDIT) == 0)
-		    arch->object->seg_linkedit64 = sg64;
-		break;
-	    case LC_CODE_SIGNATURE:
-		arch->object->code_sig_cmd =
-		    (struct linkedit_data_command *)lc1;
-		break;
-	    case LC_SEGMENT_SPLIT_INFO:
-		arch->object->split_info_cmd =
-		    (struct linkedit_data_command *)lc1;
-		break;
-	    case LC_FUNCTION_STARTS:
-		arch->object->func_starts_info_cmd =
-		    (struct linkedit_data_command *)lc1;
-		break;
-	    case LC_DATA_IN_CODE:
-		arch->object->data_in_code_cmd =
-		    (struct linkedit_data_command *)lc1;
-		break;
-	    case LC_DYLIB_CODE_SIGN_DRS:
-		arch->object->code_sign_drs_cmd =
-		    (struct linkedit_data_command *)lc1;
-		break;
-	    case LC_LINKER_OPTIMIZATION_HINT:
-		arch->object->link_opt_hint_cmd =
-		    (struct linkedit_data_command *)lc1;
-		break;
-	    case LC_DYLD_CHAINED_FIXUPS:
-		arch->object->dyld_chained_fixups =
-		    (struct linkedit_data_command *)lc1;
-		break;
-	    case LC_DYLD_EXPORTS_TRIE:
-		arch->object->dyld_exports_trie =
-		    (struct linkedit_data_command *)lc1;
-		break;
-	    }
-	    lc1 = (struct load_command *)((char *)lc1 + lc1->cmdsize);
-	}
+	reset_load_command_pointers(arch->object);
 }

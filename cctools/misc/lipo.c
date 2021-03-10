@@ -65,7 +65,10 @@
 #include "stuff/lto.h"
 #include "stuff/write64.h"
 #include "stuff/rnd.h"
+#include "stuff/align.h"
+#include "stuff/diagnostics.h"
 #include <math.h>
+#include <unistd.h>
 
 /* cctools-port start */
 #ifndef HAVE_UTIMENS
@@ -157,8 +160,6 @@ struct segalign {
 static struct segalign *segaligns = NULL;
 static uint32_t nsegaligns = 0;
 
-static enum bool arch_blank_flag = FALSE;
-
 static struct fat_header fat_header = { 0 };
 
 static enum bool verify_flag = FALSE;
@@ -189,20 +190,6 @@ static void check_extend_format_1(
 static uint32_t get_mh_filetype(
     char* addr,
     uint64_t size);
-static uint32_t get_align(
-    struct mach_header *mhp,
-    struct load_command *load_commands,
-    uint64_t size,
-    char *name,
-    enum bool swapped);
-static uint32_t get_align_64(
-    struct mach_header_64 *mhp64,
-    struct load_command *load_commands,
-    uint64_t size,
-    char *name,
-    enum bool swapped);
-static uint32_t guess_align(
-    uint64_t vmaddr);
 static void print_arch(
     cpu_type_t cputype,
     cpu_subtype_t cpusubtype);
@@ -232,8 +219,6 @@ static void check_arch(
     struct thin_file *thin);
 static void usage(
     void);
-static struct thin_file *new_blank_dylib(
-    struct arch_flag *arch);
 
 /* apple_version is created by the libstuff/Makefile */
 extern char apple_version[];
@@ -254,10 +239,14 @@ char *envp[])
     struct segalign *segalign;
     const struct arch_flag *arch_flags;
     enum bool found;
-    struct arch_flag blank_arch;
     int time_result;
 
 	input = NULL;
+
+	diagnostics_enable(getenv("CC_LOG_DIAGNOSTICS") != NULL);
+	diagnostics_output(getenv("CC_LOG_DIAGNOSTICS_FILE"));
+	diagnostics_log_args(argc, argv);
+
 	/*
 	 * Process the command line arguments.
 	 */
@@ -285,20 +274,7 @@ char *envp[])
 			a += 2;
 		    }
 		    else if(strcmp(p, "arch_blank") == 0){
-			arch_blank_flag = TRUE;
-			if(a + 1 >= argc){
-			    error("missing argument(s) to %s option", argv[a]);
-			    usage();
-			}
-			if(get_arch_from_flag(argv[a+1], &blank_arch) == 0){
-			    error("unknown architecture specification flag: %s "
-				  "in specifying input file %s %s", argv[a+1],
-				  argv[a], argv[a+1]);
-			    arch_usage();
-			    usage();
-			}
-			new_blank_dylib(&blank_arch);
-			a += 1;
+                        fatal("flag %s is no longer supported.", argv[a]);
 		    }
 		    else if(strcmp(p, "archs") == 0){
 			brief_info_flag = TRUE;
@@ -550,10 +526,6 @@ unknown_flag:
 		  "-verify_arch <arch_type> ..., "
 		  "-info, -archs, or -detailed_info can be specified");
 	    usage();
-	}
-	if(arch_blank_flag == TRUE && create_flag == FALSE){
-		error("-arch_blank may only be used with -create");
-		usage();
 	}
         if (hideARM64_flag == TRUE && create_flag == FALSE &&
             replace_flag == FALSE && remove_flag == FALSE) {
@@ -879,8 +851,7 @@ unknown_flag:
                             }
 			    printf("\n");
 			    print_cputype(input_files[i].fat_arches[j].cputype,
-				      input_files[i].fat_arches[j].cpusubtype &
-					  ~CPU_SUBTYPE_MASK);
+				      input_files[i].fat_arches[j].cpusubtype);
 			    printf("    offset %u\n",
 				   input_files[i].fat_arches[j].offset);
 			    printf("    size %u\n",
@@ -898,8 +869,7 @@ unknown_flag:
 			    printf("\n");
 			    print_cputype(
 				input_files[i].fat_arches64[j].cputype,
-				input_files[i].fat_arches64[j].cpusubtype &
-					  ~CPU_SUBTYPE_MASK);
+				input_files[i].fat_arches64[j].cpusubtype);
 			    printf("    offset %llu\n",
 				   input_files[i].fat_arches64[j].offset);
 			    printf("    size %llu\n",
@@ -937,12 +907,13 @@ unknown_flag:
 			break;
 		    }
 		}
-		if(found == FALSE)
+		if(found == FALSE){
 		    exit(1);
+		}
 	    }
 	}
 
-	return(0);
+	return (errors ? 1 : 0);
 }
 
 /*
@@ -1462,7 +1433,12 @@ struct input_file *input)
 	    thin->cpusubtype = mhp->cpusubtype;
 	    thin->offset = 0;
 	    thin->size = size;
-	    thin->align = get_align(mhp, lcp, size, input->name, swapped);
+	    if (MH_OBJECT == mhp->filetype)
+		thin->align = guess_align(getpagesize(), MINSEGALIGN32,
+					  MAXSEGALIGN);
+	    else
+		thin->align = get_seg_align(mhp, NULL, lcp, swapped, size,
+					    input->name);
 
 	    /* if the arch type is specified make sure it matches the object */
 	    if(input->arch_flag.name != NULL)
@@ -1497,7 +1473,12 @@ struct input_file *input)
 	    thin->cpusubtype = mhp64->cpusubtype;
 	    thin->offset = 0;
 	    thin->size = size;
-	    thin->align = get_align_64(mhp64, lcp, size, input->name, swapped);
+	    if (MH_OBJECT == mhp64->filetype)
+		thin->align = guess_align(getpagesize(), MINSEGALIGN64,
+					  MAXSEGALIGN);
+	    else
+		thin->align = get_seg_align(NULL, mhp64, lcp, swapped, size,
+					    input->name);
 
 	    /* if the arch type is specified make sure it matches the object */
 	    if(input->arch_flag.name != NULL)
@@ -1673,8 +1654,15 @@ struct replace *replace)
 	    replace->thin_file.cpusubtype = mhp->cpusubtype;
 	    replace->thin_file.offset = 0;
 	    replace->thin_file.size = size;
-	    replace->thin_file.align =
-		    get_align(mhp, lcp, size, replace->thin_file.name, swapped);
+	    if (MH_OBJECT == mhp->filetype)
+		replace->thin_file.align = guess_align(getpagesize(),
+						       MINSEGALIGN32,
+						       MAXSEGALIGN);
+
+	    else
+		replace->thin_file.align =
+		    get_seg_align(mhp, NULL, lcp, swapped, size,
+				  replace->thin_file.name);
 	}
 	/* see if this file is Mach-O file for 64-bit architectures */
 	else if(size >= sizeof(struct mach_header_64) &&
@@ -1703,8 +1691,14 @@ struct replace *replace)
 	    replace->thin_file.cpusubtype = mhp64->cpusubtype;
 	    replace->thin_file.offset = 0;
 	    replace->thin_file.size = size;
-	    replace->thin_file.align =
-	       get_align_64(mhp64, lcp, size, replace->thin_file.name, swapped);
+	    if (MH_OBJECT == mhp64->filetype)
+		replace->thin_file.align = guess_align(getpagesize(),
+						       MINSEGALIGN64,
+						       MAXSEGALIGN);
+	    else
+		replace->thin_file.align =
+		    get_seg_align(NULL, mhp64, lcp, swapped, size,
+				  replace->thin_file.name);
 	}
 	/* see if this file is an archive file */
 	else if(size >= SARMAG && strncmp(addr, ARMAG, SARMAG) == 0){
@@ -1946,30 +1940,6 @@ uint32_t *member_name_size)
 }
 
 /*
- * get_default_align() returns the default segment alignment for the specified
- * cputype and cpusubtype, as an exponent of a power of 2; e.g., a segment
- * alignment of 0x4000 will be described as 14. If the default alignment is not
- * known it will return 0.
- */
-static
-uint32_t
-get_default_align(
-cpu_type_t cputype,
-cpu_subtype_t cpusubtype)
-{
-    const char* arch_name = get_arch_name_from_types(cputype, cpusubtype);
-    if (arch_name != NULL) {
-	struct arch_flag arch_flag;
-	if (get_arch_from_flag((char*)arch_name, &arch_flag)) {
-	    uint32_t pagesize = get_segalign_from_flag(&arch_flag);
-	    return (uint32_t)(log2(pagesize));
-	}
-    }
-    
-    return 0;
-}
-
-/*
  * get_mh_filetype() gets the filetype from the mach-o pointed to by addr.
  * will return 0 if addr does not point to a struct mach_header or struct
  * mach_header_64.
@@ -2006,238 +1976,6 @@ static uint32_t get_mh_filetype(
     }
     
     return filetype;
-}
-
-/*
- * get_align() returns the segment alignment for this object, as an exponent of
- * a power of 2; e.g., a segment alignment of 0x4000 will be described as 14.
- * Since the actual segment alignment used by the linker is not recorded in the
- * Mach-O file, get_align() will choose an alignment based on the file contents.
- *
- * If the mach_header points to a well-known cputype, get_align() will return
- * the default segment alignment for that cputype. No attempt will be made to
- * guess the "-segalign" flag passed into ld(1).
- *
- * If the cputype isn't recognized, get_align() will issue a warning (this is
- * potentially a serious configuration error) and fall back to historical
- * methods:
- *
- *   If the Mach-O is an MH_OBJECT (.o) file, get_align() will return the
- *   largest section alignment within the first-and-only segment.
- *
- *   If the Mach-O is any other file type, get_align() will guess the alignment
- *   for each segment from vmaddr, and then return the smallest such value.
- *   Since all well-formed segments are required to be page aligned, the
- *   resulting alignment will be legal, but there is a risk that unlucky
- *   binaries will choose an alignment value that is larger than necessary.
- *
- * In either fall back method, the result of get_align() will be bounded by
- * 2 (which is log2(sizeof(uint32_t))) and MAXSECTALIGN.
- */
-static
-uint32_t
-get_align(
-struct mach_header *mhp,
-struct load_command *load_commands,
-uint64_t size,
-char *name,
-enum bool swapped)
-{
-    uint32_t i, j, cur_align, align;
-    struct load_command *lcp, l;
-    struct segment_command *sgp, sg;
-    struct section *sp, s;
-    enum byte_sex host_byte_sex;
-    
-	/*
-	 * Special case well-known architectures. We know that for these
-	 * architectures that the Darwin kernel and mmap require file offsets
-	 * to be page aligned.
-	 */
-	align = get_default_align(mhp->cputype, mhp->cpusubtype);
-	if (align != 0)
-	    return align;
-    
-	warning("unknown cputype (%u) cpusubtype (%u), computing the segment "
-		"alignment from file contents.", mhp->cputype,
-		mhp->cpusubtype & ~CPU_SUBTYPE_MASK);
-
-	host_byte_sex = get_host_byte_sex();
-
-	/* set worst case the link editor uses first */
-	cur_align = MAXSECTALIGN;
-	if(mhp->sizeofcmds + sizeof(struct mach_header) > size)
-	    fatal("truncated or malformed object (load commands would "
-		  "extend past the end of the file) in: %s", name);
-	lcp = load_commands;
-	for(i = 0; i < mhp->ncmds; i++){
-	    l = *lcp;
-	    if(swapped)
-		swap_load_command(&l, host_byte_sex);
-	    if(l.cmdsize % sizeof(uint32_t) != 0)
-		error("load command %u size not a multiple of "
-		      "sizeof(uint32_t) in: %s", i, name);
-	    if(l.cmdsize <= 0)
-		fatal("load command %u size is less than or equal to zero "
-		      "in: %s", i, name);
-	    if((char *)lcp + l.cmdsize >
-	       (char *)load_commands + mhp->sizeofcmds)
-		fatal("load command %u extends past end of all load "
-		      "commands in: %s", i, name);
-	    if(l.cmd == LC_SEGMENT){
-		sgp = (struct segment_command *)lcp;
-		sg = *sgp;
-		if(swapped)
-		    swap_segment_command(&sg, host_byte_sex);
-		if(mhp->filetype == MH_OBJECT){
-		    /* this is the minimum alignment, then take largest */
-		    align = 2; /* 2^2 sizeof(uint32_t) */
-		    sp = (struct section *)((char *)sgp +
-					    sizeof(struct segment_command));
-		    for(j = 0; j < sg.nsects; j++){
-			s = *sp;
-			if(swapped)
-			    swap_section(&s, 1, host_byte_sex);
-			if(s.align > align)
-			    align = s.align;
-			sp++;
-		    }
-		    if(align < cur_align)
-			cur_align = align;
-		}
-		else{
-		    /* guess the smallest alignment and use that */
-		    align = guess_align(sg.vmaddr);
-		    if(align < cur_align)
-			cur_align = align;
-		}
-	    }
-	    lcp = (struct load_command *)((char *)lcp + l.cmdsize);
-	}
-	return(cur_align);
-}
-
-/*
- * get_align_64() returns the segment alignment for this object, as an exponent
- * of a power of 2; e.g., a segment alignment of 0x4000 will be described as 14.
- * The method of determining the segment alignment is the same as get_align()
- * above.
- *
- * In either fall back method, the result of get_align_64() will be bounded by
- * 3 (which is log2(sizeof(uint64_t))) and MAXSECTALIGN.
- */
-static
-uint32_t
-get_align_64(
-struct mach_header_64 *mhp64,
-struct load_command *load_commands,
-uint64_t size,
-char *name,
-enum bool swapped)
-{
-    uint32_t i, j, cur_align, align;
-    struct load_command *lcp, l;
-    struct segment_command_64 *sgp, sg;
-    struct section_64 *sp, s;
-    enum byte_sex host_byte_sex;
-
-	/*
-	 * Special case well-known architectures. We know that for these
-	 * architectures that the Darwin kernel and mmap require file offsets
-	 * to be page aligned.
-	 */
-	align = get_default_align(mhp64->cputype, mhp64->cpusubtype);
-	if (align != 0)
-	    return align;
-
-	warning("unknown cputype (%u) cpusubtype (%u), computing the segment "
-		"alignment from file contents.", mhp64->cputype,
-		mhp64->cpusubtype & ~CPU_SUBTYPE_MASK);
-	
-	host_byte_sex = get_host_byte_sex();
-
-	/* set worst case the link editor uses first */
-	cur_align = MAXSECTALIGN;
-	if(mhp64->sizeofcmds + sizeof(struct mach_header_64) > size)
-	    fatal("truncated or malformed object (load commands would "
-		  "extend past the end of the file) in: %s", name);
-	lcp = load_commands;
-	for(i = 0; i < mhp64->ncmds; i++){
-	    l = *lcp;
-	    if(swapped)
-		swap_load_command(&l, host_byte_sex);
-	    if(l.cmdsize % sizeof(long long) != 0)
-		error("load command %u size not a multiple of "
-		      "sizeof(long long) in: %s", i, name);
-	    if(l.cmdsize <= 0)
-		fatal("load command %u size is less than or equal to zero "
-		      "in: %s", i, name);
-	    if((char *)lcp + l.cmdsize >
-	       (char *)load_commands + mhp64->sizeofcmds)
-		fatal("load command %u extends past end of all load "
-		      "commands in: %s", i, name);
-	    if(l.cmd == LC_SEGMENT_64){
-		sgp = (struct segment_command_64 *)lcp;
-		sg = *sgp;
-		if(swapped)
-		    swap_segment_command_64(&sg, host_byte_sex);
-		if(mhp64->filetype == MH_OBJECT){
-		    /* this is the minimum alignment, then take largest */
-		    align = 3; /* 2^3 sizeof(long long) */
-		    sp = (struct section_64 *)((char *)sgp +
-					    sizeof(struct segment_command_64));
-		    for(j = 0; j < sg.nsects; j++){
-			s = *sp;
-			if(swapped)
-			    swap_section_64(&s, 1, host_byte_sex);
-			if(s.align > align)
-			    align = s.align;
-			sp++;
-		    }
-		    if(align < cur_align)
-			cur_align = align;
-		}
-		else{
-		    /* guess the smallest alignment and use that */
-		    align = guess_align(sg.vmaddr);
-		    if(align < cur_align)
-			cur_align = align;
-		}
-	    }
-	    lcp = (struct load_command *)((char *)lcp + l.cmdsize);
-	}
-	return(cur_align);
-}
-
-/*
- * guess_align is passed a vmaddr of a segment and guesses what the segment
- * alignment was.  It uses the most conservative guess up to the maximum
- * alignment that the link editor uses.
- */
-static
-uint32_t
-guess_align(
-uint64_t vmaddr)
-{
-    uint32_t align;
-    uint64_t segalign;
-
-	if(vmaddr == 0)
-	    return(MAXSECTALIGN);
-
-	align = 0;
-	segalign = 1;
-	while((segalign & vmaddr) == 0){
-	    segalign = segalign << 1;
-	    align++;
-	}
-	
-	if(align < 2)
-	    return(2);
-	if(align > MAXSECTALIGN)
-	    return(MAXSECTALIGN);
-
-	return(align);
 }
 
 /*
@@ -2513,6 +2251,11 @@ print_cputype(
 cpu_type_t cputype,
 cpu_subtype_t cpusubtype)
 {
+    cpu_subtype_t rawsubtype;
+
+	rawsubtype = cpusubtype;
+	cpusubtype  &= ~CPU_SUBTYPE_MASK;
+
 	switch(cputype){
 	case CPU_TYPE_MC680x0:
 	    switch(cpusubtype & ~CPU_SUBTYPE_MASK){
@@ -2826,6 +2569,25 @@ print_arch_unknown:
 		   cpusubtype & ~CPU_SUBTYPE_MASK);
 	    break;
 	}
+
+	if (detailed_info_flag) {
+	    if ((cputype == CPU_TYPE_X86_64 || cputype == CPU_TYPE_POWERPC64) &&
+		((rawsubtype & CPU_SUBTYPE_MASK) == CPU_SUBTYPE_LIB64))
+		printf("    capabilities CPU_SUBTYPE_LIB64\n");
+	    else if (cputype == CPU_TYPE_ARM64 &&
+		     (rawsubtype & CPU_SUBTYPE_ARM64E_VERSIONED_ABI_MASK)) {
+		printf("    capabilities PTR_AUTH_VERSION");
+		if (rawsubtype & CPU_SUBTYPE_ARM64E_KERNEL_ABI_MASK)
+		    printf(" KERNEL");
+		else
+		    printf(" USERSPACE");
+		printf(" %d\n",
+		       rawsubtype & CPU_SUBTYPE_ARM64E_KERNEL_ABI_MASK >> 24);
+	    }
+	    else
+		printf("    capabilities 0x%x\n", (unsigned int)
+		       ((rawsubtype & CPU_SUBTYPE_MASK) >> 24));
+	}
 }
 
 /*
@@ -2945,7 +2707,8 @@ const struct thin_file *thin2)
 {
 	/* if cpu types match, sort by cpu subtype */
 	if (thin1->cputype == thin2->cputype)
-	    return thin1->cpusubtype - thin2->cpusubtype;
+	    return ((thin1->cpusubtype & ~CPU_SUBTYPE_MASK) -
+		    (thin2->cpusubtype & ~CPU_SUBTYPE_MASK));
 
 	/* force arm64-family to follow after all other slices */
 	if (thin1->cputype == CPU_TYPE_ARM64)
@@ -2999,59 +2762,6 @@ struct thin_file *thin)
 }
 
 /*
- * Create a blank dylib.  This is a stub dylib with no load commands.
- * It is a target page size block of bytes of zero except for the mach_header.
- */
-static
-struct thin_file *
-new_blank_dylib(
-struct arch_flag *arch)
-{
-    uint32_t target_page_size, align, onebit;
-    struct thin_file *file;
-    enum byte_sex host_byte_sex, target_byte_sex;
-    struct mach_header *mh;
-    struct mach_header_64 *mh64;
-
-	file = new_thin();
-	file->name = "blank dylib";
-	target_page_size = get_segalign_from_flag(arch);
-	file->addr = allocate(target_page_size);
-	memset(file->addr, '\0', target_page_size);
-	file->cputype = arch->cputype;
-	file->cpusubtype = arch->cpusubtype;
-	file->offset = 0;
-	file->size = target_page_size;
-	onebit = 1;
-	for(align = 1; (target_page_size & onebit) != onebit; align++)
-	   onebit = onebit << 1;
-	file->align = align;
-    
-	host_byte_sex = get_host_byte_sex();
-	target_byte_sex = get_byte_sex_from_flag(arch);
-
-	if((arch->cputype & CPU_ARCH_ABI64) == CPU_ARCH_ABI64){
-	    mh64 = (struct mach_header_64 *)file->addr;
-	    mh64->magic = MH_MAGIC_64;
-	    mh64->cputype = arch->cputype;
-	    mh64->cpusubtype = arch->cpusubtype;
-	    mh64->filetype = MH_DYLIB_STUB;
-	    if(target_byte_sex != host_byte_sex)
-		swap_mach_header_64(mh64, target_byte_sex);
-	}
-	else{
-	    mh = (struct mach_header *)file->addr;
-	    mh->magic = MH_MAGIC;
-	    mh->cputype = arch->cputype;
-	    mh->cpusubtype = arch->cpusubtype;
-	    mh->filetype = MH_DYLIB_STUB;
-	    if(target_byte_sex != host_byte_sex)
-		swap_mach_header(mh, target_byte_sex);
-	}
-	return(file);
-}
-
-/*
  * Print the current usage line and exit.
  */
 static
@@ -3062,7 +2772,7 @@ usage(void)
 "usage: lipo <input_file> <command> [<options> ...]\n"
 "  command is one of:\n"
 "    -archs\n"
-"    -create [-arch_blank <arch_type>]\n"
+"    -create\n"
 "    -detailed_info\n"
 "    -extract <arch_type> [-extract <arch_type> ...]\n"
 "    -extract_family <arch_type> [-extract_family <arch_type> ...]\n"

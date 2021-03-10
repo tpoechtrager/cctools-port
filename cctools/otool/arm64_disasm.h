@@ -9,7 +9,7 @@ extern uint32_t arm64_disassemble(
     char *sect,
     uint32_t left,
     uint64_t addr,
-    uint32_t sect_addr,
+    uint64_t sect_addr,
     enum byte_sex object_byte_sex,
     struct relocation_info *relocs,
     uint32_t nrelocs,

@@ -2712,6 +2712,20 @@ enum byte_sex target_byte_sex)
 
 __private_extern__
 void
+swap_fileset_entry_command(
+struct fileset_entry_command *lc,
+enum byte_sex target_byte_sex)
+{
+	lc->cmd = SWAP_INT(lc->cmd);
+	lc->cmdsize = SWAP_INT(lc->cmdsize);
+	lc->vmaddr = SWAP_LONG_LONG(lc->vmaddr);
+	lc->fileoff = SWAP_LONG_LONG(lc->fileoff);
+	lc->entry_id.offset = SWAP_INT(lc->entry_id.offset);
+	lc->reserved = SWAP_INT(lc->reserved);
+}
+
+__private_extern__
+void
 swap_nlist(
 struct nlist *symbols,
 uint32_t nsymbols,

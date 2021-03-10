@@ -38,18 +38,14 @@ architecture name is a single word, making this option suitable for shell
 scripting. Unknown architectures will be represented by "unknown" along with
 the numeric CPU type and CPU subtype values as a single word.
 .TP
-.BI \-create " [\-arch_blank arch_type ...]"
+.BI \-create
 Create one universal output file from one or more input files. When input files
 specified on the command-line, all of the architectures in each file will be
 copied into the output file, whereas when input files are included using the
 global
 .B \-arch
 option, only the specified architecture will be copied from that input file.
-The
-.B \-arch_blank
-option specifies that the output for the specified
-.I arch_type
-will be an MH_DYLIB_STUB file. This command requires the
+This command requires the
 .B \-output
 option.
 .TP

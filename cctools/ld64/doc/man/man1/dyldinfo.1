@@ -6,7 +6,7 @@
 .Nd "Displays information used by dyld in an executable"
 .Sh SYNOPSIS
 .Nm
-.Op Fl arch Ar arch-name 
+.Op Fl arch Ar arch-name
 .Op Fl dylibs
 .Op Fl rebase
 .Op Fl bind
@@ -19,7 +19,7 @@
 .Sh DESCRIPTION
 Executables built for Mac OS X 10.6 and later have a new format for the
 information in the __LINKEDIT segment.  The dyldinfo tool will display
-that information.   
+that information.
 .Pp
 The options are as follows:
 .Bl -tag -width indent
@@ -28,15 +28,15 @@ Only display the specified architecture.  Other architectures in a universal ima
 .It Fl dylibs
 Display the table of dylibs on which this image depends.
 .It Fl rebase
-Display the table of rebasing information.  Rebasing is what dyld does when an image is 
+Display the table of rebasing information.  Rebasing is what dyld does when an image is
 not loaded at its preferred address.  Typically, this involves updating pointers in the __DATA
-segment which point within the image. 
+segment which point within the image.
 .It Fl bind
 Display the table of binding information.  These are the symbolic fix ups that dyld must
 do when an image is loaded.
 .It Fl weak_bind
-Display the table of weak binding information.  Typically, only C++ progams will have any 
-weak binding.  These are symbols which dyld must unique accross all images.
+Display the table of weak binding information.  Typically, only C++ programs will have any
+weak binding.  These are symbols which dyld must unique across all images.
 .It Fl lazy_bind
 Display the table of lazy binding information. These are symbols which dyld delays binding
 until they are first used.  Lazy binding is automatically used for all function calls to

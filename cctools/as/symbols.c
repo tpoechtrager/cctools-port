@@ -461,7 +461,7 @@ int local_colon)/* non-zero if called from local_colon() */
 	     && symbolP -> sy_value == 0)
 	    {
 	      symbolP -> sy_frag  = frag_now;
-	      symbolP -> sy_value = (uint32_t)(obstack_next_free(& frags) -
+	      symbolP -> sy_value = (valueT)(obstack_next_free(& frags) -
 					       frag_now -> fr_literal);
 	      know( N_UNDF == 0 );
 	      symbolP -> sy_type |= N_SECT; /* keep N_EXT bit */
@@ -900,7 +900,7 @@ symbolS *sym)
 {
     sym->sy_type = N_SECT;
     sym->sy_other = now_seg;
-    sym->sy_value = (uint32_t)frag_now_fix();
+    sym->sy_value = (valueT)frag_now_fix();
     sym->sy_frag = frag_now;
 }
 

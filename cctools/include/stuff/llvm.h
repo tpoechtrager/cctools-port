@@ -3,6 +3,8 @@
 
 #include "llvm-c/Disassembler.h"
 
+void* llvm_load(void);
+
 __private_extern__ LLVMDisasmContextRef llvm_create_disasm(
     const char *TripleName,
     const char *CPU,

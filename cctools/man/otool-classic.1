@@ -13,12 +13,17 @@ otool-classic \- object file displaying tool
 .SH DESCRIPTION
 The
 .I otool-classic
-command displays specified parts of object files or libraries.  It is now
+command displays specified parts of object files or libraries. It is now largely
 obsolete and the command line shim,
 .IR otool (1)
 executes
 .IR llvm-obdump (1)
 as the default tool.
+.I otool-classic
+is still useful for diagnosing bad, corrupted, or fuzzed binaries, or for
+viewing older binaries that
+.I llvm-objdump
+will not read.
 .PP
 If the
 .B \-m
@@ -78,7 +83,11 @@ zero (the section header flags).  Also the sections
 (\_\^\_OBJC,__string_object) and (\_\^\_OBJC,\_\^\_runtime_setup) are displayed
 symbolically if the
 .B \-v
-flag is specified.
+flag is specified. For unknown section types, if the
+.B \-V
+flag is specified, the contents of the section are displayed in a canonical
+hex+ASCII display, where a column of hexadecimal values print along side a
+column of ASCII characters.
 .TP
 .B \-t
 Display the contents of the (\_\^\_TEXT,\_\^\_text) section.  With the
@@ -159,7 +168,8 @@ Display verbosely (symbolically) when possible.
 Display the disassembled operands symbolically (this implies the
 .B \-v
 option).  This is useful with the
-.B \-t
+.B \-s,
+.B \-t,
 and
 .B \-x
 options.

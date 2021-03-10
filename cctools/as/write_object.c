@@ -194,11 +194,8 @@ char *out_file_name)
 	 */
 	nsects = 0;
 	for(frchainP = frchain_root; frchainP; frchainP = frchainP->frch_next){
-	    frchainP->frch_section.addr = (uint32_t)
-		frchainP->frch_root->fr_address;
-	    frchainP->frch_section.size = (uint32_t)
-		(frchainP->frch_last->fr_address -
-		 frchainP->frch_root->fr_address);
+	    frchainP->frch_section.addr = (valueT)frchainP->frch_root->fr_address;
+	    frchainP->frch_section.size = (valueT)(frchainP->frch_last->fr_address - frchainP->frch_root->fr_address);
 	    nsects++;
 	}
 

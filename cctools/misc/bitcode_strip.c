@@ -31,6 +31,8 @@
 #include "stuff/rnd.h"
 #include "stuff/execute.h"
 #include "stuff/write64.h"
+#include "stuff/align.h"
+#include "stuff/diagnostics.h"
 
 /* used by error routines as the name of the program */
 char *progname = NULL;
@@ -39,6 +41,7 @@ static enum bool rflag = FALSE; /* remove bitcode segment */
 static enum bool mflag = FALSE; /* remove bitcode but leave a marker segment */
 static enum bool lflag = FALSE; /* leave only bitcode segment */
 static enum bool vflag = FALSE; /* to print internal commands that are run */
+static enum bool keep_cs_flag = FALSE; /* keep code signature load commands */
 
 /*
  * We shortcut bitcode_strip(1) to do nothing with the -r option when there is
@@ -115,6 +118,10 @@ char **envp)
     struct arch *archs;
     uint32_t narchs;
 
+	diagnostics_enable(getenv("CC_LOG_DIAGNOSTICS") != NULL);
+	diagnostics_output(getenv("CC_LOG_DIAGNOSTICS_FILE"));
+	diagnostics_log_args(argc, argv);
+
 	progname = argv[0];
 	input = NULL;
 	output = NULL;
@@ -156,6 +163,9 @@ char **envp)
 	    }
 	    else if(strcmp(argv[i], "-v") == 0){
 		vflag = TRUE;
+	    }
+	    else if (0 == strcmp(argv[i], "-keep_cs")){
+		keep_cs_flag = TRUE;
 	    }
 	    else{
 		if(input != NULL){
@@ -203,7 +213,8 @@ char **envp)
 	    return(EXIT_SUCCESS);
 	}
 
-	writeout(archs, narchs, output, 0777, TRUE, FALSE, FALSE, FALSE, NULL);
+	writeout(archs, narchs, output, 0777, TRUE, FALSE, FALSE, FALSE, FALSE,
+		 NULL);
 
 	if(errors)
 	    return(EXIT_FAILURE);
@@ -219,7 +230,9 @@ void
 usage(
 void)
 {
-	fprintf(stderr, "Usage: %s input [-r | -m | -l] -o output\n", progname);
+	fprintf(stderr,
+		"Usage: %s input [-r | -m | -l] [-keep_cs] -o output\n",
+		progname);
 	exit(EXIT_FAILURE);
 }
 
@@ -495,8 +508,7 @@ struct object *object)
     uint32_t dyld_info_end;
     enum bool has_bitcode;
 
-    const struct arch_flag *arch_flag;
-    uint32_t i, segalign, bitcode_marker_size, sect_offset;
+    uint32_t i, segalign, segalignexp, bitcode_marker_size, sect_offset;
     struct section *s;
     struct section_64 *s64;
 
@@ -517,16 +529,11 @@ struct object *object)
 	 * If we are removing the bitcode segment and leaving just a marker
 	 * calculate a minimum sized segment contents with all zeros which
 	 * usually will be the segment alignment.
-	 *
-	 * In practice we will assume 16K alignment (arm) unless the arch
-	 * flag specifies otherwise.
 	 */
-	segalign = 0x4000; /* 16K */
-	if(mflag){
-	    arch_flag = get_arch_family_from_cputype(object->mh_cputype);
-	    if(arch_flag != NULL)
-		segalign = get_segalign_from_flag(arch_flag);
-	}
+	segalignexp = get_seg_align(object->mh, object->mh64,
+				    object->load_commands, FALSE,
+				    object->object_size, arch->file_name);
+	segalign = 1 << segalignexp;
 
 	/*
 	 * To get the right amount of the start of the file copied out by
@@ -958,7 +965,7 @@ struct object *object)
 
 	/* The code signature if any is last, after the strings. */
 	if(object->code_sig_cmd != NULL){
-	    if(has_bitcode){
+	    if(keep_cs_flag == FALSE && has_bitcode){
 		/*
 		 * We remove the code signature on output if we are removing
 		 * a bitcode segment.
@@ -1346,8 +1353,19 @@ struct object *object)
 
 	/* The code signature if any is last, after the strings. */
 	if(object->code_sig_cmd != NULL){
-	    object->output_code_sig_data = NULL;
-	    object->output_code_sig_data_size = 0;
+	    if(keep_cs_flag == FALSE){
+		object->output_code_sig_data = NULL;
+		object->output_code_sig_data_size = 0;
+	    }
+	    else{
+		object->output_code_sig_data = object->object_addr +
+		object->code_sig_cmd->dataoff;
+		object->output_code_sig_data_size =
+		object->code_sig_cmd->datasize;
+		offset = rnd32(offset, 16);
+		object->code_sig_cmd->dataoff = offset;
+		offset += object->code_sig_cmd->datasize;
+	    }
 	}
 
 	object->output_sym_info_size = offset - start_offset;
@@ -1363,11 +1381,13 @@ struct object *object)
 /*
  * strip_bitcode_segment_command() is called when -r is specified to remove
  * the LC_SEGMENT or LC_SEGMENT_64 load command from the object's load commands
- * for the bitcode segment and any LC_CODE_SIGNATURE and LC_DYLIB_CODE_SIGN_DRS
- * load commands.
+ * for the bitcode segment.
  *
  * If we are using the -m flag to remove the bitcode and leave a marker then
  * the LC_SEGMENT or LC_SEGMENT_64 load command are not removed.
+ *
+ * Any LC_CODE_SIGNATURE and LC_DYLIB_CODE_SIGN_DRS load commands wil also be
+ * removed, unless the -keep_cs flag is specified.
  */
 static
 void
@@ -1429,8 +1449,9 @@ struct object *object)
 		    lc2 = (struct load_command *)((char *)lc2 + lc2->cmdsize);
 		}
 	    }
-	    else if(lc1->cmd != LC_CODE_SIGNATURE &&
-		    lc1->cmd != LC_DYLIB_CODE_SIGN_DRS){
+	    else if (keep_cs_flag == TRUE ||
+		    (lc1->cmd != LC_CODE_SIGNATURE &&
+		     lc1->cmd != LC_DYLIB_CODE_SIGN_DRS)) {
 		memcpy(lc2, lc1, lc1->cmdsize);
 		new_ncmds++;
 		new_sizeofcmds += lc2->cmdsize;
@@ -1463,19 +1484,21 @@ struct object *object)
 	 * The LC_CODE_SIGNATURE and LC_DYLIB_CODE_SIGN_DRS load commands
 	 * if any were removed above.
 	 */
-	object->code_sig_cmd = NULL;
-	object->code_sign_drs_cmd = NULL;
+	if (keep_cs_flag == FALSE) {
+	    object->code_sig_cmd = NULL;
+	    object->code_sign_drs_cmd = NULL;
+	}
 }
 
 /*
  * leave_only_bitcode_load_commands() is called when -l is specified to leave
  * the LC_SEGMENT or LC_SEGMENT_64 load command from the object's load commands
- * for the bitcode segment.  It only removes the LC_CODE_SIGNATURE and 
- * LC_DYLIB_CODE_SIGN_DRS load commands.  And zeros out all the fields of
- * other load commands to make them valid in the Mach-O file.  If keeping_plist
- * is TRUE, then the (__TEXT,__info_plist) section is kept and the caller has
- * adjusted the __TEXT segment's values and the __info_plist section values,
- * so they are not changed here.
+ * for the bitcode segment. It only removes the LC_CODE_SIGNATURE and
+ * LC_DYLIB_CODE_SIGN_DRS load commands if the -keep_cs flag was not specified.
+ * It also zeros out all the fields of other load commands to make them valid in
+ * the Mach-O file.  If keeping_plist is TRUE, then the (__TEXT,__info_plist)
+ * section is kept and the caller has adjusted the __TEXT segment's values and
+ * the __info_plist section values, so they are not changed here.
  */
 static
 void
@@ -1583,8 +1606,9 @@ enum bool keeping_plist)
 		new_sizeofcmds += lc2->cmdsize;
 		lc2 = (struct load_command *)((char *)lc2 + lc2->cmdsize);
 	    }
-	    else if(lc1->cmd != LC_CODE_SIGNATURE &&
-		    lc1->cmd != LC_DYLIB_CODE_SIGN_DRS){
+	    else if(keep_cs_flag == TRUE ||
+		    (lc1->cmd != LC_CODE_SIGNATURE &&
+		     lc1->cmd != LC_DYLIB_CODE_SIGN_DRS)) {
 		if(lc1->cmd == LC_MAIN){
 		    ep = (struct entry_point_command *)lc1;
 		    ep->entryoff = 0;
@@ -1631,8 +1655,10 @@ enum bool keeping_plist)
 	 * The LC_CODE_SIGNATURE and LC_DYLIB_CODE_SIGN_DRS load commands
 	 * if any were removed above.
 	 */
-	object->code_sig_cmd = NULL;
-	object->code_sign_drs_cmd = NULL;
+	if (keep_cs_flag == FALSE) {
+	    object->code_sig_cmd = NULL;
+	    object->code_sign_drs_cmd = NULL;
+	}
 }
 
 /*

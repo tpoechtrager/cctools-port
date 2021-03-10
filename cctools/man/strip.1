@@ -1,4 +1,4 @@
-.TH STRIP 1 "January 17, 2018" "Apple Inc."
+.TH STRIP 1 "June 23, 2020" "Apple Inc."
 .SH NAME
 strip \- remove symbols
 .SH SYNOPSIS
@@ -129,7 +129,7 @@ in the object file.  In this case
 has updated the relocation entries to reflect the new symbol table.
 .SH OPTIONS
 .PP
-The first set of options indicate symbols that are to be save in the resulting
+The first set of options indicate symbols that are to be saved in the resulting
 output file.
 .TP
 .B \-u
@@ -238,9 +238,22 @@ And the last options:
 .B \-
 Treat all remaining arguments as file names and not options.
 .TP
+.B \-D
+When stripping a static library, set the archive's SYMDEF file's user id,
+group id, date, and file mode to reasonable defaults. See the
+.IR libtool (1)
+documentation for
+.B \-D
+for more information.
+.TP
 .BI \-o " output"
 Write the result into the file
 .I output.
+.TP
+.B \-v
+Print the arguments passed to other tools run by
+.IR strip (1)
+when processing object files.
 .TP
 .B \-no_uuid
 Remove any LC_UUID load commands.
@@ -264,7 +277,7 @@ The
 .I arch_type
 can be "all" to operate on all architectures in the file, which is the default.
 .SH "SEE ALSO"
-ld(1), cc(1)
+ld(1), libtool(1), cc(1)
 .SH EXAMPLES
 .PP
 When creating a stub library the

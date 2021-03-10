@@ -110,6 +110,14 @@ objective-C class symbols as globals.  This is intended for use of programs
 that load code at runtime
 and want the loaded code to use symbols from the shared libraries.
 .TP
+.B \-D
+When editing a static library, set the archive's SYMDEF file's user id,
+group id, date, and file mode to reasonable defaults. See the
+.IR libtool (1)
+documentation for
+.B \-D
+for more information.
+.TP
 .B \-
 Treat all remaining arguments as file names and not options.
 .TP
@@ -134,7 +142,7 @@ the file.
 Write the result into the file
 .I output.
 .SH "SEE ALSO"
-strip(1), ld(1), arch(3)
+strip(1), ld(1), libtool(1), arch(3)
 .SH BUGS
 The changing of the symbolic debugging information by
 .I nmedit

@@ -51,6 +51,8 @@
 #include "stuff/bytesex.h"
 #include "stuff/write64.h"
 #include "stuff/arch.h"
+#include "stuff/align.h"
+#include "stuff/diagnostics.h"
 
 /* These variables are set from the command line arguments */
 __private_extern__
@@ -151,6 +153,10 @@ char *envp[])
     struct extract *ep;
     struct replace *rp;
 
+	diagnostics_enable(getenv("CC_LOG_DIAGNOSTICS") != NULL);
+	diagnostics_output(getenv("CC_LOG_DIAGNOSTICS_FILE"));
+	diagnostics_log_args(argc, argv);
+
 	progname = argv[0];
 	host_byte_sex = get_host_byte_sex();
 
@@ -210,7 +216,8 @@ char *envp[])
 	    error("no input file specified");
 	    usage();
 	}
-	if(replaces != NULL && output == NULL)
+	if(replaces != NULL && (output == NULL ||
+				strncmp("-", output, 2) == 0))
 	    fatal("output file must be specified via -o <filename> when "
 		  "replacing a section");
 
@@ -374,6 +381,29 @@ map_input(void)
 		if(swapped)
 		    swap_symseg_command(ssp, host_byte_sex);
 		break;
+	    case LC_CODE_SIGNATURE:
+	    case LC_SEGMENT_SPLIT_INFO:
+	    case LC_FUNCTION_STARTS:
+	    case LC_DATA_IN_CODE:
+	    case LC_DYLIB_CODE_SIGN_DRS:
+	    case LC_LINKER_OPTIMIZATION_HINT:
+	    case LC_DYLD_CHAINED_FIXUPS:
+	    case LC_DYLD_EXPORTS_TRIE:
+	    {
+		struct linkedit_data_command* ldcp =
+		    (struct linkedit_data_command*)lcp;
+		if (swapped)
+		    swap_linkedit_data_command(ldcp, host_byte_sex);
+	    }
+		break;
+	    case LC_DYLD_INFO:
+	    case LC_DYLD_INFO_ONLY:
+	    {
+		struct dyld_info_command* dicp = (struct dyld_info_command*)lcp;
+		if (swapped)
+		    swap_dyld_info_command(dicp, host_byte_sex);
+	    }
+		break;
 	    default:
 		*lcp = l;
 		break;
@@ -464,15 +494,20 @@ uint32_t size)
 			  "contents of (%s,%s) extends past the "
 			  "end of the file) in: %s", segname,
 			  sectname, input);
-		 if((fd = open(ep->filename, O_WRONLY | O_CREAT |
-			       O_TRUNC, 0666)) == -1)
-		    system_fatal("can't create: %s", ep->filename);
-		 if(write64(fd, (char *)input_addr + offset,
-                            size) != (ssize_t)size)
-		    system_fatal("can't write: %s", ep->filename);
-		 if(close(fd) == -1)
-		    system_fatal("can't close: %s", ep->filename);
-		 ep->found = 1;
+		if (0 == strncmp("-", ep->filename, 2)) {
+		    printf("%s", (char *)input_addr + offset);
+		}
+		else {
+		    if((fd = open(ep->filename, O_WRONLY | O_CREAT |
+				   O_TRUNC, 0666)) == -1)
+			system_fatal("can't create: %s", ep->filename);
+		    if(write64(fd, (char *)input_addr + offset,
+				size) != (ssize_t)size)
+			system_fatal("can't write: %s", ep->filename);
+		    if(close(fd) == -1)
+			system_fatal("can't close: %s", ep->filename);
+		}
+		ep->found = 1;
 	    }
 	    ep = ep->next;
 	}
@@ -503,6 +538,7 @@ replace_sections(void)
     kern_return_t r;
     enum bool no_seg_resize;
     uint32_t pagesize;
+    uint32_t segalign;
     
 	errors = 0;
 
@@ -767,31 +803,13 @@ replace_sections(void)
 
 	/*
 	 * Set the pagesize to match that of the input file. Note that we cannot
-	 * assume a single pagesize across all Mach-O files.
+	 * assume a single pagesize across all Mach-O files. Instead we'll
+         * compute a prevailing segment alignment from the input file and
+         * convert that into a pagesize.
 	 */
-	pagesize = 0;
-	if (0 == pagesize)
-	{
-	    cpu_type_t cputype = (mhp != NULL ?
-				  mhp->cputype : mhp64->cputype);
-	    cpu_subtype_t cpusubtype = (mhp != NULL ?
-					mhp->cpusubtype : mhp64->cpusubtype);
-	    const char* arch_name = get_arch_name_from_types(cputype,
-							     cpusubtype);
-	    if (arch_name != NULL) {
-		struct arch_flag arch_flag;
-		if (get_arch_from_flag((char*)arch_name, &arch_flag)) {
-		    pagesize = get_segalign_from_flag(&arch_flag);
-		}
-		else {
-		    /* unreachable? */
-		    fatal("unknown cputype %u found in %s", cputype, input);
-		}
-	    }
-	    else {
-		fatal("unknown cputype %u found in %s", cputype, input);
-	    }
-	}
+	segalign = get_seg_align(mhp, mhp64, load_commands, FALSE, input_size,
+				 input);
+	pagesize = 1 << segalign;
  
 	/*
 	 * First go through the segments and adjust the segment offsets, sizes

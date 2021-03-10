@@ -46,6 +46,7 @@
 #include "stuff/execute.h"
 #include "otool.h"
 #include "dyld_bind_info.h"
+#include "fixup-chains.h"
 #include "ofile_print.h"
 #include "m68k_disasm.h"
 #include "i860_disasm.h"
@@ -77,6 +78,7 @@ enum bool no_show_raw_insn = FALSE; /* no raw inst, for llvm-objdump testing
 				       with 32-bit arm */
 #ifdef LLVM_OTOOL
 enum bool show_objdump_command = FALSE; /* print the objdump command */
+static char* object_tool_path = "objdump"; /* path to object tool */
 #endif /* LLVM_OTOOL */
 enum bool dflag = FALSE; /* print the data */
 enum bool oflag = FALSE; /* print the objctive-C info */
@@ -114,9 +116,14 @@ char *mcpu = "";	/* the arg of the -mcpu=arg flag */
 enum bool function_offsets = FALSE;
 enum bool print_bind_info = FALSE;  /* print dyld bind information */
 enum bool print_dyld_opcodes = FALSE; /* print raw dyld bind/reebase opcodes */
+enum bool print_chained_fixups = FALSE; /* print raw fixup chain records */
 
 /* this is set when any of the flags that process object files is set */
 enum bool object_processing = FALSE;
+
+/* apply a slide when disassembling text sections */
+enum bool addr_slide_flag = FALSE;
+uint64_t addr_slide = 0;
 
 static void usage(
     void);
@@ -368,6 +375,10 @@ static void print_argstrings(
 
 #else /* defined(LLVM_OTOOL) */
 
+static void object_tool(
+    int argc,
+    char** argv);
+
 static void llvm_otool(
     char **files,
     uint32_t nfiles,
@@ -397,9 +408,12 @@ char **envp)
     uint32_t narch_flags;
     enum bool all_archs, use_member_syntax, version;
     char **files;
-#ifndef LLVM_OTOOL
+#ifdef LLVM_OTOOL
+    int orig_argc;
+    char **orig_argv;
+#else
     const char *disssembler_version;
-#endif /* !defined(LLVM_OTOOL) */
+#endif /* defined(LLVM_OTOOL) */
 
 	progname = argv[0];
 	arch_flags = NULL;
@@ -413,11 +427,19 @@ char **envp)
 	if(argc <= 1)
 	    usage();
 
+#ifdef LLVM_OTOOL
+	orig_argc = argc;
+	orig_argv = argv;
+	if (getenv("OTOOL_PATH")) {
+	    object_tool_path = getenv("OTOOL_PATH");
+	}
+#endif
+
 	/*
 	 * Parse the arguments.
 	 */
 	nfiles = 0;
-        files = allocate(sizeof(char *) * argc);
+	files = allocate(sizeof(char *) * argc);
 	for(i = 1; i < argc; i++){
 	    if(argv[i][0] == '-' && argv[i][1] == '\0'){
 		for(i += 1 ; i < argc; i++)
@@ -487,12 +509,40 @@ char **envp)
 		object_processing = TRUE;
 		continue;
 	    }
+	    if(strcmp(argv[i], "-chained_fixups") == 0 ||
+	       strcmp(argv[i], "-fixup_chains") == 0){
+		print_chained_fixups = TRUE;
+		object_processing = TRUE;
+		continue;
+	    }
 	    if(strncmp(argv[i], "-mcpu=", sizeof("-mcpu=")-1) == 0){
 		mcpu = argv[i] + sizeof("-mcpu=")-1;
 		if(*mcpu == '\0'){
 		    error("missing argument to -mcpu=");
 		    usage();
 		}
+		continue;
+	    }
+	    if(strncmp(argv[i], "-addr_slide=", sizeof("-addr_slide=")-1)== 0){
+		const char* slide = argv[i] + sizeof("-addr_slide=")-1;
+		if(*slide == '\0'){
+		    error("missing argument to -addr_slide= (amount to "
+			  "slide addresses when printing pointers)");
+		    usage();
+		}
+		addr_slide = (uint64_t)strtoull(slide, NULL, 16);
+		addr_slide_flag = TRUE;
+		continue;
+	    }
+	    if(strcmp(argv[i], "-addr_slide")== 0){
+		if(argc <=  i + 1){
+		    error("-addr_slide requires an argument (amount to "
+			  "slide addresses when printing pointers)");
+		    usage();
+		}
+		addr_slide = (uint64_t)strtoull(argv[i+1], NULL, 16);
+		addr_slide_flag = TRUE;
+		i += 1;
 		continue;
 	    }
 	    if(strcmp(argv[i], "-no-show-raw-insn") == 0){
@@ -515,6 +565,16 @@ char **envp)
 		show_objdump_command = TRUE;
 		continue;
 	    }
+            if (strcmp(argv[i], "-object-tool-path") == 0){
+                if(argc <=  i + 1){
+                    error("-object-tool-path requires an argument (path to an "
+                          "objdump or otool tool)");
+                    usage();
+                }
+                object_tool_path = argv[i + 1];
+                i++;
+                continue;
+            }
 #endif /* LLVM_OTOOL */
 	    if(argv[i][1] == 's'){
 		if(argc <=  i + 2){
@@ -675,7 +735,7 @@ char **envp)
 	   !oflag && !Oflag && !rflag && !Tflag && !Mflag && !Rflag && !Iflag &&
 	   !Cflag && !print_bind_info && !print_dyld_opcodes && !version &&
 	   !Pflag && !xflag && !Hflag && !Gflag && !Sflag && !cflag && !iflag &&
-	   !Dflag &&!segname){
+	   !Dflag && !segname && !print_chained_fixups){
 	    error("one of -fahlLtdoOrTMRIHCGScisPx or --version must be "
 		  "specified");
 	    usage();
@@ -724,7 +784,12 @@ char **envp)
 			  TRUE, use_member_syntax, processor, NULL);
 	}
 #else /* defined(LLVM_OTOOL) */
-	llvm_otool(files, nfiles, arch_flags, narch_flags, all_archs, version);
+	if (strstr(object_tool_path, "otool")) {
+	    object_tool(orig_argc, orig_argv);
+	} else {
+	    llvm_otool(files, nfiles, arch_flags, narch_flags, all_archs,
+		       version);
+	}
 #endif /* LLVM_OTOOL */
 
 	if(errors)
@@ -808,6 +873,34 @@ void)
 
 #ifdef LLVM_OTOOL
 
+static void object_tool(
+int argc,
+char** argv)
+{
+    char *otool = object_tool_path;
+
+    if (otool[0] != '/')
+	otool = cmd_with_prefix(otool);
+
+    reset_execute_list();
+    add_execute_list(otool);
+
+    for (int i = 1; i < argc; ++i) {
+	if (!strcmp(argv[i], "-show-objdump-command")) {
+	    continue;
+	}
+	else if (!strcmp(argv[i], "-object-tool-path")) {
+	    ++i;
+	    continue;
+	}
+	add_execute_list(argv[i]);
+    }
+
+    if(execute_list(show_objdump_command) == 0)
+    /* Internal objdump command failed. */
+	exit(EXIT_FAILURE);
+}
+
 static void llvm_otool(
 char **files,
 uint32_t nfiles,
@@ -820,9 +913,13 @@ enum bool version)
     struct stat stat_buf;
     uint32_t i;
 
-	objdump = cmd_with_prefix("objdump");
-	if(stat(objdump, &stat_buf) == -1)
+	objdump = object_tool_path;
+	if (objdump[0] != '/')
+	    objdump = cmd_with_prefix(objdump);
+	if(stat(objdump, &stat_buf) == -1 &&
+	   strcmp(object_tool_path, "objdump") == 0) {
 	    objdump = cmd_with_prefix("llvm-objdump");
+	}
 
 	reset_execute_list();
 	add_execute_list(objdump);
@@ -1633,6 +1730,11 @@ void *cookie) /* cookie is not used */
 		&dbi, &ndbi, &chain_format);
 	    print_dyld_bind_info(dbi, ndbi);
 	}
+	if (print_chained_fixups){
+	    print_dyld_chained_fixups(ofile->load_commands, mh_ncmds,
+				    mh_sizeofcmds, ofile->object_byte_sex,
+				    ofile->object_addr, ofile->object_size);
+	}
 
 	if(tflag || xflag ||
 	   (sect_flags & S_ATTR_PURE_INSTRUCTIONS) ==
@@ -1790,7 +1892,7 @@ void *cookie) /* cookie is not used */
 		    printf("(%s,%s) section\n", SEG_DATA, SECT_DATA);
 		if(sect != NULL)
 		    print_sect(mh_cputype, ofile->object_byte_sex, sect,
-			sect_size, sect_addr);
+			sect_size, sect_addr, Vflag);
 	    }
 	}
 
@@ -1871,7 +1973,7 @@ void *cookie) /* cookie is not used */
 		    switch((sect_flags & SECTION_TYPE)){
 		    case 0:
 			print_sect(mh_cputype, ofile->object_byte_sex,
-				   sect, sect_size, sect_addr);
+				   sect, sect_size, sect_addr, Vflag);
 			break;
 		    case S_ZEROFILL:
 			printf("zerofill section and has no contents in the "
@@ -1946,7 +2048,7 @@ void *cookie) /* cookie is not used */
 			printf("Unknown section type (0x%x)\n",
 			       (unsigned int)(sect_flags & SECTION_TYPE));
 			print_sect(mh_cputype, ofile->object_byte_sex, sect,
-				   sect_size, sect_addr);
+				   sect_size, sect_addr, Vflag);
 			break;
 		    }
 		}
@@ -1956,7 +2058,7 @@ void *cookie) /* cookie is not used */
 			       "file\n");
 		    else
 			print_sect(mh_cputype, ofile->object_byte_sex, sect,
-				   sect_size, sect_addr);
+				   sect_size, sect_addr, Vflag);
 		}
 	    }
 	}
@@ -3410,9 +3512,18 @@ uint32_t *nloc_relocs)
 }
 
 /*
- * setup_dyld_bind_info() looks for a LC_DYLD_INFO load command and if it has
- * bind info unpacks it and returns it in dbi and ndbi values for the internal
- * expanded structs.
+ * setup_dyld_bind_info() unpacks bind info from an LC_DYLD_INFO* or
+ * LC_DYLD_CHAINED_FIXUPS load command returns it in the dbi and ndbi values.
+ *
+ * Also, setup_dyld_bind_info() will return the pointer chain format used by
+ * the object. This information is usually derived from the bind info; arm64e
+ * binaries always use CHAIN_FORMAT_ARM64E unless otherwise specified.
+ *
+ * BUG: The Mach-O file format allows each segment to use a different pointer
+ * format. While generally Mach-O files are expected to use one pointer format
+ * consistently, it may be the case that the kernel or shared cache binaries
+ * specifiy different fromats for each section. otool's architecture does not
+ * currently accommodate this situation.
  */
 static
 void
@@ -3428,7 +3539,7 @@ uint64_t *ndbi,
 enum chain_format_t *chain_format)
 {
     enum byte_sex host_byte_sex;
-    enum bool swapped, found_bind, found_chained_fixups;
+    enum bool swapped, found_dyldinfo, found_chained_lcmd,found_chained_section;
     uint32_t pass, i, j, left, size, nsegs, nsegs64, ndylibs;
     uint64_t big_size;
     struct load_command *lc, l;
@@ -3451,11 +3562,11 @@ enum chain_format_t *chain_format)
 	if(*dbi != NULL)
 	    return;
 
-	found_bind = FALSE;
-	found_chained_fixups = FALSE;
+	found_dyldinfo = FALSE;
+	found_chained_lcmd = FALSE;
+	found_chained_section = FALSE;
 	*dbi = NULL;
 	*ndbi = 0;
-	*chain_format = CHAIN_FORMAT_NONE;
 
 	host_byte_sex = get_host_byte_sex();
 	swapped = host_byte_sex != load_commands_byte_sex;
@@ -3469,6 +3580,39 @@ enum chain_format_t *chain_format)
 	segs64 = NULL;
 
 	a = NULL;
+
+	/*
+	 * Set the proper default chain format. This code has to do reconstruct
+	 * the mach_header to get the cputype and cpusubtype. We should consider
+	 * passing this information in along with the load commands.
+	 */
+	if (chain_format) {
+	    cpu_type_t cputype  = 0;
+	    cpu_subtype_t cpusubtype = 0;
+	    uint32_t magic = object_addr ? *(uint32_t*)object_addr : 0;
+	    if (MH_MAGIC == magic || MH_CIGAM == magic) {
+		struct mach_header mh;
+		memcpy(&mh, object_addr, sizeof(mh));
+		if (MH_CIGAM == magic) {
+		    swap_mach_header(&mh, host_byte_sex);
+		}
+		cputype = mh.cputype;
+		cpusubtype = mh.cpusubtype;
+	    }
+	    else if (MH_MAGIC_64 == magic || MH_CIGAM_64 == magic) {
+		struct mach_header_64 mh;
+		memcpy(&mh, object_addr, sizeof(mh));
+		if (MH_CIGAM_64 == magic) {
+		    swap_mach_header_64(&mh, host_byte_sex);
+		}
+		cputype = mh.cputype;
+		cpusubtype = mh.cpusubtype;
+	    }
+	    if (CPU_TYPE_ARM64 == cputype && CPU_SUBTYPE_ARM64E == cpusubtype)
+		*chain_format = CHAIN_FORMAT_ARM64E;
+	    else
+		*chain_format = CHAIN_FORMAT_NONE;
+	}
 
 	/*
 	 * Make two passes over the load commands. On the first pass count the
@@ -3519,17 +3663,21 @@ enum chain_format_t *chain_format)
 				   "load command %u past end of file\n", i);
 			    return;
 			}
-			if(found_bind == TRUE){
-			    if (found_chained_fixups == TRUE) {
-				printf("multiple LC_DYLD_INFO and "
-				       " LC_DYLD_CHAINED_FIXUPS load "
-				       "commands\n");
-				return;
-			    }
+			if(found_dyldinfo == TRUE){
 			    printf("more than one LC_DYLD_INFO load command\n");
 			    return;
 			}
-			found_bind = TRUE;
+			else if (found_chained_lcmd == TRUE) {
+			    printf("both LC_DYLD_INFO and "
+				   "LC_DYLD_CHAINED_FIXUPS load commands\n");
+			    return;
+			}
+			else if (found_chained_section) {
+			    printf("both LC_DYLD_INFO load command and "
+				   "__TEXT,__chain_starts section\n");
+			    return;
+			}
+			found_dyldinfo = TRUE;
 		    }
 		    break;
 		case LC_DYLD_CHAINED_FIXUPS:
@@ -3555,19 +3703,22 @@ enum chain_format_t *chain_format)
 				   "past end of file\n", i);
 			    return;
 			}
-			if(found_bind == TRUE){
-			    if (found_chained_fixups == FALSE) {
-				printf("multiple LC_DYLD_INFO and "
-				       " LC_DYLD_CHAINED_FIXUPS load "
-				       "commands\n");
-				return;
-			    }
-			    printf("more than one LC_DYLD_CHAINED_FIXUPS "
-				   "load command\n");
+			if (found_dyldinfo == TRUE) {
+			    printf("both LC_DYLD_CHAINED_FIXUPS and "
+				   "LC_DYLD_INFO load commands\n");
 			    return;
 			}
-			found_bind = TRUE;
-			found_chained_fixups = TRUE;
+			else if (found_chained_lcmd == TRUE) {
+			    printf("multiple LC_DYLD_CHAINED_FIXUPS load "
+				   "commands\n");
+			    return;
+			}
+			else if (found_chained_section) {
+			    printf("both LC_DYLD_CHAINED_FIXUPS load command "
+				   "and __TEXT,__chain_starts section\n");
+			    return;
+			}
+			found_chained_lcmd = TRUE;
 		    }
 			break;
 		case LC_LOAD_DYLIB:
@@ -3633,6 +3784,30 @@ enum chain_format_t *chain_format)
 			memcpy((char *)&s, p, size);
 			if(swapped)
 			    swap_section(&s, 1, host_byte_sex);
+			if(pass == 1) {
+			    if (0 == strcmp(s.segname,  "__TEXT") &&
+				0 == strcmp(s.sectname, "__chain_starts")) {
+				if (found_dyldinfo == TRUE) {
+				    printf("both __TEXT,__chain_starts section "
+					   "and LC_DYLD_INFO load command\n");
+				    return;
+				}
+				else if (found_chained_lcmd == TRUE) {
+				    printf("both __TEXT,__chain_starts section "
+					   "and LC_DYLD_CHAINED_FIXUPS load "
+					   "commands\n");
+				    return;
+				}
+				else if (found_chained_section) {
+				    printf("multiple __TEXT,__chain_starts "
+					   "sections\n");
+				    return;
+				}
+				found_chained_section = TRUE;
+				chained_fixups.dataoff = s.offset;
+				chained_fixups.datasize = s.size;
+			    }
+			}
 			if(pass == 2){
 			    memcpy(a, (char *)&s, sizeof(struct section));
 			    a += sizeof(struct section);
@@ -3677,6 +3852,30 @@ enum chain_format_t *chain_format)
 			memcpy((char *)&s64, p, size);
 			if(swapped)
 			    swap_section_64(&s64, 1, host_byte_sex);
+			if(pass == 1){
+			    if (0 == strcmp(s64.segname,  "__TEXT") &&
+				0 == strcmp(s64.sectname, "__chain_starts")) {
+				if (found_dyldinfo == TRUE) {
+				    printf("both __TEXT,__chain_starts section "
+					   "and LC_DYLD_INFO load command\n");
+				    return;
+				}
+				else if (found_chained_lcmd == TRUE) {
+				    printf("both __TEXT,__chain_starts section "
+					   "and LC_DYLD_CHAINED_FIXUPS load "
+					   "commands\n");
+				    return;
+				}
+				else if (found_chained_section) {
+				    printf("multiple __TEXT,__chain_starts "
+					   "sections\n");
+				    return;
+				}
+				found_chained_section = TRUE;
+				chained_fixups.dataoff = s64.offset;
+				chained_fixups.datasize = (uint32_t)s64.size;
+			    }
+			}
 			if(pass == 2){
 			    memcpy(a, (char *)&s64, sizeof(struct section_64));
 			    a += sizeof(struct section_64);
@@ -3699,7 +3898,8 @@ enum chain_format_t *chain_format)
 		if((char *)lc > (char *)load_commands + sizeofcmds)
 		    break;
 	    }
-	    if(found_bind == FALSE)
+	    if (!found_dyldinfo && !found_chained_lcmd &&
+		!found_chained_section)
 		return;
 	    if(pass == 1){
 		dylibs = (const char **)allocate(ndylibs * sizeof(char *));
@@ -3710,14 +3910,20 @@ enum chain_format_t *chain_format)
 	    }
 	}
 
-	if (found_chained_fixups) {
+	if ((found_chained_lcmd || found_chained_section) &&
+	    chained_fixups.dataoff != 0 && chained_fixups.datasize != 0) {
+	    enum chain_header_t header_type;
+	    if (found_chained_lcmd)
+		header_type = CHAIN_HEADER_LOAD_COMMAND;
+	    else
+		header_type = CHAIN_HEADER_SECTION;
 	    start = (uint8_t *)(object_addr + chained_fixups.dataoff);
 	    end = start + chained_fixups.datasize;
 	    get_dyld_chained_fixups(start, end, dylibs, ndylibs, segs, nsegs,
 				    segs64, nsegs64, swapped, object_addr,
 				    object_size, dbi, ndbi, chain_format,
-				    print_bind_info || vflag);
-	} else {
+				    header_type, print_bind_info || vflag);
+	} else if (found_dyldinfo) {
 	    start = (uint8_t *)(object_addr + dyld_info.bind_off);
 	    end = start + dyld_info.bind_size;
 	    get_dyld_bind_info(start, end, dylibs, ndylibs, segs, nsegs,
@@ -4108,9 +4314,9 @@ uint64_t seg_addr)
 			printf("%+6d ", (int)(i - label_offset));
 		    if(Xflag == FALSE){
 			if(cputype & CPU_ARCH_ABI64)
-			    printf("%016llx", cur_addr);
+			    printf("%016llx", cur_addr + addr_slide);
 			else
-			    printf("%08x", (uint32_t)cur_addr);
+			    printf("%08x", (uint32_t)(cur_addr + addr_slide));
 			if((qflag == FALSE ||
 			    (cputype == CPU_TYPE_POWERPC)) &&
 			    (cputype != CPU_TYPE_ARM64 &&
@@ -4201,7 +4407,7 @@ uint64_t seg_addr)
 				ndices, seg_addr, &(insts[n]), NULL, 0);
 		else if(cputype == CPU_TYPE_ARM64 || cputype == CPU_TYPE_ARM64_32)
 		    j = arm64_disassemble(sect, (uint32_t)size - i,
-				(uint32_t)cur_addr, (uint32_t)addr,
+				cur_addr, addr,
 				object_byte_sex, relocs, nrelocs, ext_relocs,
 				next_relocs, loc_relocs, nloc_relocs, dbi, ndbi,
 				chain_format, symbols, symbols64, nsymbols,
@@ -4302,9 +4508,9 @@ uint64_t seg_addr)
 	    if(cputype == CPU_TYPE_I386 || cputype == CPU_TYPE_X86_64){
 		for(i = 0 ; i < size ; i += j , addr += j){
 		    if(cputype & CPU_ARCH_ABI64)
-			printf("%016llx ", addr);
+			printf("%016llx ", addr + addr_slide);
 		    else
-			printf("%08x ", (uint32_t)addr);
+			printf("%08x ", (uint32_t)(addr + addr_slide));
 		    for(j = 0;
 			j < 16 * sizeof(char) && i + j < size;
 			j += sizeof(char)){
@@ -4316,7 +4522,7 @@ uint64_t seg_addr)
 	    }
 	    else if(cputype == CPU_TYPE_MC680x0){
 		for(i = 0 ; i < size ; i += j , addr += j){
-		    printf("%08x ", (unsigned int)addr);
+		    printf("%08x ", (unsigned int)(addr + addr_slide));
 		    for(j = 0;
 			j < 8 * sizeof(short) && i + j < size;
 			j += sizeof(short)){
@@ -4331,9 +4537,9 @@ uint64_t seg_addr)
 	    else{
 		for(i = 0 ; i < size ; i += j , addr += j){
 		    if(cputype & CPU_ARCH_ABI64)
-			printf("%016llx ", addr);
+			printf("%016llx ", addr + addr_slide);
 		    else
-			printf("%08x ", (uint32_t)addr);
+			printf("%08x ", (uint32_t)(addr + addr_slide));
 		    for(j = 0;
 			j < 4 * sizeof(int32_t) && i + j < size;
 			j += sizeof(int32_t)){

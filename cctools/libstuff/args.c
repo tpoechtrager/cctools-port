@@ -188,7 +188,7 @@ struct string_list* at_paths, int *hint_p)
 
       char* addr = NULL;
       if (sb.st_size) {
-        addr = mmap(0, sb.st_size, PROT_READ | PROT_WRITE,
+        addr = mmap(0, (size_t)sb.st_size, PROT_READ | PROT_WRITE,
                     MAP_FILE | MAP_PRIVATE, fd, 0);
         if (!addr) {
           fprintf(stderr, "error: can't mmap %s: %s\n", at_path,
@@ -201,7 +201,7 @@ struct string_list* at_paths, int *hint_p)
       if (close(fd)) {
         fprintf(stderr, "error: can't close %s: %s\n", at_path,
                 strerror(errno));
-        if (munmap(addr, sb.st_size))
+        if (munmap(addr, (size_t)sb.st_size))
           fprintf(stderr, "error: can't munmap %s: %s\n", at_path,
                   strerror(errno));
         return EXPAND_ERROR;
@@ -226,7 +226,7 @@ struct string_list* at_paths, int *hint_p)
 
       // unmap the file
       if (addr) {
-        if (munmap(addr, sb.st_size)) {
+        if (munmap(addr, (size_t)sb.st_size)) {
           fprintf(stderr, "error: can't munmap %s: %s\n", at_path,
                   strerror(errno));
           return EXPAND_ERROR;

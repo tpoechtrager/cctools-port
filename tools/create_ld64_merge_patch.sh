@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-BASE_VERSION=512.4
-NEW_VERSION=530
+BASE_VERSION=530
+NEW_VERSION=609
 
 set -e
 
@@ -15,7 +15,11 @@ wget http://www.opensource.apple.com/tarballs/ld64/ld64-$NEW_VERSION.tar.gz
 
 tar xzf ld64-$BASE_VERSION.tar.gz &>/dev/null
 tar xzf ld64-$NEW_VERSION.tar.gz &>/dev/null
+
 rm *.tar.gz
+
+rm -rf ld64-$BASE_VERSION/unit-tests
+rm -rf ld64-$NEW_VERSION/unit-tests
 
 pushd ld64-$NEW_VERSION*
 

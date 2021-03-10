@@ -20,6 +20,16 @@
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
+/*
+ * Note: indr does not correctly support 64-bit Mach-O files, and so is
+ * no longer a useful or usable. The source code is provided here only for
+ * historical context.
+ */
+#if __LP64__
+#error indir.c will not correctly process 64-bit Mach-O files.
+#endif
+/* indr, thank you for your service, you did well. */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -352,7 +362,7 @@ char *envp[])
 	if(stat(input_file, &stat_buf) == -1)
 	    system_error("can't stat input file: %s", input_file);
 	writeout(archs, narchs, output_file, stat_buf.st_mode & 0777, TRUE,
-		 FALSE, FALSE, FALSE, NULL);
+		 FALSE, FALSE, FALSE, FALSE, NULL);
 
 	if(errors)
 	    return(EXIT_FAILURE);
@@ -1623,7 +1633,12 @@ struct arch *arch)
 	    mh = (struct mach_header *)object_addr;
 	    st = (struct symtab_command *)(object_addr +
 					   sizeof(struct mach_header));
-	    mh->magic = MH_MAGIC;
+	    if((cputype & CPU_ARCH_ABI64) == CPU_ARCH_ABI64){
+		mh->magic = MH_MAGIC_64;
+	    }
+	    else {
+		mh->magic = MH_MAGIC;
+	    }
 	    mh->cputype = cputype;
 	    mh->cpusubtype = cpusubtype;
 	    mh->filetype = MH_OBJECT;

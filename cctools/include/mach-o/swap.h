@@ -217,6 +217,10 @@ extern void swap_twolevel_hint(
     uint32_t nhints,
     enum NXByteOrder target_byte_sex);
 
+extern void swap_fileset_entry_command(
+    struct fileset_entry_command *lc,
+    enum NXByteOrder target_byte_sex);
+
 extern void swap_nlist(
     struct nlist *symbols,
     uint32_t nsymbols,

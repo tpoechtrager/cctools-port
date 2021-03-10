@@ -1,7 +1,7 @@
 libexec_PROGRAMS = arm-as
 
 arm_as_LDADD =  \
-        $(top_builddir)/libstuff/libstuff.la
+        $(top_builddir)/libstuff/libstuff.la $(REALLOCF_LIB)
 
 arm_as_CFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/include/foreign -I$(top_srcdir)/libstuff -I$(top_srcdir)/as $(WARNINGS) $(LTO_DEF) -DNeXT_MOD -DASLIBEXECDIR="\"$(ASLIBEXECDIR)/\"" -D__DARWIN_UNIX03 -DARM $(ENDIAN_FLAG)
 

@@ -31,6 +31,16 @@ can now be found as
 .IR otool-classic (1)
 and typically will be run by using "xcrun otool-classic".
 .TP
+.BI \-object-tool-path " tool"
+After parsing the otool arguments, execute the command indicated by
+.I tool.
+This value defaults to "objdump". If the specified tool contains the string
+"otool" in its name, the tool will be executed with the original unmodified
+arguments to
+.IR llvm-otool (1),
+otherwise the arguments will be translated into llvm-style arguments as
+explained below.
+.TP
 .B \-show-objdump-command
 Print the
 .IR objdump (1)

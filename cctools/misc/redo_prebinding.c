@@ -919,7 +919,7 @@ char *envp[])
                 if(write_to_stdout)
                     output_file = NULL;
 		writeout(archs, narchs, output_file, mode, TRUE, FALSE, FALSE,
-		         FALSE, NULL);
+		         FALSE, NULL, NULL);
 		if(errors){
                     if(write_to_stdout == FALSE)
                         unlink(output_file);
@@ -929,7 +929,7 @@ char *envp[])
 	    else{
 		output_file = makestr(input_file, ".redo_prebinding", NULL);
 		writeout(archs, narchs, output_file, mode, TRUE, FALSE, FALSE,
-			 FALSE, NULL);
+			 FALSE, NULL, NULL);
 		if(errors){
 		    unlink(output_file);
 		    return(2);
@@ -1610,7 +1610,7 @@ uint32_t *throttle)
 
 	    if(output_file != NULL){
 		writeout(archs, narchs, (char *)output_file, mode, TRUE, FALSE,
-			 FALSE, FALSE, throttle);
+			 FALSE, FALSE, FALSE, throttle);
 		if(errors){
 		    unlink(output_file);
 		    goto error_return;
@@ -1619,7 +1619,7 @@ uint32_t *throttle)
 	    else{
 		output_file = makestr(file_name, ".redo_prebinding", NULL);
 		writeout(archs, narchs, (char *)output_file, mode, TRUE, FALSE,
-			 FALSE, FALSE, throttle);
+			 FALSE, FALSE, FALSE, throttle);
 		if(errors){
 		    unlink(output_file);
 		    goto error_return;
@@ -1834,11 +1834,11 @@ uint32_t *outlen)
 	    	if(outbuf != NULL){
 		    writeout_to_mem(archs, narchs, (char *)output_file, outbuf,
 	    			    &outlen64, TRUE, FALSE, FALSE, FALSE,
-				    &seen_archive);
+				    FALSE, &seen_archive);
 		    *outlen = (uint32_t)outlen64;
 	    	}else
 		    writeout(archs, narchs, (char *)output_file, mode, TRUE, 
-			     FALSE, FALSE, FALSE, NULL);
+			     FALSE, FALSE, FALSE, FALSE, NULL);
 		if(errors){
 		    if(outbuf == NULL)
 			unlink(output_file);
@@ -1850,7 +1850,7 @@ uint32_t *outlen)
 		if(outbuf != NULL){
 		    writeout_to_mem(archs, narchs, (char *)output_file, outbuf,
 				    &outlen64, TRUE, FALSE, FALSE, FALSE,
-				    &seen_archive);
+				    FALSE, &seen_archive);
 		    /* error if outlen is too large */
 		    if (outlen64 > 0xFFFFFFFF) {
 			if(outbuf == NULL)
@@ -1860,7 +1860,7 @@ uint32_t *outlen)
 		    *outlen = (uint32_t)outlen64;
 		}else
 		    writeout(archs, narchs, (char *)output_file, mode, TRUE, 
-			     FALSE, FALSE, FALSE, NULL);
+			     FALSE, FALSE, FALSE, FALSE, NULL);
 		if(errors){
 		    if(outbuf == NULL)
 			unlink(output_file);
@@ -9344,61 +9344,7 @@ uint32_t vmslide)
 	free(new_load_commands);
 
 	/* reset the pointers into the load commands */
-	lc1 = arch->object->load_commands;
-	for(i = 0; i < ncmds; i++){
-	    switch(lc1->cmd){
-	    case LC_SYMTAB:
-		arch->object->st = (struct symtab_command *)lc1;
-	        break;
-	    case LC_DYSYMTAB:
-		arch->object->dyst = (struct dysymtab_command *)lc1;
-		break;
-	    case LC_TWOLEVEL_HINTS:
-		arch->object->hints_cmd = (struct twolevel_hints_command *)lc1;
-		break;
-	    case LC_PREBIND_CKSUM:
-		arch->object->cs = (struct prebind_cksum_command *)lc1;
-		break;
-	    case LC_SEGMENT:
-		sg = (struct segment_command *)lc1;
-		if(strcmp(sg->segname, SEG_LINKEDIT) == 0)
-		    arch->object->seg_linkedit = sg;
-		break;
-	    case LC_CODE_SIGNATURE:
-		arch->object->code_sig_cmd =
-		    (struct linkedit_data_command *)lc1;
-		break;
-	    case LC_SEGMENT_SPLIT_INFO:
-		arch->object->split_info_cmd =
-		    (struct linkedit_data_command *)lc1;
-		break;
-	    case LC_FUNCTION_STARTS:
-		arch->object->func_starts_info_cmd =
-		    (struct linkedit_data_command *)lc1;
-		break;
-	    case LC_DATA_IN_CODE:
-		arch->object->data_in_code_cmd =
-		    (struct linkedit_data_command *)lc1;
-		break;
-	    case LC_DYLIB_CODE_SIGN_DRS:
-		arch->object->code_sign_drs_cmd =
-		    (struct linkedit_data_command *)lc1;
-		break;
-	    case LC_LINKER_OPTIMIZATION_HINT:
-		arch->object->link_opt_hint_cmd =
-		    (struct linkedit_data_command *)lc1;
-		break;
-	    case LC_DYLD_CHAINED_FIXUPS:
-		arch->object->dyld_chained_fixups =
-		    (struct linkedit_data_command *)lc1;
-		break;
-	    case LC_DYLD_EXPORTS_TRIE:
-		arch->object->dyld_exports_trie =
-		    (struct linkedit_data_command *)lc1;
-		break;
-	    }
-	    lc1 = (struct load_command *)((char *)lc1 + lc1->cmdsize);
-	}
+	reset_load_command_pointers(arch->object);
 }
 
 #ifndef LIBRARY_API

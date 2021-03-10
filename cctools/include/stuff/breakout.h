@@ -180,6 +180,12 @@ struct object {
 	*dyld_exports_trie;	    /* the exports trie */
     struct linkedit_data_command
 	*dyld_chained_fixups;	    /* the fixups */
+    struct encryption_info_command
+	*encryption_info_command;   /* LC_ENCRYPTION_INFO */
+    struct encryption_info_command_64
+	*encryption_info_command64; /* LC_ENCRYPTION_INFO_64 */
+    struct note_command **notes;    /* array of note_command struct pointers */
+    uint32_t nnote;                 /* count of notes array */
 
     /*
      * This is only used for redo_prebinding and is calculated by breakout()
@@ -293,6 +299,7 @@ __private_extern__ void writeout(
     enum bool commons_in_toc,
     enum bool force_64bit_toc,
     enum bool library_warnings,
+    enum bool deterministic_libraries,
     uint32_t *throttle);
 
 __private_extern__ void writeout_to_mem(
@@ -305,7 +312,11 @@ __private_extern__ void writeout_to_mem(
     enum bool commons_in_toc,
     enum bool force_64bit_toc,
     enum bool library_warning,
+    enum bool deterministic_libraries,
     enum bool *seen_archive);
+
+__private_extern__ void reset_load_command_pointers(
+    struct object* object);
 
 __private_extern__ void checkout(
     struct arch *archs,

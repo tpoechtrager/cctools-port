@@ -9,7 +9,6 @@ bin_PROGRAMS =  \
 	seg_addr_table \
 	seg_hack \
 	install_name_tool \
-	indr \
 	strip \
 	nmedit \
 	segedit \
@@ -43,7 +42,6 @@ redo_prebinding_SOURCES = redo_prebinding.c
 seg_addr_table_SOURCES = seg_addr_table.c
 seg_hack_SOURCES = seg_hack.c
 install_name_tool_SOURCES = install_name_tool.c
-indr_SOURCES = indr.c
 strip_SOURCES = strip.c
 nmedit_SOURCES = strip.c
 nmedit_CFLAGS = -DNMEDIT $(AM_CFLAGS)
