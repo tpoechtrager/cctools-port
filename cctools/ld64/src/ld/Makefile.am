@@ -15,6 +15,9 @@ ld_LDADD =  \
 
 ld_LDFLAGS = $(PTHREAD_FLAGS) $(EXECINFO_LIB)
 
+ld_la_LIBADD =  \
+	 $(top_builddir)/ld64/src/3rd/libhelper.la
+
 ld_CXXFLAGS =  \
 	-D__DARWIN_UNIX03 \
 	$(WARNINGS) \
