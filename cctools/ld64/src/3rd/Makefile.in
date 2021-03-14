@@ -105,10 +105,13 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 libhelper_la_LIBADD =
+am__dirstamp = $(am__leading_dot)dirstamp
 am_libhelper_la_OBJECTS = libhelper_la-helper.lo \
 	libhelper_la-qsort_r.lo libhelper_la-strlcat.lo \
 	libhelper_la-strlcpy.lo libhelper_la-eprintf.lo \
-	libhelper_la-md5.lo libhelper_la-mkpath_np.lo \
+	libhelper_la-md5.lo libhelper_la-sha1.lo \
+	libhelper_la-sha256.lo corecrypto/libhelper_la-ccsha1.lo \
+	corecrypto/libhelper_la-ccsha2.lo libhelper_la-mkpath_np.lo \
 	libhelper_la-find_executable.lo libhelper_la-reallocf.lo
 libhelper_la_OBJECTS = $(am_libhelper_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -383,6 +386,10 @@ libhelper_la_SOURCES = \
 	strlcpy.c \
 	eprintf.c \
 	md5.c \
+	sha1.c \
+	sha256.c \
+	corecrypto/ccsha1.c \
+	corecrypto/ccsha2.c \
 	mkpath_np.c \
 	find_executable.c \
 	reallocf.c
@@ -431,12 +438,19 @@ clean-noinstLTLIBRARIES:
 	  echo rm -f $${locs}; \
 	  rm -f $${locs}; \
 	}
+corecrypto/$(am__dirstamp):
+	@$(MKDIR_P) corecrypto
+	@: > corecrypto/$(am__dirstamp)
+corecrypto/libhelper_la-ccsha1.lo: corecrypto/$(am__dirstamp)
+corecrypto/libhelper_la-ccsha2.lo: corecrypto/$(am__dirstamp)
 
 libhelper.la: $(libhelper_la_OBJECTS) $(libhelper_la_DEPENDENCIES) $(EXTRA_libhelper_la_DEPENDENCIES) 
 	$(AM_V_CCLD)$(libhelper_la_LINK)  $(libhelper_la_OBJECTS) $(libhelper_la_LIBADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
+	-rm -f corecrypto/*.$(OBJEXT)
+	-rm -f corecrypto/*.lo
 
 distclean-compile:
 	-rm -f *.tab.c
@@ -468,6 +482,18 @@ libhelper_la-eprintf.lo: eprintf.c
 libhelper_la-md5.lo: md5.c
 	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libhelper_la_CFLAGS) $(CFLAGS) -c -o libhelper_la-md5.lo `test -f 'md5.c' || echo '$(srcdir)/'`md5.c
 
+libhelper_la-sha1.lo: sha1.c
+	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libhelper_la_CFLAGS) $(CFLAGS) -c -o libhelper_la-sha1.lo `test -f 'sha1.c' || echo '$(srcdir)/'`sha1.c
+
+libhelper_la-sha256.lo: sha256.c
+	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libhelper_la_CFLAGS) $(CFLAGS) -c -o libhelper_la-sha256.lo `test -f 'sha256.c' || echo '$(srcdir)/'`sha256.c
+
+corecrypto/libhelper_la-ccsha1.lo: corecrypto/ccsha1.c
+	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libhelper_la_CFLAGS) $(CFLAGS) -c -o corecrypto/libhelper_la-ccsha1.lo `test -f 'corecrypto/ccsha1.c' || echo '$(srcdir)/'`corecrypto/ccsha1.c
+
+corecrypto/libhelper_la-ccsha2.lo: corecrypto/ccsha2.c
+	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libhelper_la_CFLAGS) $(CFLAGS) -c -o corecrypto/libhelper_la-ccsha2.lo `test -f 'corecrypto/ccsha2.c' || echo '$(srcdir)/'`corecrypto/ccsha2.c
+
 libhelper_la-mkpath_np.lo: mkpath_np.c
 	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libhelper_la_CFLAGS) $(CFLAGS) -c -o libhelper_la-mkpath_np.lo `test -f 'mkpath_np.c' || echo '$(srcdir)/'`mkpath_np.c
 
@@ -482,6 +508,7 @@ mostlyclean-libtool:
 
 clean-libtool:
 	-rm -rf .libs _libs
+	-rm -rf corecrypto/.libs corecrypto/_libs
 
 # This directory's subdirectories are mostly independent; you can cd
 # into them and run 'make' without going through this Makefile.
@@ -671,6 +698,7 @@ clean-generic:
 distclean-generic:
 	-test -z "$(CONFIG_CLEAN_FILES)" || rm -f $(CONFIG_CLEAN_FILES)
 	-test . = "$(srcdir)" || test -z "$(CONFIG_CLEAN_VPATH_FILES)" || rm -f $(CONFIG_CLEAN_VPATH_FILES)
+	-rm -f corecrypto/$(am__dirstamp)
 
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
