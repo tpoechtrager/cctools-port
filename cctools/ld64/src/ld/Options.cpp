@@ -4138,13 +4138,7 @@ void Options::parse(int argc, const char* argv[])
 				fMakeInitializersIntoOffsets = true;
 			}
 			else if (strcmp(arg, "-adhoc_codesign") == 0) {
-#ifdef __APPLE__ // ld64-port
 				fAdHocSign = true;
-#else
-				fprintf(stderr, "warning: '-adhoc_codesign' is not supported by ld64-port");
-				fAdHocSign = false;
-#endif
-				
 			}
 			else if (strcmp(arg, "-oso_prefix") == 0) {
 				const char* path = argv[++i];
@@ -5785,11 +5779,9 @@ void Options::reconfigureDefaults()
 		fUseObjCRelativeMethodLists = platforms().minOS(ld::version2020Fall);
 	}
 
-#ifdef __APPLE__ // ld64-port: Not supported yet
 	// <rdar://problem/51911409> codesign all userland arm64 macOS binaries
 	if ( dyldLoadsOutput() && (fArchitecture == CPU_TYPE_ARM64) && platforms().contains(ld::Platform::macOS) )
 		fAdHocSign = true;
-#endif
 
 }
 
