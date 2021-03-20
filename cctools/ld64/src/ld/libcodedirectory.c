@@ -19,18 +19,9 @@
 #include <sys/mman.h>
 #include <sys/queue.h>
 
-#if __has_include(<corecrypto/ccdigest.h>) // ld64-port
 #include <corecrypto/ccdigest.h>
 #include <corecrypto/ccsha1.h>
 #include <corecrypto/ccsha2.h>
-#else
-#define ccdigest_init(...)
-#define ccdigest_update(...)
-#define ccdigest_final(...)
-#define ccdigest_di_decl(...)
-#define ccsha1_di NULL
-#define ccsha256_di NULL
-#endif
 
 #define LIBCD_HAS_PLATFORM_VERSION 1
 #include "libcodedirectory.h"
