@@ -1591,17 +1591,6 @@ int main(int argc, const char* argv[])
 			fprintf(stderr, "processed %3u dylib files\n", inputFiles._totalDylibsLoaded);
 			fprintf(stderr, "wrote output file            totaling %15s bytes\n", commatize(out.fileSize(), temp));
 		}
-		if ( strncmp(archName, "arm", 3) == 0 && !getenv("NO_LDID") ) { // ld64-port: fake sign arm binaries
-			char *ldid = find_executable("ldid");
-			if ( ldid ) {
-				std::string ldidCommand = std::string(ldid) + std::string(" -S ") + std::string(options.outputFilePath());
-				if (getenv("LDID_DEBUG")) {
-					fprintf(stderr, "\n%s\n", ldidCommand.c_str());
-				}
-				system(ldidCommand.c_str());
-				free(ldid);
-			}
-		}
 		// <rdar://problem/6780050> Would like linker warning to be build error.
 		if ( options.errorBecauseOfWarnings() ) {
 			fprintf(stderr, "ld: fatal warning(s) induced error (-fatal_warnings)\n");
