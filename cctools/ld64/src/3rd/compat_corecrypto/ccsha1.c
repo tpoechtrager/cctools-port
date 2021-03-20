@@ -1,7 +1,7 @@
-#ifndef __APPLE__
+#if !defined(__APPLE__) || !__has_include(<corecrypto/ccdigest.h>)
 
-#include <corecrypto/ccdigest.h>
-#include <corecrypto/ccsha1.h>
+#include "compat_corecrypto/ccdigest.h"
+#include "compat_corecrypto/ccsha1.h"
 
 #include "sha1.h"
 
@@ -31,4 +31,4 @@ const struct ccdigest_info *ccsha1_di(void) {
 	return &ccsha1_info;
 }
 
-#endif /* __APPLE__ */
+#endif /* !__APPLE__ || !__has_include(<corecrypto/ccdigest.h>) */

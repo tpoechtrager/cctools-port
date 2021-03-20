@@ -1,10 +1,5 @@
-#ifdef __APPLE__
-
-#include_next <corecrypto/ccdigest.h>
-
-#else
-#ifndef __CORECRYPTO_CCDIGEST__
-#define __CORECRYPTO_CCDIGEST__
+#ifndef __COMPAT_CORECRYPTO_CCDIGEST__
+#define __COMPAT_CORECRYPTO_CCDIGEST__
 
 #include <stdint.h>
 #include <stddef.h>
@@ -25,5 +20,4 @@ struct ccdigest_info {
 #define ccdigest_update(di, ...) (di)->update(__VA_ARGS__)
 #define ccdigest_final(di, ...) (di)->final(__VA_ARGS__)
 
-#endif /* __CORECRYPTO_CCDIGEST__ */
-#endif /* __APPLE__ */
+#endif /* __COMPAT_CORECRYPTO_CCDIGEST__ */

@@ -48,16 +48,6 @@ Optional, but recommended:
 You can find xar [here](https://github.com/tpoechtrager/xar).  
 Do not install libxar-dev on Ubuntu, it's a different package.
 
-## ISSUES ##
-
-* `-adhoc_codesign` is not supported for now.  
-  `-adhoc_codesign` requires stuff from CoreCrypto which is not redistributable.  
-  Patches which implement the missing functionalitiy in `ld64/src/ld/libcodedirectory.c`  
-  are more than welcome.  However, you should only do this if you haven't looked at the  
-  non-distributable original code.
-
-  We use `ldid` instead for now.
-
 ## INSTALLATION ##
 
 ### Install Apple's TAPI library:
