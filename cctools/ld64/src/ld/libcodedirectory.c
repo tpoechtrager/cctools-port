@@ -19,7 +19,7 @@
 #include <sys/mman.h>
 #include <sys/queue.h>
 
-#if __has_include(<corecrypto/ccdigest.h>) // ld64-port
+#if defined(__APPLE__) && __has_include(<corecrypto/ccdigest.h>) // ld64-port
 #include <corecrypto/ccdigest.h>
 #include <corecrypto/ccsha1.h>
 #include <corecrypto/ccsha2.h>
@@ -794,14 +794,16 @@ _libcd_hash_page(libcd *s,
                  struct _hash_info const *hi,
                  uint8_t* hash_destination)
 {
-    uint8_t page_hash[_max_known_hash_len] = {0};
+    uint8_t page_hash[_max_known_hash_len]; // = {0};
+    memset(page_hash, 0, sizeof(page_hash)); // ld64-port
     const unsigned int page_no = (unsigned int)page_idx;
 
     struct ccdigest_info const *di = hi->di();
     ccdigest_di_decl(di, ctx);
 
     const size_t pos = page_idx * _cs_page_bytes;
-    uint8_t page[_cs_page_bytes] = {0};
+    uint8_t page[_cs_page_bytes]; // = {0};
+    memset(page, 0, sizeof(page)); // ld64-port
     size_t read_bytes = s->read_page(s, page_no, pos, _cs_page_bytes, page);
 
     if (read_bytes == 0) {
