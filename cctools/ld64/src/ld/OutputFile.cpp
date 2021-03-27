@@ -3813,6 +3813,8 @@ void OutputFile::writeOutputFile(ld::Internal& state)
 			}
 			else {
 #endif /* __APPLE__ */
+				// ld64-port: Added unlink() to fix file permissions when creating universal binaries
+				(void)unlink(_options.outputFilePath());
 				outputIsMappableFile = false;
 #ifdef __APPLE__ // ld64-port
 			}
