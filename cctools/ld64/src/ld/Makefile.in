@@ -119,7 +119,8 @@ ld_DEPENDENCIES = $(top_builddir)/ld64/src/3rd/libhelper.la \
 	$(top_builddir)/ld64/src/ld/passes/libPasses.la \
 	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
@@ -268,6 +269,7 @@ CXXCPP = @CXXCPP@
 CXXFLAGS = @CXXFLAGS@
 CYGPATH_W = @CYGPATH_W@
 DEFS = @DEFS@
+DISPATCH_LIB = @DISPATCH_LIB@
 DLLTOOL = @DLLTOOL@
 DL_LIB = @DL_LIB@
 DSYMUTIL = @DSYMUTIL@
@@ -409,7 +411,8 @@ ld_LDADD = \
 	$(XAR_LIB) \
 	$(DL_LIB) \
 	$(TAPI_LIB) \
-	$(REALLOCF_LIB)
+	$(REALLOCF_LIB) \
+	$(DISPATCH_LIB)
 
 ld_LDFLAGS = $(PTHREAD_FLAGS) $(EXECINFO_LIB)
 ld_CXXFLAGS = \

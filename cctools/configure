@@ -669,6 +669,7 @@ TAPI_DEF
 TAPI_LIB
 XAR_LIB
 FTS_LIB
+DISPATCH_LIB
 LLVM_LIB_DIR
 LLVM_INCLUDE_DIR
 LTO_LIB
@@ -18726,6 +18727,114 @@ printf "%s\n" "$as_me: WARNING: llvm-config not found, disabling LTO support" >&
 
 
 LDFLAGS="$LDFLAGS $LTO_RPATH"
+
+### Check for dispatch library ###
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for dispatch_once in -ldispatch" >&5
+printf %s "checking for dispatch_once in -ldispatch... " >&6; }
+if test ${ac_cv_lib_dispatch_dispatch_once+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  ac_check_lib_save_LIBS=$LIBS
+LIBS="-ldispatch  $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.  */
+char dispatch_once ();
+int
+main (void)
+{
+return dispatch_once ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"
+then :
+  ac_cv_lib_dispatch_dispatch_once=yes
+else $as_nop
+  ac_cv_lib_dispatch_dispatch_once=no
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam \
+    conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_dispatch_dispatch_once" >&5
+printf "%s\n" "$ac_cv_lib_dispatch_dispatch_once" >&6; }
+if test "x$ac_cv_lib_dispatch_dispatch_once" = xyes
+then :
+
+         for ac_header in dispatch/dispatch.h
+do :
+  ac_fn_c_check_header_compile "$LINENO" "dispatch/dispatch.h" "ac_cv_header_dispatch_dispatch_h" "$ac_includes_default"
+if test "x$ac_cv_header_dispatch_dispatch_h" = xyes
+then :
+  printf "%s\n" "#define HAVE_DISPATCH_DISPATCH_H 1" >>confdefs.h
+ DISPATCH_LIB=-ldispatch
+fi
+
+done
+else $as_nop
+
+    { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for dispatch_sync in -lc" >&5
+printf %s "checking for dispatch_sync in -lc... " >&6; }
+if test ${ac_cv_lib_c_dispatch_sync+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  ac_check_lib_save_LIBS=$LIBS
+LIBS="-lc  $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.  */
+char dispatch_sync ();
+int
+main (void)
+{
+return dispatch_sync ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"
+then :
+  ac_cv_lib_c_dispatch_sync=yes
+else $as_nop
+  ac_cv_lib_c_dispatch_sync=no
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam \
+    conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_c_dispatch_sync" >&5
+printf "%s\n" "$ac_cv_lib_c_dispatch_sync" >&6; }
+if test "x$ac_cv_lib_c_dispatch_sync" = xyes
+then :
+
+             for ac_header in dispatch/dispatch.h
+do :
+  ac_fn_c_check_header_compile "$LINENO" "dispatch/dispatch.h" "ac_cv_header_dispatch_dispatch_h" "$ac_includes_default"
+if test "x$ac_cv_header_dispatch_dispatch_h" = xyes
+then :
+  printf "%s\n" "#define HAVE_DISPATCH_DISPATCH_H 1" >>confdefs.h
+ DISPATCH_LIB=
+fi
+
+done
+fi
+
+
+
+fi
+
+
 
 ### Check for libfts (musl) ###
 
