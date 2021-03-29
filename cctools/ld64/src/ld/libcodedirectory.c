@@ -19,6 +19,10 @@
 #include <sys/mman.h>
 #include <sys/queue.h>
 
+#if defined(HAVE_DISPATCH_DISPATCH_H) && HAVE_DISPATCH_DISPATCH_H // ld64-port
+#define LIBCD_PARALLEL 1
+#endif
+
 #if defined(__APPLE__) && __has_include(<corecrypto/ccdigest.h>) // ld64-port
 #include <corecrypto/ccdigest.h>
 #include <corecrypto/ccsha1.h>
@@ -55,8 +59,13 @@
 #include <sysexits.h>
 #endif
 
+#ifndef MIN // ld64-port: #ifndef
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
+#endif
+
+#ifndef MAX // ld64-port: #ifndef
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
+#endif
 
 #define bl htonl
 #ifndef __APPLE__ // ld64-port

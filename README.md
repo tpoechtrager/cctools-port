@@ -43,7 +43,8 @@ Optional, but recommended:
 
 `llvm-devel`               (For Link Time Optimization Support)  
 `uuid-devel`               (For ld64 `-random_uuid` Support)  
-`llvm-devel` + `xar-devel` (For ld64 `-bitcode_bundle` Support)
+`llvm-devel` + `xar-devel` (For ld64 `-bitcode_bundle` Support)  
+`libdispatch`              (For parallelism in ld64 / libcodedirectory.c)
 
 You can find xar [here](https://github.com/tpoechtrager/xar).  
 Do not install libxar-dev on Ubuntu, it's a different package.

@@ -336,6 +336,16 @@ LDFLAGS=$ORIGLDFLAGS
 CHECK_LLVM
 LDFLAGS="$LDFLAGS $LTO_RPATH"
 
+### Check for dispatch library ###
+
+AC_CHECK_LIB([dispatch], [dispatch_once], [
+  AC_CHECK_HEADERS([dispatch/dispatch.h], [DISPATCH_LIB=-ldispatch])], [
+    AC_CHECK_LIB([c], [dispatch_sync], [
+      AC_CHECK_HEADERS([dispatch/dispatch.h], [DISPATCH_LIB=])], [])
+    AC_SUBST(DISPATCH_LIB)
+  ])
+AC_SUBST(DISPATCH_LIB)
+
 ### Check for libfts (musl) ###
 
 AC_CHECK_LIB([fts],[fts_open],[

@@ -11,7 +11,8 @@ ld_LDADD =  \
 	$(XAR_LIB) \
 	$(DL_LIB) \
 	$(TAPI_LIB) \
-	$(REALLOCF_LIB)
+	$(REALLOCF_LIB) \
+	$(DISPATCH_LIB)
 
 ld_LDFLAGS = $(PTHREAD_FLAGS) $(EXECINFO_LIB)
 
