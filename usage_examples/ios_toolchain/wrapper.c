@@ -130,7 +130,7 @@ void env(char **p, const char *name, char *fallback)
 
 int main(int argc, char *argv[])
 {
-    char **args = alloca(sizeof(char*) * (argc+12));
+    char **args = alloca(sizeof(char*) * (argc+50));
     int i, j;
 
     char execpath[PATH_MAX+1];
@@ -181,6 +181,8 @@ int main(int argc, char *argv[])
 
     args[i++] = osvermin;
     args[i++] = "-mlinker-version=609";
+    args[i++] = "-Wl,-adhoc_codesign";
+    args[i++] = "-Wno-unused-command-line-argument";
 
     for (j = 1; j < argc; ++i, ++j)
         args[i] = argv[j];

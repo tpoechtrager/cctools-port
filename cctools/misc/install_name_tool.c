@@ -29,7 +29,6 @@
 #if defined(__APPLE__) && __aarch64__ /* cctools-port: copy before modification */
 #include <copyfile.h>
 #endif
-#include "stuff/port.h" /* cctools-port: fake signing */
 #include "stuff/errors.h"
 #include "stuff/breakout.h"
 #include "stuff/rnd.h"
@@ -328,8 +327,6 @@ char **envp)
 	    write_on_input(archs, narchs, input);
         output = input;
     }
-
-	FAKE_SIGN_ARM_BINARY(archs, narchs, input); /* cctools-port */
 
 	if(errors)
 	    return(EXIT_FAILURE);
