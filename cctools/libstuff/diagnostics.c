@@ -18,7 +18,6 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <stdbool.h> /* cctools-port */
 #include "stuff/port.h" /* cctools-port: reallocf() */
 
 
