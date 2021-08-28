@@ -26,9 +26,6 @@
 #include <limits.h>
 #include <unistd.h>
 #include <fcntl.h>
-#if defined(__APPLE__) && __aarch64__ /* cctools-port: copy before modification */
-#include <copyfile.h>
-#endif
 #include "stuff/errors.h"
 #include "stuff/breakout.h"
 #include "stuff/rnd.h"
@@ -393,22 +390,9 @@ char *input)
     struct load_command *lc;
     enum byte_sex host_byte_sex;
 
-#if defined(__APPLE__) && __aarch64__ /* cctools-port: copy before modification */
-        char tempfile[PATH_MAX];
-
-	snprintf(tempfile, PATH_MAX, "%sXXXXXX", input);
-	mktemp(tempfile);
-
-	if (copyfile(input, tempfile, NULL, COPYFILE_ALL | COPYFILE_MOVE) == -1)
-	  system_error("failed to copy %s for installation", input);
-
-	fd = open(tempfile, O_WRONLY, 0);
-#else
-	fd = open(input, O_WRONLY, 0);
-#endif
-
 	host_byte_sex = get_host_byte_sex();
 
+	fd = open(input, O_WRONLY, 0);
 	if(fd == -1)
 	    system_error("can't open input file: %s for writing", input);
 
@@ -472,11 +456,6 @@ char *input)
 	}
 	if(close(fd) == -1)
 	    system_error("can't close written on input file: %s", input);
-
-#if defined(__APPLE__) && __aarch64__ /* cctools-port: copy before modification */
-	if (rename(tempfile, input) == -1)
-	  system_error("can't rename tempfile to %s", input);
-#endif
 }
 
 /*
