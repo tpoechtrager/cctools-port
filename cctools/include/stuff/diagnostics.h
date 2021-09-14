@@ -60,4 +60,13 @@ void diagnostics_log_msg(enum diagnostic_level level, const char* message);
  */
 void diagnostics_write(void);
 
+#if defined(__APPLE__ ) && defined(__has_builtin)
+#  if __has_builtin(__builtin_available)
+#    define HAVE_OPENMEMSTREAM_RUNTIME __builtin_available(macOS 10.13, *)
+#  endif
+#endif
+#ifndef HAVE_OPENMEMSTREAM_RUNTIME
+#  define HAVE_OPENMEMSTREAM_RUNTIME 1
+#endif
+
 #endif /* diagnostics_h */
