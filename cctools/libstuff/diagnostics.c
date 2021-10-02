@@ -103,6 +103,7 @@ void diagnostics_log_args(int argc, char** argv)
 	info.args = NULL;
     }
 
+    if (HAVE_OPENMEMSTREAM_RUNTIME) {  // cctools-port
     stream = open_memstream(&buf, &len);
     if (stream) {
 	for (int i = 1; i < argc; ++i) {
@@ -112,6 +113,7 @@ void diagnostics_log_args(int argc, char** argv)
 	info.args = strdup(buf);
 	free(buf);
     }
+    }  // cctools-port
 }
 
 void diagnostics_log_msg(enum diagnostic_level level, const char* message)
@@ -140,7 +142,10 @@ void diagnostics_write(void)
     /*
      * write XML data to a dynamic in-memory buffer.
      */
+    if (HAVE_OPENMEMSTREAM_RUNTIME) { // cctools-port
+    if (diagnostics_enabled())
     stream = open_memstream(&buf, &len);
+    } // cctools-port
     if (!stream)
 	return;
 

@@ -49,7 +49,8 @@ const char *format,
         fprintf(stderr, "\n");
 	va_end(ap);
 
-	if (diagnostics_enabled()) {
+       if (HAVE_OPENMEMSTREAM_RUNTIME) {    // cctools-port modification
+       if (diagnostics_enabled()) {
 	    char* buf;
 	    size_t len;
 
@@ -65,6 +66,7 @@ const char *format,
 
 	    diagnostics_write();
 	}
+       } // cctools-port modification
 
 	exit(1);
 }
@@ -86,7 +88,8 @@ const char *format,
 	fprintf(stderr, " (%s)\n", strerror(errno));
 	va_end(ap);
 
-	if (diagnostics_enabled()) {
+       if (HAVE_OPENMEMSTREAM_RUNTIME) {    // cctools-port modification
+       if (diagnostics_enabled()) {
 	    char* buf;
 	    size_t len;
 
@@ -103,6 +106,7 @@ const char *format,
 
 	    diagnostics_write();
 	}
+       } // cctools-port modification
 
 	exit(1);
 }
@@ -125,7 +129,8 @@ char *format,
 	fprintf(stderr, " (%s)\n", mach_error_string(r));
 	va_end(ap);
 
-	if (diagnostics_enabled()) {
+       if (HAVE_OPENMEMSTREAM_RUNTIME) {    // cctools-port modification
+       if (diagnostics_enabled()) {
 	    char* buf;
 	    size_t len;
 
@@ -142,6 +147,7 @@ char *format,
 
 	    diagnostics_write();
 	}
+       } // cctools-port modification
 
 	exit(1);
 }
