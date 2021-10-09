@@ -30,16 +30,16 @@ function verbose_cmd
 function extract()
 {
     echo "extracting $(basename $1) ..."
-    local tarflags="xf"
+    local tarflags="xzf"
 
     case $1 in
-        *.tar.xz)
+        *.tar.xz|*.txz)
             xz -dc $1 | tar $tarflags -
             ;;
-        *.tar.gz)
+        *.tar.gz|*.tgz)
             gunzip -dc $1 | tar $tarflags -
             ;;
-        *.tar.bz2)
+        *.tar.bz2|*.tbz2)
             bzip2 -dc $1 | tar $tarflags -
             ;;
         *)
