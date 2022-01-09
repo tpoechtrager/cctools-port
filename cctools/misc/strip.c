@@ -38,6 +38,7 @@
 #include <mach-o/reloc.h>
 #include <mach-o/nlist.h>
 #include <mach-o/stab.h>
+#include "stuff/port.h" /* cctools-port: fake signing */
 #include "stuff/breakout.h"
 #include "stuff/allocate.h"
 #include "stuff/errors.h"
@@ -746,6 +747,7 @@ enum bool all_archs)
 		     toc64flag,
 #endif
 		     FALSE, deterministic_archives, NULL);
+	    FAKE_SIGN_ARM_BINARY(archs, narchs, output_file); /* cctools-port */
 	}
 	else{
 	    unix_standard_mode = get_unix_standard_mode();
@@ -804,6 +806,7 @@ enum bool all_archs)
 		     toc64flag,
 #endif
 		     FALSE, deterministic_archives, NULL);
+	    FAKE_SIGN_ARM_BINARY(archs, narchs, output_file); /* cctools-port */
 	    if(rename_file != NULL){
 		if(rename(output_file, rename_file) == -1)
 		    system_error("can't move temporary file: %s to file: %s",
