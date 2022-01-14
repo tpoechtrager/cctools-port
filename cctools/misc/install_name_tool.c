@@ -26,6 +26,7 @@
 #include <limits.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include "stuff/port.h" /* cctools-port: fake signing */
 #include "stuff/errors.h"
 #include "stuff/breakout.h"
 #include "stuff/rnd.h"
@@ -324,6 +325,8 @@ char **envp)
 	    write_on_input(archs, narchs, input);
         output = input;
     }
+
+	FAKE_SIGN_ARM_BINARY(archs, narchs, input); /* cctools-port */
 
 	if(errors)
 	    return(EXIT_FAILURE);
