@@ -1382,9 +1382,9 @@ char **envp)
 	if (cmd_flags.D == FALSE && zero_ar_date == FALSE) {
 #ifndef __OPENSTEP__
 		/* cctools-port: replaced __builtin_available */
-#if 0
+#ifndef __APPLE__
 	    if (__builtin_available(macOS 10.12, *)) {
-#endif /* 0*/ 
+#endif /* __APPLE__ */
 #ifdef HAVE_CLOCK_GETTIME
 		if (clock_gettime(CLOCK_REALTIME, &toc_timespec)) {
 		    system_fatal("clock_gettime failed");
@@ -1392,9 +1392,9 @@ char **envp)
 		}
 		toc_time = toc_timespec.tv_sec;
 #endif /* HAVE_CLOCK_GETTIME */
-#if 0
+#ifndef __APPLE__
 	    } else {
-#endif /* 0 */
+#endif /* __APPLE__ */
 #ifndef HAVE_CLOCK_GETTIME
 		if (gettimeofday(&toc_timeval, NULL)) {
 		    system_fatal("gettimeofday failed");
@@ -1402,9 +1402,9 @@ char **envp)
 		}
 		toc_time = toc_timeval.tv_sec;
 #endif /* !HAVE_CLOCK_GETTIME */
-#if 0
+#ifndef __APPLE__
 	    }
-#endif /* 0 */
+#endif /* __APPLE__ */
 #else
 	    toc_time = time(NULL);
 #endif /* !defined(__OPENSTEP__) */
