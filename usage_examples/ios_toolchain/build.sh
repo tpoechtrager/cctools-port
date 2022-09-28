@@ -42,6 +42,9 @@ function extract()
         *.tar.bz2|*.tbz2)
             bzip2 -dc $1 | tar $tarflags -
             ;;
+        *.tar.lzma|*.tlzma)
+            lzma -dc $1 | tar $tarflags -
+            ;;
         *)
             echo "unhandled archive type" 1>&2
             exit 1
