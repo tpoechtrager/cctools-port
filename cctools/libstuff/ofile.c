@@ -1497,6 +1497,7 @@ struct ofile *ofile)
 			      "%s", ofile->file_name);
 	    }
 	}
+	munmap(ofile->file_addr, ofile->file_size);
 	if(ofile->file_name != NULL)
 	    free(ofile->file_name);
 	if(ofile->arch_flag.name != NULL)
