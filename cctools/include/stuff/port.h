@@ -29,6 +29,9 @@ char *find_executable(const char *name);
 		uint32_t i; \
 		for (i = 0; i < narchs; i++) { \
 			cpu_type_t cputype; \
+			if (archs[i].object == NULL) { \
+				continue; \
+			} \
 			if (archs[i].object->mh != NULL) { \
 				cputype = archs[i].object->mh->cputype; \
 			} else { \
