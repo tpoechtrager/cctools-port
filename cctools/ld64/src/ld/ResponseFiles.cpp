@@ -209,18 +209,25 @@ struct string_list* at_paths, int *hint_p)
       }
 
       char* addr = NULL;
+      size_t size = sb.st_size;
+      bool used_mmap = true;
       if (sb.st_size) {
 	addr = (char*)mmap(0, (size_t)sb.st_size, PROT_READ | PROT_WRITE,
 		    MAP_FILE | MAP_PRIVATE, fd, 0);
-	if (!addr) {
-	  close(fd);
-	  throwf("can't mmap %s: %s\n", at_path, strerror(errno));
-	  return EXPAND_ERROR;
+	if (MAP_FAILED == addr) {
+	  used_mmap = false;
+	  addr = (char *)malloc(size + 1);
+	  if (-1 == read(fd, addr, size)) {
+	    close(fd);
+	    throwf("can't read %s: %s\n", at_path, strerror(errno));
+	    return EXPAND_ERROR;
+	  }
+	  addr[size] = '\0';
 	}
       }
 
       if (close(fd)) {
-	if (munmap(addr, (size_t)sb.st_size))
+	if (used_mmap && munmap(addr, (size_t)sb.st_size))
 	  throwf("can't munmap %s: %s\n", at_path, strerror(errno));
 	throwf("can't close %s: %s\n", at_path, strerror(errno));
 	return EXPAND_ERROR;
@@ -245,7 +252,7 @@ struct string_list* at_paths, int *hint_p)
 
       // unmap the file
       if (addr) {
-	if (munmap(addr, (size_t)sb.st_size)) {
+	if (used_mmap && munmap(addr, (size_t)sb.st_size)) {
 	  throwf("can't munmap %s: %s\n", at_path,
 		  strerror(errno));
 	  return EXPAND_ERROR;
