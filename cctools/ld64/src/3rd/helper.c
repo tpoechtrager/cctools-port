@@ -37,6 +37,7 @@ const char ldVersionString[] = "@(#)PROGRAM:ld  PROJECT:ld64-" STRINGIFY(LD64_VE
 
 void __assert_rtn(const char *func, const char *file, int line, const char *msg)
 {
+#ifndef NDEBUG
 #if defined(__FreeBSD__) || defined(__DragonFly__)
     __assert(msg, file, line, func);
 #elif defined(__NetBSD__) || defined(__OpenBSD__) || defined(__CYGWIN__)
@@ -48,6 +49,7 @@ void __assert_rtn(const char *func, const char *file, int line, const char *msg)
     fflush(NULL);
     abort();
 #endif /* __FreeBSD__ */
+#endif /* NDEBUG */
 }
 
 int _NSGetExecutablePath(char *epath, unsigned int *size)
