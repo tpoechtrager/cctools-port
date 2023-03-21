@@ -145,27 +145,27 @@ uint32_t *throttle)
 
 #ifndef __OPENSTEP__
 	/* cctools-port: replaced __builtin_available */
-#if 0
+#ifndef __APPLE__
 	if (__builtin_available(macOS 10.12, *)) {
-#endif /* 0 */
+#endif /* __APPLE__ */
 #ifdef HAVE_CLOCK_GETTIME
 	    if (clock_gettime(CLOCK_REALTIME, &toc_timespec)) {
 		system_error("clock_gettime failed");
 		return;
 	    }
 #endif /* HAVE_CLOCK_GETTIME */
-#if 0
+#ifndef __APPLE__
 	} else {
-#endif /* 0 */
+#endif /* __APPLE__ */
 #ifndef HAVE_CLOCK_GETTIME
 	    if (gettimeofday(&toc_timeval, NULL)) {
 		system_error("gettimeofday failed");
 		return;
 	    }
 #endif /* !HAVE_CLOCK_GETTIME */
-#if 0
+#ifndef __APPLE__
 	}
-#endif /* 0 */
+#endif /* __APPLE__ */
 #else
 	/*
 	 * The environment variable ZERO_AR_DATE is used here and other
