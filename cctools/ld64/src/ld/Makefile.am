@@ -7,7 +7,7 @@ ld_LDADD =  \
 	$(top_builddir)/ld64/src/ld/parsers/libParsers.la \
 	$(top_builddir)/ld64/src/ld/passes/libPasses.la \
 	$(UUID_LIB) \
-	$(LTO_RPATH) \
+	$(LTO_LIB) \
 	$(XAR_LIB) \
 	$(DL_LIB) \
 	$(TAPI_LIB) \
