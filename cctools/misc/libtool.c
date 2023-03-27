@@ -3172,10 +3172,17 @@ struct ofile *ofile)
 	 * Move the temporary file into its final location
 	 */
 	if (tempfile) {
+	    /*
+	     * Must release mmap otherwise rename will fail on non-local fs. 
+	     * NB: the ofile_unmap can be made by caller as well
+	     */ 
+	    if (ofile) { 
+			ofile_unmap(ofile);
+		}	
 	    if (rename(tempfile, output)) {
-		system_fatal("can't move the output file to its final location: %s",
-			     output);
-		return;
+			system_fatal("can't move the output file to its final location: %s",
+			              output);
+		    return;
 	    }
 	}
 }
