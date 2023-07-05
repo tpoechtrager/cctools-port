@@ -1250,11 +1250,14 @@ bool Resolver::atomIsDeadStripRoot(const ld::Atom* atom, bool forceDeadStrip) co
 
 	// <rdar://problem/49468634> if doing LTO, mark all libclang_rt* mach-o atoms
 	// as live since the backend may suddenly codegen uses of them
+	// ld64-port
+	// Likewise with rust compiler_builtins atoms. They may come from a libcompiler_builtins-<hash>.a lib, or from a compiler_builtins-... member of a rust static library.
 	if ( _haveLLVMObjs && !forceDeadStrip && (atom->contentType() !=  ld::Atom::typeLTOtemporary) ) {
-		if ( isCompilerSupportLib(atom->safeFilePath()) ) {
+		if ( isCompilerSupportLib(atom->safeFilePath()) || strstr(atom->safeFilePath(), "compiler_builtins") != nullptr ) {
 			return true;
 		}
 	}
+	// ld64-port end
 
 	return false;
 }
