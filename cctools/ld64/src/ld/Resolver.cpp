@@ -1171,6 +1171,14 @@ void Resolver::deadStripOptimize(bool force)
 			// unset liveness, so markLive() will recurse
 			(const_cast<ld::Atom*>(atom))->setLive(0);
 		}
+		// ld64-port
+		// Keep native Rust compiler_builtins atoms until after LTO code generation.
+		else if ( _haveLLVMObjs && !force && (atom->contentType() != ld::Atom::typeLTOtemporary) ) {
+			if ( strstr(atom->safeFilePath(), "compiler_builtins") != nullptr ) {
+				_deadStripRoots.insert(atom);
+			}
+		}
+		// ld64-port end
 	}
 	
 	// mark all roots as live, and all atoms they reference
