@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-BASE_VERSION=949.0.1
-NEW_VERSION=973.0.1
+BASE_VERSION=973.0.1
+NEW_VERSION=986
 
 set -e
 
@@ -17,10 +17,10 @@ tar xzf cctools-$BASE_VERSION* &>/dev/null
 tar xzf cctools-$NEW_VERSION* &>/dev/null
 rm *.tar.gz
 
-pushd cctools-$NEW_VERSION*
+pushd cctools*$NEW_VERSION*
 
 echo "creating patch..."
-diff -Naur ../cctools-$BASE_VERSION . > "$CDIR/cctools-${BASE_VERSION}-${NEW_VERSION}.patch" || true
+diff -Naur ../cctools-*$BASE_VERSION* . > "$CDIR/cctools-${BASE_VERSION}-${NEW_VERSION}.patch" || true
 echo "done"
 
 popd

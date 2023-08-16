@@ -1,4 +1,4 @@
-.Dd March 7, 2018
+.Dd September 10, 2020
 .Dt ld 1
 .Os Darwin
 .Sh NAME
@@ -44,9 +44,6 @@ The object files are loaded in the order in which they are specified on the
 command line.  The segments and the sections in those segments will appear in
 the output file in the order they are encountered in the object files being linked.
 All zero fill sections will appear after all non-zero fill sections in their segments.
-Sections created from files with the -sectcreate option will be laid out at after
-sections from .o files. The use of the -order_file option will alter the layout
-rules above, and move the symbols specified to start of their section.
 .Ss Libraries
 A static library (aka static archive) is a collection of .o files with a table of contents
 that lists the global symbols in the .o files.
@@ -217,6 +214,11 @@ archives to be loaded.  This option allows you to target a specific archive.
 Uses specified static library as usual, but treats all global symbols from the static library to
 as if they are visibility hidden.  Useful when building a dynamic library that uses a static library but does
 not want to export anything from that static library.
+.It Fl image_suffix Ar suffix
+Search for libraries and frameworks with
+.Ar suffix
+and then without (e.g. look for `name.framework/name_suffix' first, if not there
+try `name.framework/name', or `libname_suffix.a' first, if not there try `libname.a').
 .El
 .Ss Options that control additional content
 .Bl -tag
@@ -227,8 +229,17 @@ in the segment
 .Ar segname
 is created from the contents of file
 .Ar file.
-The combination of segname and sectname must be unique Ð there cannot already be a section (segname,sectname)
-from any other input.
+If there's a section (segname,sectname) from any other input, the linker will append the content from the file to that section.
+.It Fl add_empty_section Ar segname sectname
+An empty section named
+.Ar sectname
+in the segment
+.Ar segname.
+If any of the inputs contains a section (segname,sectname), that section will be included in the
+output, and this option will be ignored.
+.It Fl add_ast_path Ar file
+The linker will add a N_AST stab symbol to the output file where the string is the path pointed by file and its values is
+the modification time of the file.
 .It Fl filelist Ar file[,dirname]
 Specifies that the linker should link the files listed in
 .Ar file .
@@ -262,10 +273,6 @@ Literal c-strings may be ordered by by quoting the string (e.g. "Hello, world\\n
 When the -order_file option is not used, the linker lays out functions in object file order and
 it moves all initializer routines to the start of the __text section and terminator routines
 to the end. Use this option to disable the automatic rearrangement of initializers and terminators.
-.It Fl no_order_data
-By default the linker reorders global data in the __DATA segment so that all global variables that
-dyld will need to adjust at launch time will early in the __DATA segment.  This reduces the number
-of dirty pages at launch time.  This option disables that optimization.
 .It Fl platform_version Ar platform Ar min_version Ar sdk_version
 This is set to indicate the platform, oldest supported version of that platform that output is to be
 used on, and the SDK that the output was built against.
@@ -306,7 +313,8 @@ is a hexadecimal number with an optional leading 0x.  By choosing non-overlappin
 dylibs and bundles that a program loads, launch time can be improved because dyld will not need to
 "rebase" the image (that is, adjust pointers within the image to work at the loaded address).
 It is often easier to not use this option, but instead use the rebase(1) tool, and give it a list of dylibs.
-It will then choose non-overlapping addresses for the list and rebase them all.
+It will then choose non-overlapping addresses for the list and rebase them all. When building a position
+independent executable, this option will be ignored.
 This option is also called -seg1addr for compatibility.
 .It Fl no_implicit_dylibs
 When creating a two-level namespace final linked image, normally the linker will hoist up public dylibs
@@ -386,7 +394,7 @@ is a hexadecimal number with an optional leading 0x. The
 .Ar size
 should be a multiple of the architecture's page size (4KB or 16KB).
 .It Fl allow_stack_execute
-Marks executable so that all stacks in the task will be given stack execution privilege. This includes pthread stacks.
+Marks executable so that all stacks in the task will be given stack execution privilege. This includes pthread stacks. This option is only valid when targeting architectures that support stack execution (i.e. Intel).
 .It Fl export_dynamic
 Preserves all global symbols in main executables during LTO.  Without this option, Link Time Optimization
 is allowed to inline and remove global functions. This option is used when a main executable may load
@@ -511,8 +519,6 @@ See -exported_symbols_list for syntax and use of wildcards.
 Logs information about the amount of memory and time the linker used.
 .It Fl t
 Logs each file (object, archive, or dylib) the linker loads.  Useful for debugging problems with search paths where the wrong library is loaded.
-.It Fl whatsloaded
-Logs just object files the linker loads.
 .It Fl order_file_statistics
 Logs information about the processing of a -order_file.
 .It Fl map Ar map_file_path
@@ -545,6 +551,7 @@ of wildcards.
 When generating the debug map, the linker will remove the specified
 .Ar prefix-path
 from the path in OSO symbols. This can be used so to help build servers generate identical binaries.
+If '.' is passed as argument, the linker will expand the argument to the current working directory.
 .El
 .Ss Options for Bitcode build flow
 .Bl -tag
@@ -571,6 +578,11 @@ store in a file.  Note: ld is normally invoked through clang, and clang also int
 To have clang ignore the @file and pass it through to ld, use -Wl,@file.
 .It Fl v
 Prints the version of the linker.
+.It Fl adhoc_codesign
+Directs the linker to add an ad-hoc codesignature to the output file. The default for Apple Silicon binaries
+is to be ad-hoc codesigned.
+.It Fl no_adhoc_codesign
+Directs the linker to not add ad-hoc codesignature to the output file, even for Apple Silicon binaries.
 .It Fl version_details
 Prints the version info about the linker in JSON
 .It Fl no_weak_imports
@@ -852,6 +864,9 @@ indicate that the cache size will be kept under the free disk space.
 For use with -static or -preload when -pie is used.  Tells the linker to add a __TEXT,__chain_starts
 section which starts with a dyld_chained_starts_offsets struct which specifies the pointer format
 and the offsets to the start of every fixup chain.
+.It Fl fixup_chains_section_vm
+Same as -fixup_chains_section but fixes a bug.  The offsets in the __chain_starts section are vm-offsets
+from the __TEXT segment, and the rebase targets in the chains are vm-offsets.
 .It Fl threaded_starts_section
 For arm64e only.  For use with -static or -preload when -pie is used.  Tells the linker to add a __TEXT,__thread_starts
 section which starts with a 32-bit flag field, followed by an array 32-bit values.  Each value is
@@ -864,6 +879,10 @@ order file  to cluster commonly used/dirty globals onto the same page(s).
 Normally, the linker will add extra info to dylibs with -install_name starting with /usr/lib or
 /System/Library/ that allows the dylib to be placed into the dyld shared cache.  Adding this option
 tells the linker to not add that extra info.
+.It Fl search_in_sparse_frameworks
+For use when linking against versioned frameworks that do not have a normal variant.
+By default when -framework Foo,_suffix is used, the linker will follow Foo.framework/Foo if it is a symbolic link, append _suffix and search for a file with that path.
+When this option is used, the linker will also search for Foo.framework/Versions/Current/Foo_suffix.
 .El
 .Ss Obsolete Options
 .Bl -tag

@@ -1274,8 +1274,10 @@ void ChainedInfoAtom<A>::encode() const
 			if ( segInfo.pointerFormat == DYLD_CHAINED_PTR_32 ) {
 				if ( _options.sharedRegionEligible() )
 					startBytesPerPage = 256; // can't reuse non-pointers for dylibs in cache, so alloc worst case space
+				else if ( _options.stealPointersFixupChains() )
+					startBytesPerPage = 40; // guesstimate 32-bit chains go ~0.5K before needing a new start
 				else
-					startBytesPerPage = 40 ; // guesstimate 32-bit chains go ~0.5K before needing a new start
+					startBytesPerPage = 256; // if can't steal non-pointers, then allocate worst case
 			}
 			dyld_chained_starts_in_segment aSeg;
 			aSeg.size 			   = offsetof(dyld_chained_starts_in_segment, page_start) + segInfo.pages.size()*startBytesPerPage;
@@ -2254,6 +2256,10 @@ void CodeSignatureAtom::encode() const
 		case ld::Platform::watchOS_simulator:
 		case ld::Platform::driverKit:
 		case ld::Platform::watchOS:
+#if TARGET_FEATURE_REALITYOS
+		case ld::Platform::realityOS:
+		case ld::Platform::reality_simulator:
+#endif
 			sig_platform = platform;
 			sig_min_version = minVersion;
 			break;
@@ -2276,6 +2282,18 @@ void CodeSignatureAtom::encode() const
 
 	// add flags
 	libcd_set_flags(_sigRef, CS_ADHOC | CS_LINKER_SIGNED);
+
+	// set range of __TEXT
+	uint64_t flags = _opts.linkingMainExecutable() ? CS_EXECSEG_MAIN_BINARY : 0;
+	uint64_t textSize = 0;
+	bool foundText = false;
+	for (const Internal::FinalSection* sect : _state.sections) {
+		if ( strcmp(sect->segmentName(), "__TEXT") == 0 )
+			foundText = true;
+		else if ( foundText && (textSize == 0) ) // find first section after __TEXT
+			textSize = sect->fileOffset;
+	}
+	libcd_set_exec_seg(_sigRef, 0, textSize, flags);
 
 	// update section size now that code signature size is known
 	codeSignSect->size = libcd_superblob_size(_sigRef);

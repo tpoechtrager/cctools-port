@@ -131,8 +131,9 @@ public:
 	}
 
 	uint32_t minOS(ld::Platform platform) const {
+		ld::Platform base = basePlatform(platform);
 		for (const auto& version : _versions) {
-			if (basePlatform(version.platform) == platform) {
+			if (basePlatform(version.platform) == base) {
 				return version.minVersion;
 			}
 		}
@@ -194,6 +195,8 @@ static const PlatformVersion mac10_12 		(Platform::macOS, 0x000A0C00);
 static const PlatformVersion mac10_14 		(Platform::macOS, 0x000A0E00);
 static const PlatformVersion mac10_15		(Platform::macOS, 0x000A0F00);
 static const PlatformVersion mac10_16		(Platform::macOS, 0x000A1000);
+static const PlatformVersion mac11_0		(Platform::macOS, 0x000B0000);
+static const PlatformVersion mac12_0		(Platform::macOS, 0x000C0000);
 static const PlatformVersion mac10_Future 	(Platform::macOS, 0x10000000);
 
 static const PlatformVersion iOS_2_0 		(Platform::iOS, 0x00020000);
@@ -210,6 +213,7 @@ static const PlatformVersion iOS_11_0 		(Platform::iOS, 0x000B0000);
 static const PlatformVersion iOS_12_0 		(Platform::iOS, 0x000C0000);
 static const PlatformVersion iOS_13_0 		(Platform::iOS, 0x000D0000);
 static const PlatformVersion iOS_14_0 		(Platform::iOS, 0x000E0000);
+static const PlatformVersion iOS_15_0		(Platform::iOS, 0x000F0000);
 static const PlatformVersion iOS_Future 	(Platform::iOS, 0x10000000);
 
 static const PlatformVersion watchOS_1_0 		(Platform::watchOS, 0x00010000);
@@ -217,23 +221,41 @@ static const PlatformVersion watchOS_2_0 		(Platform::watchOS, 0x00020000);
 static const PlatformVersion watchOS_5_0 		(Platform::watchOS, 0x00050000);
 static const PlatformVersion watchOS_6_0 		(Platform::watchOS, 0x00060000);
 static const PlatformVersion watchOS_7_0 		(Platform::watchOS, 0x00070000);
+static const PlatformVersion watchOS_8_0		(Platform::watchOS, 0x00080000);
 static const PlatformVersion watchOS_Future		(Platform::watchOS, 0x10000000);
 
 static const PlatformVersion tvOS_9_0 			(Platform::tvOS, 0x00090000);
 static const PlatformVersion tvOS_12_0 			(Platform::tvOS, 0x000C0000);
 static const PlatformVersion tvOS_13_0 			(Platform::tvOS, 0x000D0000);
 static const PlatformVersion tvOS_14_0 			(Platform::tvOS, 0x000E0000);
+static const PlatformVersion tvOS_15_0			(Platform::tvOS, 0x000F0000);
 static const PlatformVersion tvOS_Future		(Platform::tvOS, 0x10000000);
 
 static const PlatformVersion bridgeOS_1_0 			(Platform::bridgeOS, 0x00010000);
 static const PlatformVersion bridgeOS_4_0 			(Platform::bridgeOS, 0x00040000);
 static const PlatformVersion bridgeOS_5_0 			(Platform::bridgeOS, 0x00050000);
+static const PlatformVersion bridgeOS_6_0			(Platform::bridgeOS, 0x00060000);
 static const PlatformVersion bridgeOS_Future		(Platform::bridgeOS, 0x10000000);
 
+static const PlatformVersion driverKit_19_0 		(Platform::driverKit, 0x00130000);
+static const PlatformVersion driverKit_20_0 		(Platform::driverKit, 0x00140000);
+static const PlatformVersion driverKit_21_0 		(Platform::driverKit, 0x00150000);
+static const PlatformVersion driverKit_Future		(Platform::driverKit, 0x10000000);
+
+#if TARGET_FEATURE_REALITYOS
+static const PlatformVersion realityOS_1_0			(Platform::realityOS, 0x00000001);
+static const PlatformVersion realityOS_Future		(Platform::realityOS, 0x10000000);
+#endif // TARGET_FEATURE_REALITYOS
 
 // Platform Sets
-
-static const PlatformSet simulatorPlatforms ( {Platform::iOS_simulator, Platform::tvOS_simulator, Platform::watchOS_simulator} );
+static const PlatformSet simulatorPlatforms ( {
+       Platform::iOS_simulator,
+       Platform::tvOS_simulator,
+       Platform::watchOS_simulator,
+#if TARGET_FEATURE_REALITYOS
+       Platform::reality_simulator,
+#endif // TARGET_FEATURE_REALITYOS
+} );
 
 //FIXME do we need to add simulatots to these?
 //FIXME Are the dates correct?
@@ -249,10 +271,22 @@ static const VersionSet version2013 	({mac10_9, iOS_7_0});
 static const VersionSet version2019Fall ({mac10_15, iOS_13_0, watchOS_6_0, tvOS_13_0, bridgeOS_4_0});
 static const VersionSet version2020Fall ({mac10_16, iOS_14_0, watchOS_7_0, tvOS_14_0, bridgeOS_5_0});
 
-static const VersionSet supportsSplitSegV2 		({mac10_12, iOS_9_0, watchOS_2_0, tvOS_9_0});
+#if TARGET_FEATURE_REALITYOS
+static const VersionSet version2021Fall {{mac12_0, iOS_15_0, watchOS_8_0, tvOS_15_0, bridgeOS_6_0, realityOS_1_0}};
+#else
+static const VersionSet version2021Fall {{mac12_0, iOS_15_0, watchOS_8_0, tvOS_15_0, bridgeOS_6_0}};
+#endif // TARGET_FEATURE_REALITYOS
+
+static const VersionSet supportsSplitSegV2 		({mac10_12, iOS_9_0, watchOS_2_0, tvOS_9_0, driverKit_20_0});
 // FIXME: Use the comment out line instead.
 static const VersionSet supportsLCBuildVersion 	({mac10_14, iOS_12_0, watchOS_5_0, tvOS_12_0, bridgeOS_1_0});
+
+#if TARGET_FEATURE_REALITYOS
+static const VersionSet supportsPIE				({mac10_5, iOS_4_2, realityOS_1_0});
+#else
 static const VersionSet supportsPIE				({mac10_5, iOS_4_2});
+#endif
+
 static const VersionSet supportsTLV  			({mac10_7, iOS_9_0});
 static const VersionSet supportsChainedFixups 	({mac10_16, iOS_14_0, watchOS_7_0, tvOS_14_0, bridgeOS_Future});
 
@@ -321,6 +355,8 @@ public:
 		
 	public:
 		Ordinal() : _ordinal(0) {};
+
+		uint64_t rawValue() { return _ordinal; }
 
 		static const Ordinal NullOrdinal()		{ return Ordinal((uint64_t)0); }
 		
@@ -563,7 +599,7 @@ public:
 				typeLazyDylibPointer, typeStubHelper, typeInitializerPointers, typeTerminatorPointers,
 				typeStubClose, typeLazyPointerClose, typeAbsoluteSymbols, typeThreadStarts, typeChainStarts,
 				typeTLVDefs, typeTLVZeroFill, typeTLVInitialValues, typeTLVInitializerPointers, typeTLVPointers,
-				typeFirstSection, typeLastSection, typeDebug, typeSectCreate, typeInitOffsets };
+				typeFirstSection, typeLastSection, typeDebug, typeSectCreate, typeInitOffsets, typeInterposing };
 
 
 					Section(const char* sgName, const char* sctName,
@@ -1369,11 +1405,49 @@ public:
 	std::vector<std::string>					ltoBitcodePath;
 };
 
+// Utilities used by multiple files in ld64.
+struct utils {
+	// from cctools
+	static ssize_t write64(int fildes, const void* buf, size_t nbyte) {
+		const uint8_t* uchars = (uint8_t*)buf;
+		ssize_t        total  = 0;
 
+		while (nbyte)
+		{
+			/*
+			 * If we were writing socket- or stream-safe code we'd chuck the
+			 * entire buf to write(2) and then gracefully re-request bytes that
+			 * didn't get written. But write(2) will return EINVAL if you ask it to
+			 * write more than 2^31-1 bytes. So instead we actually need to throttle
+			 * the input to write.
+			 *
+			 * Historically code using write(2) to write to disk will assert that
+			 * that all of the requested bytes were written. It seems harmless to
+			 * re-request bytes as one does when writing to streams, with the
+			 * compromise that we will return immediately when write(2) returns 0
+			 * bytes written.
+			 */
+			size_t limit   = 0x7FFFFFFF;
+			size_t towrite = nbyte < limit ? nbyte : limit;
+			ssize_t wrote  = write(fildes, uchars, towrite);
+			if ( wrote == -1) {
+				// failure
+				return -1;
+			}
+			else if ( wrote == 0 ) {
+				// done
+				break;
+			}
+			else {
+				nbyte  -= wrote;
+				uchars += wrote;
+				total  += wrote;
+			}
+		}
 
-
-
-
+		return total;
+	};
+};
 
 } // namespace ld 
 

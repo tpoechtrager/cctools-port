@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-BASE_VERSION=530
-NEW_VERSION=609
+BASE_VERSION=609
+NEW_VERSION=711
 
 set -e
 
@@ -21,10 +21,10 @@ rm *.tar.gz
 rm -rf ld64-$BASE_VERSION/unit-tests
 rm -rf ld64-$NEW_VERSION/unit-tests
 
-pushd ld64-$NEW_VERSION*
+pushd ld64-*$NEW_VERSION*
 
 echo "creating patch..."
-diff -Naur ../ld64-$BASE_VERSION . > "$CDIR/ld64-${BASE_VERSION}-${NEW_VERSION}.patch" || true
+diff -Naur ../ld64-*$BASE_VERSION* . > "$CDIR/ld64-${BASE_VERSION}-${NEW_VERSION}.patch" || true
 echo "done"
 
 popd

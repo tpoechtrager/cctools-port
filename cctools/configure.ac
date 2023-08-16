@@ -1,4 +1,4 @@
-AC_INIT([cctools], [973.0.1], [t.poechtrager@gmail.com])
+AC_INIT([cctools], [986], [t.poechtrager@gmail.com])
 
 AC_CANONICAL_BUILD
 AC_CANONICAL_HOST
@@ -80,7 +80,7 @@ case "$CCVERSION" in
   ;;
 esac
 
-EXTRAFLAGS="$EXTRAFLAGS -DLD64_VERSION_NUM=609"
+EXTRAFLAGS="$EXTRAFLAGS -DLD64_VERSION_NUM=711"
 
 case "$CXXVERSION" in
   *clang* )
@@ -316,6 +316,30 @@ AC_COMPILE_IFELSE(
   [AC_MSG_RESULT([no])]
 )
 CFLAGS=$ORIGCFLAGS
+
+ORIGCFLAGS=$CFLAGS
+CFLAGS="$CFLAGS -Werror -Wno-unused-but-set-variable"
+AC_MSG_CHECKING([whether $CC supports -Wno-unused-but-set-variable])
+AC_COMPILE_IFELSE(
+  [AC_LANG_SOURCE([[int dummy;]])],
+  [WARNINGS="$WARNINGS -Wno-unused-but-set-variable"
+   AC_MSG_RESULT([yes])],
+  [AC_MSG_RESULT([no])]
+)
+CFLAGS=$ORIGCFLAGS
+
+ORIGCFLAGS=$CFLAGS
+CFLAGS="$CFLAGS -Werror -Wno-deprecated-non-prototype"
+AC_MSG_CHECKING([whether $CC supports -Wno-deprecated-non-prototype])
+AC_COMPILE_IFELSE(
+  [AC_LANG_SOURCE([[int dummy;]])],
+  [WARNINGS="$WARNINGS -Wno-deprecated-non-prototype"
+   AC_MSG_RESULT([yes])],
+  [AC_MSG_RESULT([no])]
+)
+CFLAGS=$ORIGCFLAGS
+
+
 
 AC_SUBST([WARNINGS], [$WARNINGS])
 AC_SUBST([OBJCWARNINGS], [$OBJCWARNINGS])

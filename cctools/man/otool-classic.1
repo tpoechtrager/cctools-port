@@ -1,29 +1,34 @@
-.TH OTOOL-CLASSIC 1 "June 22, 2017" "Apple Inc."
-.\#  NAME
+.TH OTOOL-CLASSIC 1 "July 31, 2020" "Apple Inc."
+.\" NAME
 .SH NAME
 otool-classic \- object file displaying tool
+.\" SYNOPSIS
 .SH SYNOPSIS
-.B otool
+.B otool-classic
 [
 .I "option \&..."
 ] [
 .I "file \&..."
 ]
-.\#  DESCRIPTION
+.\"  DESCRIPTION
 .SH DESCRIPTION
 The
 .I otool-classic
-command displays specified parts of object files or libraries. It is now largely
-obsolete and the command line shim,
-.IR otool (1)
-executes
-.IR llvm-obdump (1)
-as the default tool.
-.I otool-classic
-is still useful for diagnosing bad, corrupted, or fuzzed binaries, or for
-viewing older binaries that
-.I llvm-objdump
-will not read.
+command displays specified parts of object files or libraries. It is the
+preferred tool for inspecting Mach-O binaries, especially for binaries that
+are bad, corrupted, or fuzzed. It is also useful in situations when inspecting
+files with new or "bleeding-edge" Mach-O file format changes.
+.PP
+For historical reasons, the LLVM-based
+.IR llvm-objdump (1)
+tool does support displaying Mach-O information in an "otool-compatibility"
+mode. For more information on using
+.IR llvm-objdump (1)
+in this way, see the
+.IR llvm-otool (1)
+command-line shim. Note that
+.IR llvm-objdump (1)
+is incapable of displaying information in all Mach-O files.
 .PP
 If the
 .B \-m
@@ -45,6 +50,7 @@ flag), or in a symbolic form using macro names of constants, etc. (with the
 or
 .B \-V
 flag).
+.\" Required options
 .PP
 At least one of the following options must be specified:
 .TP
@@ -142,8 +148,36 @@ Display the linker optimization hints (-v for verbose mode can also be added).
 .TP
 .B \-P
 Print the info plist section, (\_\^\_TEXT,\_\^\_info\_plist), as strings.
+.TP
+.B \-dyld_info
+Print bind and rebase information used by dyld to resolve external references
+in a final linked binary.
+.TP
+.B \-dyld_opcodes
+Print raw dyld bind and rebase opcodes present in a final linked binary. These
+opcodes are stored in a region pointed to by LC_DYLD_INFO* load commands.
+.TP
+.B \-show-latency
+When doing disassembly print latency annotations for instructions.
+.TP
+.B \-chained_fixups
+Print raw chained fixup data present in a final linked binary built with
+chained fixups. The chained fixup data are stored either in a region pointed
+to by the LC_DYLD_CHAINED_FIXUPS load command or in a (__TEXT,__chain_starts)
+section. This data includes the fixup chain's starting location on each page
+by segment and symbol information for each bind. Use the
+.B \-dyld_info
+option to see the individual links in each chain.
+.\" Optional options
 .PP
 The following options may also be given:
+.TP
+.B \-j
+When doing disassembly print the opcode bytes of the instructions.
+.TP
+.B \-m
+The object file names are not assumed to be in the archive(member) syntax,
+which allows file names containing parenthesis.
 .TP
 .BI "\-p " name
 Used with the
@@ -161,6 +195,15 @@ option to begin disassembly from symbol
 .I name
 in any segment where a \_\^\_text section is found.
 .TP
+.B \-q
+Use the llvm disassembler when doing disassembly; this is available for the x86
+and arm architectures.  This is the default.
+.TP
+.B \-Q
+Use
+.IR otool-classic (1)'s
+disassembler when doing disassembly.
+.TP
 .B \-v
 Display verbosely (symbolically) when possible.
 .TP
@@ -177,24 +220,14 @@ options.
 .B \-X
 Don't print leading addresses or headers with disassembly of sections.
 .TP
-.B \-q
-Use the llvm disassembler when doing disassembly; this is available for the x86
-and arm architectures.  This is the default.
-.TP
-.BI \-mcpu= arg
-When doing disassembly using the llvm disassembler use the cpu
-.I arg.
-.TP
-.B \-function_offsets
-When doing disassembly print the decimal offset from the last label printed.
-.TP
-.B \-j
-When doing disassembly print the opcode bytes of the instructions.
-.TP
-.B \-Q
-Use
-.IR otool-classic (1)'s
-disassembler when doing disassembly.
+.BI \-addr_slide= arg
+When disassembling a binary using the
+.B \-s,
+.B \-t,
+or
+.B \-o
+options, add an arbitrary slide to each pointer value when it is displayed.
+This is useful for matching otool output with that from a running process.
 .TP
 .BI \-arch " arch_type"
 Specifies the architecture,
@@ -212,14 +245,17 @@ can be "all" to operate on all architectures in the file.
 The default is to display only the host architecture, if the file contains it;
 otherwise, all architectures in the file are shown.
 .TP
-.B \-m
-The object file names are not assumed to be in the archive(member) syntax,
-which allows file names containing parenthesis.
+.B \-function_offsets
+When doing disassembly print the decimal offset from the last label printed.
+.TP
+.BI \-mcpu= arg
+When doing disassembly using the llvm disassembler use the cpu
+.I arg.
 .TP
 .B \-\-version
 Print the
 .IR otool-classic (1)
 version information.
-.\#  "SEE ALSO"
+.\"  "SEE ALSO"
 .SH "SEE ALSO"
-llvm-otool(1), install_name_tool(1), dyld(1) and libtool(1)
+dyld(1), install_name_tool(1), libtool(1), lipo(1), llvm-otool(1), and vtool(1)

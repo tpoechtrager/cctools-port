@@ -14,6 +14,12 @@ AC_DEFUN([CHECK_LLVM],
       if test "x$LLVM_CONFIG" = "xno"; then
           AC_PATH_PROGS(LLVM_CONFIG,
               [llvm-config                                              \
+               llvm-config-17.0                                         \
+               llvm-config-16.0 llvm-config-16                          \
+               llvm-config-15.0 llvm-config-15                          \
+               llvm-config-14.0 llvm-config-14                          \
+               llvm-config-13.0 llvm-config-13                          \
+               llvm-config-12.0 llvm-config-12                          \
                llvm-config-11.0 llvm-config-11                          \
                llvm-config-10.0 llvm-config-10                          \
                llvm-config-9.0 llvm-config-9                            \
@@ -23,6 +29,9 @@ AC_DEFUN([CHECK_LLVM],
                llvm-config-3.9 llvm-config-3.8 llvm-config-3.7          \
                llvm-config-3.6 llvm-config-3.5 llvm-config-3.4          \
                llvm-config-3.3 llvm-config-3.2 llvm-config-3.1          \
+               llvm-config170 llvm-config160                            \
+               llvm-config150 llvm-config140                            \
+               llvm-config130 llvm-config120                            \
                llvm-config110 llvm-config100                            \
                llvm-config90 llvm-config80                              \
                llvm-config70 llvm-config60                              \

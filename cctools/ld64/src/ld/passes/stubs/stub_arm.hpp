@@ -381,6 +381,83 @@ private:
 
 ld::Section StubPICKextAtom::_s_section("__TEXT", "__stub", ld::Section::typeCode);
 
+class ThumbStubPICAtom : public ld::Atom {
+public:
+											ThumbStubPICAtom(ld::passes::stubs::Pass& pass, const ld::Atom& stubTo,
+															bool stubToGlobalWeakDef, bool stubToResolver, bool weakImport, bool usingDataConst)
+				: ld::Atom(_s_section, ld::Atom::definitionRegular, ld::Atom::combineNever,
+							ld::Atom::scopeLinkageUnit, ld::Atom::typeStub,
+							symbolTableNotIn, false, true /* thumb */, false, ld::Atom::Alignment(2)),
+				_stubTo(stubTo),
+				_nonlazyPointer(pass, stubTo, weakImport),
+				_fixup1(12, ld::Fixup::k1of4, ld::Fixup::kindSetTargetAddress, &_nonlazyPointer),
+				_fixup2(12, ld::Fixup::k2of4, ld::Fixup::kindSubtractTargetAddress, this),
+				_fixup3(12, ld::Fixup::k3of4, ld::Fixup::kindSubtractAddend, 12),
+				_fixup4(12, ld::Fixup::k4of4, ld::Fixup::kindStoreLittleEndian32)
+				{ pass.addAtom(*this); }
+
+	virtual const ld::File*					file() const					{ return _stubTo.file(); }
+	virtual const char*						name() const					{ return _stubTo.name(); }
+	virtual uint64_t						size() const					{ return 16; }
+	virtual uint64_t						objectAddress() const			{ return 0; }
+	virtual void							copyRawContent(uint8_t buffer[]) const {
+		// The nop in the stub is needed because arm32 fixups are required to be 4-aligned.
+		OSWriteLittleInt32(&buffer[ 0], 0, 0xc008f8df);	// 	ldr ip, L1
+		OSWriteLittleInt16(&buffer[ 4], 0, 0x44fc);	// 	add ip, pc
+		OSWriteLittleInt16(&buffer[ 6], 0, 0xbf00);	//  nop
+		OSWriteLittleInt32(&buffer[ 8], 0, 0xf000f8dc); //  ldr pc, [ip]
+		OSWriteLittleInt32(&buffer[12], 0, 0x00000000);	// 	L1:  .long L_foo$lazy_ptr
+	}
+	virtual void							setScope(Scope)					{ }
+	virtual ld::Fixup::iterator				fixupsBegin() const				{ return (ld::Fixup*)&_fixup1; }
+	virtual ld::Fixup::iterator				fixupsEnd()	const 				{ return &((ld::Fixup*)&_fixup4)[1]; }
+
+private:
+	const ld::Atom&							_stubTo;
+	NonLazyPointerAtom						_nonlazyPointer;
+	ld::Fixup								_fixup1;
+	ld::Fixup								_fixup2;
+	ld::Fixup								_fixup3;
+	ld::Fixup								_fixup4;
+
+	static ld::Section						_s_section;
+};
+
+ld::Section ThumbStubPICAtom::_s_section("__TEXT", "__picstub_thumb", ld::Section::typeStub);
+
+class ThumbStubNoPICAtom : public ld::Atom {
+public:
+											ThumbStubNoPICAtom(ld::passes::stubs::Pass& pass, const ld::Atom& stubTo,
+															   bool stubToGlobalWeakDef, bool stubToResolver, bool weakImport, bool usingDataConst)
+				: ld::Atom(_s_section, ld::Atom::definitionRegular, ld::Atom::combineNever,
+							ld::Atom::scopeLinkageUnit, ld::Atom::typeStub,
+							symbolTableNotIn, false, true /* thumb */, false, ld::Atom::Alignment(2)),
+				_stubTo(stubTo),
+				_lazyPointer(pass, stubTo, stubToGlobalWeakDef, stubToResolver, weakImport, false, usingDataConst),
+				_fixup(4, ld::Fixup::k1of1, ld::Fixup::kindStoreTargetAddressLittleEndian32, &_lazyPointer)
+				{ pass.addAtom(*this); }
+
+	virtual const ld::File*					file() const					{ return _stubTo.file(); }
+	virtual const char*						name() const					{ return _stubTo.name(); }
+	virtual uint64_t						size() const					{ return 8; }
+	virtual uint64_t						objectAddress() const			{ return 0; }
+	virtual void							copyRawContent(uint8_t buffer[]) const {
+			OSWriteLittleInt32(&buffer[ 0], 0, 0x00f0dff8);	// 	ldr pc, [pc]
+			OSWriteLittleInt32(&buffer[ 4], 0, 0x00000000);	// 	.long   L_foo$lazy_ptr
+	}
+	virtual void							setScope(Scope)					{ }
+	virtual ld::Fixup::iterator				fixupsBegin() const				{ return (ld::Fixup*)&_fixup; }
+	virtual ld::Fixup::iterator				fixupsEnd()	const 				{ return &((ld::Fixup*)&_fixup)[1]; }
+
+private:
+	const ld::Atom&							_stubTo;
+	LazyPointerAtom							_lazyPointer;
+	ld::Fixup								_fixup;
+
+	static ld::Section						_s_section;
+};
+
+ld::Section ThumbStubNoPICAtom::_s_section("__TEXT", "__stub_thumb", ld::Section::typeStub);
 
 
 class StubPICAtom : public ld::Atom {

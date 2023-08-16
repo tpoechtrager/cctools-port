@@ -2441,7 +2441,7 @@ uint32_t IndirectSymbolTableAtom<A>::symIndexOfNonLazyPointerAtom(const ld::Atom
 						// dyld needs to bind nlpointer to global weak def
 						return symbolIndex(target);
 					}
-					else if ( _options.nameSpace() != Options::kTwoLevelNameSpace ) {
+					else if ( (_options.nameSpace() != Options::kTwoLevelNameSpace) || _options.interposable(target->name())) {
 						// dyld needs to bind nlpointer to global def linked for flat namespace
 						return symbolIndex(target);
 					}
