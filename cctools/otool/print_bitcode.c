@@ -39,8 +39,7 @@
 #include "../include/xar/xar.h" /* cctools-port: 
 				   force the use of the bundled xar header */
 #include "mach-o/loader.h"
-#include "objc/runtime.h"       /* cctools-port:
-				   objc/objc-runtime.h -> objc/runtime.h */
+//#include "objc/objc-runtime.h" /* cctools-port: commented */
 #include "stuff/allocate.h"
 #include "stuff/bytesex.h"
 #include "stuff/symbol.h"

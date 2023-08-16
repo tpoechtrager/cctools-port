@@ -157,8 +157,7 @@ am__define_uniq_tagged_files = \
   unique=`for i in $$list; do \
     if test -f "$$i"; then echo $$i; else echo $(srcdir)/$$i; fi; \
   done | $(am__uniquify_input)`
-DIST_SUBDIRS = libobjc2 libstuff libmacho ar as misc otool efitools \
-	ld64 man
+DIST_SUBDIRS = $(SUBDIRS)
 am__DIST_COMMON = $(srcdir)/Makefile.in AUTHORS COPYING ChangeLog \
 	INSTALL NEWS README compile config.guess config.sub install-sh \
 	ltmain.sh missing
@@ -274,9 +273,6 @@ MATH_LIB = @MATH_LIB@
 MKDIR_P = @MKDIR_P@
 NM = @NM@
 NMEDIT = @NMEDIT@
-OBJC = @OBJC@
-OBJCFLAGS = @OBJCFLAGS@
-OBJCWARNINGS = @OBJCWARNINGS@
 OBJDUMP = @OBJDUMP@
 OBJEXT = @OBJEXT@
 OTOOL = @OTOOL@
@@ -311,7 +307,6 @@ ac_ct_AR = @ac_ct_AR@
 ac_ct_CC = @ac_ct_CC@
 ac_ct_CXX = @ac_ct_CXX@
 ac_ct_DUMPBIN = @ac_ct_DUMPBIN@
-ac_ct_OBJC = @ac_ct_OBJC@
 am__leading_dot = @am__leading_dot@
 am__tar = @am__tar@
 am__untar = @am__untar@
@@ -360,8 +355,7 @@ target_vendor = @target_vendor@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-@ISDARWIN_FALSE@SUBDIRS = libobjc2 libstuff libmacho ar as misc otool efitools ld64 man
-@ISDARWIN_TRUE@SUBDIRS = libstuff libmacho ar as misc otool efitools ld64 man
+SUBDIRS = libstuff libmacho ar as misc otool efitools ld64 man
 ACLOCAL_AMFLAGS = -I m4
 DSTROOT = 
 RC_OS = macos

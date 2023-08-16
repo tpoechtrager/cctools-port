@@ -18,10 +18,6 @@ if test "x$CXXFLAGS" = "x"; then
   CXXFLAGS="-O3"
 fi
 
-if test "x$OBJCFLAGS" = "x"; then
-  OBJCFLAGS="-O3"
-fi
-
 CXXFLAGS="$CXXFLAGS -std=c++1z"
 
 if test "x$build" = "x$host"; then
@@ -31,7 +27,6 @@ if test "x$build" = "x$host"; then
 fi
 
 CWARNINGS=""
-OBJCWARNINGS=""
 CXXWARNINGS=""
 EXTRAFLAGS=""
 EXTRACXXFLAGS=""
@@ -72,7 +67,6 @@ case "$CCVERSION" in
     WARNINGS="$WARNINGS -Wall -Wno-long-long -Wno-import -Wno-format -Wno-deprecated -Wno-unused-variable"
     WARNINGS="$WARNINGS -Wno-unused-private-field -Wno-unused-function -Wno-invalid-offsetof"
     WARNINGS="$WARNINGS -Wno-int-conversion -Wno-char-subscripts"
-    OBJCWARNINGS="-Wall -Wno-objc-root-class -Wno-deprecated-objc-isa-usage"
   ;;
   * )
     echo "You must compile this project with clang. Other compilers are no longer supported." 2>&1
@@ -109,7 +103,6 @@ esac
 
 if test "x$EXTRAFLAGS" != "x"; then
   CFLAGS="$CFLAGS $EXTRAFLAGS"
-  OBJCFLAGS="$OBJCFLAGS $EXTRAFLAGS"
   CXXFLAGS="$CXXFLAGS $EXTRAFLAGS"
 fi
 
@@ -118,7 +111,6 @@ if test "xEXTRACXXFLAGS" != "x"; then
 fi
 
 CPP="$CC -E"
-OBJC="$CC"
 
 # FIXME 'subdir-objects' breaks dependency tracking
 AM_INIT_AUTOMAKE([1.10 no-define no-dist-gzip dist-bzip2 tar-ustar subdir-objects no-dependencies])
@@ -138,7 +130,6 @@ AC_PROG_INSTALL
 AC_PROG_CC([clang])
 AC_PROG_CXX([clang++])
 AM_PROG_CC_C_O
-AC_PROG_OBJC([clang])
 AM_PROG_AS([clang])
 
 AC_CHECK_TOOL([HOST_RANLIB], [ranlib], :)
@@ -342,7 +333,6 @@ CFLAGS=$ORIGCFLAGS
 
 
 AC_SUBST([WARNINGS], [$WARNINGS])
-AC_SUBST([OBJCWARNINGS], [$OBJCWARNINGS])
 
 ### Check for libLTO ###
 
@@ -514,7 +504,6 @@ AC_CONFIG_FILES([man/Makefile])
 AC_CONFIG_FILES([misc/Makefile])
 AC_CONFIG_FILES([otool/Makefile])
 AC_CONFIG_FILES([efitools/Makefile])
-AC_CONFIG_FILES([libobjc2/Makefile])
 AC_CONFIG_FILES([ld64/Makefile])
 AC_CONFIG_FILES([ld64/doc/man/Makefile])
 AC_CONFIG_FILES([ld64/src/Makefile])
