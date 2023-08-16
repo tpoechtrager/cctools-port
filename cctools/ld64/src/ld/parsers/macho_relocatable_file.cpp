@@ -2779,6 +2779,15 @@ void Parser<A>::makeSections()
 					totalSectionsSize += sizeof(ObjC1ClassSection<A>);
 					machOSects[count++].type = sectionTypeObjC1Classes;
 				}
+#if 0
+				// Re-enable this once the compiler is ready to not emit __mod_term_func sections.
+				else if ( strcmp(sect->segname(), "__DATA") == 0 && strncmp(sect->sectname(), "__mod_term_func", 15) == 0 ) {
+					if ( _file->_cpuSubType == CPU_SUBTYPE_ARM64E ) {
+						// Make this a hard error when the compiler is ready for it.
+						warning("unexpected __mod_term_func section in arm64e file: %s", _file->leafName());
+					}
+				}
+#endif
 				else {
 					totalSectionsSize += sizeof(SymboledSection<A>);
 					machOSects[count++].type = sectionTypeSymboled;
@@ -4579,7 +4588,7 @@ ld::Section::Type Section<A>::sectionType(const macho_section<typename A::P>* se
 		case S_MOD_TERM_FUNC_POINTERS:
 			return ld::Section::typeTerminatorPointers;
 		case S_INTERPOSING:
-			return ld::Section::typeUnclassified;
+			return ld::Section::typeInterposing;
 		case S_16BYTE_LITERALS:
 			return ld::Section::typeLiteral16;
 		case S_REGULAR:
@@ -8568,16 +8577,22 @@ void Section<A>::makeFixups(class Parser<A>& parser, const struct Parser<A>::CFI
 			throwf("in section %s,%s reloc %u: %s", sect->segname(), Section<A>::makeSectionName(sect), r, msg);
 		}
 	}
-	
+
 	// add follow-on fixups if .o file is missing .subsections_via_symbols
 	if ( this->addFollowOnFixups() ) {
 		Atom<A>* end = &_endAtoms[-1];
 		for(Atom<A>* p = _beginAtoms; p < end; ++p) {
 			typename Parser<A>::SourceLocation src(p, 0);
 			Atom<A>* nextAtom = &p[1];
-			// <rdar://problem/58990312> don't chain objc structures when subsections_via_symbols is missing
-			if ( (strncmp(p->section().sectionName(), "__objc_", 7) != 0) || (strcmp(p->section().segmentName(), "__DATA") != 0) )
+			if ( (strncmp(p->section().sectionName(), "__objc_", 7) == 0) && (strcmp(p->section().segmentName(), "__DATA") == 0) ) {
+				// <rdar://problem/58990312> don't chain objc structures when subsections_via_symbols is missing
+			}
+			else if ( p->contentType() == ld::Atom::typeInitializerPointers ) {
+				// <rdar://problem/69601577> don't chain initialzer pointers
+			}
+			else {
 				parser.addFixup(src, ld::Fixup::k1of1, ld::Fixup::kindNoneFollowOn, nextAtom);
+			}
 		}
 	}
 	else if ( this->type() == ld::Section::typeCode ) {

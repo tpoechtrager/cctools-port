@@ -56,7 +56,7 @@ public:
 	virtual const ld::File*					file() const					{ return NULL; }
 	virtual const char*						name() const					{ return _target->name(); }
 	virtual uint64_t						size() const					{ return (_is64 ? 8 : 4); }
-	virtual uint64_t						objectAddress() const			{ return 0; }
+	virtual uint64_t						objectAddress() const;
 	virtual void							copyRawContent(uint8_t buffer[]) const { }
 	virtual void							setScope(Scope)					{ }
 	virtual ld::Fixup::iterator				fixupsBegin() const				{ return &_fixup; }
@@ -73,6 +73,16 @@ private:
 
 ld::Section GOTEntryAtom::_s_section("__DATA", "__got", ld::Section::typeNonLazyPointer);
 ld::Section GOTEntryAtom::_s_sectionWeak("__DATA", "__got_weak", ld::Section::typeNonLazyPointer);
+
+uint64_t GOTEntryAtom::objectAddress() const
+{
+	// in case there are GOT slots to non-external atoms, return addr that is ordinal, so GOT sort is stable
+	if ( _target->scope() == ld::Atom::scopeTranslationUnit )
+		return _target->file()->ordinal().rawValue();
+	else
+		return 0;
+}
+
 
 #if SUPPORT_ARCH_arm64e
 
@@ -110,6 +120,14 @@ ld::Section GOTAuthEntryAtom::_s_sectionWeak("__DATA", "__got_weak", ld::Section
 
 #endif
 
+static uint64_t approxAtomAddress(const Options &opts, const ld::Atom *atom)
+{
+	// This doesn't take into account the size or layout of a segment.
+	uint64_t addr = opts.customSegmentAddress(atom->section().segmentName());
+	if (addr)
+		return addr;
+	return opts.machHeaderVmAddr();
+}
 
 static bool gotFixup(const Options& opts, ld::Internal& internal, const ld::Atom* targetOfGOT, const ld::Atom* fixupAtom,
 					 const ld::Fixup* fixup, bool* optimizable, bool* targetIsExternalWeakDef, bool* targetIsPersonalityFn)
@@ -122,6 +140,7 @@ static bool gotFixup(const Options& opts, ld::Internal& internal, const ld::Atom
 		case ld::Fixup::kindStoreTargetAddressARM64GOTLoadPage21:
 		case ld::Fixup::kindStoreTargetAddressARM64GOTLoadPageOff12:
 #endif
+		{
 			// start by assuming this can be optimized
 			*optimizable = true;
 			// cannot do LEA optimization if target is in another dylib
@@ -133,6 +152,10 @@ static bool gotFixup(const Options& opts, ld::Internal& internal, const ld::Atom
 												|| (targetOfGOT->section().type() == ld::Section::typeTentativeDefs)) ) {
 				*optimizable = false;
 			}
+			// ADRP only reaches +/- 4GB, so if custom sections are too far apart, don't try.
+			int64_t approxAdrpDistance = approxAtomAddress(opts, fixupAtom) - approxAtomAddress(opts, targetOfGOT);
+			if (std::abs(approxAdrpDistance) >= 0x100000000LL)
+				*optimizable = false;
 			if ( targetOfGOT->scope() == ld::Atom::scopeGlobal ) {
 				// cannot do LEA optimization if target is weak exported symbol
 				if ( ((targetOfGOT->definition() == ld::Atom::definitionRegular) || (targetOfGOT->definition() == ld::Atom::definitionProxy)) && (targetOfGOT->combine() == ld::Atom::combineByName) ) {
@@ -163,7 +186,9 @@ static bool gotFixup(const Options& opts, ld::Internal& internal, const ld::Atom
 			}
 			else if ( targetOfGOT->scope() == ld::Atom::scopeLinkageUnit) {
 				// <rdar://problem/12379969> don't do optimization if target is in custom segment
-				if ( opts.sharedRegionEligible() ) {
+				// <rdar://problem/70121432> disable GOT optimizations only for split-seg v1.
+				// <rdar://problem/70541565> disable on x86_64 until we get large shared cache.
+				if ( opts.sharedRegionEligible() && (!opts.sharedRegionEncodingV2() || opts.architecture() == CPU_TYPE_X86_64) ) {
 					const char* segName = targetOfGOT->section().segmentName();
 					if ( (strcmp(segName, "__TEXT") != 0) && (strcmp(segName, "__DATA") != 0) ) {
 						*optimizable = false;
@@ -171,6 +196,7 @@ static bool gotFixup(const Options& opts, ld::Internal& internal, const ld::Atom
 				}
 			}
 			return true;
+		}
 		case ld::Fixup::kindStoreX86PCRel32GOT:
 #if SUPPORT_ARCH_arm64
 		case ld::Fixup::kindStoreARM64PCRelToGOT:
@@ -203,8 +229,15 @@ struct AtomByNameSorter
 {
 	 bool operator()(const ld::Atom* left, const ld::Atom* right)
 	 {
-		  return (strcmp(left->name(), right->name()) < 0);
-	 }
+		if ( left == right )
+			return false;
+		int value = strcmp(left->name(), right->name());
+		if ( value == 0 ) {
+			// sort by .o order which is encoded in objectAddress()
+			return (left->objectAddress() < right->objectAddress());
+		}
+		return (value < 0);
+	}
 };
 
 struct GotMapEntry {

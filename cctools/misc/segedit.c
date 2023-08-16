@@ -539,6 +539,7 @@ replace_sections(void)
     enum bool no_seg_resize;
     uint32_t pagesize;
     uint32_t segalign;
+    enum bool is_signed;
     
 	errors = 0;
 
@@ -559,6 +560,7 @@ replace_sections(void)
 	dstp = NULL;
     
 	no_seg_resize = FALSE;
+	is_signed = FALSE;
 
 	/*
 	 * First pass over the load commands and determine if the file is laided
@@ -680,6 +682,8 @@ replace_sections(void)
 		    low_linkedit = ssp->offset;
 		break;
 	    case LC_CODE_SIGNATURE:
+		    is_signed = TRUE;
+		    /* FALLTHROUGH */
 	    case LC_SEGMENT_SPLIT_INFO:
 	    case LC_FUNCTION_STARTS:
 	    case LC_DATA_IN_CODE:
@@ -1140,6 +1144,12 @@ replace_sections(void)
 		linkedit_sgp64->fileoff += newoffset - oldoffset;
 	    }
 	}
+
+	/* Warn about invalidating the code signature. */
+	if (is_signed)
+	    warning("changes being made to the file will invalidate the code "
+		    "signature in: %s", output);
+
 	/*
 	 * Now write the new file by writing the header and modified load
 	 * commands, then the segments with any new sections and finally

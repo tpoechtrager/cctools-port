@@ -76,9 +76,10 @@ enum bool Uflag = FALSE; /* print the text symbol by symbol,
 			    for llvm-objdump testing must be used with -t */
 enum bool no_show_raw_insn = FALSE; /* no raw inst, for llvm-objdump testing
 				       with 32-bit arm */
+enum bool show_latency = FALSE; /* show latency numbers when disassembling */
 #ifdef LLVM_OTOOL
 enum bool show_objdump_command = FALSE; /* print the objdump command */
-static char* object_tool_path = "objdump"; /* path to object tool */
+static char* object_tool_path = "otool-classic"; /* path to object tool */
 #endif /* LLVM_OTOOL */
 enum bool dflag = FALSE; /* print the data */
 enum bool oflag = FALSE; /* print the objctive-C info */
@@ -549,6 +550,10 @@ char **envp)
 		no_show_raw_insn = TRUE;
 		continue;
 	    }
+		if(strcmp(argv[i], "-no-show-latency") == 0){
+		show_latency = TRUE;
+		continue;
+		}
 	    if(argv[i][1] == 'p'){
 		if(argc <=  i + 1){
 		    error("-p requires an argument (a text symbol name)");
@@ -565,16 +570,27 @@ char **envp)
 		show_objdump_command = TRUE;
 		continue;
 	    }
-            if (strcmp(argv[i], "-object-tool-path") == 0){
-                if(argc <=  i + 1){
-                    error("-object-tool-path requires an argument (path to an "
-                          "objdump or otool tool)");
-                    usage();
-                }
-                object_tool_path = argv[i + 1];
-                i++;
-                continue;
-            }
+	    if (strcmp(argv[i], "-object-tool-path") == 0){
+		if(argc <=  i + 1){
+		    error("-object-tool-path requires an argument (path to an "
+			  "objdump or otool tool)");
+		    usage();
+		}
+		object_tool_path = argv[i + 1];
+		i++;
+		continue;
+	    }
+	    if (strcmp(argv[i], "-objdump") == 0){
+		object_tool_path = "objdump";
+		continue;
+	    }
+#else /* LLVM_OTOOL */
+	    if(strcmp(argv[i], "-show-objdump-command") == 0 ||
+	       strcmp(argv[i], "-object-tool-path") == 0 ||
+	       strcmp(argv[i], "-objdump") == 0) {
+		error("only llvm-otool supports %s", argv[i]);
+		usage();
+	    }
 #endif /* LLVM_OTOOL */
 	    if(argv[i][1] == 's'){
 		if(argc <=  i + 2){
@@ -886,7 +902,8 @@ char** argv)
     add_execute_list(otool);
 
     for (int i = 1; i < argc; ++i) {
-	if (!strcmp(argv[i], "-show-objdump-command")) {
+	if (!strcmp(argv[i], "-objdump") ||
+	    !strcmp(argv[i], "-show-objdump-command")) {
 	    continue;
 	}
 	else if (!strcmp(argv[i], "-object-tool-path")) {
@@ -923,93 +940,93 @@ enum bool version)
 
 	reset_execute_list();
 	add_execute_list(objdump);
-	add_execute_list("-macho");
+	add_execute_list("--macho");
 
 	if(fflag)
-	    add_execute_list("-universal-headers");
+	    add_execute_list("--universal-headers");
 	if(aflag){
-	    add_execute_list("-archive-headers");
+	    add_execute_list("--archive-headers");
 	    if(Vflag)
-		add_execute_list("-archive-member-offsets");
+		add_execute_list("--archive-member-offsets");
 	}
 	if(hflag && !lflag)
-	    add_execute_list("-private-header");
+	    add_execute_list("--private-header");
 	if(lflag)
-	    add_execute_list("-private-headers");
+	    add_execute_list("--private-headers");
 	if(xflag){
 	    if(vflag)
-		add_execute_list("-disassemble-all");
+		add_execute_list("--disassemble-all");
 	    else{
-		add_execute_list("-section");
+		add_execute_list("--section");
 		add_execute_list(",__text");
 	    }
 	}
 	else if(tflag){
 	    if(vflag)
-		add_execute_list("-disassemble");
+		add_execute_list("--disassemble");
 	    else{
-		add_execute_list("-section");
+		add_execute_list("--section");
 		add_execute_list("__TEXT,__text");
 	    }
 	}
 	if(tflag || xflag || segname != NULL){
-	    add_execute_list("-full-leading-addr");
-	    add_execute_list("-print-imm-hex");
+	    add_execute_list("--full-leading-addr");
+	    add_execute_list("--print-imm-hex");
 	}
 	if(pflag != NULL){
-	    add_execute_list("-dis-symname");
+	    add_execute_list("--dis-symname");
 	    add_execute_list(pflag);
 	}
 	if(*mcpu != '\0')
-	    add_execute_list(makestr("-mcpu=", mcpu, NULL));
+	    add_execute_list(makestr("--mcpu=", mcpu, NULL));
 	if(Iflag)
-	    add_execute_list("-indirect-symbols");
+	    add_execute_list("--indirect-symbols");
 	if(Gflag)
-	    add_execute_list("-data-in-code");
+	    add_execute_list("--data-in-code");
 	if(Cflag)
-	    add_execute_list("-link-opt-hints");
+	    add_execute_list("--link-opt-hints");
 	if(Pflag)
-	    add_execute_list("-info-plist");
+	    add_execute_list("--info-plist");
 	if(segname != NULL && sectname != NULL){
-	    add_execute_list("-section");
+	    add_execute_list("--section");
 	    add_execute_list(makestr(segname, ",", sectname, NULL));
 	}
 	if(dflag){
-	    add_execute_list("-section");
+	    add_execute_list("--section");
 	    add_execute_list("__DATA,__data");
 	}
 	if(rflag)
-	    add_execute_list("-r");
+	    add_execute_list("--reloc");
 	if(Sflag)
 	    error("for -S functionality, use llvm-nm with -print-armap");
 	if(version)
-	    add_execute_list("-version");
+	    add_execute_list("--version");
 	if(print_bind_info)
-	    add_execute_list("-bind");
+	    add_execute_list("--bind");
 	if(Lflag)
-	    add_execute_list("-dylibs-used");
+	    add_execute_list("--dylibs-used");
 	if(Dflag)
-	    add_execute_list("-dylib-id");
+	    add_execute_list("--dylib-id");
 	if(oflag)
-	    add_execute_list("-objc-meta-data");
+	    add_execute_list("--objc-meta-data");
 
 	if(!vflag)
-	    add_execute_list("-non-verbose");
+	    add_execute_list("--non-verbose");
 	if(!Vflag && (tflag || xflag || segname != NULL))
-	    add_execute_list("-no-symbolic-operands");
+	    add_execute_list("--no-symbolic-operands");
 	if((!jflag && (tflag || xflag || segname != NULL)) || no_show_raw_insn)
-	    add_execute_list("-no-show-raw-insn");
+	    add_execute_list("--no-show-raw-insn");
 	if(Xflag){
-	    add_execute_list("-no-leading-addr");
-	    add_execute_list("-no-leading-headers");
+	    add_execute_list("--no-leading-addr");
+	    add_execute_list("--no-leading-headers");
 	}
 
 	if(all_archs){
-	    add_execute_list("-arch");
+	    add_execute_list("--arch");
 	    add_execute_list("all");
 	}
 	for(i = 0; i < narch_flags; i++){
-	    add_execute_list("-arch");
+	    add_execute_list("--arch");
 	    add_execute_list(arch_flags[i].name);
 	}
 
@@ -4231,12 +4248,16 @@ uint64_t seg_addr)
 		}
 		llvm_disasm_set_options(arm_dc,
 		    LLVMDisassembler_Option_PrintImmHex);
-		llvm_disasm_set_options(arm_dc,
-		    LLVMDisassembler_Option_PrintLatency);
+		if(show_latency){
+			llvm_disasm_set_options(arm_dc,
+				LLVMDisassembler_Option_PrintLatency);
+		}
 		llvm_disasm_set_options(thumb_dc,
 		    LLVMDisassembler_Option_PrintImmHex);
-		llvm_disasm_set_options(thumb_dc,
-		    LLVMDisassembler_Option_PrintLatency);
+		if(show_latency){
+			llvm_disasm_set_options(thumb_dc,
+				LLVMDisassembler_Option_PrintLatency);
+		}
 		if(eflag){
 		    llvm_disasm_set_options(arm_dc,
 			LLVMDisassembler_Option_UseMarkup);
@@ -4254,8 +4275,10 @@ uint64_t seg_addr)
 		    LLVMDisassembler_Option_PrintImmHex);
 		llvm_disasm_set_options(i386_dc,
 		    LLVMDisassembler_Option_SetInstrComments);
-		llvm_disasm_set_options(i386_dc,
-		    LLVMDisassembler_Option_PrintLatency);
+		if(show_latency){
+			llvm_disasm_set_options(i386_dc,
+				LLVMDisassembler_Option_PrintLatency);
+		}
 		if(eflag)
 		    llvm_disasm_set_options(i386_dc,
 			LLVMDisassembler_Option_UseMarkup);
@@ -4270,8 +4293,10 @@ uint64_t seg_addr)
 		    LLVMDisassembler_Option_PrintImmHex);
 		llvm_disasm_set_options(x86_64_dc,
 		    LLVMDisassembler_Option_SetInstrComments);
-		llvm_disasm_set_options(x86_64_dc,
-		    LLVMDisassembler_Option_PrintLatency);
+		if(show_latency){
+			llvm_disasm_set_options(x86_64_dc,
+				LLVMDisassembler_Option_PrintLatency);
+		}
 		if(eflag)
 		    llvm_disasm_set_options(x86_64_dc,
 			LLVMDisassembler_Option_UseMarkup);
@@ -4284,8 +4309,10 @@ uint64_t seg_addr)
 		}
 		llvm_disasm_set_options(arm64_dc,
 		    LLVMDisassembler_Option_PrintImmHex);
-		llvm_disasm_set_options(arm64_dc,
-		    LLVMDisassembler_Option_PrintLatency);
+		if(show_latency){
+			llvm_disasm_set_options(arm64_dc,
+				LLVMDisassembler_Option_PrintLatency);
+		}
 	    }
 	    if(gflag){
 		ninsts = 100;

@@ -923,6 +923,7 @@ static bool sharedCacheEligiblePath(const char* path)
 			|| (strncmp(path, "/System/Library/", 16) == 0)
 			|| (strncmp(path, "/System/iOSSupport/usr/lib/", 27) == 0)
 			|| (strncmp(path, "/System/iOSSupport/System/Library/", 34) == 0)
+			|| (strncmp(path, "/System/DriverKit", 17) == 0)
 			);
 }
 
@@ -2214,7 +2215,8 @@ int main(int argc, const char* argv[])
 					mergeRootPaths.push_back(mergeRoot);
 			}
 			else {
-				throwf("unknown option: %s\n", arg);
+				fprintf(stderr, "unknown option: %s\n", arg);
+				exit(1);
 			}
 		}
 		else {

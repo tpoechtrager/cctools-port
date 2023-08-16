@@ -83,8 +83,26 @@ const char *xar_member_name)
     uint32_t i, bufsize;
     char *p, *prefix, *xar_path, buf[MAXPATHLEN], resolved_name[PATH_MAX];
     struct xar_header xar_hdr;
-    char xar_filename[] = "/tmp/temp.XXXXXX";
-    char toc_filename[] = "/tmp/temp.XXXXXX";
+
+    char xar_filename[MAXPATHLEN];
+    char toc_filename[MAXPATHLEN];
+
+#define _XAR_PATH     "/tmp/otool-xar.XXXXXX"
+#define _XAR_NAME     "otool-xar.XXXXXX"
+#define _TOC_PATH     "/tmp/otool-toc.XXXXXX"
+#define _TOC_NAME     "otool-toc.XXXXXX"
+
+    char *envtmp = getenv("TMPDIR");
+
+    if (envtmp) {
+        (void)sprintf(xar_filename, "%s/%s", envtmp, _XAR_NAME);
+        (void)sprintf(toc_filename, "%s/%s", envtmp, _TOC_NAME);
+    }
+    else {
+        strcpy(xar_filename, _XAR_PATH);
+        strcpy(toc_filename, _TOC_PATH);
+    }
+
     int xar_fd, toc_fd;
     xar_t xar;
     struct stat toc_stat_buf;

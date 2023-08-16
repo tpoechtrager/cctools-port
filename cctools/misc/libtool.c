@@ -240,6 +240,13 @@ struct member {
     uint64_t offset;	    	    /* current working offset and final offset*/
     struct ar_hdr ar_hdr;	    /* the archive header for this member */
     char null_byte;		    /* space to write '\0' for ar_hdr */
+
+    /*
+     * if member data is not backed by a properly aligned mapped file, buffer
+     * holds aligned memory for this member data; otherwise NULL.
+     */
+    char* buffer;
+
     char *object_addr;		    /* the address of the object file */
     uint32_t object_size;	    /* the size of the object file */
     enum byte_sex object_byte_sex;  /* the byte sex of the object file */
@@ -1579,13 +1586,14 @@ void)
 		}while(ofile_next_arch(ofiles + i) == TRUE);
 	    }
 	    else if(ofiles[i].file_type == OFILE_ARCHIVE){
-                if (cmd_flags.ld_trace_archives == TRUE &&
-                    cmd_flags.dynamic == FALSE &&
-                    ld_trace_archive_printed == FALSE){
-                    ld_trace_archive(ofiles[i].file_name);
-                    ld_trace_archive_printed =
-                        TRUE;
-                }
+		/* log the archive */
+		if (cmd_flags.ld_trace_archives == TRUE &&
+		    cmd_flags.dynamic == FALSE &&
+		    ld_trace_archive_printed == FALSE){
+		    ld_trace_archive(ofiles[i].file_name);
+		    ld_trace_archive_printed =
+		    TRUE;
+		}
 		/* loop through archive */
 		if((flag = ofile_first_member(ofiles + i)) == TRUE){
 		    if(ofiles[i].member_ar_hdr != NULL &&
@@ -2358,6 +2366,19 @@ struct ofile *ofile)
 
 	if(ofile->mh != NULL ||
 	   ofile->mh64 != NULL){
+	    if (ofile->member_buffer) {
+		/*
+		 * The object file is not properly aligned within the
+		 * archive file. The member object will take ownership
+		 * of the object file's temporary storage, to avoid
+		 * making a second copy. This is safe only as long as
+		 * no other code is looking at this ofile during
+		 * archive enumeration, and the archive enumerator
+		 * advances/resets before member->buffer is freed.
+		 */
+		member->buffer = ofile->member_buffer;
+		ofile->member_buffer = NULL;
+	    }
 	    member->object_addr = ofile->object_addr;
 	    member->object_size = ofile->object_size;
 	    member->object_byte_sex = ofile->object_byte_sex;
@@ -2367,6 +2388,10 @@ struct ofile *ofile)
 	}
 #ifdef LTO_SUPPORT
 	else if(ofile->file_type == OFILE_LLVM_BITCODE){
+	    if (ofile->member_buffer) {
+		member->buffer = ofile->member_buffer;
+		ofile->member_buffer = NULL;
+	    }
 	    member->object_addr = ofile->file_addr;
 	    member->object_size = (uint32_t)ofile->file_size;
 	    member->lto_contents = TRUE;
@@ -2380,6 +2405,10 @@ struct ofile *ofile)
                 (ofile->file_type == OFILE_ARCHIVE &&
                  ofile->member_type == OFILE_FAT &&
                  ofile->arch_type == OFILE_LLVM_BITCODE)){
+	    if (ofile->member_buffer) {
+		member->buffer = ofile->member_buffer;
+		ofile->member_buffer = NULL;
+	    }
             member->object_addr = ofile->object_addr;
             member->object_size = ofile->object_size;
 	    member->lto_contents = TRUE;
@@ -2390,6 +2419,10 @@ struct ofile *ofile)
         }
 #endif /* LTO_SUPPORT */
 	else{
+	    if (ofile->member_buffer) {
+		member->buffer = ofile->member_buffer;
+		ofile->member_buffer = NULL;
+	    }
 	    member->object_addr = ofile->member_addr;
 	    member->object_size = ofile->member_size;
 #ifdef LTO_SUPPORT

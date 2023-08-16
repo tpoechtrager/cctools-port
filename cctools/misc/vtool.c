@@ -24,6 +24,9 @@
 #include <unistd.h>
 
 #include "stuff/port.h" /* cctools-port: reallocf() */
+#ifdef CODEDIRECTORY_SUPPORT
+#include "code_directory.h"
+#endif /* CODEDIRECTORY_SUPPORT */
 
 #ifndef PLATFORM_DRIVERKIT
 #define PLATFORM_DRIVERKIT 10
@@ -79,7 +82,7 @@ struct lcmds {
 
 struct file {
     unsigned char* buf;
-    off_t len;
+    size_t len;
     mode_t mode;
     uint32_t nfat_arch;
     struct fat_arch* fat_archs;
@@ -107,6 +110,7 @@ static struct options {
 
 static const char* gProgramName;
 static enum NXByteOrder gByteOrder;
+char *progname; /* for libstuff ... */
 
 static int process(void);
 static int command_remove(struct file* fb);
@@ -146,6 +150,8 @@ int main(int argc, const char * argv[])
     gByteOrder = NXHostByteOrder();
     gProgramName = *argv++;
     argc--;
+
+    progname = (char*)gProgramName; /* satisfy libstuff ... */
     
     if (argc == 0)
 	usage(NULL);
@@ -886,6 +892,8 @@ int command_remove(struct file* fb)
 		(((unsigned char*)(sg+1)) + isect * sizeof(*sc));
 		if (sc->flags & S_ZEROFILL)
 		    continue;
+		if (sc->flags & S_THREAD_LOCAL_ZEROFILL)
+		    continue;
 		if (sc->offset < sectoffset)
 		    sectoffset = sc->offset;
 	    }
@@ -899,6 +907,8 @@ int command_remove(struct file* fb)
 		struct section_64* sc = (struct section_64*)
 		(((unsigned char*)(sg+1)) + isect * sizeof(*sc));
 		if (sc->flags & S_ZEROFILL)
+		    continue;
+		if (sc->flags & S_THREAD_LOCAL_ZEROFILL)
 		    continue;
 		if (sc->offset < sectoffset)
 		    sectoffset = sc->offset;
@@ -1320,6 +1330,8 @@ int command_set(struct file* fb)
 		(((unsigned char*)(sg+1)) + isect * sizeof(*sc));
 		if (sc->flags & S_ZEROFILL)
 		    continue;
+		if (sc->flags & S_THREAD_LOCAL_ZEROFILL)
+		    continue;
 		if (sc->offset < sectoffset)
 		    sectoffset = sc->offset;
 	    }
@@ -1333,6 +1345,8 @@ int command_set(struct file* fb)
 		struct section_64* sc = (struct section_64*)
 		(((unsigned char*)(sg+1)) + isect * sizeof(*sc));
 		if (sc->flags & S_ZEROFILL)
+		    continue;
+		if (sc->flags & S_THREAD_LOCAL_ZEROFILL)
 		    continue;
 		if (sc->offset < sectoffset)
 		    sectoffset = sc->offset;
@@ -1572,7 +1586,7 @@ int command_set(struct file* fb)
     memcpy(q, &mh, fb->mh_size);
     q += fb->mh_size;
     memcpy(q, newcmds, totalcmdspace);
-    
+
     free(newcmds);
     free(items);
     
@@ -1613,6 +1627,8 @@ int command_show(struct file* fb)
 		(((unsigned char*)(sg+1)) + isect * sizeof(*sc));
 		if (sc->flags & S_ZEROFILL)
 		    continue;
+		if (sc->flags & S_THREAD_LOCAL_ZEROFILL)
+		    continue;
 		if (sc->offset < sectoffset)
 		    sectoffset = sc->offset;
 	    }
@@ -1625,6 +1641,8 @@ int command_show(struct file* fb)
 		struct section_64* sc = (struct section_64*)
 		(((unsigned char*)(sg+1)) + isect * sizeof(*sc));
 		if (sc->flags & S_ZEROFILL)
+		    continue;
+		if (sc->flags & S_THREAD_LOCAL_ZEROFILL)
 		    continue;
 		if (sc->offset < sectoffset)
 		    sectoffset = sc->offset;
@@ -1736,7 +1754,7 @@ int file_read(const char* path, struct file* fb)
 	return -1;
     }
     else if (readed != fb->len) {
-	fprintf(stderr, "%s error: %s: partial read (0x%zx of 0x%llx)\n",
+        fprintf(stderr, "%s error: %s: partial read (0x%zx of 0x%zx)\n",
 		gProgramName, path, readed, fb->len);
 	close(fd);
 	free(fb->buf);
@@ -1856,7 +1874,7 @@ int file_read(const char* path, struct file* fb)
 	{
 	    if (fb->len < fb->fat_archs[i].offset + fb->fat_archs[i].size) {
 		fprintf(stderr, "%s error: %s file #%d for cputype (%u, %u) "
-			"extends beyond file boundaries (%llu < %u + %u)\n",
+                        "extends beyond file boundaries (%zu < %u + %u)\n",
 			gProgramName, path, i, fb->fat_archs[i].cputype,
 			fb->fat_archs[i].cpusubtype, fb->len,
 			fb->fat_archs[i].offset, fb->fat_archs[i].size);
@@ -1976,30 +1994,149 @@ int file_select_macho(const char* path, struct file* fb, uint32_t index)
 int file_write(const char* path, struct file* fb)
 {
     int res = 0;
-    bool warn = true;
-    bool fake_sign = false;  /* cctools-port */
+    bool warn = false;
+    bool resign = false;
+		bool fake_sign = false;  /* cctools-port */
 
-    // warn if any Mach-O files source file contain code signatures.
-    for (uint32_t iarch = 0; 0 == res && warn && iarch < fb->nfat_arch; ++iarch)
+#ifdef CODEDIRECTORY_SUPPORT
+    struct codedir** codedirs = NULL;
+#endif /* CODEDIRECTORY_SUPPORT */
+
+    // check if any Mach-O files in the source contain code signatures, and
+    // decide either to warn or to re-sign the binary.
+    for (uint32_t iarch = 0;
+	 0 == res && !(warn&&resign) && iarch < fb->nfat_arch;
+	 ++iarch)
     {
 	// prepare the mach-o for reading
 	res = file_select_macho(path, fb, iarch);
 	if (res)
 	    continue;
-	
+
 	// walk the load commands looking for LC_CODE_SIGNATURE
 	struct lcmds* lcmds = fb->lcmds;
-	for (uint32_t icmd = 0; warn && icmd < lcmds->count; ++icmd) {
+	for (uint32_t icmd = 0; !(warn&&resign) && icmd < lcmds->count; ++icmd){
 	    struct load_command* lc = lcmds->items[icmd];
 	    if (lc->cmd == LC_CODE_SIGNATURE) {
-		fprintf(stderr, "%s warning: code signature will be invalid "
-			"for %s\n", gProgramName, path);
-		warn = false;
-		fake_sign = true; /* cctools-port */
+				fake_sign = true; /* cctools-port */
+#ifdef CODEDIRECTORY_SUPPORT
+		struct linkedit_data_command* cs =
+		    (struct linkedit_data_command*)lc;
+		uint32_t offset = fb->fat_archs[iarch].offset;
+		uint32_t filesize = (uint32_t)(fb->fat_archs[iarch].size);
+		uint32_t datasize = cs->datasize;
+		char* fileaddr = (char*)(fb->buf + offset);
+		char* dataaddr = (char*)(fb->buf + offset + cs->dataoff);
+		if (codedir_is_linker_signed(dataaddr, datasize)) {
+		    resign = true;
+
+		    if (!codedirs)
+			codedirs = calloc(sizeof(*codedirs), fb->nfat_arch);
+
+		    if (codedir_create_object(path, fileaddr, filesize,
+					      &codedirs[iarch]))
+			res = -1;
+		}
+		else
+#endif /* CODEDIRECTORY_SUPPORT */
+		    warn = true;
 	    }
 	}
     }
-    
+    if (0 == res && warn) {
+	fprintf(stderr, "%s warning: code signature will be invalid "
+		"for %s\n", gProgramName, path);
+    }
+
+    /*
+     * If this binary is being resigned, we need to build a new copy of the
+     * file in memory, as the architectures may be resigned. If the file is
+     * a fat file, each Mach-O needs to be measured separately, and the new
+     * sizes need to be reflected in the fat headers.
+     */
+    unsigned char* outbuf = NULL;
+    size_t outlen = 0;
+
+    if (0 == res && resign) {
+	// make a copy of the fat_arch table to hold changes
+	size_t out_arch_len = sizeof(struct fat_arch) * fb->nfat_arch;
+	struct fat_arch* out_archs = malloc(out_arch_len);
+	memcpy(out_archs, fb->fat_archs, out_arch_len);
+
+
+	// if this is a fat file, measure the fat headers.
+	if (fb->nfat_arch > 1) {
+	    // measure the size of each architecture, plus the fat arch
+	    // if needed.
+	    outlen += sizeof(struct fat_header);
+	    outlen += sizeof(struct fat_arch) * fb->nfat_arch;
+	}
+
+	// for each file, prepare to sign and adjust the file size if needed.
+	for (uint32_t iarch = 0; 0 == res && iarch < fb->nfat_arch; ++iarch)
+	{
+	    // if fat, round this file start to its alignment.
+	    if (fb->nfat_arch > 1) {
+		uint32_t align = 1 << fb->fat_archs[iarch].align;
+		uint32_t delta = outlen % align;
+		outlen += delta ? align - delta : 0;
+		out_archs[iarch].offset = (uint32_t)outlen;
+	    }
+
+#ifdef CODEDIRECTORY_SUPPORT
+	    // resize the mach-o to hold the new code signature.
+	    if (codedirs[iarch]) {
+		out_archs[iarch].size +=codedir_datasize_delta(codedirs[iarch]);
+	    }
+#endif /* CODEDIRECTORY_SUPPORT */
+
+	    // measure the size of the file
+	    outlen += out_archs[iarch].size;
+	}
+
+	// create a buffer to hold the new file.
+	outbuf = calloc(1, outlen);
+
+	// copy the fat headers
+	if (fb->nfat_arch > 1) {
+	    struct fat_header fh = { FAT_MAGIC, fb->nfat_arch };
+	    if (gByteOrder != BIG_ENDIAN)
+		swap_fat_header(&fh, BIG_ENDIAN);
+	    memcpy(outbuf, &fh, sizeof(fh));
+
+	    unsigned char* fa = outbuf + sizeof(fh);
+	    memcpy(fa, out_archs, out_arch_len);
+	    if (gByteOrder != BIG_ENDIAN)
+		swap_fat_arch((struct fat_arch*)fa, fb->nfat_arch, BIG_ENDIAN);
+	}
+
+	// copy the file, re-signing if necesary
+	for (uint32_t iarch = 0; 0 == res && iarch < fb->nfat_arch; ++iarch)
+	{
+	    char* in_addr = ((char*)fb->buf) + out_archs[iarch].offset;
+	    char* out_addr = ((char*)outbuf) + out_archs[iarch].offset;
+	    uint32_t out_size = (uint32_t)out_archs[iarch].size;
+
+#ifdef CODEDIRECTORY_SUPPORT
+	    if (codedirs[iarch]) {
+		memcpy(out_addr, in_addr, codedir_filesize(codedirs[iarch]));
+		codedir_write_object(codedirs[iarch], out_addr, out_size);
+		codedir_free(codedirs[iarch]);
+		codedirs[iarch] = NULL;
+	    }
+	    else {
+#endif /* CODEDIRECTORY_SUPPORT */
+		memcpy(out_addr, in_addr, out_size);
+#ifdef CODEDIRECTORY_SUPPORT
+	    }
+#endif /* CODEDIRECTORY_SUPPORT */
+	}
+    }
+    else {
+	outbuf = fb->buf;
+	outlen = fb->len;
+    }
+
     // compute a temporary path to hold our output file during assembly.
     size_t pathlen = strlen(path);
     const char* prefix = ".XXXXXX";
@@ -2020,19 +2157,25 @@ int file_write(const char* path, struct file* fb)
     
     // write the file
     if (0 == res) {
-	ssize_t wrote = write(fd, fb->buf, fb->len);
+	ssize_t wrote = write(fd, outbuf, outlen);
 	if (wrote == -1) {
 	    fprintf(stderr, "%s error: %s: write: %s\n", gProgramName, tmppath,
 		    strerror(errno));
 	    res = -1;
 	}
-	else if (wrote != fb->len) {
-	    fprintf(stderr, "%s error: %s: partial write (0x%zx of 0x%llx)\n",
-		    gProgramName, tmppath, wrote, fb->len);
+	else if (wrote != outlen) {
+            fprintf(stderr, "%s error: %s: partial write (0x%zx of 0x%zx)\n",
+		    gProgramName, tmppath, wrote, outlen);
 	    res = -1;
 	}
     }
-    
+    if (outbuf != fb->buf)
+	free(outbuf);
+#ifdef CODEDIRECTORY_SUPPORT
+    if (codedirs)
+	free(codedirs);
+#endif /* CODEDIRECTORY_SUPPORT */
+
     // close the file and move the temporary file to its final destination
     if (0 == res && close(fd)) {
 	fprintf(stderr, "%s error: %s: can't close file: %s\n",
@@ -2054,7 +2197,7 @@ int file_write(const char* path, struct file* fb)
 
     /* cctools-port */
     if (0 == res && fake_sign)
-		FAKE_SIGN_BINARY(path, 1);
+			FAKE_SIGN_BINARY(path, 1);
     /* cctools-port end */
     
     // try to lean up if something went wrong

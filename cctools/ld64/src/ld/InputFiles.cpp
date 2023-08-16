@@ -68,6 +68,10 @@
 #include "MachOFileAbstraction.hpp"
 #include "Snapshot.h"
 
+#ifndef MAP_RESILIENT_CODESIGN // ld64-port
+#define MAP_RESILIENT_CODESIGN 0
+#endif
+
 const bool _s_logPThreads = false;
 
 namespace ld {
@@ -255,9 +259,18 @@ ld::File* InputFiles::makeFile(const Options::FileInfo& info, bool indirectDylib
 	if ( stat_buf.st_size < 20 )
 		throwf("file too small (length=%llu)", stat_buf.st_size);
 	int64_t len = stat_buf.st_size;
-	uint8_t* p = (uint8_t*)::mmap(NULL, stat_buf.st_size, PROT_READ, MAP_FILE | MAP_PRIVATE, fd, 0);
-	if ( p == (uint8_t*)(-1) )
-		throwf("can't map file, errno=%d", errno);
+	// <rdar://problem/69569058>
+	// On macOS 10.15 MAP_RESILIENT_CODESIGN doesn't work, so we need to first try
+	// with the flag and then without it.
+	int flags = MAP_FILE | MAP_PRIVATE | MAP_RESILIENT_CODESIGN;
+	uint8_t* p = (uint8_t*)::mmap(NULL, stat_buf.st_size, PROT_READ, flags, fd, 0);
+	if ( p == MAP_FAILED ) {
+		flags &= ~MAP_RESILIENT_CODESIGN;
+		p = (uint8_t*)::mmap(NULL, stat_buf.st_size, PROT_READ, flags, fd, 0);
+		if ( p == MAP_FAILED ) {
+			throwf("can't map file, errno=%d", errno);
+		}
+	}
 
 	// if fat file, skip to architecture we want
 	// Note: fat header is always big-endian
@@ -330,13 +343,23 @@ ld::File* InputFiles::makeFile(const Options::FileInfo& info, bool indirectDylib
 			// if requested architecture is page aligned within fat file, then remap just that portion of file
 			// ld64-port: remapping the file on Cygwin fails for an unknown reason, so always go the alternative way there
 #ifndef __CYGWIN__
-			if ( (fileOffset & PAGE_MASK) == 0 ) {
+			static const int page_mask = ::getpagesize() - 1;
+			if ( (fileOffset & page_mask) == 0 ) {
 				// unmap whole file
 				munmap((caddr_t)p, stat_buf.st_size);
 				// re-map just part we need
-				p = (uint8_t*)::mmap(NULL, len, PROT_READ, MAP_FILE | MAP_PRIVATE, fd, fileOffset);
-				if ( p == (uint8_t*)(-1) )
-					throwf("can't re-map file, errno=%d", errno);
+				// <rdar://problem/69569058>
+				// On macOS 10.15 MAP_RESILIENT_CODESIGN doesn't work, so we need to first try
+				// with the flag and then without it.
+				int flags = MAP_FILE | MAP_PRIVATE | MAP_RESILIENT_CODESIGN;
+				p = (uint8_t*)::mmap(NULL, len, PROT_READ, flags, fd, fileOffset);
+				if ( p == MAP_FAILED ) {
+					flags &= ~MAP_RESILIENT_CODESIGN;
+					p = (uint8_t*)::mmap(NULL, len, PROT_READ, flags, fd, fileOffset);
+					if ( p == MAP_FAILED ) {
+						throwf("can't re-map file, errno=%d", errno);
+					}
+				}
 			}
 			else {
 #endif /* __CYGWIN__ */
@@ -1495,11 +1518,16 @@ struct DylibByInstallNameSorter
 void InputFiles::dylibs(ld::Internal& state)
 {
 	bool dylibsOK = false;
+	bool shouldLinkLibSystem = false;
 	switch ( _options.outputKind() ) {
 		case Options::kDynamicExecutable:
+			dylibsOK = true;
+			shouldLinkLibSystem = _options.needsEntryPointLoadCommand(); // don't require libSystem for pre-LC_MAIN programs
+			break;
 		case Options::kDynamicLibrary:
 		case Options::kDynamicBundle:
 			dylibsOK = true;
+			shouldLinkLibSystem = true;
 			break;
 		case Options::kStaticExecutable:
 		case Options::kDyld:
@@ -1562,13 +1590,30 @@ void InputFiles::dylibs(ld::Internal& state)
 	state.bundleLoader = _bundleLoader;
 	
 	// <rdar://problem/10807040> give an error when -nostdlib is used and libSystem is missing
-	if ( (state.dylibs.size() == 0) && _options.needsEntryPointLoadCommand() && !_options.platforms().contains(ld::Platform::driverKit))  {
+	// <rdar://problem/75177082> (ld64 should enforce that dylibs and bundles link with libSystem.dylib)
+	if ( (state.dylibs.size() == 0) && shouldLinkLibSystem && !_options.platforms().contains(ld::Platform::driverKit))  {
 		// HACK until 39514191 is fixed
 		bool grandfather = false;
 		for (const File* inFile : _inputFiles) {
 			if ( strstr(inFile->path(), "exit-asm.o") != NULL )
 				grandfather = true;
 		}
+
+		if ( strcmp(_options.installPath(), "/usr/lib/system/libsystem_kernel.dylib") == 0 ) {
+			grandfather = true;
+		}
+
+		// Grandfather libsystem_pthread* when building for the simulator.
+		if ( _options.targetIOSSimulator() &&
+			strncmp(_options.installPath(), "/usr/lib/system/libsystem_pthread", 33) == 0 ) {
+			grandfather = true;
+		}
+		
+		// FIXME: remove this after libobjc starts linking against libsystem
+		if ( strcmp(_options.installPath(), "/usr/lib/libobjc-trampolines.dylib") == 0 ) {
+			grandfather = true;
+		}
+
 		if ( !grandfather )
 			throw "dynamic main executables must link with libSystem.dylib";
 	}

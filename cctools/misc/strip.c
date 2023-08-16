@@ -58,6 +58,7 @@
 __private_extern__
 char *progname = NULL;	/* name of the program for error messages (argv[0]) */
 static char *output_file;/* name of the output file */
+static const char *input_leaf_name; /* name of the input file */
 static char *sfile;	/* filename of global symbol names to keep */
 static char *Rfile;	/* filename of global symbol names to remove */
 static uint32_t Aflag;	/* save only absolute symbols with non-zero value and
@@ -214,7 +215,7 @@ static void strip_file(
     char *input_file,
     struct arch_flag *arch_flags,
     uint32_t narch_flags,
-    enum bool all_archs);
+    enum bool all_archs, enum bool no_options);
 
 static void strip_arch(
     struct arch *archs,
@@ -411,6 +412,7 @@ char *envp[])
     struct arch_flag *arch_flags;
     uint32_t narch_flags;
     enum bool all_archs;
+    enum bool no_options;
     struct symbol_list *sp;
 
 	diagnostics_enable(getenv("CC_LOG_DIAGNOSTICS") != NULL);
@@ -422,6 +424,7 @@ char *envp[])
 	arch_flags = NULL;
 	narch_flags = 0;
 	all_archs = FALSE;
+	no_options = TRUE;
 
 	files_specified = 0;
 	args_left = 1;
@@ -431,6 +434,7 @@ char *envp[])
 		    args_left = 0;
 		    break;
 		}
+		no_options = FALSE;
 		if(strcmp(argv[i], "-o") == 0){
 		    if(i + 1 >= argc)
 			fatal("-o requires an argument");
@@ -663,9 +667,9 @@ char *envp[])
 		char resolved_path[PATH_MAX + 1];
 
 		if(realpath(argv[i], resolved_path) == NULL)
-		    strip_file(argv[i], arch_flags, narch_flags, all_archs);
+		    strip_file(argv[i], arch_flags, narch_flags, all_archs, no_options);
 		else
-		    strip_file(resolved_path, arch_flags,narch_flags,all_archs);
+		    strip_file(resolved_path, arch_flags,narch_flags,all_archs, no_options);
 		files_specified++;
 	    }
 	}
@@ -700,7 +704,8 @@ strip_file(
 char *input_file,
 struct arch_flag *arch_flags,
 uint32_t narch_flags,
-enum bool all_archs)
+enum bool all_archs,
+enum bool no_optionss)
 {
     struct ofile *ofile;
     struct arch *archs;
@@ -724,8 +729,20 @@ enum bool all_archs)
 	if(errors)
 	    return;
 
+#ifndef NMEDIT
+	// rdar://77566992 (UNIX10 Conformance | VSC strip assertion 1001 failed.
+	// strip should strip the archive being created using ar for c sources
+	// compiled with -g option.)
+	if (ofile->file_type == OFILE_ARCHIVE) {
+	    Sflag = TRUE;
+	}
+#endif
 	/* checkout the file for symbol table replacement processing */
 	checkout(archs, narchs);
+
+	/* save current input file name */
+	const char* slash = strrchr(input_file, '/');
+	input_leaf_name = slash ? slash + 1 : input_file;
 
 	/* process the symbols in the input file */
 	strip_arch(archs, narchs, arch_flags, narch_flags, all_archs);
@@ -1089,6 +1106,7 @@ struct object *object)
     uint32_t swift_version;
     enum bool nlist_outofsync_with_dyldinfo;
     uint32_t mh_flags;
+    uint32_t orgCodeSigOffset = 0;
 
 	if(object->mh != NULL)
 	    mh_flags = object->mh->flags;
@@ -2166,6 +2184,7 @@ struct object *object)
 		}
 
 		if(object->code_sig_cmd != NULL){
+			orgCodeSigOffset = object->code_sig_cmd->dataoff;
 		    offset = rnd32(offset, 16);
 		    object->code_sig_cmd->dataoff = offset;
 		    offset += object->code_sig_cmd->datasize;
@@ -2654,16 +2673,27 @@ struct object *object)
 	}
 
 	/*
-	 * Issue a warning if object file has a code signature that the
-	 * operation will invalidate it.
+	 * If this file was codesigned either warn or re-sign.
 	 */
-	if(object->code_sig_cmd != NULL
+	if (object->code_sig_cmd != NULL) {
+#ifdef CODEDIRECTORY_SUPPORT
+	    uint32_t datasize = object->code_sig_cmd->datasize;
+	    char* dataaddr = (char*)(object->object_addr + orgCodeSigOffset);
+	    if (codedir_is_linker_signed(dataaddr, datasize)) {
+		codedir_create_object(output_file ? output_file : input_leaf_name,
+				      object->object_addr,
+				      orgCodeSigOffset,
+				      &object->output_codedir);
+	    }
+	    else
+#endif /* CODEDIRECTORY_SUPPORT */
 #ifndef NMEDIT
- 	   && !no_code_signature_warning
+		if (!no_code_signature_warning)
 #endif /* !(NMEDIT) */
-	  )
-	    warning_arch(arch, member, "changes being made to the file will "
-		"invalidate the code signature in: ");
+		    warning_arch(arch, member,
+				 "changes being made to the file will "
+				 "invalidate the code signature in: ");
+	}
 
 	if(nlist_outofsync_with_dyldinfo == TRUE){
 	    if(object->mh != NULL)

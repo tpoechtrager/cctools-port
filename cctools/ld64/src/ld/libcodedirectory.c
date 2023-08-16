@@ -882,9 +882,9 @@ _libcd_serialize_cd (libcd *s, uint32_t hash_type)
             end += strlen(s->team_id)+1;
         }
 
-        cd->execSegBase = bl(s->exec_seg_base);
-        cd->execSegLimit = bl(s->exec_seg_limit);
-        cd->execSegFlags = bl(s->exec_seg_flags);
+        cd->execSegBase = htonll(s->exec_seg_base);
+        cd->execSegLimit = htonll(s->exec_seg_limit);
+        cd->execSegFlags = htonll(s->exec_seg_flags);
 
         if (s->linkage_set) {
             cd->linkageHashType = s->linkage_hash_type;

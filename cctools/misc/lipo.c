@@ -718,7 +718,7 @@ unknown_flag:
 	    /* remove those thin files marked for removal */
 	    for(i = 0; i < nthin_files; ){
 		if(thin_files[i].remove == TRUE){
-		    for(j = i; j < nthin_files; j++)
+		    for(j = i; j < nthin_files - 1; j++)
 			thin_files[j] = thin_files[j + 1];
 		    nthin_files--;
 		}

@@ -397,6 +397,11 @@ void File::processIndirectLibraries(ld::dylib::File::DylibHandler* handler, bool
                         if ( log )
                             fprintf(stderr, "processIndirectLibraries() implicitly linking %s\n", dep.dylib->installPath());
                         dep.dylib->setImplicitlyLinked();
+                        if ( ! dep.dylib->explicitlyLinked()) {
+                            if ( this->_forcedWeakLinked ) {
+                                dep.dylib->setForcedWeakLinked();
+                            }
+                        }
                     }
                     else if ( dep.dylib->explicitlyLinked() || dep.dylib->implicitlyLinked() ) {
                         if ( log )

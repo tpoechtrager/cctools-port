@@ -75,6 +75,8 @@ struct flags {
     enum bool m;
     enum bool l;
     enum bool x;
+    enum bool nested;
+    char* indent;
 };
 
 static void usage(
@@ -111,6 +113,8 @@ char **envp)
 	flag.m = FALSE;
 	flag.l = FALSE;
 	flag.x = FALSE;
+	flag.nested = FALSE;
+	flag.indent = "";
 
 	files = allocate(sizeof(char *) * argc);
 	for(i = 1; i < argc; i++){
@@ -215,6 +219,7 @@ void *cookie)
     struct load_command *lc;
     struct segment_command *sg;
     struct segment_command_64 *sg64;
+    struct fileset_entry_command *fse;
     struct section *s;
     struct section_64 *s64;
     uint64_t text, data, objc, others, sum;
@@ -229,12 +234,12 @@ void *cookie)
 	    if(flag->nfiles > 1 || ofile->member_ar_hdr != NULL ||
 	       arch_name != NULL){
 		if(ofile->member_ar_hdr != NULL){
-		    printf("%s(%.*s)", ofile->file_name,
+		    printf("%s%s(%.*s)", flag->indent, ofile->file_name,
 			   (int)ofile->member_name_size,
 			   ofile->member_name);
 		}
 		else{
-		    printf("%s", ofile->file_name);
+		    printf("%s%s", flag->indent, ofile->file_name);
 		}
 		if(arch_name != NULL)
 		    printf(" (for architecture %s):\n", arch_name);
@@ -243,14 +248,18 @@ void *cookie)
 	    }
 	    lc = ofile->load_commands;
 	    seg_sum = 0;
-	    for(i = 0; i < ncmds; i++){
+	    for(i = 0; i < ncmds; i++,
+		    lc = (struct load_command *)((char *)lc + lc->cmdsize)){
 		if(lc->cmd == LC_SEGMENT){
 		    sg = (struct segment_command *)lc;
-		    printf("Segment %.16s: ", sg->segname);
+		    if (flag->nested && !strcmp(sg->segname, "__LINKEDIT")) continue;
+		    printf("%sSegment %.16s: ", flag->indent, sg->segname);
 		    if(flag->x == TRUE)
 			printf("0x%x", (unsigned int)sg->vmsize);
 		    else
 			printf("%u", sg->vmsize);
+			if (strcmp(sg->segname, "__PAGEZERO") == 0)
+				printf(" (zero fill) ");
 		    if(sg->flags & SG_FVMLIB)
 			printf(" (fixed vm library segment)\n");
 		    else{
@@ -266,36 +275,54 @@ void *cookie)
 		    sect_sum = 0;
 		    for(j = 0; j < sg->nsects; j++){
 			if(ofile->mh_filetype == MH_OBJECT)
-			    printf("\tSection (%.16s, %.16s): ",
+			    printf("%s\tSection (%.16s, %.16s): ", flag->indent,
 				   s->segname, s->sectname);
 			else
-			    printf("\tSection %.16s: ", s->sectname);
+			    printf("%s\tSection %.16s: ", flag->indent, s->sectname);
 			if(flag->x == TRUE)
 			    printf("0x%x", (unsigned int)s->size);
 			else
 			    printf("%u", s->size);
-			if(flag->l == TRUE)
-			    printf(" (addr 0x%x offset %u)\n",
-				    (unsigned int)s->addr, s->offset);
-			else
-			    printf("\n");
+			enum bool zero_filled = ((s->flags & SECTION_TYPE) == S_THREAD_LOCAL_ZEROFILL) ||
+					((s->flags & SECTION_TYPE) == S_ZEROFILL);
+			if(flag->l == TRUE) {
+				if (!zero_filled) {
+					printf(" (addr 0x%x offset %u)\n",
+						   (unsigned int)s->addr, s->offset);
+				}
+				else {
+					printf(" (addr 0x%x zerofill)\n",
+						   (unsigned int)s->addr);
+				}
+			}
+			else {
+				if (!zero_filled) {
+					printf("\n");
+				}
+				else {
+					printf(" (zerofill)\n");
+				}
+			}
 			sect_sum += s->size;
 			s++;
 		    }
 		    if(sg->nsects > 0){
 			if(flag->x == TRUE)
-			    printf("\ttotal 0x%llx\n", sect_sum);
+			    printf("%s\ttotal 0x%llx\n", flag->indent, sect_sum);
 			else
-			    printf("\ttotal %llu\n", sect_sum);
+			    printf("%s\ttotal %llu\n", flag->indent, sect_sum);
 		    }
 		}
 		else if(lc->cmd == LC_SEGMENT_64){
 		    sg64 = (struct segment_command_64 *)lc;
-		    printf("Segment %.16s: ", sg64->segname);
+		    if (flag->nested && !strcmp(sg64->segname, "__LINKEDIT")) continue;
+		    printf("%sSegment %.16s: ", flag->indent, sg64->segname);
 		    if(flag->x == TRUE)
 			printf("0x%llx", sg64->vmsize);
 		    else
 			printf("%llu", sg64->vmsize);
+			if (strcmp(sg64->segname, "__PAGEZERO") == 0)
+				printf(" (zero fill) ");
 		    if(sg64->flags & SG_FVMLIB)
 			printf(" (fixed vm library segment)\n");
 		    else{
@@ -311,36 +338,83 @@ void *cookie)
 		    sect_sum = 0;
 		    for(j = 0; j < sg64->nsects; j++){
 			if(ofile->mh_filetype == MH_OBJECT)
-			    printf("\tSection (%.16s, %.16s): ",
+			    printf("%s\tSection (%.16s, %.16s): ", flag->indent,
 				   s64->segname, s64->sectname);
 			else
-			    printf("\tSection %.16s: ", s64->sectname);
+			    printf("%s\tSection %.16s: ", flag->indent, s64->sectname);
 			if(flag->x == TRUE)
 			    printf("0x%llx", s64->size);
 			else
 			    printf("%llu", s64->size);
-			if(flag->l == TRUE)
-			    printf(" (addr 0x%llx offset %u)\n",
-				    s64->addr,
-				    s64->offset);
-			else
-			    printf("\n");
+			enum bool zero_filled = ((s64->flags & SECTION_TYPE) == S_THREAD_LOCAL_ZEROFILL) ||
+				((s64->flags & SECTION_TYPE) == S_ZEROFILL);
+			if(flag->l == TRUE) {
+				if (!zero_filled) {
+					printf(" (addr 0x%llx offset %u)\n",
+						   s64->addr,
+						   s64->offset);
+				}
+				else {
+					printf(" (addr 0x%llx zerofill)\n",
+						   s64->addr);
+				}
+			}
+			else {
+				if (!zero_filled) {
+					printf("\n");
+				}
+				else {
+					printf(" (zerofill)\n");
+				}
+			}
 			sect_sum += s64->size;
 			s64++;
 		    }
 		    if(sg64->nsects > 0){
 			if(flag->x == TRUE)
-			    printf("\ttotal 0x%llx\n", sect_sum);
+			    printf("%s\ttotal 0x%llx\n", flag->indent, sect_sum);
 			else
-			    printf("\ttotal %llu\n", sect_sum);
+			    printf("%s\ttotal %llu\n", flag->indent, sect_sum);
 		    }
 		}
-		lc = (struct load_command *)((char *)lc + lc->cmdsize);
+		else if(lc->cmd == LC_FILESET_ENTRY){
+		    fse = (struct fileset_entry_command *)lc;
+		    printf("%sFileset entry %s: ", flag->indent,
+			    (char*)lc + fse->entry_id.offset);
+		    if(flag->l == TRUE)
+			printf(" (vmaddr 0x%llx fileoff %llu)\n",
+				fse->vmaddr, fse->fileoff);
+		    else
+			printf("\n");
+		    uint32_t magic;
+		    char *addr = ofile->object_addr + fse->fileoff;
+		    memcpy(&magic, addr, sizeof(uint32_t));
+		    if(magic == MH_MAGIC || magic == SWAP_INT(MH_MAGIC) ||
+			    magic == MH_MAGIC_64 || magic == SWAP_INT(MH_MAGIC_64)) {
+			struct ofile fse_ofile = *ofile;
+			fse_ofile.object_addr = addr;
+			if (magic == MH_MAGIC || magic == SWAP_INT(MH_MAGIC)) {
+			    fse_ofile.mh = (struct mach_header *)addr;
+			    fse_ofile.mh_filetype = fse_ofile.mh->filetype;
+			    fse_ofile.load_commands = (struct load_command *)(addr +
+						sizeof(struct mach_header));
+			} else {
+			    fse_ofile.mh64 = (struct mach_header_64 *)addr;
+			    fse_ofile.mh_filetype = fse_ofile.mh64->filetype;
+			    fse_ofile.load_commands = (struct load_command *)(addr +
+						sizeof(struct mach_header_64));
+			}
+		        struct flags fseflag = *flag;
+			fseflag.nested = TRUE;
+			fseflag.indent = "\t|";
+			size(&fse_ofile, arch_name, &fseflag);
+		    }
+		}
 	    }
 	    if(flag->x == TRUE)
-		printf("total 0x%llx\n", seg_sum);
+		printf("%stotal 0x%llx\n", flag->indent, seg_sum);
 	    else
-		printf("total %llu\n", seg_sum);
+		printf("%stotal %llu\n", flag->indent, seg_sum);
 	}
 	else{
 	    text = 0;

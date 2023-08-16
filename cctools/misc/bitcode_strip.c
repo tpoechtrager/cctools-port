@@ -51,6 +51,8 @@ static enum bool keep_cs_flag = FALSE; /* keep code signature load commands */
  */
 static enum bool some_slice_has_bitcode = FALSE;
 
+char *output_file = NULL;
+
 static void usage(
     void);
 
@@ -75,16 +77,13 @@ static void leave_just_bitcode_segment(
 
 static void strip_bitcode_from_load_commands(
     struct arch *arch,
-    struct object *object);
+    struct object *object,
+    enum bool resign);
 
 static void leave_only_bitcode_load_commands(
     struct arch *arch,
     struct object *object,
     enum bool keeping_plist);
-
-static void reset_pointers_for_object_load_commands(
-    struct arch *arch,
-    struct object *object);
 
 static void make_ld_process_mh_object(
     struct arch *arch,
@@ -114,7 +113,7 @@ char **argv,
 char **envp)
 {
     uint32_t i;
-    char *input, *output;
+    char *input;
     struct arch *archs;
     uint32_t narchs;
 
@@ -124,7 +123,7 @@ char **envp)
 
 	progname = argv[0];
 	input = NULL;
-	output = NULL;
+	output_file = NULL;
 	archs = NULL;
 	narchs = 0;
 	for(i = 1; i < argc; i++){
@@ -133,11 +132,11 @@ char **envp)
 		    error("missing argument(s) to: %s option", argv[i]);
 		    usage();
 		}
-		if(output != NULL){
+		if(output_file != NULL){
 		    error("more than one: %s option specified", argv[i]);
 		    usage();
 		}
-		output = argv[i+1];
+		output_file = argv[i+1];
 		i++;
 	    }
 	    else if(strcmp(argv[i], "-l") == 0){
@@ -180,7 +179,7 @@ char **envp)
 	    error("one of -r, -m or -l must specified");
 	    usage();
 	}
-	if(input == NULL || output == NULL)
+	if(input == NULL || output_file == NULL)
 	    usage();
 
 	breakout(input, &archs, &narchs, FALSE);
@@ -197,7 +196,7 @@ char **envp)
 	 */
 	if(rflag && some_slice_has_bitcode == FALSE){
 	    /* If the input file is the same as the output file do nothing. */
-	    if(strcmp(input, output) == 0)
+	    if(strcmp(input, output_file) == 0)
 		return(EXIT_SUCCESS);
 
 	    /*
@@ -207,14 +206,14 @@ char **envp)
 	    reset_execute_list();
 	    add_execute_list("/bin/cp");
 	    add_execute_list(input);
-	    add_execute_list(output);
+	    add_execute_list(output_file);
 	    if(execute_list(vflag) == 0)
 		fatal("internal /bin/cp command failed");
 	    return(EXIT_SUCCESS);
 	}
 
-	writeout(archs, narchs, output, 0777, TRUE, FALSE, FALSE, FALSE, FALSE,
-		 NULL);
+	writeout(archs, narchs, output_file, 0777, TRUE, FALSE, FALSE, FALSE,
+		 FALSE, NULL);
 
 	if(errors)
 	    return(EXIT_FAILURE);
@@ -507,12 +506,15 @@ struct object *object)
     uint32_t dyld_info_start;
     uint32_t dyld_info_end;
     enum bool has_bitcode;
+    enum bool has_ld_sig;
 
     uint32_t i, segalign, segalignexp, bitcode_marker_size, sect_offset;
     struct section *s;
     struct section_64 *s64;
 
 	segalign = 0; /* cctools-port */
+
+	has_ld_sig = FALSE;
 
 	/*
 	 * For MH_OBJECT files, .o files, the bitcode info is in two sections
@@ -965,7 +967,22 @@ struct object *object)
 
 	/* The code signature if any is last, after the strings. */
 	if(object->code_sig_cmd != NULL){
-	    if(keep_cs_flag == FALSE && has_bitcode){
+#if 0
+	/*
+	 * Codesigning support for bitcode_strip was disabled to reduce risk
+	 * in the GlacierPointB release. This #if 0 can be removed in order to
+	 * renable the re-signing logic.
+	 */
+#ifdef CODEDIRECTORY_SUPPORT
+	    if (object->code_sig_cmd->dataoff) {
+		uint32_t size = object->code_sig_cmd->datasize;
+		const char* data = object->object_addr + object->code_sig_cmd->dataoff);
+		has_ld_sig = codedir_is_linker_signed(data, size);
+	    }
+#endif /* CODEDIRECTORY_SUPPORT */
+#endif /* 0 */
+
+	    if(keep_cs_flag == FALSE && has_ld_sig == FALSE && has_bitcode){
 		/*
 		 * We remove the code signature on output if we are removing
 		 * a bitcode segment.
@@ -997,8 +1014,8 @@ struct object *object)
 
 	object->output_sym_info_size = offset - start_offset;
 
-	if(has_bitcode)
-	    strip_bitcode_from_load_commands(arch, object);
+	if (has_bitcode)
+	    strip_bitcode_from_load_commands(arch, object, has_ld_sig);
 }
 
 /*
@@ -1393,7 +1410,8 @@ static
 void
 strip_bitcode_from_load_commands(
 struct arch *arch,
-struct object *object)
+struct object *object,
+enum bool resign)
 {
     uint32_t i, mh_ncmds, new_ncmds, mh_sizeofcmds, new_sizeofcmds;
     struct load_command *lc1, *lc2, *new_load_commands;
@@ -1450,6 +1468,9 @@ struct object *object)
 		}
 	    }
 	    else if (keep_cs_flag == TRUE ||
+#ifdef CODEDIRECTORY_SUPPORT
+		     resign == TRUE ||
+#endif /* CODEDIRECTORY_SUPPORT */
 		    (lc1->cmd != LC_CODE_SIGNATURE &&
 		     lc1->cmd != LC_DYLIB_CODE_SIGN_DRS)) {
 		memcpy(lc2, lc1, lc1->cmdsize);
@@ -1478,16 +1499,28 @@ struct object *object)
 	free(new_load_commands);
 
 	/* reset the pointers into the load commands */
-	reset_pointers_for_object_load_commands(arch, object);
+	reset_load_command_pointers(object);
 
+#ifdef CODEDIRECTORY_SUPPORT
 	/*
-	 * The LC_CODE_SIGNATURE and LC_DYLIB_CODE_SIGN_DRS load commands
-	 * if any were removed above.
+	 * At this point in time, the binary is laid out properly, and the
+	 * load commands all exist. We can begin the process of trying to
+	 * replace the code signature for this binary.
+	 *
+	 * If that file cannot be re-signed, and we aren't keeping the
+	 * invalid code signature, we need to try again, this time removing
+	 * the codesign load command and rewriting the mach_header again.
 	 */
-	if (keep_cs_flag == FALSE) {
-	    object->code_sig_cmd = NULL;
-	    object->code_sign_drs_cmd = NULL;
+	if (resign == TRUE && object->code_sig_cmd != NULL) {
+	    int err = codedir_create_object(output_file,
+					    object->object_addr,
+					    object->object_size,
+					    &object->output_codedir);
+	    if (err && keep_cs_flag == FALSE)
+		warning_arch(arch, NULL, "changes being made to the file will "
+		    "invalidate the code signature in: ");
 	}
+#endif /* CODEDIRECTORY_SUPPORT */
 }
 
 /*
@@ -1521,7 +1554,7 @@ enum bool keeping_plist)
 	 * Allocate space for the new load commands and zero it out so any holes
 	 * will be zero bytes.
 	 */
-        if(object->mh != NULL){
+	if(object->mh != NULL){
 	    mh_ncmds = object->mh->ncmds;
 	    mh_sizeofcmds = object->mh->sizeofcmds;
 	}
@@ -1639,113 +1672,17 @@ enum bool keeping_plist)
 	if(mh_sizeofcmds > new_sizeofcmds)
 		memset((char *)object->load_commands + new_sizeofcmds,
 		       '\0', (mh_sizeofcmds - new_sizeofcmds));
-        if(object->mh != NULL) {
-            object->mh->sizeofcmds = new_sizeofcmds;
-            object->mh->ncmds = new_ncmds;
-        } else {
-            object->mh64->sizeofcmds = new_sizeofcmds;
-            object->mh64->ncmds = new_ncmds;
-        }
+	if(object->mh != NULL) {
+	    object->mh->sizeofcmds = new_sizeofcmds;
+	    object->mh->ncmds = new_ncmds;
+	} else {
+	    object->mh64->sizeofcmds = new_sizeofcmds;
+	    object->mh64->ncmds = new_ncmds;
+	}
 	free(new_load_commands);
 
 	/* reset the pointers into the load commands */
-	reset_pointers_for_object_load_commands(arch, object);
-
-	/*
-	 * The LC_CODE_SIGNATURE and LC_DYLIB_CODE_SIGN_DRS load commands
-	 * if any were removed above.
-	 */
-	if (keep_cs_flag == FALSE) {
-	    object->code_sig_cmd = NULL;
-	    object->code_sign_drs_cmd = NULL;
-	}
-}
-
-/*
- * reset_pointers_for_object_load_commands() sets the fields in the object
- * struct that are pointers to the load commands.  This is needed when we
- * rewrite the load commands making those fields that have pointers invalid.
- */
-static
-void
-reset_pointers_for_object_load_commands(
-struct arch *arch,
-struct object *object)
-{
-    uint32_t i, mh_ncmds;
-    struct load_command *lc;
-    struct segment_command *sg;
-    struct segment_command_64 *sg64;
-
-        if(object->mh != NULL)
-            mh_ncmds = object->mh->ncmds;
-        else
-            mh_ncmds = object->mh64->ncmds;
-
-	/* reset the pointers into the load commands */
-	lc = object->load_commands;
-	for(i = 0; i < mh_ncmds; i++){
-	    switch(lc->cmd){
-	    case LC_SYMTAB:
-		object->st = (struct symtab_command *)lc;
-	        break;
-	    case LC_DYSYMTAB:
-		object->dyst = (struct dysymtab_command *)lc;
-		break;
-	    case LC_TWOLEVEL_HINTS:
-		object->hints_cmd = (struct twolevel_hints_command *)lc;
-		break;
-	    case LC_PREBIND_CKSUM:
-		object->cs = (struct prebind_cksum_command *)lc;
-		break;
-	    case LC_SEGMENT:
-		sg = (struct segment_command *)lc;
-		if(strcmp(sg->segname, SEG_LINKEDIT) == 0)
-		    object->seg_linkedit = sg;
-		else if(strcmp(sg->segname, "__LLVM") == 0)
-		    object->seg_bitcode = sg;
-		break;
-	    case LC_SEGMENT_64:
-		sg64 = (struct segment_command_64 *)lc;
-		if(strcmp(sg64->segname, SEG_LINKEDIT) == 0)
-		    object->seg_linkedit64 = sg64;
-		else if(strcmp(sg64->segname, "__LLVM") == 0)
-		    object->seg_bitcode64 = sg64;
-		break;
-	    case LC_SEGMENT_SPLIT_INFO:
-		object->split_info_cmd = (struct linkedit_data_command *)lc;
-		break;
-	    case LC_FUNCTION_STARTS:
-		object->func_starts_info_cmd =
-					 (struct linkedit_data_command *)lc;
-		break;
-	    case LC_DATA_IN_CODE:
-		object->data_in_code_cmd =
-				         (struct linkedit_data_command *)lc;
-		break;
-	    case LC_LINKER_OPTIMIZATION_HINT:
-		object->link_opt_hint_cmd =
-				         (struct linkedit_data_command *)lc;
-		break;
-	    case LC_DYLD_INFO_ONLY:
-	    case LC_DYLD_INFO:
-		object->dyld_info = (struct dyld_info_command *)lc;
-	    case LC_DYLIB_CODE_SIGN_DRS:
-		object->code_sign_drs_cmd = (struct linkedit_data_command *)lc;
-		break;
-	    case LC_CODE_SIGNATURE:
-		object->code_sig_cmd = (struct linkedit_data_command *)lc;
-		break;
-	    case LC_DYLD_CHAINED_FIXUPS:
-		object->dyld_chained_fixups =
-					 (struct linkedit_data_command *)lc;
-		break;
-	    case LC_DYLD_EXPORTS_TRIE:
-		object->dyld_exports_trie = (struct linkedit_data_command *)lc;
-		break;
-	    }
-	    lc = (struct load_command *)((char *)lc + lc->cmdsize);
-	}
+	reset_load_command_pointers(object);
 }
 
 /*

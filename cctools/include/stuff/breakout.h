@@ -26,6 +26,9 @@
 
 #import "stuff/ofile.h"
 
+#ifdef CODEDIRECTORY_SUPPORT
+#import "stuff/code_directory.h"
+#endif /* CODEDIRECTORY_SUPPORT */
 /*
  * This is used to build the table of contents of an archive.  Each toc_entry
  * Contains a pointer to a symbol name that is defined by a member of the
@@ -103,6 +106,18 @@ struct arch {
 struct member {
     enum ofile_type type;	/* the type of this member can be OFILE_Mach_O*/
 				/*  OFILE_LLVM_BITCODE or OFILE_UNKNOWN */
+
+    /*
+     * Ordinarily, 'struct member' member pointers point into memory owned
+     * by the enclosing 'struct arch's 'struct object' pointer. (Say that
+     * ten times fast!) If the member represents an object file that is not
+     * properly architecture-aligned within the library archive, the object
+     * file will be copied into newly allocated memory, which will be pointer
+     * aligned. In this case, 'buffer' points at this memory, and the other
+     * member pointers will point into 'buffer' instead of the archive file.
+     */
+    char* buffer;
+
     struct ar_hdr *ar_hdr;	/* the archive header for this member */
     uint64_t offset;		/* current working offset and final offset */
 				/*  use in creating the table of contents */
@@ -262,6 +277,10 @@ struct object {
     uint32_t      output_nmodtab;
     struct dylib_reference *output_refs;
     uint32_t      output_nextrefsyms;
+
+#ifdef CODEDIRECTORY_SUPPORT
+    struct codedir* output_codedir;
+#endif /* CODEDIRECTORY_SUPPORT */
 
     /*
      * For strip(1) to strip DWARF debug info it must run ld -r on the original

@@ -32,6 +32,11 @@
 #define __darwin_i386_float_state i386_float_state
 #define __darwin_i386_thread_state i386_thread_state
 
+/* cctools-port */
+#ifndef MAP_RESILIENT_CODESIGN
+#define MAP_RESILIENT_CODESIGN 0
+#endif
+
 #ifndef RLD
 #ifdef SHLIB
 #include "shlib.h"
@@ -437,7 +442,7 @@ void *cookie)
 		    if(ofile.arch_flag.cputype ==
 			    host_arch_flag.cputype &&
 		       ((ofile.arch_flag.cpusubtype & ~CPU_SUBTYPE_MASK) ==
-#ifdef __arm__
+#if defined(__arm__) || defined(__arm64__) || defined(__arm64e__)
 			(specific_arch_flag.cpusubtype & ~CPU_SUBTYPE_MASK) ||
 #else
 			(host_arch_flag.cpusubtype & ~CPU_SUBTYPE_MASK) ||
@@ -875,8 +880,10 @@ enum bool archives_with_fat_objects)
 	
 	addr = NULL;
 	if(size != 0){
-	    addr = mmap(0, size, PROT_READ|PROT_WRITE, MAP_FILE|MAP_PRIVATE, fd,
-		        0);
+	    // <rdar://29161359> try mmap() with MAP_RESILIENT_CODESIGN to allow corrupt files to be re-code signed
+	    addr = mmap(0, size, PROT_READ|PROT_WRITE, MAP_FILE|MAP_PRIVATE|MAP_RESILIENT_CODESIGN, fd,0);
+	    if (addr == MAP_FAILED)
+		addr = mmap(0, size, PROT_READ|PROT_WRITE, MAP_FILE|MAP_PRIVATE, fd,0);
 	    if((intptr_t)addr == -1){
 		system_error("can't map file: %s", file_name);
 		close(fd);
@@ -1777,6 +1784,45 @@ cleanup:
 }
 
 /*
+ * member_addr_set() sets the ofile's 'member_addr' member given a pointer to
+ * the archive file. The ofile's 'member_offset' and 'member_size' must already
+ * be set. If 'member_offset' is pointer aligned, 'member_addr' will point
+ * directly into the archive file. If not, new memory of size 'member_size'
+ * will be allocated into 'member_buffer', the member's file contents will be
+ * copied into the new memory, and this value will be used for 'member_addr'
+ * instead. As a result, all of the member_* pointers for un-aligned files are
+ * valid only while the ofile still points at this member.
+ *
+ * If a caller wants to preserve member_* pointers for unaligned objects, they
+ * must take ownership of the 'member_buffer' pointer by copying its value and
+ * setting ofile->member_buffer to NULL. Callers can then keep the buffer
+ * pointer alive as long as they wish.
+ */
+static
+void
+member_addr_set(
+struct ofile *ofile,
+char* addr)
+{
+    uint64_t offset = ofile->member_offset;
+    uint32_t size = ofile->member_size;
+
+    if (ofile->member_buffer) {
+	free(ofile->member_buffer);
+	ofile->member_buffer = NULL;
+    }
+
+    if (offset % sizeof(char*)) {
+	ofile->member_buffer = malloc(size);
+	memcpy(ofile->member_buffer, addr + offset, size);
+	ofile->member_addr = ofile->member_buffer;
+    }
+    else {
+	ofile->member_addr = addr + offset;
+    }
+}
+
+/*
  * ofile_first_member() set up the ofile structure (the member_* fields and
  * the object file fields if the first member is an object file) for the first
  * member.
@@ -1795,6 +1841,10 @@ struct ofile *ofile)
     uint32_t sizeof_fat_archs;
 
 	/* These fields are to be filled in by this routine, clear them first */
+	if (ofile->member_buffer != NULL) {
+	    free(ofile->member_buffer);
+	    ofile->member_buffer = NULL;
+	}
 	ofile->member_offset = 0;
 	ofile->member_addr = NULL;
 	ofile->member_size = 0;
@@ -1877,7 +1927,6 @@ struct ofile *ofile)
 	ar_hdr = (struct ar_hdr *)(addr + offset);
 	offset += sizeof(struct ar_hdr);
 	ofile->member_offset = offset;
-	ofile->member_addr = addr + offset;
 	ofile->member_size = (uint32_t)strtoul(ar_hdr->ar_size, NULL, 10);
 	if(ofile->member_size > size - sizeof(struct ar_hdr)){
 	    archive_error(ofile, "size of first archive member extends past "
@@ -1888,7 +1937,8 @@ struct ofile *ofile)
 	ofile->member_type = OFILE_UNKNOWN;
 	ofile->member_name = ar_hdr->ar_name;
 	if(strncmp(ofile->member_name, AR_EFMT1, sizeof(AR_EFMT1) - 1) == 0){
-	    ofile->member_name = ar_hdr->ar_name + sizeof(struct ar_hdr);
+	    ofile->member_name = ((char*)ar_hdr->ar_name) +
+				 sizeof(struct ar_hdr);
 	    ar_name_size = (uint32_t)
 		strtoul(ar_hdr->ar_name + sizeof(AR_EFMT1) - 1, NULL, 10);
 	    if(ar_name_size > ofile->member_size){
@@ -1898,13 +1948,14 @@ struct ofile *ofile)
 	    }
 	    ofile->member_name_size = ar_name_size;
 	    ofile->member_offset += ar_name_size;
-	    ofile->member_addr += ar_name_size;
 	    ofile->member_size -= ar_name_size;
 	}
 	else{
 	    ofile->member_name_size = size_ar_name(ar_hdr);
 	    ar_name_size = 0;
 	}
+	member_addr_set(ofile, addr);
+
 	/* Clear these in case there is no table of contents */
 	ofile->toc_addr = NULL;
 	ofile->toc_size = 0;
@@ -2071,6 +2122,10 @@ fatcleanup:
 	ofile->fat_archs = NULL;
 	ofile->fat_archs64 = NULL;
 cleanup:
+	if (ofile->member_buffer != NULL) {
+	    free(ofile->member_buffer);
+	    ofile->member_buffer = NULL;
+	}
 	ofile->member_offset = 0;
 	ofile->member_addr = 0;
 	ofile->member_size = 0;
@@ -2178,7 +2233,6 @@ struct ofile *ofile)
 	ar_hdr = (struct ar_hdr *)(addr + offset);
 	offset += sizeof(struct ar_hdr);
 	ofile->member_offset = offset;
-	ofile->member_addr = addr + offset;
 	ofile->member_size = (uint32_t)strtoul(ar_hdr->ar_size, NULL, 10);
 	if(ofile->member_size > size - sizeof(struct ar_hdr)){
 	    archive_error(ofile, "size of archive member extends past "
@@ -2211,7 +2265,8 @@ struct ofile *ofile)
 	}
 	else if(strncmp(ofile->member_name, AR_EFMT1,
 			sizeof(AR_EFMT1) - 1) == 0){
-	    ofile->member_name = ar_hdr->ar_name + sizeof(struct ar_hdr);
+	    ofile->member_name = ((char*)ar_hdr->ar_name) +
+	                         sizeof(struct ar_hdr);
 	    ar_name_size = (uint32_t)
 		strtoul(ar_hdr->ar_name + sizeof(AR_EFMT1) - 1, NULL, 10);
 	    if(ar_name_size > ofile->member_size){
@@ -2221,13 +2276,14 @@ struct ofile *ofile)
 	    }
 	    ofile->member_name_size = ar_name_size;
 	    ofile->member_offset += ar_name_size;
-	    ofile->member_addr += ar_name_size;
 	    ofile->member_size -= ar_name_size;
 	}
 	else{
 	    ofile->member_name_size = size_ar_name(ar_hdr);
 	    ar_name_size = 0;
 	}
+	member_addr_set(ofile, addr);
+
 	ofile->member_type = OFILE_UNKNOWN;
 	ofile->object_addr = NULL;
 	ofile->object_size = 0;
@@ -2366,6 +2422,10 @@ cleanup:
 	    ofile->fat_archs = NULL;
 	    ofile->fat_archs64 = NULL;
 	}
+	if (ofile->member_buffer != NULL) {
+	    free(ofile->member_buffer);
+	    ofile->member_buffer = NULL;
+	}
 	ofile->member_offset = 0;
 	ofile->member_addr = NULL;
 	ofile->member_size = 0;
@@ -2409,6 +2469,10 @@ struct ofile *ofile)
     uint32_t sizeof_fat_archs;
 
 	/* These fields are to be filled in by this routine, clear them first */
+	if (ofile->member_buffer != NULL) {
+	    free(ofile->member_buffer);
+	    ofile->member_buffer = NULL;
+	}
 	ofile->member_offset = 0;
 	ofile->member_addr = NULL;
 	ofile->member_size = 0;
@@ -2536,11 +2600,11 @@ struct ofile *ofile)
 		ofile->member_name = ar_name;
 		ofile->member_name_size = i;
 		ofile->member_offset = offset + ar_name_size;
-		ofile->member_addr = addr + offset + ar_name_size;
 		ofile->member_size =
 		    (uint32_t)strtoul(ar_hdr->ar_size, NULL, 10) - ar_name_size;
 		ofile->member_ar_hdr = ar_hdr;
 		ofile->member_type = OFILE_UNKNOWN;
+		member_addr_set(ofile, addr);
 
 		host_byte_sex = get_host_byte_sex();
 
@@ -2680,6 +2744,10 @@ fatcleanup:
 	ofile->fat_archs = NULL;
 	ofile->fat_archs64 = NULL;
 cleanup:
+	if (ofile->member_buffer != NULL) {
+	    free(ofile->member_buffer);
+	    ofile->member_buffer = NULL;
+	}
 	ofile->member_offset = 0;
 	ofile->member_addr = NULL;
 	ofile->member_size = 0;
@@ -3413,10 +3481,11 @@ enum bool archives_with_fat_objects)
 			  "first member extends past the end of the file)");
 	    return(CHECK_BAD);
 	}
+	/* Checking an archive does not require the member_addr. */
+	ofile->member_addr = NULL;
 	while(size > offset){
 	    ar_hdr = (struct ar_hdr *)(addr + offset);
 	    ofile->member_offset = offset;
-	    ofile->member_addr = addr + offset;
 	    ofile->member_size = (uint32_t)strtoul(ar_hdr->ar_size, NULL, 10);
 	    ofile->member_ar_hdr = ar_hdr;
 	    ofile->member_name = ar_hdr->ar_name;
@@ -3433,11 +3502,11 @@ enum bool archives_with_fat_objects)
 					 (uint32_t)(size - offset),
 					 &ar_name_size) == CHECK_BAD)
 		    return(CHECK_BAD);
-		ofile->member_name = ar_hdr->ar_name + sizeof(struct ar_hdr);
+		ofile->member_name = ((char*)ar_hdr->ar_name) +
+				     sizeof(struct ar_hdr);
 		ofile->member_name_size = ar_name_size;
 		offset += ar_name_size;
 		ofile->member_offset += ar_name_size;
-		ofile->member_addr += ar_name_size;
 		ofile->member_size -= ar_name_size;
 	    }
 #ifndef OTOOL

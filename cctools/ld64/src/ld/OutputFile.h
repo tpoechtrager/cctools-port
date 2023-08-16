@@ -66,13 +66,14 @@ public:
 	int							compressedOrdinalForAtom(const ld::Atom* target) const;
 	uint64_t					fileSize() const { return _fileSize; }
 
-	bool						needsBind(const ld::Atom* toTarget, bool authPtr, uint64_t* accumulator = nullptr,
+	bool						needsBind(const ld::Atom*& toTarget, bool authPtr, uint64_t* accumulator = nullptr,
 										  uint64_t* inlineAddend = nullptr, uint32_t* bindOrdinal = nullptr,
 										  uint32_t* libOrdinal = nullptr) const;
 	
 	
 	bool						usesWeakExternalSymbols;
 	bool						overridesWeakExternalSymbols;
+	bool						reExportsWeakDefSymbols;
 	bool						_noReExportedDylibs;
 	bool						pieDisabled;
 	bool						hasDataInCode;

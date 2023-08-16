@@ -359,6 +359,19 @@ struct ofile *ofile)
 		if(ofile->member_type == OFILE_Mach_O){
 		    member->object = allocate(sizeof(struct object));
 		    memset(member->object, '\0', sizeof(struct object));
+		    if (ofile->member_buffer) {
+			/*
+			 * The object file is not properly aligned within the
+			 * archive file. The member object will take ownership
+			 * of the object file's temporary storage, to avoid
+			 * making a second copy. This is safe only as long as
+			 * no other code is looking at this ofile during
+			 * archive enumeration, and the archive enumerator
+			 * advances/resets before member->buffer is freed.
+			 */
+			member->buffer = ofile->member_buffer;
+			ofile->member_buffer = NULL;
+		    }
 		    member->object->object_addr = ofile->object_addr;
 		    member->object->object_size = ofile->object_size;
 		    member->object->object_byte_sex = ofile->object_byte_sex;

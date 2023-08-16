@@ -135,13 +135,13 @@ public:
     // Prints the duplicated symbols to stderr and throws. Only valid to call if hasDuplicateSymbols() returns true.
     void                checkDuplicateSymbols() const;
 
+	static void			markCoalescedAway(const ld::Atom* atom);
 
 private:
 	bool					addByName(const ld::Atom& atom, Options::Treatment duplicates);
 	bool					addByContent(const ld::Atom& atom);
 	bool					addByReferences(const ld::Atom& atom);
-	void					markCoalescedAway(const ld::Atom* atom);
-    
+
     // Tracks duplicated symbols. Each call adds file to the list of files defining symbol.
     // The file list is uniqued per symbol, so calling multiple times for the same symbol/file pair is permitted.
     void                    addDuplicateSymbol(DuplicateSymbols& dups, const char* symbol, const ld::Atom* atom);

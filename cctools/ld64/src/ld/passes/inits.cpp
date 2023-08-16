@@ -92,16 +92,24 @@ void doPass(Options& opts, ld::Internal& state)
 
 	// only needed if there is a __mod_init_funcs section
     std::vector<InitOffsetAtom*> orderedInitOffsetAtoms;
+    std::set<ld::Internal::FinalSection*> sectionsToRemove;
 	for (ld::Internal::FinalSection* sect : state.sections) {
 		if ( sect->type() != ld::Section::typeInitializerPointers )
 			continue;
+        bool haveSectionStartEndSymbols = false;
         const uint64_t pointerSize = (opts.architecture() & CPU_ARCH_ABI64) ? 8 : 4;
         for (const ld::Atom* atom : sect->atoms) {
-            for (ld::Fixup::iterator fit = atom->fixupsBegin(), end=atom->fixupsEnd(); fit != end; ++fit) {
-                if ( fit->firstInCluster() )
-                    orderedInitOffsetAtoms.push_back(NULL);
+            if ( (atom->contentType() == ld::Atom::typeSectionEnd) || (atom->contentType() == ld::Atom::typeSectionStart) ) {
+                warning("symbol '%s' is useless because section transformed to __TEXT,__init_offsets", atom->name());
+                haveSectionStartEndSymbols = true;
             }
-        }
+            else {
+                for (ld::Fixup::iterator fit = atom->fixupsBegin(), end=atom->fixupsEnd(); fit != end; ++fit) {
+                    if ( fit->firstInCluster() )
+                        orderedInitOffsetAtoms.push_back(NULL);
+                }
+            }
+         }
         uint64_t atomOffsetInSection = 0;
 		for (const ld::Atom* atom : sect->atoms) {
 			for (ld::Fixup::iterator fit = atom->fixupsBegin(), end=atom->fixupsEnd(); fit != end; ++fit) {
@@ -125,15 +133,27 @@ void doPass(Options& opts, ld::Internal& state)
             }
             atomOffsetInSection += atom->size();
         }
+        if ( haveSectionStartEndSymbols ) {
+            // have start/end symbols, so just remove intializer pointer atoms
+            sect->atoms.erase(std::remove_if(sect->atoms.begin(), sect->atoms.end(),
+                                        [&](const ld::Atom*& atom) {
+                                            return (atom->contentType() != ld::Atom::typeSectionEnd) && (atom->contentType() != ld::Atom::typeSectionStart);
+                                        }), sect->atoms.end());
+        }
+        else {
+            // can just remove whole section
+            sectionsToRemove.insert(sect);
+        }
 	}
     if ( orderedInitOffsetAtoms.empty() )
         return;
 
-    // remove any old style __mod_init_funcs sections
-	state.sections.erase(std::remove_if(state.sections.begin(), state.sections.end(),
+    // remove whole __mod_init_funcs sections
+    state.sections.erase(std::remove_if(state.sections.begin(), state.sections.end(),
                                         [&](ld::Internal::FinalSection*& sect) {
-                                            return (sect->type() == ld::Section::typeInitializerPointers);
+                                            return (sectionsToRemove.count(sect) != 0);
                                         }), state.sections.end());
+
 
     // add in new __init_offsets section (must do after done iterating state.sections)
     for (InitOffsetAtom* atom : orderedInitOffsetAtoms) {

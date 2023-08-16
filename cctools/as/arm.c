@@ -1476,7 +1476,7 @@ parse_reg_list (char ** strp)
 
 	      if ((range & expr.X_add_number) != 0)
 		{
-		  int regno = range & expr.X_add_number;
+		  int regno = (int)(range & expr.X_add_number);
 
 		  regno &= -regno;
 		  regno = (1 << regno) - 1;
@@ -16507,13 +16507,13 @@ md_pcrel_from_section (fixS * fixP, segT seg)
 	 pipeline offset.  However, Thumb adrl already adjusts for
 	 this, so we need not do it again.  */
     case BFD_RELOC_ARM_THUMB_ADD:
-      return base & ~3;
+      return (int32_t)(base & ~3);
 
     case BFD_RELOC_ARM_THUMB_OFFSET:
     case BFD_RELOC_ARM_T32_OFFSET_IMM:
     case BFD_RELOC_ARM_T32_ADD_PC12:
     case BFD_RELOC_ARM_T32_CP_OFF_IMM:
-      return (base + 4) & ~3;
+      return (int32_t)((base + 4) & ~3);
 
       /* Thumb branches are simply offset by +4.  */
     case BFD_RELOC_THUMB_PCREL_BRANCH7:

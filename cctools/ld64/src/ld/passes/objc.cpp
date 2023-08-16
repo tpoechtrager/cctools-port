@@ -193,7 +193,7 @@ public:
 	virtual const ld::File*					file() const					{ return _file; }
 	virtual const char*						name() const					{ return "objc merged category name"; }
 	virtual uint64_t						size() const					{ return _categoryName.size() + 1; }
-	virtual uint64_t						objectAddress() const			{ return 0; }
+	virtual uint64_t						objectAddress() const			{ return _syntheticAddress; }
 	virtual void							setScope(Scope)					{ }
 	virtual void							copyRawContent(uint8_t buffer[]) const {
 		strcpy((char*)buffer, _categoryName.c_str());
@@ -203,14 +203,18 @@ private:
 	typedef typename A::P::uint_t			pint_t;
 
 	const ld::File*							_file;
+	unsigned int							_syntheticAddress;	// since all have same name, need something else to provide a stable sort
 	std::string								_categoryName;
 
+	static unsigned int					    _s_nextSyntheticAddress;
 	static ld::Section						_s_section;
 };
 
 template <typename A>
 ld::Section CategoryNameAtom<A>::_s_section("__TEXT", "__objc_classname", ld::Section::typeCString);
 
+template <typename A>
+unsigned int CategoryNameAtom<A>::_s_nextSyntheticAddress = 0;
 
 struct MethodEntryInfo
 {
@@ -261,7 +265,7 @@ private:
 };
 
 template <typename A> 
-ld::Section MethodListAtom<A>::_s_section_ptrs("__DATA", "__objc_const", ld::Section::typeUnclassified);
+ld::Section MethodListAtom<A>::_s_section_ptrs("__DATA", "__objc_data", ld::Section::typeUnclassified);
 
 template <typename A>
 ld::Section MethodListAtom<A>::_s_section_rel("__TEXT", "__objc_methlist", ld::Section::typeUnclassified);
@@ -320,7 +324,7 @@ public:
 	virtual const ld::File*					file() const					{ return _file; }
 	virtual const char*						name() const					{ return "objc merged property list"; }
 	virtual uint64_t						size() const					{ return _propertyCount*2*sizeof(pint_t) + 8; }
-	virtual uint64_t						objectAddress() const			{ return 0; }
+	virtual uint64_t						objectAddress() const			{ return _syntheticAddress; }
 	virtual void							setScope(Scope)					{ }
 	virtual void							copyRawContent(uint8_t buffer[]) const {
 		bzero(buffer, size());
@@ -335,14 +339,18 @@ private:
 
 	const ld::File*							_file;
 	unsigned int							_propertyCount;
+	unsigned int							_syntheticAddress;	// since all have same name, need something else to provide a stable sort
 	std::vector<ld::Fixup>					_fixups;
 
 	static ld::Section						_s_section;
+	static unsigned int					    _s_nextSyntheticAddress;
 };
 
 template <typename A>
 ld::Section PropertyListAtom<A>::_s_section("__DATA", "__objc_const", ld::Section::typeUnclassified);
 
+template <typename A>
+unsigned int PropertyListAtom<A>::_s_nextSyntheticAddress = 0;
 
 //
 // This class is used to create an Atom that replaces an atom from a .o file that holds a class_ro_t or category_t.
@@ -1309,6 +1317,102 @@ static bool compSelRefs(const ld::Atom* l, const ld::Atom* r)
 #endif
 
 template <typename A>
+static void optimizeCategories(const std::vector<const ld::Atom*>& categories,
+							   ld::Internal& state,
+							   const char* onClassName,
+							   const typename MethodListAtom<A>::ListFormat methodListFormat,
+							   NameToAtom& selectorNameToSlot,
+							   std::set<const ld::Atom*>& deadAtoms,
+							   std::map<const ld::Atom*, const ld::Atom*>& categoryToListElement,
+							   std::map<const ld::Atom*, const ld::Atom*>& categoryToNlListElement,
+							   bool usesAuthPtrs,
+							   bool log) {
+
+	// get category info
+	// FIXME:  This merges categories even if -no_objc_category_merging is used.
+	const ld::Atom* categoryAtom = categories.front();
+	if (log) {
+		const ld::Atom* categoryNameAtom = Category<A>::getName(state, categoryAtom);
+		const char* catName = (char*)categoryNameAtom->rawContentPointer();
+		fprintf(stderr, "updating method lists in category '%s' on '%s'\n", catName, onClassName);
+		for (unsigned i = 1; i != categories.size(); ++i) {
+			const ld::Atom* categoryNameAtom = Category<A>::getName(state, categories[i]);
+			const char* catName = (char*)categoryNameAtom->rawContentPointer();
+			fprintf(stderr, "  attaching method lists in category '%s'\n", catName);
+		}
+	}
+	bool categoryIsNowOverlay = false;
+	// if category has instance methods, replace method list format
+	if ( OptimizeCategories<A>::hasInstanceMethods(state, &categories) ) {
+		const ld::Atom* newInstanceMethodListAtom = new MethodListAtom<A>(state, nullptr, methodListFormat, MethodListAtom<A>::categoryMethodList,
+																		  onClassName, false, &categories, selectorNameToSlot, deadAtoms);
+		if ( const ld::Atom* methodListAtom = Category<A>::getInstanceMethods(state, categoryAtom) ) {
+			deadAtoms.insert(methodListAtom);
+		}
+		Category<A>::setInstanceMethods(state, categoryAtom, newInstanceMethodListAtom, usesAuthPtrs, categoryIsNowOverlay, deadAtoms);
+	}
+	// if category has class methods, replace method list format
+	if ( OptimizeCategories<A>::hasClassMethods(state, &categories) ) {
+		const ld::Atom* newClassMethodListAtom = new MethodListAtom<A>(state, nullptr, methodListFormat, MethodListAtom<A>::categoryMethodList,
+																	   onClassName, true, &categories, selectorNameToSlot, deadAtoms);
+		if ( const ld::Atom* methodListAtom = Category<A>::getClassMethods(state, categoryAtom) ) {
+			deadAtoms.insert(methodListAtom);
+		}
+		Category<A>::setClassMethods(state, categoryAtom, newClassMethodListAtom, usesAuthPtrs, categoryIsNowOverlay, deadAtoms);
+	}
+	// if any category adds protocols, generate new merged protocol list, and replace
+	if ( OptimizeCategories<A>::hasProtocols(state, &categories) ) {
+		const ProtocolListAtom<A>* newProtocolListAtom = new ProtocolListAtom<A>(state, nullptr, onClassName, &categories, deadAtoms);
+		if ( const ld::Atom* protocolAtom = Category<A>::getProtocols(state, categoryAtom) ) {
+			deadAtoms.insert(protocolAtom);
+		}
+		Category<A>::setProtocols(state, categoryAtom, newProtocolListAtom, categoryIsNowOverlay, deadAtoms);
+	}
+	// if any category adds instance properties, generate new merged property list, and replace
+	if ( OptimizeCategories<A>::hasInstanceProperties(state, &categories) ) {
+		const ld::Atom* newPropertyListAtom = new PropertyListAtom<A>(state, nullptr, &categories, deadAtoms, PropertyListAtom<A>::PropertyKind::InstanceProperties);
+		if ( const ld::Atom* propertyListAtom = Category<A>::getInstanceProperties(state, categoryAtom) ) {
+			deadAtoms.insert(propertyListAtom);
+		}
+		Category<A>::setInstanceProperties(state, categoryAtom, newPropertyListAtom, categoryIsNowOverlay, deadAtoms);
+	}
+	// if any category adds class properties, generate new merged property list, and replace
+	if ( OptimizeCategories<A>::hasClassProperties(state, &categories) ) {
+		const ld::Atom* newPropertyListAtom = new PropertyListAtom<A>(state, nullptr, &categories, deadAtoms, PropertyListAtom<A>::PropertyKind::ClassProperties);
+		if ( const ld::Atom* propertyListAtom = Category<A>::getClassProperties(state, categoryAtom) ) {
+			deadAtoms.insert(propertyListAtom);
+		}
+		Category<A>::setClassProperties(state, categoryAtom, newPropertyListAtom, categoryIsNowOverlay, deadAtoms);
+	}
+
+	// delete categories now incorporated into base class
+	for (unsigned i = 1; i != categories.size(); ++i) {
+		const ld::Atom* categoryAtom = categories[i];
+		assert(!categoryToNlListElement.count(categoryAtom));
+		deadAtoms.insert(categoryToListElement[categoryAtom]);
+		deadAtoms.insert(categoryAtom);
+	}
+	if ( categoryIsNowOverlay ) {
+		// switch list element to use new category atom
+		const ld::Atom* originalCategoryAtom = categories.front();
+		const ld::Atom* listElement = categoryToListElement[originalCategoryAtom];
+		ld::Fixup::iterator fit = listElement->fixupsBegin();
+		assert(fit->binding == ld::Fixup::bindingDirectlyBound);
+		assert(fit->u.target == originalCategoryAtom);
+		fit->u.target = categoryAtom;
+		// if here is a non-lazy list, switch that too
+		auto pos = categoryToNlListElement.find(originalCategoryAtom);
+		if ( pos != categoryToNlListElement.end() ) {
+			const ld::Atom* nlListElement = pos->second;
+			ld::Fixup::iterator fit = nlListElement->fixupsBegin();
+			assert(fit->binding == ld::Fixup::bindingDirectlyBound);
+			assert(fit->u.target == originalCategoryAtom);
+			fit->u.target = categoryAtom;
+		}
+	}
+}
+
+template <typename A>
 void OptimizeCategories<A>::doit(const Options& opts, ld::Internal& state, bool haveCategoriesWithoutClassPropertyStorage)
 {
 	std::set<const ld::Atom*> deadAtoms;
@@ -1398,8 +1502,9 @@ void OptimizeCategories<A>::doit(const Options& opts, ld::Internal& state, bool 
 	// build map of all categories on each class
 	typedef std::map<const ld::Atom*, std::vector<const ld::Atom*>> ClassToCategories;
 	ClassToCategories classDefsToCategories;
-	ClassToCategories externalClassToCategories;
-	std::vector<const ld::Atom*> externalClassAtoms;
+	ClassToCategories externalClassToLazyCategories;
+	ClassToCategories externalClassToNonLazyCategories;
+	std::set<const ld::Atom*> externalClassAtoms;
 	for (const auto& mapEntry : categoryToClassAtoms) {
 		const ld::Atom* categoryAtom = mapEntry.first;
 		const ld::Atom* onClassAtom  = mapEntry.second;
@@ -1409,11 +1514,15 @@ void OptimizeCategories<A>::doit(const Options& opts, ld::Internal& state, bool 
 			classDefsToCategories[onClassAtom].push_back(categoryAtom);
 		}
 		else if ( !haveCategoriesWithoutClassPropertyStorage ) {
-			// Don't optimize non-lazy categories for now
-			if ( !categoryToNlListElement.count(categoryAtom) ) {
-				std::vector<const ld::Atom*>& categories = externalClassToCategories[onClassAtom];
+			if ( categoryToNlListElement.count(categoryAtom) ) {
+				std::vector<const ld::Atom*>& categories = externalClassToNonLazyCategories[onClassAtom];
 				if ( categories.empty() )
-					externalClassAtoms.push_back(onClassAtom);
+					externalClassAtoms.insert(onClassAtom);
+				categories.push_back(categoryAtom);
+			} else {
+				std::vector<const ld::Atom*>& categories = externalClassToLazyCategories[onClassAtom];
+				if ( categories.empty() )
+					externalClassAtoms.insert(onClassAtom);
 				categories.push_back(categoryAtom);
 			}
 		}
@@ -1427,8 +1536,27 @@ void OptimizeCategories<A>::doit(const Options& opts, ld::Internal& state, bool 
 		const char* onClassName = "";
 		if ( onClassNameAtom != nullptr )
 			onClassName = (char*)onClassNameAtom->rawContentPointer();
+		if (log) fprintf(stderr,"cannot optimize method list for class '%s' because there are %u +load methods\n", onClassName, plusLoadEntry.second);
 		//warning("cannot optimize method list for class '%s' because there are %u +load methods", onClassName, plusLoadEntry.second);
-		classDefsToCategories[onClassAtom].clear();
+
+		// We can't attach the categories to a class defined in this dylib, but we can still optimize the categories
+		std::vector<const ld::Atom*>& categories = classDefsToCategories[onClassAtom];
+		if ( !haveCategoriesWithoutClassPropertyStorage ) {
+			for (const ld::Atom* categoryAtom : categories) {
+				if ( categoryToNlListElement.count(categoryAtom) ) {
+					std::vector<const ld::Atom*>& categories = externalClassToNonLazyCategories[onClassAtom];
+					if ( categories.empty() )
+						externalClassAtoms.insert(onClassAtom);
+					categories.push_back(categoryAtom);
+				} else {
+					std::vector<const ld::Atom*>& categories = externalClassToLazyCategories[onClassAtom];
+					if ( categories.empty() )
+						externalClassAtoms.insert(onClassAtom);
+					categories.push_back(categoryAtom);
+				}
+			}
+		}
+		categories.clear();
 	}
 
 	// build initial map of all selector references
@@ -1533,113 +1661,63 @@ void OptimizeCategories<A>::doit(const Options& opts, ld::Internal& state, bool 
 	// rebuild/merge method list of categories on external classes
 	if ( !externalClassAtoms.empty() ) {
 		// we want builds to be reproducible, so need to process classes in same order every time
-		std::sort(externalClassAtoms.begin(), externalClassAtoms.end(), AtomSorter());
+		std::vector<const ld::Atom*> orderedClassAtoms;
+		for (const ld::Atom* atom : externalClassAtoms)
+			orderedClassAtoms.push_back(atom);
+		std::sort(orderedClassAtoms.begin(), orderedClassAtoms.end(), AtomSorter());
 
 		// now walk categories on external class and rewrite method list if needed
-		for (const ld::Atom* externalClassAtom : externalClassAtoms) {
+		for (const ld::Atom* externalClassAtom : orderedClassAtoms) {
 
-			std::vector<const ld::Atom*>& categories = externalClassToCategories[externalClassAtom];
-			std::sort(categories.begin(), categories.end(), AtomSorter());
-
-			// optimizations are to change method lists and merge categories with each other
-			bool optimizeCategories = false;
-			if ( opts.objcCategoryMerging() && (categories.size() > 1) )
-				optimizeCategories = true;
-			if ( !optimizeCategories) {
-				// Check if any of the method lists need to be optimized
-				for (const ld::Atom* categoryAtom : categories) {
-					if ( Category<A>::usesRelMethodLists(state, categoryAtom) != opts.useObjCRelativeMethodLists() )
-						optimizeCategories = true;
-				}
-			}
-			if ( !optimizeCategories )
-				continue;
-
-			// get category info
 			const char* onClassName = externalClassAtom->name();
 			if ( strncmp(onClassName, "_OBJC_CLASS_$_", 14) == 0 )
 				onClassName = &onClassName[14];
-			// FIXME:  This merges categories even if -no_objc_category_merging is used.
-			const ld::Atom* categoryAtom = categories.front();
-			if (log) {
-				const ld::Atom* categoryNameAtom = Category<A>::getName(state, categoryAtom);
-				const char* catName = (char*)categoryNameAtom->rawContentPointer();
-				if (log) {
-					fprintf(stderr, "updating method lists in category '%s' on '%s'\n", catName, onClassName);
-					for (unsigned i = 1; i != categories.size(); ++i) {
-						const ld::Atom* categoryNameAtom = Category<A>::getName(state, categories[i]);
+
+			// Lazy categories
+			auto lazyCategoriesIt = externalClassToLazyCategories.find(externalClassAtom);
+			if ( lazyCategoriesIt != externalClassToLazyCategories.end() ) {
+				std::vector<const ld::Atom*>& categories = lazyCategoriesIt->second;
+				std::sort(categories.begin(), categories.end(), AtomSorter());
+
+				// optimizations are to change method lists and merge categories with each other
+				bool shouldOptimizeCategories = false;
+				if ( opts.objcCategoryMerging() && (categories.size() > 1) )
+					shouldOptimizeCategories = true;
+				if ( !shouldOptimizeCategories) {
+					// Check if any of the method lists need to be optimized
+					for (const ld::Atom* categoryAtom : categories) {
+						const ld::Atom* categoryNameAtom = Category<A>::getName(state, categoryAtom);
 						const char* catName = (char*)categoryNameAtom->rawContentPointer();
-						fprintf(stderr, "  attaching method lists in category '%s'\n", catName);
+						if (log) fprintf(stderr, "category: %p %s on %s\n", categoryAtom, catName, onClassName);
+						if ( Category<A>::usesRelMethodLists(state, categoryAtom) != opts.useObjCRelativeMethodLists() )
+							shouldOptimizeCategories = true;
 					}
 				}
-			}
-			bool categoryIsNowOverlay = false;
-			// if category has instance methods, replace method list format
-			if ( OptimizeCategories<A>::hasInstanceMethods(state, &categories) ) {
-				const ld::Atom* newInstanceMethodListAtom = new MethodListAtom<A>(state, nullptr, methodListFormat, MethodListAtom<A>::categoryMethodList,
-																				  onClassName, false, &categories, selectorNameToSlot, deadAtoms);
-				if ( const ld::Atom* methodListAtom = Category<A>::getInstanceMethods(state, categoryAtom) ) {
-					deadAtoms.insert(methodListAtom);
-				}
-				Category<A>::setInstanceMethods(state, categoryAtom, newInstanceMethodListAtom, usesAuthPtrs, categoryIsNowOverlay, deadAtoms);
-			}
-			// if category has class methods, replace method list format
-			if ( OptimizeCategories<A>::hasClassMethods(state, &categories) ) {
-				const ld::Atom* newClassMethodListAtom = new MethodListAtom<A>(state, nullptr, methodListFormat, MethodListAtom<A>::categoryMethodList,
-																			  onClassName, true, &categories, selectorNameToSlot, deadAtoms);
-				if ( const ld::Atom* methodListAtom = Category<A>::getClassMethods(state, categoryAtom) ) {
-					deadAtoms.insert(methodListAtom);
-				}
-				Category<A>::setClassMethods(state, categoryAtom, newClassMethodListAtom, usesAuthPtrs, categoryIsNowOverlay, deadAtoms);
-			}
-			// if any category adds protocols, generate new merged protocol list, and replace
-			if ( OptimizeCategories<A>::hasProtocols(state, &categories) ) {
-				const ProtocolListAtom<A>* newProtocolListAtom = new ProtocolListAtom<A>(state, nullptr, onClassName, &categories, deadAtoms);
-				if ( const ld::Atom* protocolAtom = Category<A>::getProtocols(state, categoryAtom) ) {
-					deadAtoms.insert(protocolAtom);
-				}
-				Category<A>::setProtocols(state, categoryAtom, newProtocolListAtom, categoryIsNowOverlay, deadAtoms);
-			}
-			// if any category adds instance properties, generate new merged property list, and replace
-			if ( OptimizeCategories<A>::hasInstanceProperties(state, &categories) ) {
-				const ld::Atom* newPropertyListAtom = new PropertyListAtom<A>(state, nullptr, &categories, deadAtoms, PropertyListAtom<A>::PropertyKind::InstanceProperties);
-				if ( const ld::Atom* propertyListAtom = Category<A>::getInstanceProperties(state, categoryAtom) ) {
-					deadAtoms.insert(propertyListAtom);
-				}
-				Category<A>::setInstanceProperties(state, categoryAtom, newPropertyListAtom, categoryIsNowOverlay, deadAtoms);
-			}
-			// if any category adds class properties, generate new merged property list, and replace
-			if ( OptimizeCategories<A>::hasClassProperties(state, &categories) ) {
-				const ld::Atom* newPropertyListAtom = new PropertyListAtom<A>(state, nullptr, &categories, deadAtoms, PropertyListAtom<A>::PropertyKind::ClassProperties);
-				if ( const ld::Atom* propertyListAtom = Category<A>::getClassProperties(state, categoryAtom) ) {
-					deadAtoms.insert(propertyListAtom);
-				}
-				Category<A>::setClassProperties(state, categoryAtom, newPropertyListAtom, categoryIsNowOverlay, deadAtoms);
+				if ( !shouldOptimizeCategories )
+					continue;
+
+				optimizeCategories<A>(categories, state, onClassName, methodListFormat,
+									  selectorNameToSlot, deadAtoms, categoryToListElement, categoryToNlListElement,
+									  usesAuthPtrs, log);
 			}
 
-			// delete categories now incorporated into base class
-			for (unsigned i = 1; i != categories.size(); ++i) {
-				const ld::Atom* categoryAtom = categories[i];
-				assert(!categoryToNlListElement.count(categoryAtom));
-				deadAtoms.insert(categoryToListElement[categoryAtom]);
-				deadAtoms.insert(categoryAtom);
-			}
-			if ( categoryIsNowOverlay ) {
-				// switch list element to use new category atom
-				const ld::Atom* originalCategoryAtom = categories.front();
-				const ld::Atom* listElement = categoryToListElement[originalCategoryAtom];
-				ld::Fixup::iterator fit = listElement->fixupsBegin();
-				assert(fit->binding == ld::Fixup::bindingDirectlyBound);
-				assert(fit->u.target == originalCategoryAtom);
-				fit->u.target = categoryAtom;
-				// if here is a non-lazy list, switch that too
-				auto pos = categoryToNlListElement.find(originalCategoryAtom);
-				if ( pos != categoryToNlListElement.end() ) {
-					const ld::Atom* nlListElement = pos->second;
-					ld::Fixup::iterator fit = nlListElement->fixupsBegin();
-					assert(fit->binding == ld::Fixup::bindingDirectlyBound);
-					assert(fit->u.target == originalCategoryAtom);
-					fit->u.target = categoryAtom;
+			// Non-lazy categories
+			auto nonLazyCategoriesIt = externalClassToNonLazyCategories.find(externalClassAtom);
+			if ( nonLazyCategoriesIt != externalClassToNonLazyCategories.end() ) {
+				std::vector<const ld::Atom*>& categories = nonLazyCategoriesIt->second;
+				std::sort(categories.begin(), categories.end(), AtomSorter());
+
+				// Non-lazy categories need to be updated one at a time as they are converted to relative method lists, but they
+				// are not merged
+				std::vector<const ld::Atom*> category;
+				for (const ld::Atom* categoryAtom : categories) {
+					if ( Category<A>::usesRelMethodLists(state, categoryAtom) != opts.useObjCRelativeMethodLists() ) {
+						category.push_back(categoryAtom);
+						optimizeCategories<A>(category, state, onClassName, methodListFormat,
+											  selectorNameToSlot, deadAtoms, categoryToListElement, categoryToNlListElement,
+											  usesAuthPtrs, log);
+						category.clear();
+					}
 				}
 			}
 		}
@@ -1678,6 +1756,7 @@ CategoryNameAtom<A>::CategoryNameAtom(ld::Internal& state, const std::vector<con
 			_categoryName = _categoryName + "," + name;
 		}
 	}
+	_syntheticAddress = _s_nextSyntheticAddress++;
 }
 
 
@@ -2158,6 +2237,7 @@ PropertyListAtom<A>::PropertyListAtom(ld::Internal& state, const ld::Atom* baseP
 			_fixups.push_back(fixup);
 		}
 	}
+	_syntheticAddress = _s_nextSyntheticAddress++;
 	state.addAtom(*this);
 }
 

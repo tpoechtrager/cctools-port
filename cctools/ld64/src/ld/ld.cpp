@@ -998,6 +998,17 @@ ld::Internal::FinalSection* InternalState::getFinalSection(const ld::Section& in
 			{
 				// coalesce some sections
 				const ld::Section& outSect = FinalSection::outputSection(inputSection, _options.mergeZeroFill());
+				if ( _options.mergeZeroFill() && (inputSection.type() == ld::Section::typeZeroFill) && (strcmp(inputSection.segmentName(), "__DATA") != 0) ) {
+					// have custom segment with zero-fill, so need custom section, see if we already have one
+					for (const auto& entry : _sectionInToFinalMap) {
+						ld::Internal::FinalSection* anOut = entry.second;
+						if ( (strcmp(anOut->segmentName(), inputSection.segmentName()) == 0) && (strcmp(anOut->sectionName(), "__zerofill") == 0) )
+							return anOut;
+					}
+					// need to create custom section
+					baseForFinalSection = new ld::Section(inputSection.segmentName(), "__zerofill", ld::Section::typeZeroFill);
+					break;
+				}
 				pos = _sectionInToFinalMap.find(&outSect);
 				if ( pos != _sectionInToFinalMap.end() ) {
 					_sectionInToFinalMap[&inputSection] = pos->second;
@@ -1160,8 +1171,13 @@ void InternalState::setSectionSizesAndAlignments()
 			// section alignment is that of a contained atom with the greatest alignment
 			sect->alignment = maxAlignment;
 			// unless -sectalign command line option overrides
-			if  ( _options.hasCustomSectionAlignment(sect->segmentName(), sect->sectionName()) )
+			if  ( _options.hasCustomSectionAlignment(sect->segmentName(), sect->sectionName()) ) {
 				sect->alignment = _options.customSectionAlignment(sect->segmentName(), sect->sectionName());
+				if ( maxAlignment > sect->alignment ) {
+					warning("-sectalign is reducing the alignment of %s,%s from 2^%u to 2^%u",
+								sect->segmentName(), sect->sectionName(), maxAlignment, sect->alignment);
+				}
+			}
 			// each atom in __eh_frame has zero alignment to assure they pack together,
 			// but compilers usually make the CFIs pointer sized, so we want whole section
 			// to start on pointer sized boundary.

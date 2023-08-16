@@ -47,9 +47,25 @@
 #undef VALID_THREAD_STATE_FLAVOR
 #include <mach/m88k/thread_status.h>
 #include <mach/i860/thread_status.h>
+#if defined (__i386__) || defined (__x86_64__)
 #include <mach/i386/thread_status.h>
+#else
+#define __x86_64__
+#include <mach/i386/thread_status.h>
+#undef __x86_64__
+#endif
 #include <mach/hppa/thread_status.h>
 #include <mach/sparc/thread_status.h>
+#if defined (__arm__) || defined (__arm64__)
+#include <mach/arm/thread_status.h>
+#else
+#define __arm__
+#include <mach/arm/thread_status.h>
+#undef __arm__
+#endif
+#include <mach-o/nlist.h>
+#include <mach-o/reloc.h>
+#include <mach-o/ranlib.h>
 /* cctools-port: need to undef these to avoid warnings */
 #undef MACHINE_THREAD_STATE
 #undef MACHINE_THREAD_STATE_COUNT

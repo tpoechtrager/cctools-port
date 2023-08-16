@@ -256,6 +256,8 @@ char **envp)
     struct arch_flag *arch_flags;
     uint32_t narch_flags;
     enum bool all_archs;
+    enum bool use_member_syntax;
+    struct stat stat_buf;
     char **files;
 
 	progname = argv[0];
@@ -467,9 +469,18 @@ char **envp)
 	    files[cmd_flags.nfiles++] = argv[i];
 	}
 
-	for(j = 0; j < cmd_flags.nfiles; j++)
+    for(j = 0; j < cmd_flags.nfiles; j++) {
+        /*
+         * If there's a filename that's an exact match then use
+         * that, else fall back to the member syntax.
+         */
+        if(stat(files[j], &stat_buf) == 0)
+            use_member_syntax = FALSE;
+        else
+            use_member_syntax = TRUE;
 	    ofile_process(files[j], arch_flags, narch_flags, all_archs, TRUE,
-			  cmd_flags.f, TRUE, nm, &cmd_flags);
+			  cmd_flags.f, use_member_syntax, nm, &cmd_flags);
+    }
 	if(cmd_flags.nfiles == 0)
 	    ofile_process("a.out",  arch_flags, narch_flags, all_archs, TRUE,
 			  cmd_flags.f, TRUE, nm, &cmd_flags);
@@ -1008,11 +1019,23 @@ struct cmd_flags *cmd_flags)
 {
     uint32_t r, bufsize;
     char *p, *prefix, *xar_path, buf[MAXPATHLEN], resolved_name[PATH_MAX];
-    char xar_filename[] = "/tmp/temp.XXXXXX";
+    char xar_filename[MAXPATHLEN];
     int xar_fd;
     xar_t xar;
     xar_iter_t i;
     xar_file_t f;
+
+#define _XAR_PATH     "/tmp/temp.XXXXXX"
+#define _XAR_NAME     "temp.XXXXXX"
+
+    char *envtmp = getenv("TMPDIR");
+
+    if (envtmp) {
+        (void)sprintf(xar_filename, "%s/%s", envtmp, _XAR_NAME);
+    }
+    else {
+        strcpy(xar_filename, _XAR_PATH);
+    }
 
 	/*
 	 * Note this check is also preformed before we are called recursively,

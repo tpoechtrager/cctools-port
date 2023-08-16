@@ -96,15 +96,23 @@ struct ofile {
     /* If this structure is currently referencing an archive member or an object
        file that is an archive member these are valid and filled in. */
     uint64_t member_offset;         /* logical offset to the member starting */
-    char *member_addr;      	    /* pointer to the member contents */
+    char *member_addr;              /* pointer to the member contents */
     uint32_t member_size;           /* actual size of the member (not rounded)*/
     struct ar_hdr *member_ar_hdr;   /* pointer to the ar_hdr for this member */
-    char *member_name;		    /* name of this member */
+    char *member_name;              /* name of this member */
     uint32_t member_name_size;      /* size of the member name */
     enum ofile_type member_type;    /* the type of file for this member */
     cpu_type_t archive_cputype;	    /* if the archive contains objects then */
-    cpu_subtype_t		    /*  these two fields reflect the objects */
-	archive_cpusubtype;	    /*  at are in the archive. */
+    cpu_subtype_t                   /*  these two fields reflect the objects */
+	archive_cpusubtype;         /*  at are in the archive. */
+
+    /* If this structure is currently referencing an object file that is an
+       archive member, and that object file is not properly pointer aligned
+       within the archive file, the object file's contents will be copied into
+       a pointer-aligned buffer. All of the member_* pointers above will be
+       relative to this buffer rather than the pointer into the archive file.
+       If the object file is properly aligned, this buffer will be NULL.*/
+    char *member_buffer;            /* pointer to aligned contents, or NULL */
 
     /* If this structure is currently referencing a dynamic library module 
        these are valid and filled in. */

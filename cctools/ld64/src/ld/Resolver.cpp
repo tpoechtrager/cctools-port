@@ -528,7 +528,7 @@ void Resolver::doFile(const ld::File& file)
 			case CPU_TYPE_ARM64:
 				if (_options.subArchitecture() == CPU_SUBTYPE_ARM64E) {
 					if ((file.cpuSubTypeFlags() & 0x80) == 0) {
-						warning("object file %s was built with an incompatible arm64e ABI compiler", file.path());
+						warning("object file built with an incompatible arm64e ABI: '%s'", file.path());
 						break;
 					}
 					if (!_internal.hasArm64eABIVersion) {
@@ -538,10 +538,10 @@ void Resolver::doFile(const ld::File& file)
 						// The compilers that generate ABI versions have not been submitted yet, so only warn about old .o files
 						// when we have already seen a new one.
 						if ( _internal.arm64eABIVersion != file.cpuSubTypeFlags()) {
-							const char * originalVersion = (_internal.arm64eABIVersion & 0x40) ? "kernel" : "user";
-							const char * fileVersion = (file.cpuSubTypeFlags() & 0x40) ? "kernel" : "user";
-							warning("object file %s was built for different arm64e ABI (%s version %u) than earlier object files (%s version %u)",
-									file.path(), fileVersion, (file.cpuSubTypeFlags() & 0x3f), originalVersion, (_internal.arm64eABIVersion & 0x3f));
+							const char* originalVersion = (_internal.arm64eABIVersion & 0x40) ? "kernel" : "user";
+							const char* fileVersion     = (file.cpuSubTypeFlags() & 0x40)     ? "kernel" : "user";
+							warning("object file was built for different arm64e ABI (%s version %u) than earlier object files (%s version %u): %s",
+									fileVersion, (file.cpuSubTypeFlags() & 0x3f), originalVersion, (_internal.arm64eABIVersion & 0x3f), file.path());
 						}
 					}
 				}
@@ -662,7 +662,7 @@ void Resolver::doFile(const ld::File& file)
 					throwf("embedded dylibs/frameworks are only supported on iOS 8.0 and later (%s)", depInstallName);
 			}
 		}
-		if ( _options.sharedRegionEligible() && !_options.debugVariant() ) {
+		if ( _options.sharedRegionEligible() ) {
 			assert(depInstallName != NULL);
 			if ( depInstallName[0] == '@' ) {
 				warning("invalid -install_name (%s) in dependent dylib (%s). Dylibs/frameworks which might go in dyld shared cache "
@@ -1992,7 +1992,8 @@ void Resolver::checkChainedFixupsBounds()
 	for (const ld::Atom* atom : _atoms) {
 		totalSize += atom->size();
 	}
-	bool tooBig = (totalSize > 64*1024*1024);
+	// <rdar://73537908> TEXT+DATA limited to 64MB, we don't have alignment info here to be conservative and max at 60MB
+	bool tooBig = (totalSize > 60*1024*1024);
 
 	// TEMP: disable chained fixups on 32-bit arch if it contains Darwin Test metadata
 	bool hasDtMetaData = false;
@@ -2009,6 +2010,8 @@ void Resolver::checkChainedFixupsBounds()
 			case Options::kDynamicBundle:
 			case Options::kObjectFile:
 			case Options::kDyld:
+				if ( tooBig )
+					warning("output will be > 64MB, so chained fixups being disabled. Use -no_fixup_chains to silence this warning");
 				break;
 			case Options::kStaticExecutable:
 			case Options::kKextBundle:

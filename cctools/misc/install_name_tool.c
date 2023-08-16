@@ -44,10 +44,18 @@ static void process(
     struct arch *archs,
     uint32_t narchs);
 
+#if 0
 static void write_on_input(
     struct arch *archs,
     uint32_t narchs,
     char *input);
+#endif /* 0 */
+
+static void write_on_input_safely(
+    struct arch *archs,
+    uint32_t narchs,
+    char *input,
+    unsigned short mode);
 
 static void update_load_commands(
     struct arch *arch,
@@ -133,6 +141,7 @@ char **envp)
     uint32_t narchs;
     char *input;
     char *output;
+    struct stat stat_buf;
 
 	diagnostics_enable(getenv("CC_LOG_DIAGNOSTICS") != NULL);
 	diagnostics_output(getenv("CC_LOG_DIAGNOSTICS_FILE"));
@@ -318,13 +327,39 @@ char **envp)
 	if(errors)
 	    exit(EXIT_FAILURE);
 
+	/*
+	 * If this file was codesigned either warn or re-sign.
+	 */
+	for(i = 0; i < narchs; i++){
+	    if(archs[i].type == OFILE_Mach_O){
+		struct object *object = archs[i].object;
+		if (object->code_sig_cmd != NULL) {
+#ifdef CODEDIRECTORY_SUPPORT
+		    uint32_t datasize = object->code_sig_cmd->datasize;
+		    char* dataaddr = (char*)(object->object_addr + object->code_sig_cmd->dataoff);
+		    if (codedir_is_linker_signed(dataaddr, datasize)) {
+			codedir_create_object(output ? output : input,
+					      object->object_addr,
+					      object->object_size,
+					      &object->output_codedir);
+		    }
+		    else
+#endif /* CODEDIRECTORY_SUPPORT */
+			warning_arch(&archs[i], NULL,
+				     "changes being made to the file will "
+				     "invalidate the code signature in: ");
+		}
+	    }
+	}
+
+	if(stat(input, &stat_buf) == -1)
+	    system_error("can't stat input file: %s", input);
+
 	if(output != NULL)
-	    writeout(archs, narchs, output, 0777, TRUE, FALSE, FALSE, FALSE,
-		     FALSE, NULL);
-	else {
-	    write_on_input(archs, narchs, input);
-        output = input;
-    }
+	    writeout(archs, narchs, output, stat_buf.st_mode&0777, TRUE,
+		     FALSE, FALSE, FALSE, FALSE, NULL);
+	else
+	    write_on_input_safely(archs, narchs, input, stat_buf.st_mode&0777);
 
 	FAKE_SIGN_ARM_BINARY(archs, narchs, input); /* cctools-port */
 
@@ -373,6 +408,7 @@ uint32_t narchs)
 	}
 }
 
+#if 0
 /*
  * write_on_input() takes the modified archs and writes the load commands
  * directly into the input file.
@@ -459,6 +495,99 @@ char *input)
 	}
 	if(close(fd) == -1)
 	    system_error("can't close written on input file: %s", input);
+}
+
+#endif /* 0 */
+
+/*
+ * write_on_input_safely() takes the modified archs and writes the load commands
+ * directly into a new temporary file, and then moves the file into place atop
+ * the input file. In this way the modification to the file at input is atomic.
+ */
+static
+void
+write_on_input_safely(
+struct arch *archs,
+uint32_t narchs,
+char *input,
+unsigned short mode)
+{
+    struct mach_header *mh;
+    struct mach_header_64 *mh64;
+    struct load_command *lc;
+    uint32_t i, size, headers_size;
+    enum byte_sex host_byte_sex;
+    size_t pathlen, tmpsize;
+    char* tmppath;
+    const char* prefix = ".XXXXXX";
+
+    host_byte_sex = get_host_byte_sex();
+    mh = NULL;
+    mh64 = NULL;
+
+    for (i = 0; i < narchs; i++) {
+       archs[i].dont_update_LC_ID_DYLIB_timestamp = TRUE;
+	if(archs[i].object->mh != NULL){
+	    mh = archs[i].object->mh;
+	    headers_size = sizeof(*mh) + mh->sizeofcmds;
+	    lc = (struct load_command *)
+	    archs[i].object->object_addr + sizeof(mh);
+	}
+	else{
+	    mh64 = archs[i].object->mh64;
+	    headers_size = sizeof(*mh64) + mh64->sizeofcmds;
+	    lc = (struct load_command *)
+	    archs[i].object->object_addr + sizeof(mh64);
+	}
+
+	/*
+	 * Swap the mach header and load commands, and prepare to write them
+	 * back out to disk.
+	 */
+	if(archs[i].object->object_byte_sex != host_byte_sex) {
+	    if (mh) {
+		if(swap_object_headers(mh, lc) == FALSE)
+		    fatal("internal error: swap_object_headers() failed");
+	    }
+	    else {
+		if(swap_object_headers(mh64, lc) == FALSE)
+		    fatal("internal error: swap_object_headers() failed");
+	    }
+	}
+
+	/*
+	 * Zero out the unused space between our load commands and the start of
+	 * segment data
+	 */
+	if(arch_header_sizes[i] > headers_size) {
+	    size = arch_header_sizes[i];
+	    memset(archs[i].object->object_addr + headers_size, 0,
+		   size - headers_size);
+	}
+    }
+
+    /* Compute a temporary path to hold our output file during assembly. */
+    pathlen = strlen(input);
+    tmpsize = pathlen + strlen(prefix) + 1;
+    tmppath = calloc(1, tmpsize);
+    snprintf(tmppath, tmpsize, "%s%s", input, prefix);
+
+    /* Write to temporary file */
+    writeout(archs, narchs, tmppath, mode, TRUE, FALSE, FALSE, FALSE,
+	     FALSE, NULL);
+
+    /* Don't overwrite symlinks */
+    char resolvedInputPath[PATH_MAX];
+    if (realpath(input, resolvedInputPath) != NULL)
+        input = resolvedInputPath;
+
+    /* Move temporary file into place */
+    if (rename(tmppath, input)) {
+	unlink(tmppath);
+	system_fatal("cannot rename %s to %s", input, tmppath);
+    }
+
+    free(tmppath);
 }
 
 /*

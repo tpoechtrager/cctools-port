@@ -179,9 +179,7 @@ ld::Atom* Pass::makeStub(const ld::Atom& target, bool weakImport)
 
 	bool forLazyDylib = false;
 	bool stubToResolver = (target.contentType() == ld::Atom::typeResolver);
-#if SUPPORT_ARCH_arm_any || SUPPORT_ARCH_arm64 || SUPPORT_ARCH_arm64e
 	bool usingDataConst =  _options.useDataConstSegment() && _options.sharedRegionEligible();
-#endif
 
 	if ( usingCompressedLINKEDIT() && !forLazyDylib && !_options.noLazyBinding() ) {
 		if ( _internal->compressedFastBinderProxy == NULL )
@@ -207,7 +205,7 @@ ld::Atom* Pass::makeStub(const ld::Atom& target, bool weakImport)
 				return new ld::passes::stubs::x86_64::NonLazyStubAtom(*this, target, weakImport);
 			else if ( _options.makeChainedFixups() ) {
 				if ( stubToResolver )
-					return new ld::passes::stubs::x86_64::StubAtom(*this, target, stubToGlobalWeakDef, stubToResolver, weakImport);
+					return new ld::passes::stubs::x86_64::StubAtom(*this, target, stubToGlobalWeakDef, stubToResolver, weakImport, usingDataConst);
 				else
 					return new ld::passes::stubs::x86_64::NonLazyStubAtom(*this, target, weakImport);
 			}
@@ -217,7 +215,7 @@ ld::Atom* Pass::makeStub(const ld::Atom& target, bool weakImport)
 				else if ( _options.noLazyBinding() && !stubToResolver )
 					return new ld::passes::stubs::x86_64::NonLazyStubAtom(*this, target, weakImport);
 				else
-					return new ld::passes::stubs::x86_64::StubAtom(*this, target, stubToGlobalWeakDef, stubToResolver, weakImport);
+					return new ld::passes::stubs::x86_64::StubAtom(*this, target, stubToGlobalWeakDef, stubToResolver, weakImport, usingDataConst);
 			}
 			else
 				return new ld::passes::stubs::x86_64::classic::StubAtom(*this, target, stubToGlobalWeakDef, weakImport);
@@ -230,6 +228,13 @@ ld::Atom* Pass::makeStub(const ld::Atom& target, bool weakImport)
 				return new ld::passes::stubs::arm::StubPICKextAtom(*this, target, weakImport);
 			}
 			else if ( _options.makeChainedFixups() ) {
+				if ( _options.armFirmwareVariant() ) {
+					if ( stubToResolver )
+						throwf("unsupported lazy PIC resolver for arm Thumb");
+					else {
+						return new ld::passes::stubs::arm::ThumbStubPICAtom(*this, target, stubToGlobalWeakDef, stubToResolver, weakImport, usingDataConst);
+					}
+				}
 				if ( stubToResolver )
 					return new ld::passes::stubs::arm::StubPICAtom(*this, target, stubToGlobalWeakDef, stubToResolver, weakImport, usingDataConst);
 				else
@@ -246,10 +251,18 @@ ld::Atom* Pass::makeStub(const ld::Atom& target, bool weakImport)
 					return new ld::passes::stubs::arm::StubNoPICAtom(*this, target, stubToGlobalWeakDef, stubToResolver, weakImport);
 			} 
 			else {
-				if ( _pic )
-					return new ld::passes::stubs::arm::classic::StubPICAtom(*this, target, forLazyDylib, weakImport);
-				else
-					return new ld::passes::stubs::arm::classic::StubNoPICAtom(*this, target, forLazyDylib, weakImport);
+				if ( _options.armFirmwareVariant() ) {
+					if ( _pic )
+						return new ld::passes::stubs::arm::ThumbStubPICAtom(*this, target, stubToGlobalWeakDef, stubToResolver, weakImport, usingDataConst);
+					else
+						return new ld::passes::stubs::arm::ThumbStubNoPICAtom(*this, target, stubToGlobalWeakDef, stubToResolver, weakImport, usingDataConst);
+				}
+				else {
+					if ( _pic )
+						return new ld::passes::stubs::arm::classic::StubPICAtom(*this, target, forLazyDylib, weakImport);
+					else
+						return new ld::passes::stubs::arm::classic::StubNoPICAtom(*this, target, forLazyDylib, weakImport);
+				}
 			}
 			break;
 #endif

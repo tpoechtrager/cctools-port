@@ -604,7 +604,8 @@ uint32_t size)
 		    }
 		}
 		else{
-		    if(sg->filesize != 0 && sg->fileoff < low_fileoff)
+		    if(sg->filesize != 0 && sg->fileoff != 0 &&
+                       sg->fileoff < low_fileoff)
 			low_fileoff = sg->fileoff;
 		}
 	    }
@@ -632,7 +633,8 @@ uint32_t size)
 		    }
 		}
 		else{
-		    if(sg64->filesize != 0 && sg64->fileoff < low_fileoff)
+                    if(sg64->filesize != 0 && sg64->fileoff != 0 &&
+                       sg64->fileoff < low_fileoff)
 			low_fileoff = (uint32_t)sg64->fileoff;
 		}
 	    }
