@@ -94,16 +94,19 @@ EXTRAFLAGS="$EXTRAFLAGS -fblocks"
 
 case $host_cpu in
   powerpc)
-    EXTRAFLAGS="$EXTRAFLAGS -D__ppc__"
+    EXTRAFLAGS="$EXTRAFLAGS -D__ppc__ -target ${host_triplet} -arch ppc32"
   ;;
   powerpc64*)
-    EXTRAFLAGS="$EXTRAFLAGS -D__ppc__ -D__ppc64__"
+    EXTRAFLAGS="$EXTRAFLAGS -D__ppc__ -D__ppc64__ -target ${host_triplet} -arch ppc64"
   ;;
-  arm64*|aarch64)
-    EXTRAFLAGS="$EXTRAFLAGS -D__arm64__"
+  arm64*)
+    EXTRAFLAGS="$EXTRAFLAGS -D__arm64__ -target ${host_triplet} -arch arm64"
+  ;;
+  aarch64)
+    EXTRAFLAGS="$EXTRAFLAGS -D__arm64__ -target ${host_triplet} -arch aarch64"
   ;;
   arm*)
-    EXTRAFLAGS="$EXTRAFLAGS -D__arm__"
+    EXTRAFLAGS="$EXTRAFLAGS -D__arm__ -target ${host_triplet} -arch arm"
   ;;
 esac
 
