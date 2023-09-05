@@ -138,10 +138,10 @@ OK=0
 set +e
 which $LLVM_DSYMUTIL &>/dev/null
 if [ $? -eq 0 ]; then
-    case $($LLVM_DSYMUTIL --version | \
-           grep "LLVM version" | head -1 | awk '{print $3}') in
-        3.8*|3.9*|4.0*|5.0*|6.0*|7.0*|8.0*|9.0*|10*|11*|12*|13*) OK=1 ;;
-    esac
+    llvm_version=$($LLVM_DSYMUTIL --version | \
+        grep "LLVM version" | head -1 | awk '{print $3}')
+    if [[ "$llvm_version" == "3.8"* || "$llvm_version" == "3.9"* ]]; then OK=1; fi
+    if [ "$(echo $llvm_version | cut -d'.' -f1)" -ge "4" ]; then OK=1; fi
 fi
 set -e
 
