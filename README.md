@@ -7,7 +7,7 @@ Originally ported by [cjacker](http://ios-toolchain-based-on-clang-for-linux.goo
 
 **SUPPORTED HOST OPERATING SYSTEMS:**
 
-Linux, FreeBSD, OpenBSD  
+Linux, FreeBSD, OpenBSD,  
 macOS, iOS
 
 **SUPPORTED HOST ARCHITECTURES:**
