@@ -12,7 +12,7 @@ Mac OS X, iOS, OpenBSD and NetBSD
 
 **SUPPORTED HOST ARCHITECTURES:**
 
-x86, x86_64, arm, arm64/aarch64
+x86, x86_64, arm, arm64/AArch64, PowerPC/PowerPC64
 
 ## SUPPORTED TARGET ARCHITECTURES ##
 
