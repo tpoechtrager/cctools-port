@@ -5,10 +5,10 @@ Originally ported by [cjacker](http://ios-toolchain-based-on-clang-for-linux.goo
 
 ## SUPPORTED HOSTS ##
 
-**SUPPORTED OPERATING SYSTEMS:**
+**SUPPORTED HOST OPERATING SYSTEMS:**
 
-Linux, Android (Termux), FreeBSD,  
-Mac OS X, iOS, OpenBSD and NetBSD
+Linux, FreeBSD, OpenBSD  
+macOS, iOS
 
 **SUPPORTED HOST ARCHITECTURES:**
 

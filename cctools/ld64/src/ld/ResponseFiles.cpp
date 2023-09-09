@@ -31,6 +31,7 @@ extern void warning(const char* format, ...) __attribute__((format(printf, 1, 2)
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <errno.h>
 
 #ifndef HAVE_REALLOCF // ld64-port
 #include "reallocf.h"
