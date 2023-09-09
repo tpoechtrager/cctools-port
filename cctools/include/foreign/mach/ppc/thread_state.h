@@ -36,6 +36,7 @@
 #define PPC_THREAD_STATE_MAX	(144)    /* Size of biggest state possible */
 
 #if defined (__ppc__) || defined (__ppc64__)
+#undef THREAD_STATE_MAX /* cctools-port */
 #define THREAD_STATE_MAX	PPC_THREAD_STATE_MAX
 #endif
 

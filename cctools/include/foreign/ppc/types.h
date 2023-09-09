@@ -1,3 +1,5 @@
+#if !defined(__ppc__) && !defined(__ppc64__) /* cctools-port */
+
 /*
  * Copyright (c) 2000-2008 Apple Inc. All rights reserved.
  *
@@ -133,3 +135,5 @@ typedef u_int64_t		syscall_arg_t;
 
 #endif /* __ASSEMBLER__ */
 #endif	/* _MACHTYPES_H_ */
+
+#endif /* cctools-port */

@@ -169,33 +169,32 @@ kern_return_t mach_timebase_info(mach_timebase_info_t info)
 #if defined(__ppc__) && !defined(__ppc64__)
 
 /*
- * __sync_fetch_and_add_8 is missing on ppc 32-bit for some reason.
+ * __atomic_fetch_and_add_8 is missing on ppc 32-bit for some reason.
  */
 
 #include <pthread.h>
-static pthread_mutex_t lock;
 
-__attribute__((constructor (101)))
-static void init_mutex() { pthread_mutex_init(&lock, NULL); }
+static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
-int64_t __clang_does_not_like_redeclaring_sync_fetch_and_add_8(
-    volatile int64_t *ptr, int64_t value, ...)
+int64_t OSAtomicAdd64(int64_t __theAmount, volatile int64_t *__theValue)
 {
+    int64_t oldValue;
     pthread_mutex_lock(&lock);
-    *ptr = value;
+
+    oldValue = *__theValue;
+    *__theValue += __theAmount;
+
     pthread_mutex_unlock(&lock);
-    return *ptr;
+
+    return oldValue;
 }
 
-asm
-(
-    ".global __sync_fetch_and_add_8\n"
-    ".weak   __sync_fetch_and_add_8\n"
-    ".type   __sync_fetch_and_add_8, @function\n"
-    "__sync_fetch_and_add_8:\n"
-    "b       __clang_does_not_like_redeclaring_sync_fetch_and_add_8\n"
-    ".size   __sync_fetch_and_add_8, .-__sync_fetch_and_add_8"
-);
+#else
+
+int64_t OSAtomicAdd64(int64_t __theAmount, volatile int64_t *__theValue)
+{
+   return __sync_fetch_and_add(__theValue, __theAmount);
+}
 
 #endif /* __ppc__ && !__ppc64__ */
 
@@ -204,9 +203,6 @@ int32_t OSAtomicAdd32(int32_t __theAmount, volatile int32_t *__theValue)
    return __sync_fetch_and_add(__theValue, __theAmount);
 }
 
-int64_t OSAtomicAdd64(int64_t __theAmount, volatile int64_t *__theValue)
-{
-   return __sync_fetch_and_add(__theValue, __theAmount);
-}
+
 
 #endif /* __APPLE__ */
