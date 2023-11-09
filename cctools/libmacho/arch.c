@@ -43,12 +43,17 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
+//#include <TargetConditionals.h> /* cctools-port: commented */
 
-#include "mach/machine.h"
+#include <mach/machine-cctools.h>
 #include "mach/mach.h"
 #include "stuff/openstep_mach.h"
 #include <mach-o/fat.h>
 #include <mach-o/arch.h>
+#include <mach-o/loader.h>
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
 
 /* The array of all currently know architecture flags (terminated with an entry
  * with all zeros).  Pointer to this returned with NXGetAllArchInfos().
@@ -400,6 +405,37 @@ const NXArchInfo *x)
 }
 
 /*
+ * Note: this matches the kernel's grading algorithm
+ * V8 is preferred over ALL
+ * On arm64e hardware, the ABI is in flux.  The high byte of the cpu-subtype is the ABI version.
+ * The current current version is zero and is preferred over any other version (which would
+ * require running with keys off).
+ */
+static uint32_t grade_arm64(uint32_t cpusubtype)
+{
+#if __arm64e__
+    if ((cpusubtype & ~CPU_SUBTYPE_MASK) == CPU_SUBTYPE_ARM64E){
+        extern struct mach_header __dso_handle;
+        //fprintf(stderr, "cpusubtype=0x%08X __dso_handle.cpusubtype=0x%08X\n", cpusubtype, __dso_handle.cpusubtype);
+	if (cpusubtype == __dso_handle.cpusubtype)
+	    return 12; // ABI version is current version
+#if TARGET_OS_IOS
+	else if ((cpusubtype & CPU_SUBTYPE_MASK) == 0)
+	    return 0;  // old, pre-versioned ABI
+#endif
+	else
+	    return 11; // some other ABI version
+    }
+#endif
+    if ( cpusubtype == CPU_SUBTYPE_ARM64_V8 )
+        return 10;
+    if ( cpusubtype == CPU_SUBTYPE_ARM64_ALL )
+        return 9;
+
+    return 0;
+}
+
+/*
  * internal_NXFindBestFatArch() is passed a cputype and cpusubtype and a
  * either set of fat_arch structs or fat_arch_64 structs and selects the best
  * one that matches (if any) and returns an index to the array of structs or
@@ -437,10 +473,19 @@ uint32_t nfat_archs)
 	    fat_cputype = fat_archs[i].cputype;
 	    fat_cpusubtype = fat_archs[i].cpusubtype;
 	}
-	if(fat_cputype == cputype &&
+#if STATIC_LIBMACHO
+        if(fat_cputype == cputype &&
+           (fat_cpusubtype & ~CPU_SUBTYPE_MASK) == (cpusubtype & ~CPU_SUBTYPE_MASK)){
+            return(i);
+        }
+#else
+        // arm64 requires special handling below
+	if(fat_cputype == cputype && cputype != CPU_TYPE_ARM64 &&
 		(fat_cpusubtype & ~CPU_SUBTYPE_MASK) ==
-		(cpusubtype & ~CPU_SUBTYPE_MASK))
+                (cpusubtype & ~CPU_SUBTYPE_MASK)){
 	    return(i);
+        }
+#endif
     }
 
     /*
@@ -987,12 +1032,10 @@ uint32_t nfat_archs)
 	case CPU_TYPE_ARM:
 	case CPU_TYPE_ARM64:
 	    {
-		/* 
-		 * ARM is straightforward, since each architecture is backward
-		 * compatible with previous architectures.  So, we just take the
-		 * highest that is less than our target.
+		/*
+		 * ARM64 requires a pass across all slices, finding the best
 		 */
-		int fat_match_found = 0;
+		uint32_t best_grade = 0;
 		uint32_t best_fat_arch = 0;
 		for(i = 0; i < nfat_archs; i++){
 		    if(fat_archs64 != NULL){
@@ -1003,27 +1046,16 @@ uint32_t nfat_archs)
 			fat_cputype = fat_archs[i].cputype;
 			fat_cpusubtype = fat_archs[i].cpusubtype;
 		    }
-		    if(fat_cputype != cputype)
+		    if(fat_cputype != CPU_TYPE_ARM64)
 			continue;
-		    if(fat_cpusubtype > cpusubtype)
-			continue;
-		    if(!fat_match_found){
-			fat_match_found = 1;
+		    uint32_t grade = grade_arm64(fat_cpusubtype);
+		    //fprintf(stderr, "  grade=%d\n", grade);
+		    if (grade > best_grade){
+			best_grade = grade;
 			best_fat_arch = i;
-			continue;
-		    }
-		    if(fat_archs64 != NULL){
-			if(fat_cpusubtype >
-			   fat_archs64[best_fat_arch].cpusubtype)
-			    best_fat_arch = i;
-		    }
-		    else{
-			if(fat_cpusubtype >
-			   fat_archs[best_fat_arch].cpusubtype)
-			    best_fat_arch = i;
 		    }
 		}
-		if(fat_match_found)
+		if(best_grade != 0)
 		    return(best_fat_arch);
 		/*
 		 * For CPU_TYPE_ARM64, we will fall back to a CPU_TYPE_ARM
@@ -1327,4 +1359,7 @@ cpu_subtype_t cpusubtype2)
 	}
 	return((cpu_subtype_t)-1); /* logically can't get here */
 }
+
+#pragma clang diagnostic pop
+
 #endif /* !defined(RLD) */

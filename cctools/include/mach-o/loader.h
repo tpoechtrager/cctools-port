@@ -32,20 +32,28 @@
  * <mach/machine.h> is needed here for the cpu_type_t and cpu_subtype_t types
  * and contains the constants for the possible values of these types.
  */
+#if __has_include(<mach/machine.h>)
 #include <mach/machine.h>
+#endif
 
 /*
  * <mach/vm_prot.h> is needed here for the vm_prot_t type and contains the 
  * constants that are or'ed together for the possible values of this type.
  */
+#if __has_include(<mach/vm_prot.h>)
 #include <mach/vm_prot.h>
+#endif
 
 /*
  * <machine/thread_status.h> is expected to define the flavors of the thread
  * states and the structures of those flavors for each machine.
  */
+#if __has_include(<mach/machine/thread_status.h>)
 #include <mach/machine/thread_status.h>
+#endif
+#if __has_include(<architecture/byte_order.h>)
 #include <architecture/byte_order.h>
+#endif
 
 /*
  * The 32-bit mach header appears at the very beginning of the object file for
@@ -53,8 +61,8 @@
  */
 struct mach_header {
 	uint32_t	magic;		/* mach magic number identifier */
-	cpu_type_t	cputype;	/* cpu specifier */
-	cpu_subtype_t	cpusubtype;	/* machine specifier */
+	int32_t		cputype;	/* cpu specifier */
+	int32_t		cpusubtype;	/* machine specifier */
 	uint32_t	filetype;	/* type of file */
 	uint32_t	ncmds;		/* number of load commands */
 	uint32_t	sizeofcmds;	/* the size of all the load commands */
@@ -71,8 +79,8 @@ struct mach_header {
  */
 struct mach_header_64 {
 	uint32_t	magic;		/* mach magic number identifier */
-	cpu_type_t	cputype;	/* cpu specifier */
-	cpu_subtype_t	cpusubtype;	/* machine specifier */
+	int32_t		cputype;	/* cpu specifier */
+	int32_t		cpusubtype;	/* machine specifier */
 	uint32_t	filetype;	/* type of file */
 	uint32_t	ncmds;		/* number of load commands */
 	uint32_t	sizeofcmds;	/* the size of all the load commands */
@@ -123,6 +131,9 @@ struct mach_header_64 {
 #define MH_FILESET	0xc		/* a file composed of other Mach-Os to
 					   be run in the same userspace sharing
 					   a single linkedit. */
+#define	MH_GPU_EXECUTE	0xd		/* gpu program */
+#define	MH_GPU_DYLIB	0xe		/* gpu support functions */
+
 
 /* Constants for the flags field of the mach_header */
 #define	MH_NOUNDEFS	0x1		/* the object file has no undefined
@@ -326,6 +337,7 @@ struct load_command {
 #define LC_DYLD_EXPORTS_TRIE (0x33 | LC_REQ_DYLD) /* used with linkedit_data_command, payload is trie */
 #define LC_DYLD_CHAINED_FIXUPS (0x34 | LC_REQ_DYLD) /* used with linkedit_data_command */
 #define LC_FILESET_ENTRY (0x35 | LC_REQ_DYLD) /* used with fileset_entry_command */
+#define LC_ATOM_INFO 0x36 /* used with linkedit_data_command */
 
 /*
  * A variable length string in a load command is represented by an lc_str
@@ -362,8 +374,8 @@ struct segment_command { /* for 32-bit architectures */
 	uint32_t	vmsize;		/* memory size of this segment */
 	uint32_t	fileoff;	/* file offset of this segment */
 	uint32_t	filesize;	/* amount to map from the file */
-	vm_prot_t	maxprot;	/* maximum VM protection */
-	vm_prot_t	initprot;	/* initial VM protection */
+	int32_t		maxprot;	/* maximum VM protection */
+	int32_t		initprot;	/* initial VM protection */
 	uint32_t	nsects;		/* number of sections in segment */
 	uint32_t	flags;		/* flags */
 };
@@ -382,8 +394,8 @@ struct segment_command_64 { /* for 64-bit architectures */
 	uint64_t	vmsize;		/* memory size of this segment */
 	uint64_t	fileoff;	/* file offset of this segment */
 	uint64_t	filesize;	/* amount to map from the file */
-	vm_prot_t	maxprot;	/* maximum VM protection */
-	vm_prot_t	initprot;	/* initial VM protection */
+	int32_t		maxprot;	/* maximum VM protection */
+	int32_t		initprot;	/* initial VM protection */
 	uint32_t	nsects;		/* number of sections in segment */
 	uint32_t	flags;		/* flags */
 };
@@ -1191,7 +1203,7 @@ struct rpath_command {
 struct linkedit_data_command {
     uint32_t	cmd;		/* LC_CODE_SIGNATURE, LC_SEGMENT_SPLIT_INFO,
 				   LC_FUNCTION_STARTS, LC_DATA_IN_CODE,
-				   LC_DYLIB_CODE_SIGN_DRS,
+				   LC_DYLIB_CODE_SIGN_DRS, LC_ATOM_INFO,
 				   LC_LINKER_OPTIMIZATION_HINT,
 				   LC_DYLD_EXPORTS_TRIE, or
 				   LC_DYLD_CHAINED_FIXUPS. */
@@ -1263,6 +1275,8 @@ struct build_tool_version {
 };
 
 /* Known values for the platform field above. */
+#define PLATFORM_UNKNOWN 0
+#define PLATFORM_ANY 0xFFFFFFFF
 #define PLATFORM_MACOS 1
 #define PLATFORM_IOS 2
 #define PLATFORM_TVOS 3
@@ -1274,13 +1288,26 @@ struct build_tool_version {
 #define PLATFORM_WATCHOSSIMULATOR 9
 #define PLATFORM_DRIVERKIT 10
 
-#ifndef __APPLE_BLEACH_SDK__
-#endif /* __APPLE_BLEACH_SDK__ */
+
+#define PLATFORM_FIRMWARE 13
+#define PLATFORM_SEPOS 14
+
 
 /* Known values for the tool field above. */
 #define TOOL_CLANG 1
 #define TOOL_SWIFT 2
 #define TOOL_LD	3
+#define TOOL_LLD 4
+
+/* values for gpu tools (1024 to 1048) */
+#define TOOL_METAL                 1024
+#define TOOL_AIRLLD                1025
+#define TOOL_AIRNT                 1026
+#define TOOL_AIRNT_PLUGIN          1027
+#define TOOL_AIRPACK               1028
+#define TOOL_GPUARCHIVER           1031
+#define TOOL_METAL_FRAMEWORK       1032
+
 
 /*
  * The dyld_info_command contains the file offsets and sizes of 

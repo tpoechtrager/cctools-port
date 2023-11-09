@@ -47,7 +47,8 @@ typedef void *LLVMDisasmContextRef;
  * returns 1, otherwise it returns 0.
  */
 typedef int (*LLVMOpInfoCallback)(void *DisInfo, uint64_t Pc,
-                                  uint64_t Offset, uint64_t Size,
+                                  uint64_t Offset, uint64_t OpSize,
+                                  uint64_t InstSize,
                                   int TagType, void *TagBuf);
 
 /**

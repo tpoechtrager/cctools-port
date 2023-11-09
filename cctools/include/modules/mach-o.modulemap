@@ -1,4 +1,4 @@
-module MachO [system] [extern_c] {
+module MachO [system] {
 
   extern module dyld "dyld.modulemap"
 

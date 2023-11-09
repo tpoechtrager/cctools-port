@@ -24,6 +24,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <libc.h>
+#include <mach-o/fixup-chains.h>
+
 #include "stuff/bool.h"
 #include "stuff/errors.h"
 #include "stuff/breakout.h"
@@ -742,6 +744,15 @@ struct object *object)
 	if (object->dyld_chained_fixups != NULL) {
 	    object->output_dyld_chained_fixups_data =
 		object->object_addr + object->dyld_chained_fixups->dataoff;
+		if(rflag){
+			struct dyld_chained_fixups_header* header =
+			(struct dyld_chained_fixups_header*)(object->output_dyld_chained_fixups_data);
+			struct dyld_chained_starts_in_image* starts =
+			(struct dyld_chained_starts_in_image*)
+			(object->output_dyld_chained_fixups_data + header->starts_offset);
+			/* we removed a segment, so reduce the segment count in the fixup chain header */
+			starts->seg_count -= 1;
+		}
 	    object->output_dyld_chained_fixups_data_size =
 		object->dyld_chained_fixups->datasize;
 	    object->dyld_chained_fixups->dataoff = offset;
@@ -777,6 +788,15 @@ struct object *object)
 		object->split_info_cmd->datasize;
 	    object->split_info_cmd->dataoff = offset;
 	    offset += object->split_info_cmd->datasize;
+	}
+
+	if(object->atom_info_cmd != NULL){
+		object->output_atom_info_data = object->object_addr +
+		object->atom_info_cmd->dataoff;
+		object->output_atom_info_data_size =
+		object->atom_info_cmd->datasize;
+		object->atom_info_cmd->dataoff = offset;
+		offset += object->atom_info_cmd->datasize;
 	}
 
 	if(object->func_starts_info_cmd != NULL){
@@ -1274,10 +1294,17 @@ struct object *object)
 	}
 
 	if(object->split_info_cmd != NULL){
-	    object->output_split_info_data = NULL;
-	    object->output_split_info_data_size = 0;
-	    object->split_info_cmd->dataoff = 0;
-	    object->split_info_cmd->datasize = 0;
+		object->output_split_info_data = NULL;
+		object->output_split_info_data_size = 0;
+		object->split_info_cmd->dataoff = 0;
+		object->split_info_cmd->datasize = 0;
+	}
+
+	if(object->atom_info_cmd != NULL){
+		object->output_atom_info_data = NULL;
+		object->output_atom_info_data_size = 0;
+		object->atom_info_cmd->dataoff = 0;
+		object->atom_info_cmd->datasize = 0;
 	}
 
 	if(object->func_starts_info_cmd != NULL){
@@ -1947,6 +1974,11 @@ struct object *object)
 	if(object->split_info_cmd != NULL)
 	    fatal_arch(arch, member, "malformed MH_OBJECT should not contain a "
 		       "split info load command");
+
+	/* There should be no split info in a .o file. */
+	if(object->atom_info_cmd != NULL)
+		fatal_arch(arch, member, "malformed MH_OBJECT should not contain a "
+			   "atom info load command");
 
 	if(object->func_starts_info_cmd != NULL){
 	    object->input_sym_info_size +=

@@ -23,7 +23,7 @@
  */
 
 #ifndef __MACH_O_FIXUP_CHAINS__
-#define __MACH_O_FIXUP_CHAINS__
+#define __MACH_O_FIXUP_CHAINS__ 5
 
 
 #include <stdint.h>
@@ -85,6 +85,7 @@ struct dyld_chained_starts_offsets
     uint32_t    chain_starts[1];    // array chain start offsets
 };
 
+
 // values for dyld_chained_starts_in_segment.pointer_format
 enum {
     DYLD_CHAINED_PTR_ARM64E                 =  1,    // stride 8, unauth target is vmaddr
@@ -99,62 +100,43 @@ enum {
     DYLD_CHAINED_PTR_ARM64E_USERLAND        =  9,    // stride 8, unauth target is vm offset
     DYLD_CHAINED_PTR_ARM64E_FIRMWARE        = 10,    // stride 4, unauth target is vmaddr
     DYLD_CHAINED_PTR_X86_64_KERNEL_CACHE    = 11,    // stride 1, x86_64 kernel caches
-    DYLD_CHAINED_PTR_ARM64E_USERLAND24      = 12,    // stride 8, unauth target is vm offset, 24-bit bind
 };
 
+
 // DYLD_CHAINED_PTR_ARM64E
-// DYLD_CHAINED_PTR_ARM64E_USERLAND
-// DYLD_CHAINED_PTR_ARM64E_USERLAND24
-// DYLD_CHAINED_PTR_ARM64E_KERNEL
 struct dyld_chained_ptr_arm64e_rebase
 {
-    uint64_t    target   : 43,    // vmaddr
+    uint64_t    target   : 43,
                 high8    :  8,
-                next     : 11,    // 8-byte stride
+                next     : 11,    // 4 or 8-byte stide
                 bind     :  1,    // == 0
                 auth     :  1;    // == 0
 };
 
 // DYLD_CHAINED_PTR_ARM64E
-// DYLD_CHAINED_PTR_ARM64E_USERLAND
 struct dyld_chained_ptr_arm64e_bind
 {
     uint64_t    ordinal   : 16,
                 zero      : 16,
-                addend    : 19,
-                next      : 11,    // 8-byte stride
+                addend    : 19,    // +/-256K
+                next      : 11,    // 4 or 8-byte stide
                 bind      :  1,    // == 1
                 auth      :  1;    // == 0
 };
 
-// DYLD_CHAINED_PTR_ARM64E_USERLAND24
-struct dyld_chained_ptr_arm64e_bind24
-{
-    uint64_t    ordinal   : 24,
-		zero      :  8,
-		addend    : 19,    // +/-256K
-		next      : 11,    // 8-byte stide
-		bind      :  1,    // == 1
-		auth      :  1;    // == 0
-};
-
 // DYLD_CHAINED_PTR_ARM64E
-// DYLD_CHAINED_PTR_ARM64E_USERLAND
-// DYLD_CHAINED_PTR_ARM64E_USERLAND24
-// DYLD_CHAINED_PTR_ARM64E_KERNEL
 struct dyld_chained_ptr_arm64e_auth_rebase
 {
     uint64_t    target    : 32,   // runtimeOffset
                 diversity : 16,
                 addrDiv   :  1,
                 key       :  2,
-                next      : 11,    // 8-byte stride
+                next      : 11,    // 4 or 8-byte stide
                 bind      :  1,    // == 0
                 auth      :  1;    // == 1
 };
 
 // DYLD_CHAINED_PTR_ARM64E
-// DYLD_CHAINED_PTR_ARM64E_USERLAND
 struct dyld_chained_ptr_arm64e_auth_bind
 {
     uint64_t    ordinal   : 16,
@@ -162,37 +144,22 @@ struct dyld_chained_ptr_arm64e_auth_bind
                 diversity : 16,
                 addrDiv   :  1,
                 key       :  2,
-                next      : 11,    // 8-byte stride
+                next      : 11,    // 4 or 8-byte stide
                 bind      :  1,    // == 1
                 auth      :  1;    // == 1
 };
 
-// DYLD_CHAINED_PTR_ARM64E_USERLAND24
-struct dyld_chained_ptr_arm64e_auth_bind24
-{
-    uint64_t    ordinal   : 24,
-		zero      :  8,
-		diversity : 16,
-		addrDiv   :  1,
-		key       :  2,
-		next      : 11,    // 8-byte stide
-		bind      :  1,    // == 1
-		auth      :  1;    // == 1
-};
-
-// DYLD_CHAINED_PTR_64
-// DYLD_CHAINED_PTR_64_OFFSET
+// DYLD_CHAINED_PTR_64/DYLD_CHAINED_PTR_64_OFFSET
 struct dyld_chained_ptr_64_rebase
 {
-    uint64_t    target    : 36,    // vmaddr, 64GB max image size
-                high8     :  8,    // top 8 bits set to this after slide added
+    uint64_t    target    : 36,    // 64GB max image size (DYLD_CHAINED_PTR_64 => vmAddr, DYLD_CHAINED_PTR_64_OFFSET => runtimeOffset)
+                high8     :  8,    // top 8 bits set to this (DYLD_CHAINED_PTR_64 => after slide added, DYLD_CHAINED_PTR_64_OFFSET => before slide added)
                 reserved  :  7,    // all zeros
                 next      : 12,    // 4-byte stride
                 bind      :  1;    // == 0
 };
 
 // DYLD_CHAINED_PTR_64
-// DYLD_CHAINED_PTR_64_OFFSET
 struct dyld_chained_ptr_64_bind
 {
     uint64_t    ordinal   : 24,
@@ -202,17 +169,16 @@ struct dyld_chained_ptr_64_bind
                 bind      :  1;   // == 1
 };
 
-// DYLD_CHAINED_PTR_64_KERNEL_CACHE
-// DYLD_CHAINED_PTR_X86_64_KERNEL_CACHE
+// DYLD_CHAINED_PTR_64_KERNEL_CACHE, DYLD_CHAINED_PTR_X86_64_KERNEL_CACHE
 struct dyld_chained_ptr_64_kernel_cache_rebase
 {
     uint64_t    target     : 30,   // basePointers[cacheLevel] + target
-		cacheLevel :  2,   // what level of cache to bind to (indexes a mach_header array)
-		diversity  : 16,
-		addrDiv    :  1,
-		key        :  2,
-		next       : 12,    // 1 or 4-byte stide
-		isAuth     :  1;    // 0 -> not authenticated.  1 -> authenticated
+                cacheLevel :  2,   // what level of cache to bind to (indexes a mach_header array)
+                diversity  : 16,
+                addrDiv    :  1,
+                key        :  2,
+                next       : 12,    // 1 or 4-byte stide
+                isAuth     :  1;    // 0 -> not authenticated.  1 -> authenticated
 };
 
 // DYLD_CHAINED_PTR_32
@@ -243,12 +209,15 @@ struct dyld_chained_ptr_32_cache_rebase
                 next      :  2;   // 4-byte stride
 };
 
+
 // DYLD_CHAINED_PTR_32_FIRMWARE
 struct dyld_chained_ptr_32_firmware_rebase
 {
     uint32_t    target   : 26,   // 64MB max firmware TEXT and DATA
                 next     :  6;   // 4-byte stride
 };
+
+
 
 // values for dyld_chained_fixups_header.imports_format
 enum {

@@ -194,6 +194,7 @@ ETAGS = @ETAGS@
 EXECINFO_LIB = @EXECINFO_LIB@
 EXEEXT = @EXEEXT@
 FGREP = @FGREP@
+FILECMD = @FILECMD@
 FTS_LIB = @FTS_LIB@
 GCC_LIB = @GCC_LIB@
 GREP = @GREP@
@@ -318,7 +319,7 @@ dist_man_MANS = dyld.1 strings.1 lipo.1 as.1 nm.1 otool.1 ranlib.1 \
 	getsectbyname.3 getsectbynamefromheader.3 getsectdata.3 \
 	getsectdatafromheader.3 getsegbyname.3 Mach-O.5 a.out.5 \
 	ranlib.5 stab.5 indr.1 checksyms.1 seg_addr_table.1 \
-	check_dylib.1 mtoc.1 NSObjectFileImage_priv.3 libsyminfo.3 \
+	check_dylib.1 mtoc.1 NSObjectFileImage_priv.3 \
 	redo_prebinding.3
 all: all-am
 

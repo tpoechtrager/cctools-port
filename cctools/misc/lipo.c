@@ -56,6 +56,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
+#include <mach/machine-cctools.h>
 #include <mach/mach.h>
 #include <mach-o/loader.h>
 #include <mach-o/fat.h>
@@ -546,8 +547,10 @@ unknown_flag:
 
 	if(create_flag){
 	    /* check to make sure no two files have the same architectures */
-	    for(i = 0; i < nthin_files; i++)
-		for(j = i + 1; j < nthin_files; j++)
+	    uint64_t lastOffset = 0;
+	    enum bool mainExecuteable = FALSE;
+	    for(i = 0; i < nthin_files; i++) {
+		for(j = i + 1; j < nthin_files; j++) {
 		    if(thin_files[i].cputype == 
 		       thin_files[j].cputype && 
 		       (thin_files[i].cpusubtype & ~CPU_SUBTYPE_MASK)==
@@ -572,6 +575,17 @@ unknown_flag:
 			      thin_files[i].cpusubtype &
 				~CPU_SUBTYPE_MASK);
 		    }
+		}
+		// peek to see if last slice offset will be > 4GB
+		if (i < (nthin_files-1))
+		    lastOffset += thin_files[i].size;
+		// kernel does not support fat64
+                if (get_mh_filetype(thin_files[i].addr,thin_files[i].size) == MH_EXECUTE)
+		    mainExecuteable = TRUE;
+	    }
+	    // automatically switch to fat64 if needed
+	    if (!mainExecuteable && (lastOffset > 0xFFFFFFFF))
+		fat64_flag = TRUE;
 	    create_fat();
 	}
 

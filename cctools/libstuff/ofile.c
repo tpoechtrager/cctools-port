@@ -42,6 +42,7 @@
 #include "shlib.h"
 #endif
 #include <libc.h>
+#include <mach/machine-cctools.h>
 #include <mach/mach.h>
 #include "stuff/openstep_mach.h"
 #include <stddef.h>
@@ -1799,13 +1800,19 @@ cleanup:
  * pointer alive as long as they wish.
  */
 static
-void
+enum bool
 member_addr_set(
 struct ofile *ofile,
 char* addr)
 {
     uint64_t offset = ofile->member_offset;
     uint32_t size = ofile->member_size;
+
+    if (addr+offset+size > ofile->file_addr+ofile->file_size){
+      error("address 0x%llx extends beyond the end of the object file %s",
+            (uint64_t)addr+offset+size, ofile->file_name);
+      return(FALSE);
+    }
 
     if (ofile->member_buffer) {
 	free(ofile->member_buffer);
@@ -1820,6 +1827,7 @@ char* addr)
     else {
 	ofile->member_addr = addr + offset;
     }
+    return(TRUE);
 }
 
 /*
@@ -1925,6 +1933,11 @@ struct ofile *ofile)
 
 	/* now we know there is a first member so set it up */
 	ar_hdr = (struct ar_hdr *)(addr + offset);
+	if ((char*)ar_hdr > ofile->file_addr + ofile->file_size){
+	    archive_error(ofile, "truncated or malformed (archive header of "
+			  "member extends past the end of the file)");
+	    return(FALSE);
+	}
 	offset += sizeof(struct ar_hdr);
 	ofile->member_offset = offset;
 	ofile->member_size = (uint32_t)strtoul(ar_hdr->ar_size, NULL, 10);
@@ -1954,7 +1967,8 @@ struct ofile *ofile)
 	    ofile->member_name_size = size_ar_name(ar_hdr);
 	    ar_name_size = 0;
 	}
-	member_addr_set(ofile, addr);
+	if(member_addr_set(ofile, addr) == FALSE)
+	  goto fatcleanup;
 
 	/* Clear these in case there is no table of contents */
 	ofile->toc_addr = NULL;
@@ -2231,6 +2245,11 @@ struct ofile *ofile)
 
 	/* now we know there is a next member so set it up */
 	ar_hdr = (struct ar_hdr *)(addr + offset);
+	if ((char*)ar_hdr > ofile->file_addr + ofile->file_size){
+	    archive_error(ofile, "truncated or malformed (archive header of "
+			    "member extends past the end of the file)");
+	    return(FALSE);
+	}
 	offset += sizeof(struct ar_hdr);
 	ofile->member_offset = offset;
 	ofile->member_size = (uint32_t)strtoul(ar_hdr->ar_size, NULL, 10);
@@ -2282,7 +2301,8 @@ struct ofile *ofile)
 	    ofile->member_name_size = size_ar_name(ar_hdr);
 	    ar_name_size = 0;
 	}
-	member_addr_set(ofile, addr);
+	if(member_addr_set(ofile, addr) == FALSE)
+	  goto cleanup;
 
 	ofile->member_type = OFILE_UNKNOWN;
 	ofile->object_addr = NULL;
@@ -2604,7 +2624,8 @@ struct ofile *ofile)
 		    (uint32_t)strtoul(ar_hdr->ar_size, NULL, 10) - ar_name_size;
 		ofile->member_ar_hdr = ar_hdr;
 		ofile->member_type = OFILE_UNKNOWN;
-		member_addr_set(ofile, addr);
+		if(member_addr_set(ofile, addr) == FALSE)
+		  goto fatcleanup;
 
 		host_byte_sex = get_host_byte_sex();
 
@@ -3485,6 +3506,11 @@ enum bool archives_with_fat_objects)
 	ofile->member_addr = NULL;
 	while(size > offset){
 	    ar_hdr = (struct ar_hdr *)(addr + offset);
+	    if ((char*)ar_hdr > ofile->file_addr + ofile->file_size){
+                archive_error(ofile, "truncated or malformed (archive header of "
+                              "member extends past the end of the file)");
+                return(CHECK_BAD);
+	    }
 	    ofile->member_offset = offset;
 	    ofile->member_size = (uint32_t)strtoul(ar_hdr->ar_size, NULL, 10);
 	    ofile->member_ar_hdr = ar_hdr;
@@ -3985,7 +4011,7 @@ struct ofile *ofile)
     struct twolevel_hints_command *hints;
     struct linkedit_data_command *code_sig, *split_info, *func_starts,
 			     *data_in_code, *code_sign_drs, *linkedit_data,
-			     *exports_trie, *chained_fixups;
+			     *exports_trie, *chained_fixups, *atom_info;
     struct linkedit_data_command *link_opt_hint;
     struct version_min_command *vers;
     struct build_version_command *bv, *bv1, *bv2;
@@ -4098,6 +4124,7 @@ struct ofile *ofile)
 	code_sig = NULL;
 	func_starts = NULL;
 	data_in_code = NULL;
+	atom_info = NULL;
 	code_sign_drs = NULL;
 	link_opt_hint = NULL;
 	exports_trie = NULL;
@@ -4690,6 +4717,17 @@ struct ofile *ofile)
 		    goto return_bad;
 		}
 		split_info = (struct linkedit_data_command *)lc;
+		goto check_linkedit_data_command;
+
+	    case LC_ATOM_INFO:
+		cmd_name = "LC_ATOM_INFO";
+		element_name = "atom info";
+		if(atom_info != NULL){
+		    Mach_O_error(ofile, "malformed object (more than one "
+			"%s command)", cmd_name);
+		    goto return_bad;
+		}
+		atom_info = (struct linkedit_data_command *)lc;
 		goto check_linkedit_data_command;
 
 	    case LC_CODE_SIGNATURE:

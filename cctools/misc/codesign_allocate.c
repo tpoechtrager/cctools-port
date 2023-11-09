@@ -482,6 +482,12 @@ struct object *object)
 		object->output_split_info_data_size = 
 		    object->split_info_cmd->datasize;
 	    }
+            if(object->atom_info_cmd != NULL){
+		object->output_atom_info_data =
+		(object->object_addr + object->atom_info_cmd->dataoff);
+		object->output_atom_info_data_size =
+		    object->atom_info_cmd->datasize;
+	    }
 	    if(object->func_starts_info_cmd != NULL){
 		object->output_func_start_info_data = 
 		(object->object_addr + object->func_starts_info_cmd->dataoff);
@@ -561,6 +567,8 @@ struct object *object)
 		    sizeof(struct dylib_reference);
 	    if(object->split_info_cmd != NULL)
 		object->input_sym_info_size += object->split_info_cmd->datasize;
+	    if(object->atom_info_cmd != NULL)
+		object->input_sym_info_size += object->atom_info_cmd->datasize;
 	    if(object->func_starts_info_cmd != NULL)
 		object->input_sym_info_size +=
 		    object->func_starts_info_cmd->datasize;

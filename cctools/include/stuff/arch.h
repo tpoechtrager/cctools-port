@@ -30,6 +30,7 @@
  * This file contains the current known set of flags and constants for the
  * known architectures.
  */
+#include <mach/machine-cctools.h>
 #include <mach/machine.h>
 #include <stuff/bytesex.h>
 

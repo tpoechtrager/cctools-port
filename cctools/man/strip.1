@@ -1,4 +1,4 @@
-.TH STRIP 1 "June 23, 2020" "Apple Inc."
+.TH STRIP 1 "June 23, 2023" "Apple Inc."
 .SH NAME
 strip \- remove symbols
 .SH SYNOPSIS
@@ -31,12 +31,9 @@ command is the same as using the
 .B \-u
 and
 .B \-r
-options. If the file does not use the dynamic link editor, the effect of
+options. If the file does not use the dynamic link editor (e.g. -preload or -static), the effect of
 .I strip
-without any options is the same as using the
-.B \-s
-option of
-.IR ld (1).
+without any options is to completely remove the symbol table.
 The options
 .B \-S,
 .B \-x,
@@ -70,14 +67,14 @@ that will still allow the program to run correctly with its libraries.
 .PP
 If the executable loads objects, however, the global symbols that the objects
 reference from the executable also must not be stripped.
-In this case, you should list the global symbols that the executable wants to allow the objects to reference in a file, and those global symbols are then saved when the executable is stripped. For example:
+In this case, when linking the executable you should use the
+`-exported_symbols_list` option of the link editor
+.IR ld (1)
+to limit which symbols can be referenced by the objects.
+Then you only need to strip local and debug symbols, like that:
 .RS
-% strip \-u \-r \-s interface_symbols executable
+% strip \-x \-S executable
 .RE
-where the file
-.I interface_symbols
-would contain only those global symbols from the executable that the executable
-wants the loaded objects to have access to.
 .PP
 For objects that will be loaded into an executable, you should trim the symbol table
 to limit the global symbols the executable will see.
@@ -217,10 +214,14 @@ and other compilers).
 Remove the local symbols whose names begin with `L'.
 .TP
 .B \-T
-The intent of this flag is to remove Swift symbols.  It removes the
-symbols whose names begin with `\_$S' or `\_$s' only when it finds
+The intent of this flag is to remove Swift symbols from the Mach-O symbol table,
+It removes the symbols whose names begin with `\_$S' or `\_$s' only when it finds
 an \_\^\_objc_imageinfo section with and it has a non-zero swift version.
 The future the implementation of this flag may change to match the intent.
+When used together with
+.B \-R,/
+.B \-s
+files the Swift symbols will also be removed from global symbol lists used by dyld.
 .TP
 .B \-N
 In binaries that use the dynamic linker remove all nlist symbols and the string
@@ -259,7 +260,10 @@ when processing object files.
 Remove any LC_UUID load commands.
 .TP
 .B \-no_split_info
-Remove the LC_SEGMENT_SPLIT_INFO load command and its payload load.
+Remove the LC_SEGMENT_SPLIT_INFO load command and its payload.
+.TP
+.B \-no_atom_info
+Remove the LC_ATOM_INFO load command and its payload.
 .TP
 .B \-no_code_signature_warning
 Don't warn when the code signature would be invalid in the output.

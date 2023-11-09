@@ -197,15 +197,15 @@ char **envp)
 		    switch(argv[i+1][0]){
 		    case 'd':
 			flags.print_offsets = TRUE;
-			flags.offset_format = "%d";
+			flags.offset_format = "d";
 			break;
 		    case 'o':
 			flags.print_offsets = TRUE;
-			flags.offset_format = "%o";
+			flags.offset_format = "o";
 			break;
 		    case 'x':
 			flags.print_offsets = TRUE;
-			flags.offset_format = "%x";
+			flags.offset_format = "x";
 			break;
 		    default:
 			error("invalid argument to option: %s %s",
@@ -220,7 +220,7 @@ char **envp)
 			switch(argv[i][j]){
 			case 'o':
 			    flags.print_offsets = TRUE;
-			    flags.offset_format = "%7lu";
+			    flags.offset_format = "7lu";
 			    break;
 			case 'a':
 			    flags.all_sections = TRUE;
@@ -284,6 +284,9 @@ char **envp)
 	else{
 	    find(UINT_MAX, &flags);
 	}
+	/* rdar://problem/89146917 - error check stdout for conformance. */
+	if(ferror(stdout) != 0 || fflush(stdout) != 0)
+	    error("failed to flush output");
 	if(errors == 0)
 	    return(EXIT_SUCCESS);
 	else
@@ -465,6 +468,26 @@ void *cookie)
 }
 
 /*
+ * print_offsets prints the offset in the file with the correct format.
+ */
+static
+void
+print_offsets(
+uint64_t offset,
+const char* format)
+{
+    uint64_t fmt_len;
+    fmt_len = strlen(format);
+    if (strncmp(format, "d", fmt_len) == 0)
+        printf("%lld", offset);
+    else if (strncmp(format, "o", fmt_len) == 0)
+        printf("%llo", offset);
+    else if (strncmp(format, "x", fmt_len) == 0)
+        printf("%llx", offset);
+    else if (strncmp(format, "7lu", fmt_len) == 0)
+        printf("%7llu", offset);
+}
+/*
  * ofile_find is used by ofile_processor() to find strings in part of a ofile
  * that is memory at addr for size.  offset is the offset in the file to this
  * data for use when printing offsets.
@@ -487,7 +510,7 @@ struct flags *flags)
 	    if(c == '\n' || dirt(c) || i == size - 1){
 		if(string_length >= flags->minimum_length){
 		    if(flags->print_offsets){
-			printf(flags->offset_format, offset + (string - addr));
+			print_offsets(offset + (string - addr), flags->offset_format);
 			printf(" ");
 		    }
 		    if(i == size - 1 && c != '\n')
@@ -531,8 +554,7 @@ struct flags *flags)
 			*cp++ = 0;
 			if (cp > &buf[flags->minimum_length]) {
 				if (flags->print_offsets == TRUE){
-					printf(flags->offset_format,
-					       i - cc);
+					print_offsets(i - cc, flags->offset_format);
 					printf(" ");
 				}
 				printf("%s\n", buf);

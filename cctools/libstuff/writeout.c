@@ -383,7 +383,7 @@ enum bool deterministic,
 enum bool *seen_archive)
 {
     uint32_t i, j, k, pad, size;
-    uint64_t file_size, offset;
+    uint64_t file_size, offset, full_size;
     uint32_t i32;
     uint64_t i64;
     enum byte_sex target_byte_sex, host_byte_sex;
@@ -482,10 +482,17 @@ enum bool *seen_archive)
 		}
 	    }
 	    else if(archs[i].type == OFILE_Mach_O){
-		size = archs[i].object->object_size
-		       - archs[i].object->input_sym_info_size
-		       + archs[i].object->output_new_content_size
-		       + archs[i].object->output_sym_info_size;
+            full_size = (uint64_t)archs[i].object->object_size
+                      - (uint64_t)archs[i].object->input_sym_info_size
+                      + (uint64_t)archs[i].object->output_new_content_size
+                      + (uint64_t)archs[i].object->output_sym_info_size;
+            if(full_size > UINT_MAX){
+            error("file too large to create because the size "
+                  "of output for file %s exceeds 32-bits ",
+                  archs[i].file_name);
+            return;
+            }
+            size = (uint32_t)full_size;
 		if(archs[i].fat_arch64 != NULL)
 		    file_size = rnd(file_size, 1 << archs[i].fat_arch64->align);
 		else if(archs[i].fat_arch != NULL)
@@ -1063,6 +1070,12 @@ struct object *object)
 			   object->output_data_in_code_info_data_size);
 		*size += object->output_data_in_code_info_data_size;
 	    }
+		if(object->output_atom_info_data_size != 0){
+		if(object->output_atom_info_data != NULL)
+			memcpy(p + *size, object->output_atom_info_data,
+			   object->output_atom_info_data_size);
+		*size += object->output_atom_info_data_size;
+		}
 	    if(object->output_code_sign_drs_info_data_size != 0){
 		if(object->output_code_sign_drs_info_data != NULL)
 		    memcpy(p + *size, object->output_code_sign_drs_info_data,
@@ -1135,6 +1148,12 @@ struct object *object)
 			   object->output_data_in_code_info_data_size);
 		*size += object->output_data_in_code_info_data_size;
 	    }
+		if(object->output_atom_info_data_size != 0){
+		if(object->output_atom_info_data != NULL)
+			memcpy(p + *size, object->output_atom_info_data,
+			   object->output_atom_info_data_size);
+		*size += object->output_atom_info_data_size;
+		}
 	    if(object->output_link_opt_hint_info_data_size != 0){
 		if(object->output_link_opt_hint_info_data != NULL)
 		    memcpy(p + *size, object->output_link_opt_hint_info_data,
@@ -1886,6 +1905,7 @@ struct object* object)
     object->split_info_cmd = NULL;
     object->func_starts_info_cmd = NULL;
     object->data_in_code_cmd = NULL;
+    object->atom_info_cmd = NULL;
     object->code_sign_drs_cmd = NULL;
     object->link_opt_hint_cmd = NULL;
     object->dyld_info = NULL;
@@ -1943,6 +1963,10 @@ struct object* object)
 	    case LC_DATA_IN_CODE:
 		object->data_in_code_cmd =
 		    (struct linkedit_data_command *)lc;
+		break;
+		case LC_ATOM_INFO:
+		object->atom_info_cmd =
+			(struct linkedit_data_command *)lc;
 		break;
 	    case LC_DYLIB_CODE_SIGN_DRS:
 		object->code_sign_drs_cmd =

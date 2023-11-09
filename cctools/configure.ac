@@ -1,4 +1,4 @@
-AC_INIT([cctools], [986], [t.poechtrager@gmail.com])
+AC_INIT([cctools], [1009.2], [t.poechtrager@gmail.com])
 
 AC_CANONICAL_BUILD
 AC_CANONICAL_HOST
@@ -502,7 +502,7 @@ AC_CONFIG_FILES([as/ppc/Makefile])
 AC_CONFIG_FILES([as/ppc64/Makefile])
 AC_CONFIG_FILES([man/Makefile])
 AC_CONFIG_FILES([misc/Makefile])
-AC_CONFIG_FILES([otool/Makefile])
+AC_CONFIG_FILES([otool-wrapper/Makefile])
 AC_CONFIG_FILES([efitools/Makefile])
 AC_CONFIG_FILES([ld64/Makefile])
 AC_CONFIG_FILES([ld64/doc/man/Makefile])

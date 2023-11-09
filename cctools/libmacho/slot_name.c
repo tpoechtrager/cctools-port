@@ -45,6 +45,9 @@
 #include <mach-o/arch.h>
 #include <stddef.h>
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+
 /*
  *     Convert the specified cpu_type/cpu_subtype pair to their
  *     human readable form.
@@ -62,3 +65,5 @@ char **cpu_subname)
         *cpu_name = name;
         *cpu_subname = subname;
 }
+
+#pragma clang diagnostic pop

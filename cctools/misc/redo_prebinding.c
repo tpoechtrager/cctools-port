@@ -5476,10 +5476,15 @@ enum bool missing_arch)
 		sizeof(struct twolevel_hint);
 	}
 
-	if(arch->object->split_info_cmd != NULL){
-	    sym_info_size +=
-		arch->object->split_info_cmd->datasize;
-	}
+    if(arch->object->split_info_cmd != NULL){
+        sym_info_size +=
+        arch->object->split_info_cmd->datasize;
+    }
+
+    if(arch->object->atom_info_cmd != NULL){
+        sym_info_size +=
+        arch->object->atom_info_cmd->datasize;
+    }
 
 	if(arch->object->func_starts_info_cmd != NULL){
 	    sym_info_size +=
@@ -5552,8 +5557,14 @@ enum bool missing_arch)
 	if(arch->object->split_info_cmd != NULL){
 	    arch->object->output_split_info_data = arch->object->object_addr +
 		arch->object->split_info_cmd->dataoff;
-	    arch->object->output_split_info_data_size = 
+	    arch->object->output_split_info_data_size =
 		arch->object->split_info_cmd->datasize;
+	}
+	if(arch->object->atom_info_cmd != NULL){
+	    arch->object->output_atom_info_data = arch->object->object_addr +
+		arch->object->atom_info_cmd->dataoff;
+	    arch->object->output_atom_info_data_size =
+		arch->object->atom_info_cmd->datasize;
 	}
 	if(arch->object->func_starts_info_cmd != NULL){
 	    arch->object->output_func_start_info_data =

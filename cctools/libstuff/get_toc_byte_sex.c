@@ -46,6 +46,7 @@ uint64_t size)
      uint32_t ar_name_size;
      struct ar_hdr *ar_hdr;
      char *p;
+     uint64_t ar_size;
 
 	ar_hdr = (struct ar_hdr *)(addr + SARMAG);
 
@@ -66,7 +67,10 @@ uint64_t size)
 		    magic == SWAP_INT(MH_MAGIC_64))
 		return(get_host_byte_sex() == BIG_ENDIAN_BYTE_SEX ?
 		       LITTLE_ENDIAN_BYTE_SEX : BIG_ENDIAN_BYTE_SEX);
-	    p += rnd(strtoul(ar_hdr->ar_size, NULL, 10), sizeof(short));
+        ar_size = strtoul(ar_hdr->ar_size, NULL, 10);
+        if (ar_size > size)
+          return (UNKNOWN_BYTE_SEX);
+        p += rnd(ar_size, sizeof(short));
 	}
 	return(UNKNOWN_BYTE_SEX);
 }

@@ -5,6 +5,7 @@
 #include <sys/file.h>
 #include <dlfcn.h>
 #include <stdint.h> /* cctools-port */
+#include <stdbool.h> /* cctools-port */
 #include "llvm-c/Disassembler.h"
 #include "stuff/llvm.h"
 #include "stuff/allocate.h"
@@ -265,4 +266,34 @@ llvm_disasm_version_string(void)
 	if(version == NULL)
 	    return(NULL);
 	return(version());
+}
+
+/*
+ * GetOpInfo added an extra parameter after clang-1403. Parse the version string
+ * to see if we should provide the new or old callback.
+ */
+__private_extern__
+int
+llvm_disasm_new_getopinfo_abi(void)
+{
+	const char *VersionStr = llvm_disasm_version_string();
+
+	// LTO is not an Apple-built one, most likely a developer's own just
+	// compiled and so new.
+	if (!VersionStr)
+	    return true;
+
+	const char *VersionPos = strstr(VersionStr, "clang-");
+
+	if (!VersionPos)
+	    return true;
+
+	VersionPos += strlen("clang-");
+	char *EndPtr;
+	long Version = strtol(VersionPos, &EndPtr, 10);
+
+	if (EndPtr == VersionPos)
+	    return true;
+
+	return Version > 1403;
 }

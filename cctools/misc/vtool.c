@@ -141,7 +141,8 @@ static void print_source_version_command(struct source_version_command *sv);
 static uint32_t tool_id_for_name(const char* name);
 static const char* tool_name_for_id(uint32_t tool_id);
 
-static void usage(const char * __restrict format, ...);
+static void usage(const char * __restrict format, ...)
+            __attribute__((format(printf, 1, 2)));
 
 int main(int argc, const char * argv[])
 {
@@ -362,7 +363,7 @@ int main(int argc, const char * argv[])
 		}
 		
 		if (parse_version_xyz(*argv, &item->version)) {
-		    usage("bad version: %s", gProgramName, *argv);
+		    usage("bad version: %s", gProgramName);
 		}
 	    }
 
@@ -414,7 +415,7 @@ int main(int argc, const char * argv[])
 		}
 		
 		if (parse_version_xyz(*argv, &item->version)) {
-		    usage("bad min_version: %s", gProgramName, *argv);
+		    usage("bad min_version: %s", gProgramName);
 		}
 		argv++; argc--;
 		
@@ -424,7 +425,7 @@ int main(int argc, const char * argv[])
 		}
 		
 		if (parse_version_xyz(*argv, &item->sdk_vers)) {
-		    usage("bad sdk_version: %s", gProgramName, *argv);
+		    usage("bad sdk_version: %s", gProgramName);
 		}
 		
 		while (*(argv + 1) && 0 == strcmp("-tool", *(argv + 1)))
@@ -467,7 +468,7 @@ int main(int argc, const char * argv[])
 		    }
 		    
 		    if (parse_version_xyz(*argv, &item->version)) {
-			usage("bad version: %s", gProgramName, *argv);
+			usage("bad version: %s", gProgramName);
 		    }
 		} // 0 == strcmp("tool", *(argv + 1))
 	    } // if -set-build-version || -set-version-min
@@ -499,7 +500,7 @@ int main(int argc, const char * argv[])
 		}
 		
 		if (parse_version_abcde(*argv, &item->src_vers)) {
-		    usage("bad version: %s", gProgramName, *argv);
+		    usage("bad version: %s", gProgramName);
 		}
 	    } // -set-source-version
 	    else if (0 == strcmp("-show", *argv) ||
@@ -890,9 +891,10 @@ int command_remove(struct file* fb)
 	    {
 		struct section* sc = (struct section*)
 		(((unsigned char*)(sg+1)) + isect * sizeof(*sc));
-		if (sc->flags & S_ZEROFILL)
+                uint32_t type = sc->flags & SECTION_TYPE;
+		if (type == S_ZEROFILL)
 		    continue;
-		if (sc->flags & S_THREAD_LOCAL_ZEROFILL)
+		if (type == S_THREAD_LOCAL_ZEROFILL)
 		    continue;
 		if (sc->offset < sectoffset)
 		    sectoffset = sc->offset;
@@ -906,9 +908,10 @@ int command_remove(struct file* fb)
 	    {
 		struct section_64* sc = (struct section_64*)
 		(((unsigned char*)(sg+1)) + isect * sizeof(*sc));
-		if (sc->flags & S_ZEROFILL)
+                uint32_t type = sc->flags & SECTION_TYPE;
+		if (type == S_ZEROFILL)
 		    continue;
-		if (sc->flags & S_THREAD_LOCAL_ZEROFILL)
+		if (type == S_THREAD_LOCAL_ZEROFILL)
 		    continue;
 		if (sc->offset < sectoffset)
 		    sectoffset = sc->offset;
@@ -2635,6 +2638,8 @@ static const struct platform_entry kPlatforms[] = {
     { PLATFORM_IOSSIMULATOR,        "iossim",       0 },
     { PLATFORM_WATCHOSSIMULATOR,    "watchossim",   0 },
     { PLATFORM_DRIVERKIT,           "driverkit",    0 },
+    { PLATFORM_FIRMWARE,            "firmware",     0 },
+    { PLATFORM_SEPOS,               "sepos",        0 },
 };
 
 /*
@@ -2803,6 +2808,12 @@ void print_build_version_command(struct build_version_command *bv)
 	case PLATFORM_DRIVERKIT:
 	    printf("DRIVERKIT\n");
 	    break;
+	case PLATFORM_FIRMWARE:
+	    printf("FIRMWARE\n");
+	    break;
+	case PLATFORM_SEPOS:
+	    printf("SEPOS\n");
+	    break;
 	default:
 	    printf("%u\n", bv->platform);
 	    break;
@@ -2876,6 +2887,7 @@ static const struct tool_entry kTools[] = {
     { TOOL_CLANG,	"clang" },
     { TOOL_SWIFT,	"swift" },
     { TOOL_LD,		"ld" },
+    { TOOL_LLD,		"lld" },
 };
 
 /*

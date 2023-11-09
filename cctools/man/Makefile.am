@@ -46,5 +46,4 @@ dist_man_MANS += seg_addr_table.1
 dist_man_MANS += check_dylib.1
 dist_man_MANS += mtoc.1
 dist_man_MANS += NSObjectFileImage_priv.3
-dist_man_MANS += libsyminfo.3
 dist_man_MANS += redo_prebinding.3

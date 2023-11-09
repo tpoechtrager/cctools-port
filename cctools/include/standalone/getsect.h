@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 2019 Apple Computer, Inc. All rights reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -20,18 +20,27 @@
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
-#if defined(__MWERKS__) && !defined(__private_extern__)
-#define __private_extern__ __declspec(private_extern)
-#endif
+#ifndef _MACH_O_GETSECT_H_
+#define _MACH_O_GETSECT_H_
 
-#import <stdarg.h>
+#include <stdint.h>
+#include <mach-o/loader.h>
 
-__private_extern__ void print(
-    const char *format, ...)
-#ifdef __GNUC__
-    __attribute__ ((format (printf, 1, 2)))
-#endif
-    ;
-__private_extern__ void vprint(
-    const char *format, va_list ap)
-    __attribute__((format(printf, 1, 0)));
+#ifdef __cplusplus
+extern "C" {
+#endif /* __cplusplus */
+
+extern uint8_t *getsectiondata(const struct mach_header_64 *mhp,
+                               const char *segname,
+                               const char *sectname,
+                               unsigned long *size);
+
+extern uint8_t *getsegmentdata(const struct mach_header_64 *mhp,
+                               const char *segname,
+                               unsigned long *size);
+
+#ifdef __cplusplus
+}
+#endif /* __cplusplus */
+
+#endif /* _MACH_O_GETSECT_H_ */

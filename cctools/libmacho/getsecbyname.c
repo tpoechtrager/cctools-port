@@ -29,7 +29,7 @@
 #ifdef __DYNAMIC__
 #include <mach-o/dyld.h> /* defines _dyld_lookup_and_bind() */
 #endif /* defined(__DYNAMIC__) */
-#ifndef __OPENSTEP__
+#if !defined(__OPENSTEP__) && __has_include(<crt_externs.h>)
 #include <crt_externs.h>
 #else /* defined(__OPENSTEP__) */
 
@@ -50,6 +50,9 @@ if ( var ## _pointer == NULL) {				\
 #define USE_VAR(var) (* var ## _pointer)
 #endif
 #endif /* __OPENSTEP__ */
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
 
 #ifndef CCTB_DRIVERKIT_ENABLED
 
@@ -326,58 +329,64 @@ unsigned long *size)
  * section in the named segment if it exists in the image pointed to by the
  * mach header.  Otherwise it returns zero.
  */
-#ifndef __LP64__
-
-uint8_t * 
+uint8_t*
 getsectiondata(
-const struct mach_header *mhp,
-const char *segname,
-const char *sectname,
-unsigned long *size)
+#if __LP64__
+  const struct mach_header_64* mh,
+#else
+  const struct mach_header* mh,
+#endif
+  const char* segname, const char* sectname, unsigned long* size)
 {
-    struct segment_command *sgp;
-    struct section *sp;
-    uint32_t i, j;
-    intptr_t slide;
-    
-	slide = 0;
-	sp = 0;
-	sgp = (struct segment_command *)
-	      ((char *)mhp + sizeof(struct mach_header));
-	for(i = 0; i < mhp->ncmds; i++){
-	    if(sgp->cmd == LC_SEGMENT){
-		if(strcmp(sgp->segname, "__TEXT") == 0){
-		    slide = (uintptr_t)mhp - sgp->vmaddr;
-		}
-		if(strncmp(sgp->segname, segname, sizeof(sgp->segname)) == 0){
-		    sp = (struct section *)((char *)sgp +
-			 sizeof(struct segment_command));
-		    for(j = 0; j < sgp->nsects; j++){
-			if(strncmp(sp->sectname, sectname,
-			   sizeof(sp->sectname)) == 0 &&
-			   strncmp(sp->segname, segname,
-			   sizeof(sp->segname)) == 0){
-			    *size = sp->size;
-			    return((uint8_t *)(sp->addr) + slide);
-			}
-			sp = (struct section *)((char *)sp +
-			     sizeof(struct section));
-		    }
-		}
-	    }
-	    sgp = (struct segment_command *)((char *)sgp + sgp->cmdsize);
-	}
-	return(0);
+    unsigned startOffset = (mh->magic == MH_MAGIC_64) ? sizeof(struct mach_header_64) : sizeof(struct mach_header);
+    struct load_command* lc = (struct load_command*)((uint8_t*)mh + startOffset);
+    uintptr_t slide = 0;
+    for (int i=0; i < mh->ncmds; ++i){
+        if (lc->cmd == LC_SEGMENT_64) {
+            const struct segment_command_64* seg = (struct segment_command_64*)lc;
+            if (strcmp(seg->segname, "__TEXT") == 0) {
+                slide = (uintptr_t)mh - seg->vmaddr;
+            }
+            if (strncmp(seg->segname, segname, 16) == 0) {
+                const struct section_64* sect = (struct section_64*)((uint8_t*)seg + sizeof(struct segment_command_64));
+                for (int j = 0; j < seg->nsects; ++j){
+                    if ((strncmp(sect[j].sectname, sectname, 16) == 0) && (strncmp(sect[j].segname, segname, 16) == 0)) {
+                        *size = sect[j].size;
+                        uint8_t* result = (uint8_t*)(sect[j].addr + slide);
+                        return result;
+                    }
+                }
+            }
+        }
+        else if (lc->cmd == LC_SEGMENT) {
+            const struct segment_command* seg = (struct segment_command*)lc;
+            if (strcmp(seg->segname, "__TEXT") == 0) {
+                slide = (uintptr_t)mh - seg->vmaddr;
+            }
+            if (strncmp(seg->segname, segname, 16) == 0) {
+                const struct section* sect = (struct section*)((uint8_t*)seg + sizeof(struct segment_command));
+                for (int j = 0; j < seg->nsects; ++j){
+                    if ((strncmp(sect[j].sectname, sectname, 16) == 0) && (strncmp(sect[j].segname, segname, 16) == 0)) {
+                        *size = sect[j].size;
+                        return (uint8_t*)(sect[j].addr + slide);
+                    }
+                }
+            }
+        }
+        lc = (struct load_command*)((uint8_t*)lc + lc->cmdsize);
+    }
+    return NULL;
 }
 
-uint8_t * 
+#ifndef __LP64__
+uint8_t *
 getsegmentdata(
 const struct mach_header *mhp,
 const char *segname,
 unsigned long *size)
 {
     struct segment_command *sgp;
-    intptr_t slide;
+    uintptr_t slide;
     uint32_t i;
 
 	slide = 0;
@@ -400,47 +409,6 @@ unsigned long *size)
 
 #else /* defined(__LP64__) */
 
-uint8_t * 
-getsectiondata(
-const struct mach_header_64 *mhp,
-const char *segname,
-const char *sectname,
-unsigned long *size)
-{
-    struct segment_command_64 *sgp;
-    struct section_64 *sp;
-    uint32_t i, j;
-    intptr_t slide;
-    
-	slide = 0;
-	sp = 0;
-	sgp = (struct segment_command_64 *)
-	      ((char *)mhp + sizeof(struct mach_header_64));
-	for(i = 0; i < mhp->ncmds; i++){
-	    if(sgp->cmd == LC_SEGMENT_64){
-		if(strcmp(sgp->segname, "__TEXT") == 0){
-		    slide = (uintptr_t)mhp - sgp->vmaddr;
-		}
-		if(strncmp(sgp->segname, segname, sizeof(sgp->segname)) == 0){
-		    sp = (struct section_64 *)((char *)sgp +
-			 sizeof(struct segment_command_64));
-		    for(j = 0; j < sgp->nsects; j++){
-			if(strncmp(sp->sectname, sectname,
-			   sizeof(sp->sectname)) == 0 &&
-			   strncmp(sp->segname, segname,
-			   sizeof(sp->segname)) == 0){
-			    *size = sp->size;
-			    return((uint8_t *)(sp->addr) + slide);
-			}
-			sp = (struct section_64 *)((char *)sp +
-			     sizeof(struct section_64));
-		    }
-		}
-	    }
-	    sgp = (struct segment_command_64 *)((char *)sgp + sgp->cmdsize);
-	}
-	return(0);
-}
 
 uint8_t * 
 getsegmentdata(
@@ -576,4 +544,7 @@ unsigned long *size)
 }
 #endif /* __DYNAMIC__ */
 #endif /* !defined(CCTB_DRIVERKIT_ENABLED) */
+
+#pragma clang diagnostic pop
+
 #endif /* !defined(RLD) */

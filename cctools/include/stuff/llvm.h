@@ -31,4 +31,7 @@ __private_extern__ int llvm_disasm_set_options(
 __private_extern__ const char *llvm_disasm_version_string(
     void);
 
+__private_extern__ int llvm_disasm_new_getopinfo_abi(
+    void);
+
 #endif /* _STUFF_LLVM_H_ */
