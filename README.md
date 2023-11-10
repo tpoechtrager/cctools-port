@@ -33,8 +33,7 @@ Not all of the targets have been tested.
 
 `Clang 10+`  
 `libstdc++` or `libc++` with C++20 support; depending on what your compiler uses  
-`libdispatch-dev`  
-`libblocksruntime` (should be installed by the dispatch library)
+[`libdispatch-dev` and `libblocksruntime`](https://github.com/tpoechtrager/apple-libdispatch) (the runtime should be installed by the dispatch library)
 
 SDKs with .tdb stubs (>= Xcode 7) require the TAPI library to be installed.  
 => https://github.com/tpoechtrager/apple-libtapi
@@ -51,7 +50,6 @@ Optional, but recommended:
 `llvm-devel`               (For Link Time Optimization Support)  
 `uuid-devel`               (For ld64 `-random_uuid` Support)  
 `llvm-devel` + `xar-devel` (For ld64 `-bitcode_bundle` Support)  
-`libdispatch`              (For parallelism in ld64 / libcodedirectory.c)
 
 You can find xar [here](https://github.com/tpoechtrager/xar).  
 Do not install libxar-dev on Ubuntu, it's a different package.
