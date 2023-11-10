@@ -1693,8 +1693,13 @@ void __assert_rtn(const char* func, const char* file, int line, const char* fail
 
 // Override atexit() so that destructors don't get registered and we can call the
 // regular exit() instead of _exit()
-extern "C" int __cxa_atexit(void (*func) (void *), void * arg, void * dso_handle);
-int __cxa_atexit(void (*func) (void *), void * arg, void * dso_handle) throw() // ld64-port: a
+#ifndef __APPLE__ // ld64-port
+#define CXA_ATEXIT_THROW throw()
+#else
+#define CXA_ATEXIT_THROW throw()
+#endif
+extern "C" int __cxa_atexit(void (*func) (void *), void * arg, void * dso_handle) CXA_ATEXIT_THROW;
+int __cxa_atexit(void (*func) (void *), void * arg, void * dso_handle) CXA_ATEXIT_THROW
 {
 	return 0;
 }

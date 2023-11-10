@@ -347,7 +347,11 @@ File<A>::File(const uint8_t fileContent[], uint64_t fileLength, const char* pth,
 				continue;
 #endif
 			// don't instantiate bitcode files with -ObjC because instantiation has side effect of merging into LTO
-			if ( _loadMode == LibraryOptions::ArchiveLoadMode::forceLoad || !validLTOFile(p->content(), p->contentSize(), _objOpts) )
+			if ( _loadMode == LibraryOptions::ArchiveLoadMode::forceLoad 
+#ifdef LTO_SUPPORT
+			|| !validLTOFile(p->content(), p->contentSize(), _objOpts)
+#endif 
+			)
 				this->makeObjectFileForMember(p);
 		}
 	}

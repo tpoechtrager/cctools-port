@@ -27,7 +27,9 @@
 #include <assert.h>
 #include <uuid/uuid.h>
 #include <errno.h>
+#if !defined(__APPLE__) && __has_include(<malloc.h>)
 #include <malloc.h> // ld64-port
+#endif
 //#include <TargetConditionals.h> // ld64-port: commented
 
 #include <mach/machine.h>

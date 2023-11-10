@@ -1,9 +1,9 @@
 #ifndef APPLE_PRIVATE_OS_LOCK_WRAPPER_H
 #define APPLE_PRIVATE_OS_LOCK_WRAPPER_H
 
-#ifdef __APPLE__
+#if defined(__APPLE__) && __has_include_next(<os/lock_private.h>)
 // Include the original macOS header on macOS
-#include <os/lock_private.h>
+#include_next <os/lock_private.h>
 #else
 // Include the pthread header on Unix-like systems (Linux and BSD)
 #include <pthread.h>

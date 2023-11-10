@@ -31,10 +31,10 @@ Not all of the targets have been tested.
 
 ## DEPENDENCIES ##
 
-`Clang 3.4+` 
-
+`Clang 10+` 
+`libstdc++` or `libc++` with C++20 support; depending on what your compiler uses
 `libdispatch-dev`  
-`libblocksruntime-dev` (should be installed by the dispatch lib)
+`libblocksruntime` (should be installed by the dispatch library)
 
 SDKs with .tdb stubs (>= Xcode 7) require the TAPI library to be installed.  
 => https://github.com/tpoechtrager/apple-libtapi
