@@ -90,57 +90,6 @@ template <> bool File<x86>::useSimulatorVariant() { return true; }
 template <> bool File<x86_64>::useSimulatorVariant() { return true; }
 template <typename A> bool File<A>::useSimulatorVariant() { return false; }
 
-
-static ld::VersionSet mapPlatform(tapi::Platform platform, bool useSimulatorVariant) {
-	ld::VersionSet platforms;
-	switch (platform) {
-	case tapi::Platform::Unknown:
-		break;
-	case tapi::Platform::OSX:
-		platforms.insert(ld::Platform::macOS);
-		break;
-	case tapi::Platform::iOS:
-		if (useSimulatorVariant)
-			platforms.insert(ld::Platform::iOS_simulator);
-		else
-			platforms.insert(ld::Platform::iOS);
-		break;
-	case tapi::Platform::watchOS:
-		if (useSimulatorVariant)
-			platforms.insert(ld::Platform::watchOS_simulator);
-		else
-			platforms.insert(ld::Platform::watchOS);
-		break;
-	case tapi::Platform::tvOS:
-		if (useSimulatorVariant)
-			platforms.insert(ld::Platform::tvOS_simulator);
-		else
-			platforms.insert(ld::Platform::tvOS);
-		break;
-	#if ((TAPI_API_VERSION_MAJOR == 1 &&  TAPI_API_VERSION_MINOR >= 2) || (TAPI_API_VERSION_MAJOR > 1))
-	case tapi::Platform::bridgeOS:
-		platforms.insert(ld::Platform::bridgeOS);
-		break;
-	#endif
-	#if ((TAPI_API_VERSION_MAJOR == 1 &&  TAPI_API_VERSION_MINOR >= 4) || (TAPI_API_VERSION_MAJOR > 1))
-	case tapi::Platform::iOSMac:
-		platforms.insert(ld::Platform::iOSMac);
-		break;
-	case tapi::Platform::zippered:
-		platforms.insert(ld::Platform::macOS);
-		platforms.insert(ld::Platform::iOSMac);
-		break;
-	#endif
-	#if ((TAPI_API_VERSION_MAJOR == 1 &&  TAPI_API_VERSION_MINOR >= 5) || (TAPI_API_VERSION_MAJOR > 1))
-	case tapi::Platform::DriverKit:
-		platforms.insert(ld::Platform::driverKit);
-		break;
-	#endif
-	}
-
-	return platforms;
-}
-
 template <typename A>
 File<A>::File(const char* path, const uint8_t* fileContent, uint64_t fileLength, const Options *opts,
 		  time_t mTime, ld::File::Ordinal ord, bool linkingFlatNamespace,
@@ -152,6 +101,13 @@ File<A>::File(const char* path, const uint8_t* fileContent, uint64_t fileLength,
 : Base(strdup(path), mTime, ord, platforms, allowWeakImports, linkingFlatNamespace,
 	   hoistImplicitPublicDylibs, allowSimToMacOSX, addVers)
 {
+#if (TAPI_API_VERSION_MAJOR >= 1)
+	if(!tapi::APIVersion::isAtLeast(1,6))
+		throwf("unsupported libtapi API version '%i.%i'", tapi::APIVersion::getMajor(), tapi::APIVersion::getMinor());
+#else
+	#error "unsupported libtapi API version"
+#endif
+
 	std::unique_ptr<tapi::LinkerInterfaceFile> file;
 	std::string errorMessage;
 	__block uint32_t linkMinOSVersion = 0;
@@ -164,25 +120,16 @@ File<A>::File(const char* path, const uint8_t* fileContent, uint64_t fileLength,
 	});
 
 // <rdar://problem/29038544> Support $ld$weak symbols in .tbd files
-#if ((TAPI_API_VERSION_MAJOR == 1 &&  TAPI_API_VERSION_MINOR >= 3) || (TAPI_API_VERSION_MAJOR > 1))
-	// Check if the library supports the new create API.
-	if (tapi::APIVersion::isAtLeast(1, 3)) {
-		tapi::ParsingFlags flags = tapi::ParsingFlags::None;
-		if (enforceDylibSubtypesMatch)
-			flags |= tapi::ParsingFlags::ExactCpuSubType;
+	tapi::ParsingFlags flags = tapi::ParsingFlags::None;
+	if (enforceDylibSubtypesMatch)
+		flags |= tapi::ParsingFlags::ExactCpuSubType;
 
-		if (!allowWeakImports)
-			flags |= tapi::ParsingFlags::DisallowWeakImports;
+	if (!allowWeakImports)
+		flags |= tapi::ParsingFlags::DisallowWeakImports;
 
-		_interface = tapi::LinkerInterfaceFile::create(
-			path, cpuType, cpuSubType, flags,
-			tapi::PackedVersion32(linkMinOSVersion), errorMessage);
-	} else {
-		throwf("unsupported libtapi API version '%i.%i'", tapi::APIVersion::getMajor(), tapi::APIVersion::getMinor());
-	}
-#else
-	#error "unsupported libtapi API version"
-#endif
+	_interface = tapi::LinkerInterfaceFile::create(
+		path, cpuType, cpuSubType, flags,
+		tapi::PackedVersion32(linkMinOSVersion), errorMessage);
 
 	if (!_interface)
 		throw strdup(errorMessage.c_str());
@@ -253,14 +200,20 @@ void File<A>::init(tapi::LinkerInterfaceFile* file, const Options *opts, bool bu
 		this->_allowableClients.emplace_back(strdup(client.c_str()));
 
 	ld::VersionSet lcPlatforms;
-#if ((TAPI_API_VERSION_MAJOR == 1 &&  TAPI_API_VERSION_MINOR >= 6) || (TAPI_API_VERSION_MAJOR > 1))
-	if (tapi::APIVersion::isAtLeast(1, 6)) {
-		for (const auto &platform : file->getPlatformSet())
-			lcPlatforms.insert((ld::Platform)platform);
+#if (TAPI_API_VERSION_MAJOR == 2 && TAPI_API_VERSION_MINOR >= 2)
+	if (tapi::APIVersion::isAtLeast(2, 2)) {
+		for (const auto &rpath : file->rPaths())
+			this->_rpaths.emplace_back(rpath.c_str());
+		
+		for (const auto &[platform, minOS] : file->getPlatformsAndMinDeployment()) {
+			ld::PlatformVersion pv((ld::Platform)platform, minOS);
+			lcPlatforms.insert(pv);
+		}
 	} else
 #endif
 	{
-		lcPlatforms = mapPlatform(file->getPlatform(), useSimulatorVariant());
+		for (const auto &platform : file->getPlatformSet())
+			lcPlatforms.insert((ld::Platform)platform);
 	}
 
 	// check cross-linking

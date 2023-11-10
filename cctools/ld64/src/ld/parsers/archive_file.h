@@ -32,9 +32,7 @@ namespace archive {
 
 struct ParserOptions {
 	mach_o::relocatable::ParserOptions	objOpts;
-	bool								forceLoadThisArchive;
-	bool								forceLoadAll;
-	bool								forceLoadObjC;
+	LibraryOptions::ArchiveLoadMode		loadMode;
 	bool								objcABI2;
 	bool								verboseLoad;
 	bool								logAllFiles;

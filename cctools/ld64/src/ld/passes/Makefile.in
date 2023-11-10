@@ -113,7 +113,8 @@ am_libPasses_la_OBJECTS = libPasses_la-branch_island.lo \
 	libPasses_la-order.lo libPasses_la-tlvp.lo \
 	stubs/libPasses_la-stubs.lo libPasses_la-bitcode_bundle.lo \
 	libPasses_la-code_dedup.lo libPasses_la-thread_starts.lo \
-	libPasses_la-inits.lo libPasses_la-objc_constants.lo
+	libPasses_la-inits.lo libPasses_la-objc_constants.lo \
+	libPasses_la-objc_stubs.lo
 libPasses_la_OBJECTS = $(am_libPasses_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -377,7 +378,8 @@ libPasses_la_SOURCES = \
 	code_dedup.cpp \
 	thread_starts.cpp \
 	inits.cpp \
-	objc_constants.cpp
+	objc_constants.cpp \
+	objc_stubs.cpp
 
 all: all-am
 
@@ -495,6 +497,9 @@ libPasses_la-inits.lo: inits.cpp
 
 libPasses_la-objc_constants.lo: objc_constants.cpp
 	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libPasses_la_CXXFLAGS) $(CXXFLAGS) -c -o libPasses_la-objc_constants.lo `test -f 'objc_constants.cpp' || echo '$(srcdir)/'`objc_constants.cpp
+
+libPasses_la-objc_stubs.lo: objc_stubs.cpp
+	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libPasses_la_CXXFLAGS) $(CXXFLAGS) -c -o libPasses_la-objc_stubs.lo `test -f 'objc_stubs.cpp' || echo '$(srcdir)/'`objc_stubs.cpp
 
 mostlyclean-libtool:
 	-rm -f *.lo

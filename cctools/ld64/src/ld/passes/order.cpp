@@ -26,13 +26,15 @@
 #include <stdint.h>
 #include <math.h>
 #include <unistd.h>
-#include <dlfcn.h>
 #include <mach/machine.h>
+#include <dispatch/dispatch.h>
 
+#include <algorithm>
 #include <vector>
 #include <map>
 #include <set>
 #include <unordered_map>
+#include <span>
 
 #include "ld.hpp"
 #include "order.h"
@@ -69,6 +71,37 @@ namespace order {
 // given ordinal overrides.
 //
 
+static const Atom* targetOfAliasAtom(const Atom* atom, const Internal& state)
+{
+	for (ld::Fixup::iterator fit=atom->fixupsBegin(); fit != atom->fixupsEnd(); ++fit) {
+		if ( fit->kind == ld::Fixup::kindNoneFollowOn ) {
+			switch ( fit->binding ) {
+				case ld::Fixup::bindingsIndirectlyBound:
+					return state.indirectBindingTable[fit->u.bindingIndex];
+				case ld::Fixup::bindingDirectlyBound:
+					return fit->u.target;
+				default:
+					break;
+			}
+		}
+	}
+	return nullptr;
+}
+
+// calls targetOfAliasAtom() repeatedly to unfold the chain of alt atoms and find
+// the final, real target atom
+static const Atom* nestedTargetOfAliasAtom(const Atom* atom, const Internal& state)
+{
+	const Atom* target = targetOfAliasAtom(atom, state);
+	while ( target && target->isAlias() ) {
+		const Atom* nextTarget = targetOfAliasAtom(target, state);
+		if ( !nextTarget) return target;
+
+		target = nextTarget;
+	}
+	return target;
+}
+
 class Layout
 {
 public:
@@ -78,11 +111,33 @@ private:
 
 	class Comparer {
 	public:
-					Comparer(const Layout& l, ld::Internal& s) : _layout(l), _state(s) {}
-		bool		operator()(const ld::Atom* left, const ld::Atom* right);
+		        Comparer(const Layout& l) : _layout(l) {}
+		bool    operator()(const ld::Atom* left, const ld::Atom* right);
 	private:
 		const Layout&	_layout;
-		ld::Internal&	_state;
+	};
+
+	class AliasComparer
+	{
+	public:
+
+		AliasComparer(Comparer& comparer, ld::Internal& s, std::span<const Atom*> aliasAtoms): _comparer(&comparer)
+		{
+			_aliasToTarget.reserve(aliasAtoms.size());
+			// create an alias -> target lookup map, having to lookup target on each comparison has high overhead
+			for ( const Atom* alias : aliasAtoms ) {
+				assert(alias->isAlias());
+				if ( const Atom* target = nestedTargetOfAliasAtom(alias, s) )
+					_aliasToTarget.try_emplace(alias, target);
+			}
+		}
+
+		bool		operator()(const ld::Atom* left, const ld::Atom* right) const;
+
+	private:
+
+		Comparer*                     _comparer=nullptr;
+		Map<const Atom*, const Atom*> _aliasToTarget;
 	};
 				
 	typedef std::unordered_map<std::string_view, const ld::Atom*> NameToAtom;
@@ -115,10 +170,9 @@ private:
 bool Layout::_s_log = false;
 
 Layout::Layout(const Options& opts, ld::Internal& state)
-	: _options(opts), _state(state), _comparer(*this, state), _haveOrderFile(opts.orderedSymbolsCount() != 0)
+	: _options(opts), _state(state), _comparer(*this), _haveOrderFile(opts.orderedSymbolsCount() != 0)
 {
 }
-
 
 bool Layout::Comparer::operator()(const ld::Atom* left, const ld::Atom* right)
 {
@@ -163,52 +217,6 @@ bool Layout::Comparer::operator()(const ld::Atom* left, const ld::Atom* right)
 		return false;
 	if ( right->contentType() == ld::Atom::typeSectionEnd )
 		return true;
-
-	// aliases sort before their target
-	bool leftIsAlias = left->isAlias();
-	if ( leftIsAlias ) {
-		for (ld::Fixup::iterator fit=left->fixupsBegin(); fit != left->fixupsEnd(); ++fit) {
-			const ld::Atom* target = NULL;
-			if ( fit->kind == ld::Fixup::kindNoneFollowOn ) {
-				switch ( fit->binding ) {
-					case ld::Fixup::bindingsIndirectlyBound:
-						target = _state.indirectBindingTable[fit->u.bindingIndex];
-						break;
-					case ld::Fixup::bindingDirectlyBound:
-						target = fit->u.target;
-						break;
-                    default:
-                        break;   
-				}
-			    if ( target == right )
-					return true; // left already before right
-				left = target; // sort as if alias was its target
-				break;
-		    }
-		}
-	}
-	bool rightIsAlias = right->isAlias();
-    if ( rightIsAlias ) {
-        for (ld::Fixup::iterator fit=right->fixupsBegin(); fit != right->fixupsEnd(); ++fit) {
-			const ld::Atom* target = NULL;
-			if ( fit->kind == ld::Fixup::kindNoneFollowOn ) {
-				switch ( fit->binding ) {
-					case ld::Fixup::bindingsIndirectlyBound:
-						target = _state.indirectBindingTable[fit->u.bindingIndex];
-						break;
-					case ld::Fixup::bindingDirectlyBound:
-						target = fit->u.target;
-						break;
-                    default:
-                        break;   
-				}
-			    if ( target == left )
-                    return false; // need to swap, alias is after target
-				right = target; // continue with sort as if right was target
-                break;
-			}       
-		}
-    }
 
 	// the __common section can have real or tentative definitions
 	// we want the real ones to sort before tentative ones
@@ -257,14 +265,44 @@ bool Layout::Comparer::operator()(const ld::Atom* left, const ld::Atom* right)
 	// lastly sort by atom address
 	int64_t addrDiff = left->objectAddress() - right->objectAddress();
 	if ( addrDiff == 0 ) {
-		// have same address so one might be an alias, and aliases need to sort before target
-		if ( leftIsAlias != rightIsAlias )
-			return leftIsAlias;
-
 		// both at same address, sort by name
 		return left->getUserVisibleName() < right->getUserVisibleName();
 	}
 	return (addrDiff < 0);
+}
+
+bool Layout::AliasComparer::operator()(const ld::Atom* left, const ld::Atom* right) const
+{
+	// aliases sort before their target
+	bool        leftIsAlias = left->isAlias();
+	const Atom* leftAliasTarget = nullptr;
+	if ( leftIsAlias ) {
+		auto it = _aliasToTarget.find(left);
+		leftAliasTarget = it != _aliasToTarget.end() ? it->second : nullptr;
+		// aliases have no content and must be located at the same address as their targets
+		if ( leftAliasTarget == right )
+			return true;
+	}
+
+	bool        rightIsAlias = right->isAlias();
+	const Atom* rightAliasTarget = nullptr;
+	if ( rightIsAlias ) {
+		auto it = _aliasToTarget.find(right);
+		rightAliasTarget = it != _aliasToTarget.end() ? it->second : nullptr;
+		// need to swap, alias must be before its target
+		if ( rightAliasTarget == left )
+			return false;
+	}
+	// same alias target, sort them by name
+	if ( leftAliasTarget && leftAliasTarget == rightAliasTarget )
+		return left->getUserVisibleName() < right->getUserVisibleName();
+	// when comparing alias atoms relative to other atoms then order them relative to the alias target
+	if ( leftAliasTarget )
+		left = leftAliasTarget;
+	if ( rightAliasTarget )
+		right = rightAliasTarget;
+
+	return (*_comparer)(left, right);
 }
 
 bool Layout::matchesObjectFile(const ld::Atom* atom, const char* objectFileLeafName)
@@ -591,10 +629,6 @@ void Layout::buildOrdinalOverrideMap()
 						break;
 				}
 			}
-			// update atom-to-section map
-			for (std::set<const ld::Atom*>::iterator it=moveToData.begin(); it != moveToData.end(); ++it) {
-				_state.atomToSection[*it] = dataSect;
-			}
 		}
 	}
 
@@ -621,8 +655,10 @@ void Layout::doPass()
 	this->buildOrdinalOverrideMap();
 
 	// sort atoms in each section
-	for (std::vector<ld::Internal::FinalSection*>::iterator sit=_state.sections.begin(); sit != _state.sections.end(); ++sit) {
-		ld::Internal::FinalSection* sect = *sit;
+	dispatch_apply(_state.sections.size(), DISPATCH_APPLY_AUTO, ^(size_t index) {
+		ld::Internal::FinalSection* sect = _state.sections[index];
+
+		bool needsSort = true;
 		switch ( sect->type() ) {
 			case ld::Section::typeTempAlias:
 			case ld::Section::typeStub:
@@ -631,13 +667,41 @@ void Layout::doPass()
 			case ld::Section::typeStubClose:
 			case ld::Section::typeNonLazyPointer:
 				// these sections are already sorted by pass that created them
+				needsSort = false;
+				break;
+			case ld::Section::typeCStringPointer:
+				// sel ref section already sorted by name by objc pass
+				if ( strcmp(sect->sectionName(), "__objc_selrefs") == 0 )
+					needsSort = false;
+				break;
+			case ld::Section::typeNonStdCString:
+				// sel names section already sorted by name by objc pass
+				if ( strcmp(sect->sectionName(), "__objc_methname") == 0 )
+					needsSort = false;
 				break;
 			default:
-				if ( log ) fprintf(stderr, "sorting section %s\n", sect->sectionName());
-				std::sort(sect->atoms.begin(), sect->atoms.end(), _comparer);
 				break;
 		}
-	}
+
+		if ( needsSort ) {
+			if ( log ) fprintf(stderr, "sorting section %s\n", sect->sectionName());
+
+			// split atoms into regular and alias
+			auto aliasIt = std::stable_partition(sect->atoms.begin(), sect->atoms.end(), [](const Atom* a) {
+					return !a->isAlias();
+			});
+			// sort regular atoms at [sect.begin, aliasIt) range
+			std::sort(sect->atoms.begin(), aliasIt, _comparer);
+
+			if ( aliasIt != sect->atoms.end() ) {
+				AliasComparer aliasCmp(_comparer, _state, std::span(aliasIt.base(), sect->atoms.end().base()));
+				// sort aliases relatively to each other
+				std::sort(aliasIt, sect->atoms.end(), aliasCmp);
+				// use inplace merge to merge sorted ranges of regular and alias atoms
+				std::inplace_merge(sect->atoms.begin(), aliasIt, sect->atoms.end(), aliasCmp);
+			}
+		}
+	});
 
 	if ( log ) {
 		fprintf(stderr, "Sorted atoms:\n");

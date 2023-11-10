@@ -28,6 +28,7 @@
 #include <unistd.h>
 #include <dlfcn.h>
 #include <mach/machine.h>
+#include <dispatch/dispatch.h>
 
 #include <vector>
 #include <map>
@@ -253,13 +254,13 @@ void doPass(const Options& opts, ld::Internal& state)
 {
 	const bool log = false;
 	
-	// only de-duplicate in final linked images
-	if ( opts.outputKind() == Options::kObjectFile )
-		return;
+    // only de-duplicate in final linked images
+    if ( opts.outputKind() == Options::kObjectFile )
+        return;
 
-	// only de-duplicate for architectures that use relocations that don't store bits in instructions
-	if ( (opts.architecture() != CPU_TYPE_ARM64) && (opts.architecture() != CPU_TYPE_X86_64) )
-		return;
+	  // only de-duplicate for architectures that use relocations that don't store bits in instructions
+    if ( (opts.architecture() != CPU_TYPE_ARM64) && (opts.architecture() != CPU_TYPE_X86_64) )
+        return;
 
     // support -no_deduplicate to suppress this pass
     if ( ! opts.deduplicateFunctions() )
@@ -290,7 +291,7 @@ void doPass(const Options& opts, ld::Internal& state)
             continue;
         if ( atom->autoHide() )
             map[atom].push_back(atom);
-	}
+	  }
 
     if ( log ) {
         for (auto& entry : map) {
@@ -321,19 +322,16 @@ void doPass(const Options& opts, ld::Internal& state)
             dedupSavings += ((dups.size() - 1) * masterAtom->size());
             fprintf(stderr, "deduplicate the following %lu functions (%llu bytes apiece):\n", dups.size(), masterAtom->size());
         }
+
         for (const ld::Atom* dupAtom : dups) {
             if ( verbose )
                 fprintf(stderr, "    %s\n", dupAtom->name());
             if ( dupAtom == masterAtom )
                 continue;
             const ld::Atom* aliasAtom = new DeDupAliasAtom(dupAtom, masterAtom);
-            auto pos = std::find(textAtoms.begin(), textAtoms.end(), masterAtom);
-            if ( pos != textAtoms.end() ) {
-                textAtoms.insert(pos, aliasAtom);
-                state.atomToSection[aliasAtom] = textSection;
-                replacementMap[dupAtom] = aliasAtom;
-                (const_cast<ld::Atom*>(dupAtom))->setCoalescedAway();
-            }
+            textAtoms.push_back(aliasAtom);
+            replacementMap[dupAtom] = aliasAtom;
+            (const_cast<ld::Atom*>(dupAtom))->setCoalescedAway();
         }
     }
     if ( verbose )  {
@@ -347,10 +345,11 @@ void doPass(const Options& opts, ld::Internal& state)
     }
 
     // walk all atoms and replace references to dups with references to alias
-    for (ld::Internal::FinalSection* sect : state.sections) {
-        for (const ld::Atom* atom : sect->atoms) {
-			for (ld::Fixup::iterator fit = atom->fixupsBegin(), end=atom->fixupsEnd(); fit != end; ++fit) {
-                std::unordered_map<const ld::Atom*, const ld::Atom*>::iterator pos;
+    // the replacement map is now read only so this can be done concurrently for all sections
+    dispatch_apply(state.sections.size(), DISPATCH_APPLY_AUTO, ^(size_t index) {
+        for (const ld::Atom* atom : state.sections[index]->atoms) {
+            for (ld::Fixup::iterator fit = atom->fixupsBegin(), end=atom->fixupsEnd(); fit != end; ++fit) {
+                std::unordered_map<const ld::Atom*, const ld::Atom*>::const_iterator pos;
                 switch ( fit->binding ) {
                     case ld::Fixup::bindingsIndirectlyBound:
                         pos = replacementMap.find(state.indirectBindingTable[fit->u.bindingIndex]);
@@ -365,9 +364,9 @@ void doPass(const Options& opts, ld::Internal& state)
                     default:
                         break;
                 }
-			}
+            }
         }
-    }
+    });
 
     if ( log ) {
         fprintf(stderr, "atoms before pruning:\n");
@@ -375,14 +374,11 @@ void doPass(const Options& opts, ld::Internal& state)
             fprintf(stderr, "  %p (size=%llu) %s\n", atom, atom->size(), atom->name());
     }
     // remove replaced atoms from section
-	textSection->atoms.erase(std::remove_if(textSection->atoms.begin(), textSection->atoms.end(),
+    textSection->atoms.erase(std::remove_if(textSection->atoms.begin(), textSection->atoms.end(),
                 [&](const ld::Atom* atom) {
                     return (replacementMap.count(atom) != 0);
                 }),
                 textSection->atoms.end());
-
-   for (auto& entry : replacementMap)
-        state.atomToSection.erase(entry.first);
 
     if ( log ) {
         fprintf(stderr, "atoms after pruning:\n");

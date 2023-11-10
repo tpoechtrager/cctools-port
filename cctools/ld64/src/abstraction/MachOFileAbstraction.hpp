@@ -79,6 +79,19 @@
 	#define N_COLD_FUNC 0x0400
 #endif
 
+enum 
+{
+    RISCV_RELOC_UNSIGNED       = 0,   // for simple pointers
+    RISCV_RELOC_SUBTRACTOR     = 1,   // must be followed by a RISCV_RELOC_UNSIGNED
+    RISCV_RELOC_BRANCH20       = 2,   // a JAL instruction with 20-bit displacement
+    RISCV_RELOC_HI20           = 3,   // an AUIPC or LUI which sets high 20 bits
+    RISCV_RELOC_LO12           = 4,   // an ADDI or LUI which sets high 20 bits
+    RISCV_RELOC_HI20_GOT       = 5,   // RISCV_RELOC_HI20 but to a GOT slot
+    RISCV_RELOC_LO12_GOT       = 6,   // RISCV_RELOC_LO12 but to a GOT slot
+    RISCV_RELOC_POINTER_TO_GOT = 7,   // used in __gcc_except_tab section for a 32-bit offset to GOT slot
+    RISCV_RELOC_ADDEND         = 8,   // sign extended, can used used before RISCV_RELOC_HI20, RISCV_RELOC_LO12, or RISCV_RELOC_BRANCH20
+};
+
 #if __has_include(<mach-o/fixup-chains.h>)
   #include <mach-o/fixup-chains.h>
 #else
@@ -365,6 +378,12 @@ struct dyld_chained_ptr_arm64e_auth_bind24
 	#define ARM64_RELOC_AUTHENTICATED_POINTER 11
 #endif
 
+#ifndef CPU_TYPE_RISCV32
+	#ifndef CPU_SUBTYPE_RISCV32_ALL
+		#define CPU_SUBTYPE_RISCV32_ALL	0
+	#endif
+	#define CPU_TYPE_RISCV32	24
+#endif
 
 #define UNW_ARM64_X0     0
 #define UNW_ARM64_X1     1
@@ -549,77 +568,79 @@ struct ArchInfo {
 	cpu_subtype_t		cpuSubType;
 	const char*			llvmTriplePrefix;
 	const char*			llvmTriplePrefixAlt;
-	bool				isSubType;
 	Thumb2Support		thumb2Support;
 };
 
 static const ArchInfo archInfoArray[] = {
 #if SUPPORT_ARCH_x86_64
-	{ "x86_64", CPU_TYPE_X86_64, CPU_SUBTYPE_X86_64_ALL, "x86_64-",  "", true, Thumb2Support::none },
+	{ "x86_64", CPU_TYPE_X86_64, CPU_SUBTYPE_X86_64_ALL, "x86_64-",  "", Thumb2Support::none },
 #endif
 #if SUPPORT_ARCH_x86_64h
-	{ "x86_64h", CPU_TYPE_X86_64, CPU_SUBTYPE_X86_64_H,	 "x86_64h-",  "", true, Thumb2Support::none },
+	{ "x86_64h", CPU_TYPE_X86_64, CPU_SUBTYPE_X86_64_H,	 "x86_64h-",  "", Thumb2Support::none },
 #endif
 #if SUPPORT_ARCH_i386
-	{ "i386",   CPU_TYPE_I386,   CPU_SUBTYPE_I386_ALL,   "i386-",    "", false, Thumb2Support::none },
+	{ "i386",   CPU_TYPE_I386,   CPU_SUBTYPE_I386_ALL,   "i386-",    "", Thumb2Support::none },
 #endif
 #if SUPPORT_ARCH_armv4t
-	{ "armv4t", CPU_TYPE_ARM,    CPU_SUBTYPE_ARM_V4T,    "armv4t-",  "", true,  Thumb2Support::none },
+	{ "armv4t", CPU_TYPE_ARM,    CPU_SUBTYPE_ARM_V4T,    "armv4t-",  "", Thumb2Support::none },
 	#define SUPPORT_ARCH_arm_any 1
 #endif
 #if SUPPORT_ARCH_armv5
-	{ "armv5", CPU_TYPE_ARM,     CPU_SUBTYPE_ARM_V5TEJ,  "armv5e-",  "", true,  Thumb2Support::none },
+	{ "armv5", CPU_TYPE_ARM,     CPU_SUBTYPE_ARM_V5TEJ,  "armv5e-",  "", Thumb2Support::none },
 	#define SUPPORT_ARCH_arm_any 1
 #endif
 #if SUPPORT_ARCH_armv6
-	{ "armv6", CPU_TYPE_ARM,     CPU_SUBTYPE_ARM_V6,     "armv6-",   "", true,  Thumb2Support::none },
+	{ "armv6", CPU_TYPE_ARM,     CPU_SUBTYPE_ARM_V6,     "armv6-",   "", Thumb2Support::none },
 	#define SUPPORT_ARCH_arm_any 1
 #endif
 #if SUPPORT_ARCH_armv7
-	{ "armv7", CPU_TYPE_ARM,     CPU_SUBTYPE_ARM_V7,     "thumbv7-", "armv7-", true,  Thumb2Support::all },
+	{ "armv7", CPU_TYPE_ARM,     CPU_SUBTYPE_ARM_V7,     "thumbv7-", "armv7-", Thumb2Support::all },
 	#define SUPPORT_ARCH_arm_any 1
 #endif
 #if SUPPORT_ARCH_armv7f
-	{ "armv7f", CPU_TYPE_ARM,    CPU_SUBTYPE_ARM_V7F,    "thumbv7f-", "", true,  Thumb2Support::all },
+	{ "armv7f", CPU_TYPE_ARM,    CPU_SUBTYPE_ARM_V7F,    "thumbv7f-", "", Thumb2Support::all },
 	#define SUPPORT_ARCH_arm_any 1
 #endif 
 #if SUPPORT_ARCH_armv7k
-	{ "armv7k", CPU_TYPE_ARM,    CPU_SUBTYPE_ARM_V7K,    "thumbv7k-", "", true,  Thumb2Support::all },
+	{ "armv7k", CPU_TYPE_ARM,    CPU_SUBTYPE_ARM_V7K,    "thumbv7k-", "",  Thumb2Support::all },
 	#define SUPPORT_ARCH_arm_any 1
 #endif
 #if SUPPORT_ARCH_armv7s
-	{ "armv7s", CPU_TYPE_ARM,    CPU_SUBTYPE_ARM_V7S,    "thumbv7s-", "armv7s", true,  Thumb2Support::all },
+	{ "armv7s", CPU_TYPE_ARM,    CPU_SUBTYPE_ARM_V7S,    "thumbv7s-", "armv7s",  Thumb2Support::all },
 	#define SUPPORT_ARCH_arm_any 1
 #endif
 #if SUPPORT_ARCH_armv6m
-	{ "armv6m", CPU_TYPE_ARM,    CPU_SUBTYPE_ARM_V6M,    "thumbv6m-", "", true,  Thumb2Support::branch24 },
+	{ "armv6m", CPU_TYPE_ARM,    CPU_SUBTYPE_ARM_V6M,    "thumbv6m-", "",  Thumb2Support::branch24 },
 	#define SUPPORT_ARCH_arm_any 1
 #endif
 #if SUPPORT_ARCH_armv7m
-	{ "armv7m", CPU_TYPE_ARM,    CPU_SUBTYPE_ARM_V7M,    "thumbv7m-", "armv7m", true,  Thumb2Support::all },
+	{ "armv7m", CPU_TYPE_ARM,    CPU_SUBTYPE_ARM_V7M,    "thumbv7m-", "armv7m", Thumb2Support::all },
 	#define SUPPORT_ARCH_arm_any 1
 #endif
 #if SUPPORT_ARCH_armv7em
-	{ "armv7em", CPU_TYPE_ARM,   CPU_SUBTYPE_ARM_V7EM,   "thumbv7em-", "armv7em", true, Thumb2Support::all },
+	{ "armv7em", CPU_TYPE_ARM,   CPU_SUBTYPE_ARM_V7EM,   "thumbv7em-", "armv7em", Thumb2Support::all },
 	#define SUPPORT_ARCH_arm_any 1
 #endif
 #if SUPPORT_ARCH_armv8
-	{ "armv8", CPU_TYPE_ARM,     CPU_SUBTYPE_ARM_V8,     "thumbv8-", "armv8", true,  Thumb2Support::all },
+	{ "armv8", CPU_TYPE_ARM,     CPU_SUBTYPE_ARM_V8,     "thumbv8-", "armv8", Thumb2Support::all },
 	#define SUPPORT_ARCH_arm_any 1
 #endif
 #if SUPPORT_ARCH_arm64
-	{ "arm64", CPU_TYPE_ARM64,   CPU_SUBTYPE_ARM64_ALL,  "arm64-",  "aarch64-",  true,  Thumb2Support::none },
+	{ "arm64", CPU_TYPE_ARM64,   CPU_SUBTYPE_ARM64_ALL,  "arm64-",  "aarch64-", Thumb2Support::none },
 #endif
 #if SUPPORT_ARCH_arm64e
-	{ "arm64e", CPU_TYPE_ARM64,   CPU_SUBTYPE_ARM64E,    "arm64e-",  "aarch64e-",  true,  Thumb2Support::none },
+	{ "arm64e", CPU_TYPE_ARM64,   CPU_SUBTYPE_ARM64E,    "arm64e-",  "aarch64e-", Thumb2Support::none },
 #endif
 #if SUPPORT_ARCH_arm64v8
-	{ "arm64v8", CPU_TYPE_ARM64, CPU_SUBTYPE_ARM64_V8,   "arm64v8-",  "aarch64-",   true,  Thumb2Support::none },
+	{ "arm64v8", CPU_TYPE_ARM64, CPU_SUBTYPE_ARM64_V8,   "arm64v8-",  "aarch64-", Thumb2Support::none },
 #endif
 #if SUPPORT_ARCH_arm64_32
-	{ "arm64_32", CPU_TYPE_ARM64_32,   CPU_SUBTYPE_ARM64_32_V8,  "arm64_32-",  "aarch64_32-",  true,  Thumb2Support::none },
+	{ "arm64_32", CPU_TYPE_ARM64_32,   CPU_SUBTYPE_ARM64_32_V8,  "arm64_32-",  "aarch64_32-", Thumb2Support::none },
 #endif
-	{ NULL, 0, 0, NULL, NULL, false, Thumb2Support::none }
+#if SUPPORT_ARCH_riscv
+	{ "riscv32", CPU_TYPE_RISCV32, CPU_SUBTYPE_RISCV32_ALL, "riscv32-", "", Thumb2Support::none },
+#endif
+	{ NULL, 0, 0, NULL, NULL, Thumb2Support::none }
 };
 
 

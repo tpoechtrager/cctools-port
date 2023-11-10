@@ -81,8 +81,12 @@ typedef struct mach_timespec	mach_timespec_t;
 #define CLOCK_ALARM_MINRES	4	/* minimum alarm resolution */
 #define CLOCK_ALARM_MAXRES	5	/* maximum alarm resolution */
 
-#define NSEC_PER_USEC	1000		/* nanoseconds per microsecond */
-#define USEC_PER_SEC	1000000		/* microseconds per second */
+#undef NSEC_PER_USEC
+#undef USEC_PER_SEC
+#undef NSEC_PER_SEC
+
+#define NSEC_PER_USEC   1000            /* nanoseconds per microsecond */
+#define USEC_PER_SEC    1000000         /* microseconds per second */
 #define NSEC_PER_SEC	1000000000	/* nanoseconds per second */
 
 #define BAD_MACH_TIMESPEC(t)						\

@@ -28,15 +28,15 @@
 #include <corecrypto/ccsha1.h>
 #include <corecrypto/ccsha2.h>
 #else
-#include "compat_corecrypto/ccdigest.h"
-#include "compat_corecrypto/ccsha1.h"
-#include "compat_corecrypto/ccsha2.h"
+#include "compat_corecrypto.h"
 #endif
 
 #define LIBCD_HAS_PLATFORM_VERSION 1
 #include "libcodedirectory.h"
 
 #define _libcd_err(msg, ...) _libcd_err_log("%s: " msg "\n", __func__, ##__VA_ARGS__)
+
+#define LIBCD_PARALLEL 1
 
 #if LIBCD_PARALLEL
 #include <dispatch/dispatch.h>

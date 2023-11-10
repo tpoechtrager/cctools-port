@@ -53,6 +53,7 @@ struct ParserOptions {
 	bool			internalSDK;
 	bool			forceHidden;
 	bool			platformMismatchesAreWarning;
+	bool			avoidMisalignedPointers;
 };
 
 extern ld::relocatable::File* parse(const uint8_t* fileContent, uint64_t fileLength, 

@@ -29,6 +29,7 @@
 #include <dlfcn.h>
 #include <libkern/OSByteOrder.h>
 
+#include <algorithm>
 #include <vector>
 #include <map>
 
@@ -282,7 +283,7 @@ static uint32_t countChains(ld::Internal& state, uint32_t pointerFormat) {
 			std::sort(atomFixupOffsets.begin(), atomFixupOffsets.end());
 			for (uint32_t offset : atomFixupOffsets ) {
 				uint64_t address = sAtomToAddress[atom] + offset;
-				//fprintf(stderr, "0x%llX fixup\n", address-0x7000);
+				//fprintf(stderr, "0x%llX fixup\n", address);
 				if ( prevFixupAddress == 0 ) {
 					++count;
 					//fprintf(stderr, "first chain start at: 0x%llX\n", address-0x7000);
@@ -304,6 +305,230 @@ static uint32_t countChains(ld::Internal& state, uint32_t pointerFormat) {
 }
 
 
+class RebaseRLEAtom : public ld::Atom {
+public:
+											RebaseRLEAtom(ld::Internal& state)
+											  : ld::Atom(_s_section, ld::Atom::definitionRegular, ld::Atom::combineNever,
+												ld::Atom::scopeLinkageUnit, ld::Atom::typeUnclassified,
+												symbolTableNotIn, false, false, false, ld::Atom::Alignment(2)),
+												_state(state), _size(0)
+											{
+											}
+
+	virtual const ld::File*					file() const					{ return nullptr; }
+	virtual const char*						name() const					{ return "rebase RLE"; }
+	virtual uint64_t						size() const					{ return _size; }
+	virtual uint64_t						objectAddress() const			{ return 0; }
+	virtual void							copyRawContent(uint8_t buffer[]) const;
+	virtual void							setScope(Scope)					{ }
+	virtual Fixup::iterator					fixupsBegin() const	{ return nullptr; }
+	virtual Fixup::iterator					fixupsEnd() const	{ return nullptr; }
+
+	void									encode(const std::vector<uint32_t>&) const;
+	void									gatherRebases(std::vector<uint32_t>&) const;
+	void									computeSize();
+
+private:
+	void  									makeRebaseRuns(ld::Internal::FinalSection* sect, std::vector<uint8_t>& runsContent) const;
+
+	ld::Internal& 							_state;
+	uint32_t								_size;
+
+	static ld::Section						_s_section;
+};
+
+ld::Section RebaseRLEAtom::_s_section("__TEXT", "__rebase_info", ld::Section::typeRebaseRLE);
+
+struct RebaseRuns
+{
+	uint32_t  startAddress;
+	uint8_t   runs[];   // value of even indexes is how many pointers in a row are rebases, value of odd indexes times 4 is memory to skip over
+						// two zero values in a row signals the end of the run
+};
+
+void RebaseRLEAtom::makeRebaseRuns(ld::Internal::FinalSection* sect, std::vector<uint8_t>& runsContent) const
+{
+	runsContent.clear();
+	uint32_t lastFixupAddress = 0;
+	int 	 count            = 0;
+	for (const ld::Atom* atom : sect->atoms) {
+		bool seenTarget         = false;
+		bool seenSubtractTarget = false;
+		bool isPointerStore     = false;
+		std::vector<uint32_t> atomFixupOffsets;
+		for (ld::Fixup::iterator fit = atom->fixupsBegin(), end=atom->fixupsEnd(); fit != end; ++fit) {
+			if ( fit->firstInCluster() ) {
+				seenTarget         = false;
+				seenSubtractTarget = false;
+				isPointerStore     = false;
+			}
+			if ( fit->setsTarget(false) )
+				seenTarget = true;
+			if ( fit->kind == ld::Fixup::kindSubtractTargetAddress )
+				seenSubtractTarget = true;
+			if ( fit->isStore() ) {
+				if ( (fit->kind == ld::Fixup::kindStoreLittleEndian32) || (fit->kind == ld::Fixup::kindStoreLittleEndian64) )
+					isPointerStore = true;
+				if ( (fit->kind == ld::Fixup::kindStoreTargetAddressLittleEndian32) || (fit->kind == ld::Fixup::kindStoreTargetAddressLittleEndian64) )
+					isPointerStore = true;
+			}
+			if ( fit->isPcRelStore(false) )
+				seenSubtractTarget = true;
+			if ( fit->lastInCluster() ) {
+				if ( seenTarget && !seenSubtractTarget && isPointerStore ) {
+					atomFixupOffsets.push_back(fit->offsetInAtom);
+				}
+			}
+		}
+		if ( !atomFixupOffsets.empty() ) {
+			std::sort(atomFixupOffsets.begin(), atomFixupOffsets.end());
+			for (uint32_t offsetInAtom : atomFixupOffsets ) {
+				uint32_t fixupAddress = (atom->finalAddressMode()
+										? atom->finalAddress() + offsetInAtom
+										: sect->address + atom->sectionOffset() + offsetInAtom);
+				if ( (fixupAddress % 4) != 0 )
+					throwf("misaligned pointer at 0x%08X in %s\n", fixupAddress, atom->name());
+				if ( runsContent.empty() ) {
+					runsContent.push_back(0); runsContent.push_back(0); runsContent.push_back(0); runsContent.push_back(0);
+					memcpy(&runsContent[0], &fixupAddress, sizeof(uint32_t));
+					count = 1;
+				}
+				else {
+					uint32_t delta = fixupAddress - lastFixupAddress;
+					if ( delta == 4 ) {
+						++count;
+					}
+					else {
+						// found gap, so end previous rebase run
+						// break large runs into 255 chunks
+						while ( count > 255 )  {
+							runsContent.push_back(255);
+							runsContent.push_back(0);
+							count -= 255;
+						}
+						runsContent.push_back(count);
+						// start a new run
+						count = 1;
+						if ( delta/4 > 255 ) {
+							// gap too large, start new run
+							// make sure existing run has 0x00 0x00 termination, then 4-byte align
+							if ( runsContent.size() > 4 ) {
+								if ( (runsContent[runsContent.size()-1] != 0) || (runsContent[runsContent.size()-2] != 0) ) {
+									runsContent.push_back(0);
+									runsContent.push_back(0);
+								}
+							}
+							while ( (runsContent.size() % 4) != 0 )
+								runsContent.push_back(0);
+							size_t curOffset = runsContent.size();
+							runsContent.push_back(0); runsContent.push_back(0); runsContent.push_back(0); runsContent.push_back(0);
+							memcpy(&runsContent[curOffset], &fixupAddress, sizeof(uint32_t));
+						}
+						else {
+							runsContent.push_back(delta/4);
+						}
+					}
+
+				}
+				lastFixupAddress = fixupAddress;
+			}
+		}
+	}
+	if ( count >= 1 ) {
+		// add last run
+		while ( count > 255 )  {
+			runsContent.push_back(255);
+			runsContent.push_back(0);
+			count -= 255;
+		}
+		runsContent.push_back(count);
+	}
+	// add terminator
+	if ( !runsContent.empty() ) {
+		runsContent.push_back(0);
+		runsContent.push_back(0);
+		while ( (runsContent.size() % 4) != 0 )
+			runsContent.push_back(0);
+	}
+}
+
+void RebaseRLEAtom::computeSize()
+{
+	_size = 0;
+	std::vector<uint8_t> runsContent;
+	for (ld::Internal::FinalSection* sect : _state.sections) {
+		if ( sect->isSectionHidden() )
+			continue;
+		runsContent.clear();
+		this->makeRebaseRuns(sect, runsContent);
+		_size += runsContent.size();
+		//fprintf(stderr, "computeSize: %s/%s size=0x%0lX, totalSize=0x%0X\n", sect->segmentName(), sect->sectionName(), runsContent.size(), _size);
+		//printf("");
+	}
+	//fprintf(stderr, "computeSize: total size=%d\n", _size);
+}
+
+void RebaseRLEAtom::copyRawContent(uint8_t buffer[]) const
+{
+	size_t offsetInBuffer = 0;
+	std::vector<uint8_t> runsContent;
+	for (ld::Internal::FinalSection* sect : _state.sections) {
+		if ( sect->isSectionHidden() )
+			continue;
+		runsContent.clear();
+		this->makeRebaseRuns(sect, runsContent);
+		size_t contentSize = runsContent.size();
+		memcpy(&buffer[offsetInBuffer], &runsContent[0], contentSize);
+		offsetInBuffer += contentSize;
+	}
+}
+
+void RebaseRLEAtom::gatherRebases(std::vector<uint32_t>& locations) const
+{
+	uint64_t prevFixupAddress = 0;
+	const char* prevFixupSegName = nullptr;
+	for (ld::Internal::FinalSection* sect : _state.sections) {
+		if ( sect->isSectionHidden() )
+			continue;
+		if ( (prevFixupSegName != nullptr) && (strcmp(prevFixupSegName, sect->segmentName()) != 0) )
+			prevFixupAddress = 0;
+		for (const ld::Atom* atom : sect->atoms) {
+			bool seenTarget = false;
+			bool seenSubtractTarget = false;
+			bool isPointerStore = false;
+			std::vector<uint32_t> atomFixupOffsets;
+			for (ld::Fixup::iterator fit = atom->fixupsBegin(), end=atom->fixupsEnd(); fit != end; ++fit) {
+				if ( fit->firstInCluster() ) {
+					seenTarget = false;
+					seenSubtractTarget = false;
+					isPointerStore = false;
+				}
+				if ( fit->setsTarget(false) )
+					seenTarget = true;
+				if ( fit->kind == ld::Fixup::kindSubtractTargetAddress )
+					seenSubtractTarget = true;
+				if ( fit->isStore() ) {
+					if ( (fit->kind == ld::Fixup::kindStoreLittleEndian32) || (fit->kind == ld::Fixup::kindStoreLittleEndian64) )
+						isPointerStore = true;
+					if ( (fit->kind == ld::Fixup::kindStoreTargetAddressLittleEndian32) || (fit->kind == ld::Fixup::kindStoreTargetAddressLittleEndian64) )
+						isPointerStore = true;
+				}
+				if ( fit->isPcRelStore(false) )
+					seenSubtractTarget = true;
+				if ( fit->lastInCluster() ) {
+					//fprintf(stderr, "fixup at 0x%08llX, seenTarget=%d, seenSubtractTarget=%d, isPointerStore=%d\n", sAtomToAddress[atom] + fit->offsetInAtom,
+					//			seenTarget, seenSubtractTarget, isPointerStore);
+					if ( seenTarget && !seenSubtractTarget && isPointerStore ) {
+						uint64_t fixupAddress = sAtomToAddress[atom] + fit->offsetInAtom;
+						locations.push_back((uint32_t)fixupAddress);
+					}
+				}
+			}
+		}
+	}
+	std::sort(locations.begin(), locations.end(), [](uint32_t left, uint32_t right) { return (left < right); });
+}
+
 void doPass(const Options& opts, ld::Internal& state)
 {
 	if ( opts.makeThreadedStartsSection() ) {
@@ -318,12 +543,15 @@ void doPass(const Options& opts, ld::Internal& state)
 		uint32_t startsCount = countChains(state, DYLD_CHAINED_PTR_32_FIRMWARE);
 		state.addAtom(*new ChainStartsAtom(startsCount));
 	}
-	else {
-		return;
+	else if ( opts.makeRebaseSection() ) {
+		RebaseRLEAtom* rebases = new RebaseRLEAtom(state);
+		rebases->computeSize();
+		state.rebaseRLEAtom = rebases;
+		state.addAtom(*state.rebaseRLEAtom);
 	}
 }
 
 
 } // namespace thread_starts
 } // namespace passes 
-} // namespace ld 
+} // namespace ld

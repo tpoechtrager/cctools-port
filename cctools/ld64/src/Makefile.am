@@ -1,1 +1,1 @@
-SUBDIRS = 3rd ld other 
+SUBDIRS = 3rd ld other mach_o

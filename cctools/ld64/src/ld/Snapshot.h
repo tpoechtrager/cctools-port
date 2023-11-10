@@ -26,7 +26,6 @@ public:
     typedef enum { 
         SNAPSHOT_DISABLED, // nothing is recorded
         SNAPSHOT_DEBUG, // records: .o, .dylib, .framework, .a, and other data files
-        SNAPSHOT_KEXT, // records: .o, .a, and other data files
     } SnapshotMode;
     
     Snapshot(const Options * opts);

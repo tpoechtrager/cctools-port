@@ -12,8 +12,6 @@ libhelper_la_SOURCES =  \
 	md5.c \
 	sha1.c \
 	sha256.c \
-	compat_corecrypto/ccsha1.c \
-	compat_corecrypto/ccsha2.c \
 	mkpath_np.c \
 	find_executable.c \
 	reallocf.c

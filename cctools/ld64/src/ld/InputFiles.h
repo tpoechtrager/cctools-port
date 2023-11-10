@@ -66,22 +66,22 @@ public:
 	// searches libraries for name
 	bool						searchLibraries(const char* name, bool searchDylibs, bool searchArchives,  
 																  bool dataSymbolOnly, ld::File::AtomHandler&) const;
-	// see if any linked dylibs export a weak def of symbol
-	bool						searchWeakDefInDylib(const char* name) const;
 	// copy dylibs to link with in command line order
 	void						dylibs(ld::Internal& state);
+	const std::set<ld::dylib::File*>&		getAllDylibs() const { return _allDylibs; }
 	
 	void						archives(ld::Internal& state);
 
 	void						addLinkerOptionLibraries(ld::Internal& state, ld::File::AtomHandler& handler);
 	void						createIndirectDylibs();
+	size_t						count() const { return _inputFiles.size(); }
 
 	// for -print_statistics
 	volatile int64_t			_totalObjectSize;
 	volatile int64_t			_totalArchiveSize;
 	volatile int32_t			_totalObjectLoaded;
 	volatile int32_t			_totalArchivesLoaded;
-	volatile int32_t			_totalDylibsLoaded;
+	         int32_t			_totalDylibsLoaded;
 	
 	
 private:
@@ -93,6 +93,7 @@ private:
 	void						logDylib(ld::File*, bool indirect, bool speculative);
 	void						logArchive(ld::File*) const;
 	void						markExplicitlyLinkedDylibs();
+	void						markSubDylibsReexported();
 	void						checkDylibClientRestrictions(ld::dylib::File*);
 	void						createOpaqueFileSections();
 	bool						libraryAlreadyLoaded(const char* path);
@@ -115,6 +116,7 @@ private:
 	mutable std::vector<std::string>	_archiveFilePaths;
 	InstallNameToDylib			_installPathToDylibs;
 	std::set<ld::dylib::File*>	_allDylibs;
+	uint64_t					_numProcessedIndirectDylibs = 0;
 	ld::dylib::File*			_bundleLoader;
     struct strcompclass {
         bool operator() (const char *a, const char *b) const { return ::strcmp(a, b) < 0; }

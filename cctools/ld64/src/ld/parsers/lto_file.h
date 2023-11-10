@@ -75,6 +75,7 @@ struct OptimizeOptions {
 	bool								armUsesZeroCostExceptions;
 	bool								simulator;
 	bool								internalSDK;
+	bool								avoidMisalignedPointers;
 #if SUPPORT_ARCH_arm64e
 	bool								supportsAuthenticatedPointers;
 #endif
@@ -85,6 +86,7 @@ struct OptimizeOptions {
 	ld::VersionSet						platforms;
 	const std::vector<const char*>*		llvmOptions;
 	const std::vector<const char*>*		initialUndefines;
+	bool								keepPrivateExterns;
 };
 
 extern bool	optimize(   const std::vector<const ld::Atom*>&	allAtoms,

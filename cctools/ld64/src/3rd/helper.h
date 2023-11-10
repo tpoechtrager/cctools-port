@@ -36,6 +36,8 @@ typedef Dl_info dl_info;
 #ifndef __APPLE__
 typedef char uuid_string_t__[37];
 #define uuid_string_t uuid_string_t__
+#include <unistd.h>
+#define vm_page_size sysconf(_SC_PAGESIZE)
 #endif
 
 int _NSGetExecutablePath(char *path, unsigned int *size);

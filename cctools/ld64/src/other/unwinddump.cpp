@@ -40,7 +40,7 @@
 #include "Architectures.hpp"
 
 
- __attribute__((noreturn))
+ __attribute__((noreturn, format(printf, 1, 2)))
 void throwf(const char* format, ...) 
 {
 	va_list	list;
@@ -77,13 +77,16 @@ private:
 	void										printUnwindSection(bool showFunctionNames);
 	void										printObjectUnwindSection(bool showFunctionNames);
 	void										getSymbolTableInfo();
+	void										buildSymbolsIndex();
 	const char*									functionName(pint_t addr, uint32_t* offset=NULL);
 	const char*									personalityName(const macho_relocation_info<typename A::P>* reloc);
 	bool										hasExernReloc(uint64_t sectionOffset, const char** personalityStr, pint_t* addr=NULL);
 
 	static const char*							archName();
 	static void									decode(uint32_t encoding, const uint8_t* funcStart, char* str);
-		
+
+	using SymbolsIndex = std::vector<std::pair<pint_t, const char*>>;
+
 	const char*									fPath;
 	const macho_header<P>*						fHeader;
 	uint64_t									fLength;
@@ -91,6 +94,7 @@ private:
 	const char*									fStrings;
 	const char*									fStringsEnd;
 	const macho_nlist<P>*						fSymbols;
+	SymbolsIndex							fSymbolsIndex; // list of symbols, ordered by address
 	uint32_t									fSymbolCount;
 	pint_t										fMachHeaderAddress;
 };
@@ -217,9 +221,10 @@ UnwindPrinter<A>::UnwindPrinter(const uint8_t* fileContent, uint32_t fileLength,
 
 	fPath = strdup(path);
 	fHeader = (const macho_header<P>*)fileContent;
-	
+
 	getSymbolTableInfo();
-	
+	buildSymbolsIndex();
+
 	if ( findUnwindSection() ) {
 		if ( fHeader->filetype() == MH_OBJECT ) 
 			printObjectUnwindSection(showFunctionNames);
@@ -228,6 +233,25 @@ UnwindPrinter<A>::UnwindPrinter(const uint8_t* fileContent, uint32_t fileLength,
 	}
 }
 
+template <typename A>
+void UnwindPrinter<A>::buildSymbolsIndex()
+{
+	for (uint32_t i=0; i < fSymbolCount; ++i) {
+		uint8_t type = fSymbols[i].n_type();
+		if ( ((type & N_STAB) == 0) && ((type & N_TYPE) == N_SECT) ) {
+			pint_t value = fSymbols[i].n_value();
+			const char* n = &fStrings[fSymbols[i].n_strx()];
+			if ( fSymbols[i].n_desc() & N_ARM_THUMB_DEF )
+				value |= 1;
+
+			fSymbolsIndex.emplace_back(value, n);
+		}
+	}
+
+	std::sort(fSymbolsIndex.begin(), fSymbolsIndex.end(), [](auto& lhs, auto& rhs) {
+		return lhs.first < rhs.first;
+	});
+}
 
 template <typename A>
 void UnwindPrinter<A>::getSymbolTableInfo()
@@ -257,41 +281,28 @@ void UnwindPrinter<A>::getSymbolTableInfo()
 template <typename A>
 const char* UnwindPrinter<A>::functionName(pint_t addr, uint32_t* offset)
 {
-	const macho_nlist<P>* closestSymbol = NULL;
-	if ( offset != NULL )
+	if ( offset )
 		*offset = 0;
-	for (uint32_t i=0; i < fSymbolCount; ++i) {
-		uint8_t type = fSymbols[i].n_type();
-		if ( ((type & N_STAB) == 0) && ((type & N_TYPE) == N_SECT) ) {
-			pint_t value = fSymbols[i].n_value();
-			if ( value == addr ) {
-				const char* r = &fStrings[fSymbols[i].n_strx()];
-				return r;
-			}
-			if ( fSymbols[i].n_desc() & N_ARM_THUMB_DEF ) 
-				value |= 1;
-			if ( value == addr ) {
-				const char* r = &fStrings[fSymbols[i].n_strx()];
-				//fprintf(stderr, "addr=0x%08llX, i=%u, n_type=0x%0X, r=%s\n", (long long)(fSymbols[i].n_value()), i,  fSymbols[i].n_type(), r);
-				return r;
-			}
-			else if ( offset != NULL ) {
-				if ( closestSymbol == NULL ) {
-					if ( fSymbols[i].n_value() < addr )
-						closestSymbol = &fSymbols[i];
-				}
-				else {
-					if ( (fSymbols[i].n_value() < addr) && (fSymbols[i].n_value() > closestSymbol->n_value()) )
-						closestSymbol = &fSymbols[i];
-				}
-			}
-		}
-	}
-	if ( closestSymbol != NULL ) {
-		*offset = addr - closestSymbol->n_value();
-		return &fStrings[closestSymbol->n_strx()];
-	}
-	return "--anonymous function--";
+
+	if ( fSymbolsIndex.empty() )
+		return "--anonymous function--";
+
+	// it address >= addr
+	auto it = std::lower_bound(fSymbolsIndex.begin(), fSymbolsIndex.end(), addr, [](auto& entry, pint_t addr) {
+		return entry.first < addr;
+	});
+	if ( it == fSymbolsIndex.end() )
+		it = std::prev(it); // all symbols < addr, use last
+	else if ( it->first == addr )
+		return it->second;
+	else if ( it == fSymbolsIndex.begin() )
+		return "--anonymous function--"; // addr < first symbol
+	else
+		it = std::prev(it); // it > addr, use previous
+
+	if ( offset )
+		*offset = addr - it->first;
+	return it->second;
 }
 
 

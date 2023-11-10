@@ -3092,7 +3092,7 @@ if test "x$CXXFLAGS" = "x"; then
   CXXFLAGS="-O3"
 fi
 
-CXXFLAGS="$CXXFLAGS -std=c++1z"
+CXXFLAGS="$CXXFLAGS -std=c++20"
 
 if test "x$build" = "x$host"; then
   CFLAGS="$CFLAGS -isystem /usr/local/include -isystem /usr/pkg/include"
@@ -3155,7 +3155,7 @@ case "$CCVERSION" in
   ;;
 esac
 
-EXTRAFLAGS="$EXTRAFLAGS -DLD64_VERSION_NUM=711"
+EXTRAFLAGS="$EXTRAFLAGS -DLD64_VERSION_NUM=907"
 
 case "$CXXVERSION" in
   *clang* )
@@ -19241,6 +19241,8 @@ ac_config_files="$ac_config_files ld64/src/ld/passes/Makefile"
 
 ac_config_files="$ac_config_files ld64/src/other/Makefile"
 
+ac_config_files="$ac_config_files ld64/src/mach_o/Makefile"
+
 
 cat >confcache <<\_ACEOF
 # This file is a shell script that caches the results of configure
@@ -20389,6 +20391,7 @@ do
     "ld64/src/ld/parsers/Makefile") CONFIG_FILES="$CONFIG_FILES ld64/src/ld/parsers/Makefile" ;;
     "ld64/src/ld/passes/Makefile") CONFIG_FILES="$CONFIG_FILES ld64/src/ld/passes/Makefile" ;;
     "ld64/src/other/Makefile") CONFIG_FILES="$CONFIG_FILES ld64/src/other/Makefile" ;;
+    "ld64/src/mach_o/Makefile") CONFIG_FILES="$CONFIG_FILES ld64/src/mach_o/Makefile" ;;
 
   *) as_fn_error $? "invalid argument: \`$ac_config_target'" "$LINENO" 5;;
   esac

@@ -6,6 +6,7 @@ ld_LDADD =  \
 	$(top_builddir)/ld64/src/3rd/BlocksRuntime/libBlocksRuntime.la  \
 	$(top_builddir)/ld64/src/ld/parsers/libParsers.la \
 	$(top_builddir)/ld64/src/ld/passes/libPasses.la \
+        $(top_builddir)/ld64/src/mach_o/libmach_o.la \
 	$(UUID_LIB) \
 	$(LTO_RPATH) \
 	$(XAR_LIB) \
@@ -32,6 +33,7 @@ ld_CXXFLAGS =  \
 	-I$(top_srcdir)/ld64/src/ld \
 	-I$(top_srcdir)/ld64/src/ld/parsers \
 	-I$(top_srcdir)/ld64/src/ld/passes \
+	-I$(top_srcdir)/ld64/src/mach_o \
 	-DPROGRAM_PREFIX="\"$(PROGRAM_PREFIX)\""
 
 ld_CFLAGS =  \
@@ -49,6 +51,7 @@ ld_CFLAGS =  \
 	-I$(top_srcdir)/ld64/src/ld \
 	-I$(top_srcdir)/ld64/src/ld/parsers \
 	-I$(top_srcdir)/ld64/src/ld/passes \
+	-I$(top_srcdir)/ld64/src/mach_o \
 	-DPROGRAM_PREFIX="\"$(PROGRAM_PREFIX)\"" 
 
 ld_SOURCES =  \
@@ -63,4 +66,6 @@ ld_SOURCES =  \
 	SymbolTable.cpp \
 	PlatformSupport.cpp \
 	ResponseFiles.cpp \
+	FatFile.cpp \
+	Mangling.cpp \
 	code-sign-blobs/blob.cpp

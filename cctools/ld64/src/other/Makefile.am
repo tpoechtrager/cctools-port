@@ -1,5 +1,4 @@
 bin_PROGRAMS =  \
-	dyldinfo \
 	ObjectDump \
 	unwinddump \
 	machocheck
@@ -52,7 +51,5 @@ ObjectDump_LDADD =  \
 	$(LTO_LIB) \
 	$(DL_LIB) 
 
-dyldinfo_SOURCES = dyldinfo.cpp
-dyldinfo_LDADD = $(top_builddir)/ld64/src/3rd/libhelper.la
 
 

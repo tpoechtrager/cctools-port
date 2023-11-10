@@ -22,12 +22,11 @@
  * @APPLE_LICENSE_HEADER_END@
  */
 #include <vector>
+#include <algorithm>
 
-#include "MachOFileAbstraction.hpp"
+#include "ExportsTrie.h"
 #include "MachOTrie.hpp"
 #include "prune_trie.h"
-
-
 
 
 /*
@@ -49,9 +48,9 @@ prune_trie(
 	uint32_t*	trie_new_size)
 {
 	// convert trie to vector of entries
-	std::vector<mach_o::trie::Entry> originalExports;
+	std::vector<mach_o::trie::Entry> exports;
 	try {
-		parseTrie(trie_start, trie_start+trie_start_size, originalExports);
+		parseTrie(trie_start, trie_start+trie_start_size, exports);
 	}
 	catch (const char* msg) {
 		return strdup(msg);
@@ -61,40 +60,59 @@ prune_trie(
 	}
 	
 	// prune entries into new vector of entries
-	std::vector<mach_o::trie::Entry> newExports;
-	newExports.reserve(originalExports.size());
-	for(std::vector<mach_o::trie::Entry>::iterator it = originalExports.begin(); it != originalExports.end(); ++it) {
-		if ( prune(it->name) == 0 ) 
-			newExports.push_back(*it);
+	auto pruneStartIt = std::remove_if(exports.begin(), exports.end(), [prune](const mach_o::trie::Entry& entry) {
+		return prune(entry.name) != 0;
+	});
+	// early return when none of the exports were pruned
+	if (pruneStartIt == exports.end()) {
+		*trie_new_size = trie_start_size;
+		return nullptr;
 	}
+	exports.erase(pruneStartIt, exports.end());
 
 	// create new export trie
-	std::vector<uint8_t> newExportTrieBytes;
-	newExportTrieBytes.reserve(trie_start_size);
-	mach_o::trie::makeTrie(newExports, newExportTrieBytes);
+	mach_o::ExportsTrie trie(exports.size(), ^(size_t index) {
+		const mach_o::trie::Entry& oldExport = exports[index];
+		mach_o::ExportsTrie::Export newExport;
+		newExport.name = oldExport.name;
+		newExport.flags = oldExport.flags;
+		newExport.offset = oldExport.address;
+		newExport.other = oldExport.other;
+		if ( oldExport.importName != nullptr ) {
+			newExport.importName = oldExport.importName;
+		}
+
+		return newExport;
+	});
+	if ( mach_o::Error err = std::move(trie.buildError()) )
+		return strdup(err.message());
+
+
+	uint8_t trieAlign = 0;
+	uint8_t triePadding = 0;
 	// Need to align trie to 8 or 4 bytes.  We don't know the arch, but if the incoming trie
 	// was not 8-byte aligned, then it can't be a 64-bit arch, so use 4-byte alignement.
 	if ( (trie_start_size % 8) != 0 ) {
-		// 4-byte align 
-		while ( (newExportTrieBytes.size() % 4 ) != 0)
-			newExportTrieBytes.push_back(0);
+		trieAlign = 4;
+	} else {
+		trieAlign = 8;
 	}
-	else {
-		// 8-byte align 
-		while ( (newExportTrieBytes.size() % 8 ) != 0)
-			newExportTrieBytes.push_back(0);
+	size_t					trieSize = 0;
+	const uint8_t*	trieBytes = trie.bytes(trieSize);
+	if ( (trieSize % trieAlign) != 0 ) {
+		triePadding = trieAlign - (trieSize % trieAlign);
 	}
 	
 	// copy into place, zero pad
-	*trie_new_size = newExportTrieBytes.size();
+	*trie_new_size = trieSize + triePadding;
 	if ( *trie_new_size > trie_start_size ) {
 		char* msg;
 		asprintf(&msg, "new trie is larger (%d) than original (%d)", *trie_new_size, trie_start_size);
 		return msg;
 	}
-	memcpy(trie_start, &newExportTrieBytes[0], *trie_new_size);
-	bzero(trie_start+*trie_new_size, trie_start_size - *trie_new_size);
-	
+	memcpy(trie_start, trieBytes, trieSize);
+	bzero(trie_start + trieSize, trie_start_size - trieSize);
+
 	// success
-	return NULL;
+	return nullptr;
 }

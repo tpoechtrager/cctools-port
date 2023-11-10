@@ -61,11 +61,8 @@ static const PlatformInfo sAllSupportedPlatforms[] = {
     { Platform::tvOS_simulator,    Platform::tvOS,         "tvOS Simulator",    "-tvos_simulator_version_min",    NULL,                         0x000D0000, 0x00080000, LC_VERSION_MIN_TVOS,     false, true,  PlatEnforce::warnInternalErrorExternal, PlatEnforce::error },
     { Platform::watchOS_simulator, Platform::watchOS,      "watchOS Simulator", "-watchos_simulator_version_min", NULL,                         0x00060000, 0x00020000, LC_VERSION_MIN_WATCHOS,  false, true,  PlatEnforce::warnInternalErrorExternal, PlatEnforce::error },
     { Platform::driverKit,         Platform::driverKit,    "DriverKit",         "-driverkit_version_min",         NULL,                         0x00130000, 0x00130000, 0,                       false, true,  PlatEnforce::error,                     PlatEnforce::error },
-#if TARGET_FEATURE_REALITYOS
-    { Platform::realityOS,              Platform::realityOS,         "realityOS",         "-realityos_version_min",         "REALITYOS_DEPLOYMENT_TARGET", 0x00010000, 0x00010000, 0,                       false, true,  PlatEnforce::warning,                   PlatEnforce::warning },
-    { Platform::reality_simulator,    Platform::realityOS,         "realityOS Simulator", "-realityos_simulator_version_min", NULL,                     0x00010000, 0x00010000, 0,                       false, true,  PlatEnforce::warning,                   PlatEnforce::warning },
-#endif
-    { Platform::freestanding,     Platform::freestanding,  "free standing",     "-preload",                       NULL,                         0x00000000, 0,          0,                       false, false, PlatEnforce::allow,                     PlatEnforce::allow   },
+    { Platform::sepOS,             Platform::sepOS,        "sepOS",             "",                               NULL,                         0x00010000, 0x00010000, 0,                       false, true,  PlatEnforce::warning,                   PlatEnforce::warning },
+    { Platform::freestanding,      Platform::freestanding, "free standing",     "-preload",                       NULL,                         0x00000000, 0x00000000, 0,                       false, false,  PlatEnforce::allow,                    PlatEnforce::allow },
 };
 
 static void versionToString(uint32_t value, char buffer[32])
@@ -117,6 +114,7 @@ void VersionSet::checkObjectCrosslink(const VersionSet& objectPlatforms, const s
                         // only warn during B&I builds
                         if ( (getenv("RC_XBS") != NULL) && (getenv("RC_BUILDIT") == NULL) )
                             break;
+                        [[clang::fallthrough]];
                     case PlatEnforce::warning: {
                         if ( !warned ) {
                             warning("building for %s, but linking in object file (%s) built for %s",
@@ -323,11 +321,6 @@ Platform platformFromName(const char* platformName)
 const char* nameFromPlatform(Platform platform)
 {
     for (const PlatformInfo& info : sAllSupportedPlatforms) {
-#if TARGET_FEATURE_REALITYOS
-        // Use enum for realityOS platforms.
-        if ( info.platform == ld::Platform::realityOS || info.platform == ld::Platform::reality_simulator )
-            continue;
-#endif
         if ( info.platform == platform )
             return info.printName;
     }

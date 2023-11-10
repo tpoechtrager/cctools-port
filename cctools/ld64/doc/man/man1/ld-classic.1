@@ -1,8 +1,8 @@
 .Dd September 10, 2020
-.Dt ld 1
+.Dt ld-classic 1
 .Os Darwin
 .Sh NAME
-.Nm ld
+.Nm ld-classic
 .Nd "linker"
 .Sh SYNOPSIS
 .Nm
@@ -11,10 +11,10 @@ files...
 .Op Fl o Ar outputfile
 .Sh DESCRIPTION
 The
-.Nm ld
+.Nm ld-classic
 command combines several object files and libraries, resolves references, and
 produces an output file.
-.Nm ld
+.Nm ld-classic
 can produce a final linked image (executable, dylib, or bundle), or with the -r
 option, produce another object file.  If the -o option is not used, the output
 file produced is named "a.out".
@@ -23,19 +23,19 @@ The linker accepts universal (multiple-architecture) input files, but
 always creates a "thin" (single-architecture), standard Mach-O output file.
 The architecture for the output file is specified using the -arch option.
 If this option is not used,
-.Nm ld
+.Nm ld-classic
 attempts to determine the output architecture by examining the object
 files in command line order.  The first "thin"
 architecture determines that of the output file.  If no input
 object file is a "thin" file, the native 32-bit architecture for the host is used.
 .Pp
 Usually,
-.Nm ld
+.Nm ld-classic
 is not used directly.  Instead the compiler driver invokes
-.Nm ld.
+.Nm ld-classic.
 The compiler driver can be passed multiple -arch options and it will create a
 universal final linked image by invoking
-.Nm ld
+.Nm ld-classic
 multiple times and then running
 .Xr lipo(1)
 merge the outputs into a universal file.
@@ -47,10 +47,10 @@ All zero fill sections will appear after all non-zero fill sections in their seg
 .Ss Libraries
 A static library (aka static archive) is a collection of .o files with a table of contents
 that lists the global symbols in the .o files.
-.Nm ld
+.Nm ld-classic
 will only pull .o files out of a static library if needed to resolve some symbol reference.
 Unlike traditional linkers,
-.Nm ld
+.Nm ld-classic
 will continually search a static library while linking. There is no need to specify a static
 library multiple times on the command line.
 .Pp
@@ -61,7 +61,7 @@ dynamic library are used to resolve references.
 .Pp
 Both dynamic and static libraries are searched as they appear on the command line.
 .Ss Search paths
-.Nm ld
+.Nm ld-classic
 maintains a list of directories to search for a library or framework to use.  The default
 library search path is /usr/lib then /usr/local/lib.  The -L option will add a new library search
 path.  The default framework search path is /Library/Frameworks then /System/Library/Frameworks.
@@ -84,15 +84,15 @@ When linking for two-level namespace, ld does not look at indirect dylibs, excep
 re-exported by a direct dylibs.  On the other hand when linking for flat namespace,
 ld does load all indirect dylibs and uses them to resolve references.
 Even though indirect dylibs are specified via a full path,
-.Nm ld
+.Nm ld-classic
 first uses the specified search paths to locate each indirect dylib.  If one cannot
 be found using the search paths, the full path is used.
 .Ss Dynamic libraries undefines
 When linking for two-level namespace,
-.Nm ld
+.Nm ld-classic
 does not verify that undefines in dylibs actually
 exist.  But when linking for flat namespace,
-.Nm ld
+.Nm ld-classic
 does check that all undefines from all loaded dylibs have a matching definition.
 This is sometimes used to force selected functions to be loaded from a static library.
 .Sh OPTIONS
@@ -217,8 +217,7 @@ not want to export anything from that static library.
 .It Fl image_suffix Ar suffix
 Search for libraries and frameworks with
 .Ar suffix
-and then without (e.g. look for `name.framework/name_suffix' first, if not there
-try `name.framework/name', or `libname_suffix.a' first, if not there try `libname.a').
+and then without.
 .El
 .Ss Options that control additional content
 .Bl -tag
@@ -324,11 +323,6 @@ If you link with -framework Cocoa and use a symbol from Foundation, the linker w
 command to load Foundation and encode the symbol as coming from Foundation.  If you use this option,
 the linker will not add a load command for Foundation and encode the symbol as coming from Cocoa.  Then
 at runtime dyld will have to search Cocoa and AppKit before finding the symbol in Foundation.
-.It Fl exported_symbols_order Ar file
-When targeting Mac OS X 10.6 or later, the format of the exported symbol information can be optimized to
-make lookups of popular symbols faster.  This option is used to pass a file containing a list of
-the symbols most frequently used by clients of the dynamic library being built. Not all exported symbols
-need to be listed.
 .It Fl no_zero_fill_sections
 By default the linker moves all zero fill sections to the end of the __DATA segment and configures
 them to use no space on disk.  This option suppresses that optimization, so zero-filled data occupies
@@ -438,6 +432,8 @@ The specified
 is added to the list of global symbols names that will remain as global symbols in the output file.  This
 option can be used multiple times.  For short lists, this can be more convenient than creating a file and using
 -exported_symbols_list.
+.It Fl no_exported_symbols
+Useful for main executable that don't have plugins and thus need no symbol exports.
 .It Fl unexported_symbols_list Ar file
 The specified
 .Ar filename
@@ -490,7 +486,7 @@ to have no definition.  With -two_levelnamespace, the resulting symbol will be m
 means dyld will search all loaded images.
 .It Fl undefined Ar treatment
 Specifies how undefined symbols are to be treated. Options are: error, warning, suppress, or dynamic_lookup.  The
-default is error.
+default is error. Note: dynamic_lookup that depends on lazy binding will not work with chained fixups.
 .It Fl rpath Ar path
 Add
 .Ar path
@@ -583,6 +579,19 @@ Directs the linker to add an ad-hoc codesignature to the output file. The defaul
 is to be ad-hoc codesigned.
 .It Fl no_adhoc_codesign
 Directs the linker to not add ad-hoc codesignature to the output file, even for Apple Silicon binaries.
+.It Fl data_const
+By default the linker moves some data sections into __DATA_CONST if it knows the target OS version supports that.
+This option option overrides the default behavior and forces the use of __DATA_CONST.
+.It Fl no_data_const
+By default the linker moves some data sections into __DATA_CONST if it knows the target OS version supports that.
+This option option overrides the default behavior and forces the linker to never move sections to __DATA_CONST.
+.It Fl const_selrefs
+By default the linker moves __objc_selrefs section into __DATA_CONST if it knows the target OS version supports that.
+This option option overrides the default behavior and forces __objc_selrefs being in __DATA_CONST.
+Note this only applies if the __DATA_CONST segment is enabled.  See -data_const for more information.
+.It Fl no_const_selrefs
+By default the linker moves __objc_selrefs section into __DATA_CONST if it knows the target OS version supports that.
+This option option overrides the default behavior and keeps the __objc_selrefs section in __DATA.
 .It Fl version_details
 Prints the version info about the linker in JSON
 .It Fl no_weak_imports
@@ -671,13 +680,6 @@ symbols require dyld to do extra work at launch time to coalesce those symbols.
 .It Fl no_weak_exports
 Issue an erro if the resulting final linked image contains weak external symbols. Such
 symbols require dyld to do extra work at launch time to coalesce those symbols.
-.It Fl objc_gc_compaction
-Marks the Objective-C image info in the final linked image with the bit that says that the
-code was built to work the compacting garbage collection.
-.It Fl objc_gc
-Verifies all code was compiled with -fobjc-gc or -fobjc-gc-only.
-.It Fl objc_gc_only
-Verifies all code was compiled with -fobjc-gc-only.
 .It Fl warn_unused_dylibs
 Warn about dylibs that are linked by no symbols are used from them.
 .It Fl no_warn_unused_dylibs
@@ -883,6 +885,9 @@ tells the linker to not add that extra info.
 For use when linking against versioned frameworks that do not have a normal variant.
 By default when -framework Foo,_suffix is used, the linker will follow Foo.framework/Foo if it is a symbolic link, append _suffix and search for a file with that path.
 When this option is used, the linker will also search for Foo.framework/Versions/Current/Foo_suffix.
+.It Fl ld_classic
+Override the choice of linker, and force the use of ld-classic to link the binary.
+This is incompatible with options such as -merge*, used to build/merge libraries.
 .El
 .Ss Obsolete Options
 .Bl -tag
@@ -987,5 +992,5 @@ except that the linker will construct glue code so that the shared library is no
 loaded until the first function in it is called. This option is deprecated.
 .El
 .Sh SEE ALSO
-as(1), ar(1), cc(1), nm(1), otool(1) lipo(1),
+ld(1), as(1), ar(1), cc(1), dyld_info(1), nm(1), otool(1) lipo(1),
 arch(3), dyld(3), Mach-O(5), strip(1), rebase(1)

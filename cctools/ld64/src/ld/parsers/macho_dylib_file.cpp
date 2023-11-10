@@ -141,6 +141,8 @@ File<A>::File(const uint8_t* fileContent, uint64_t fileLength, const char* path,
 	const macho_linkedit_data_command<P>* exportsTrie = nullptr;
 	const macho_nlist<P>* symbolTable = nullptr;
 	const macho_symtab_command<P>* symtab = nullptr;
+	const macho_sub_client_command<P>* subClient = nullptr;
+	const macho_sub_framework_command<P>* subFramework = nullptr;
 	const char*	strings = nullptr;
 	bool compressedLinkEdit = false;
 	uint32_t dependentLibCount = 0;
@@ -197,10 +199,16 @@ File<A>::File(const uint8_t* fileContent, uint64_t fileLength, const char* path,
 				++dependentLibCount;
 				break;
 			case LC_SUB_FRAMEWORK:
-				this->_parentUmbrella = strdup(((macho_sub_framework_command<P>*)cmd)->umbrella());
+                subFramework = (macho_sub_framework_command<P>*)cmd;
+                if ( subFramework->umbrella_offset() > cmd->cmdsize() )
+                    throwf("subframework name offset (%u) outside its size (%u)", subFramework->umbrella_offset(), cmd->cmdsize());
+				this->_parentUmbrella = strdup(subFramework->umbrella());
 				break;
 			case LC_SUB_CLIENT:
-				this->_allowableClients.push_back(strdup(((macho_sub_client_command<P>*)cmd)->client()));
+                subClient = (macho_sub_client_command<P>*)cmd;
+                if ( subClient->client_offset() > cmd->cmdsize() )
+                    throwf("subclient name offset (%u) outside its size (%u)", subClient->client_offset(), cmd->cmdsize());
+				this->_allowableClients.push_back(strdup(subClient->client()));
 				// <rdar://problem/20627554> Don't hoist "public" (in /usr/lib/) dylibs that should not be directly linked
 				this->_hasPublicInstallName = false;
 				break;
@@ -225,6 +233,8 @@ File<A>::File(const uint8_t* fileContent, uint64_t fileLength, const char* path,
 				// check for Objective-C info
 				if ( strncmp(((macho_segment_command<P>*)cmd)->segname(), objCInfoSegmentName(), 6) == 0 ) {
 					const macho_segment_command<P>* segment = (macho_segment_command<P>*)cmd;
+					if ( segment->cmdsize() != (sizeof(macho_segment_command<P>) + segment->nsects() * sizeof(macho_section_content<P>)) )
+						throwf("segment %s load command size does not match nsects", segment->segname());
 					const macho_section<P>* const sectionsStart = (macho_section<P>*)((char*)segment + sizeof(macho_segment_command<P>));
 					const macho_section<P>* const sectionsEnd = &sectionsStart[segment->nsects()];
 					for (const macho_section<P>* sect=sectionsStart; sect < sectionsEnd; ++sect) {
@@ -237,6 +247,8 @@ File<A>::File(const uint8_t* fileContent, uint64_t fileLength, const char* path,
 							// #define OBJC_IMAGE_GC_ONLY       4
 						        // #define OBJC_IMAGE_IS_SIMULATED  32
 							//
+							if ( (sect->offset()+sect->size()) > fileLength )
+								throwf("section %s file offset too large", objCInfoSectionName());
 							const uint32_t* contents = (uint32_t*)(&fileContent[sect->offset()]);
 							if ( (sect->size() >= 8) && (contents[0] == 0) ) {
 								uint32_t flags = E::get32(contents[1]);
@@ -287,14 +299,16 @@ File<A>::File(const uint8_t* fileContent, uint64_t fileLength, const char* path,
 					// with new linkedit format only care about LC_REEXPORT_DYLIB
 					if ( compressedLinkEdit && !linkingFlatNamespace ) 
 						break;
+					[[clang::fallthrough]];
 				case LC_REEXPORT_DYLIB:
-					++reExportDylibCount;
 					if ( dylibCmd->name_offset() > cmdLength )
 						throwf("malformed mach-o: LC_*_DYLIB load command has offset (%u) outside its size (%u)", dylibCmd->name_offset(), cmdLength);
 					if ( (dylibCmd->name_offset() + strlen(dylibCmd->name()) + 1) > cmdLength )
 						throwf("malformed mach-o: LC_*_DYLIB load command string extends beyond end of load command");
 					const char *path = strdup(dylibCmd->name());
 					bool reExport = (cmd->cmd() == LC_REEXPORT_DYLIB);
+					if (reExport)
+						++reExportDylibCount;
 					if ( (targetInstallPath == nullptr) || (strcmp(targetInstallPath, path) != 0) )
 						this->_dependentDylibs.emplace_back(path, reExport);
 					break;
@@ -371,6 +385,10 @@ File<A>::File(const uint8_t* fileContent, uint64_t fileLength, const char* path,
 			throwf("malformed mach-o, symbol table not in __LINKEDIT");
 		if ( symtab->stroff() < _linkeditStartOffset )
 			throwf("malformed mach-o, symbol table strings not in __LINKEDIT");
+		if ( dynamicInfo != nullptr ) {
+			if ( (dynamicInfo->iextdefsym()+dynamicInfo->nextdefsym()) > symtab->nsyms() )
+				throwf("malformed mach-o, indirect symbol table nextdefsym exceeds nsyms");
+		}
 	}
 
 	// if linking flat and this is a flat dylib, create one atom that references all imported symbols
@@ -440,7 +458,7 @@ void File<A>::buildExportHashTableFromExportInfo(uint32_t exportsOffset, uint32_
 	if ( exportsSize > 0 ) {
 		const uint8_t* start = fileContent + exportsOffset;
 		const uint8_t* end = &start[exportsSize];
-		if ( (exportsOffset + exportsSize) > _fileLength )
+		if ( ((uint64_t)exportsOffset + (uint64_t)exportsSize) > _fileLength )
 			throwf("malformed mach-o dylib, exports trie extends beyond end of file");
 		std::vector<mach_o::trie::Entry> list;
 		parseTrie(start, end, list);

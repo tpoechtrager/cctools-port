@@ -29,11 +29,7 @@
 #include <mach-o/ranlib.h>
 #include <ar.h>
 
-#include <vector>
-#include <set>
-#include <map>
 #include <algorithm>
-#include <unordered_map>
 
 #include "MachOFileAbstraction.hpp"
 #include "Architectures.hpp"
@@ -41,7 +37,7 @@
 #include "macho_relocatable_file.h"
 #include "lto_file.h"
 #include "archive_file.h"
-
+#include "Containers.h"
 
 namespace archive {
 
@@ -115,7 +111,7 @@ private:
 	struct MemberState { ld::relocatable::File* file; const Entry *entry; bool logged; bool loaded; uint32_t index;};
 	bool											loadMember(MemberState& state, ld::File::AtomHandler& handler, const char *format, ...) const;
 
-	typedef std::unordered_map<const char*, uint64_t, ld::CStringHash, ld::CStringEquals> NameToOffsetMap;
+	using NameToOffsetMap = ld::StringViewMap<uint64_t>;
 
 	typedef typename A::P							P;
 	typedef typename A::P::E						E;
@@ -139,9 +135,7 @@ private:
 	const char*										_tableOfContentStrings;
 	mutable MemberToStateMap						_instantiatedEntries;
 	NameToOffsetMap									_hashTable;
-	const bool										_forceLoadAll;
-	const bool										_forceLoadObjC;
-	const bool										_forceLoadThis;
+	const LibraryOptions::ArchiveLoadMode			_loadMode;
 	const bool										_objc2ABI;
 	const bool										_verboseLoad;
 	const bool										_logAllFiles;
@@ -235,6 +229,9 @@ template <> cpu_type_t File<arm64>::architecture()  { return CPU_TYPE_ARM64; }
 #if SUPPORT_ARCH_arm64_32
 template <> cpu_type_t File<arm64_32>::architecture()  { return CPU_TYPE_ARM64_32; }
 #endif
+#if SUPPORT_ARCH_riscv
+template <> cpu_type_t File<riscv32>::architecture()  { return CPU_TYPE_RISCV32; }
+#endif
 
 template <typename A>
 bool File<A>::validMachOFile(const uint8_t* fileContent, uint64_t fileLength, const mach_o::relocatable::ParserOptions& opts)
@@ -299,8 +296,7 @@ File<A>::File(const uint8_t fileContent[], uint64_t fileLength, const char* pth,
 	_tableOfContents64(NULL),
 #endif
 	_tableOfContentCount(0), _tableOfContentStrings(NULL),
-	_forceLoadAll(opts.forceLoadAll), _forceLoadObjC(opts.forceLoadObjC), 
-	_forceLoadThis(opts.forceLoadThisArchive), _objc2ABI(opts.objcABI2), _verboseLoad(opts.verboseLoad), 
+	_loadMode(opts.loadMode), _objc2ABI(opts.objcABI2), _verboseLoad(opts.verboseLoad), 
 	_logAllFiles(opts.logAllFiles), _alreadyLoadedAll(false), _objOpts(opts.objOpts)
 {
 	if ( strncmp((const char*)fileContent, "!<arch>\n", 8) != 0 )
@@ -335,6 +331,27 @@ File<A>::File(const uint8_t fileContent[], uint64_t fileLength, const char* pth,
 #endif
 		else
 			throw "archive has no table of contents";
+
+	if ( _loadMode != LibraryOptions::ArchiveLoadMode::lazy ) {
+		// parse all .o files in archive
+		// do this now while ld is multithreaded
+		const Entry* const start = (Entry*)&_archiveFileContent[8];
+		const Entry* const end = (Entry*)&_archiveFileContent[_archiveFilelength];
+		for (const Entry* p=start; p < end; p = p->next()) {
+			char memberName[256];
+			p->getName(memberName, sizeof(memberName));
+			if ( (p==start) && ((strcmp(memberName, SYMDEF_SORTED) == 0) || (strcmp(memberName, SYMDEF) == 0)) )
+				continue;
+#ifdef SYMDEF_64
+			if ( (p==start) && ((strcmp(memberName, SYMDEF_64_SORTED) == 0) || (strcmp(memberName, SYMDEF_64) == 0)) )
+				continue;
+#endif
+			// don't instantiate bitcode files with -ObjC because instantiation has side effect of merging into LTO
+			if ( _loadMode == LibraryOptions::ArchiveLoadMode::forceLoad || !validLTOFile(p->content(), p->contentSize(), _objOpts) )
+				this->makeObjectFileForMember(p);
+		}
+	}
+
 }
 
 template <>
@@ -461,7 +478,7 @@ template <typename A>
 bool File<A>::forEachAtom(ld::File::AtomHandler& handler) const
 {
 	bool didSome = false;
-	if ( _forceLoadAll || _forceLoadThis ) {
+	if ( _loadMode == LibraryOptions::ArchiveLoadMode::forceLoad ) {
 		// call handler on all .o files in this archive
 		const Entry* const start = (Entry*)&_archiveFileContent[8];
 		const Entry* const end = (Entry*)&_archiveFileContent[_archiveFilelength];
@@ -474,20 +491,26 @@ bool File<A>::forEachAtom(ld::File::AtomHandler& handler) const
 			if ( (p==start) && ((strcmp(memberName, SYMDEF_64_SORTED) == 0) || (strcmp(memberName, SYMDEF_64) == 0)) )
 				continue;
 #endif
-			MemberState& state = this->makeObjectFileForMember(p);
-			didSome |= loadMember(state, handler, "%s forced load of %s(%s)\n", _forceLoadThis ? "-force_load" : "-all_load", this->path(), memberName);
+			typename MemberToStateMap::iterator pos = _instantiatedEntries.find(p);
+			if ( pos == _instantiatedEntries.end() )
+				this->makeObjectFileForMember(p);
+			didSome |= loadMember(_instantiatedEntries[p], handler, "forced load of %s(%s)\n", this->path(), memberName);
 		}
 		_alreadyLoadedAll = true;
 	}
-	else if ( _forceLoadObjC ) {
+	else if ( _loadMode == LibraryOptions::ArchiveLoadMode::objc ) {
 		// call handler on all .o files in this archive containing objc classes
 		for (const auto& entry : _hashTable) {
-			if ( (strncmp(entry.first, ".objc_c", 7) == 0) || (strncmp(entry.first, "_OBJC_CLASS_$_", 14) == 0) ) {
+			if ( entry.first.starts_with(".objc_c") || entry.first.starts_with("_OBJC_CLASS_$_") ) {
 				const Entry* member = (Entry*)&_archiveFileContent[entry.second];
-				MemberState& state = this->makeObjectFileForMember(member);
+				typename MemberToStateMap::iterator pos = _instantiatedEntries.find(member);
+				if ( pos == _instantiatedEntries.end() )
+					this->makeObjectFileForMember(member);
+				else if ( pos->second.file == nullptr )
+					this->makeObjectFileForMember(member);
 				char memberName[256];
 				member->getName(memberName, sizeof(memberName));
-				didSome |= loadMember(state, handler, "-ObjC forced load of %s(%s)\n", this->path(), memberName);
+				didSome |= loadMember(_instantiatedEntries[member], handler, "-ObjC forced load of %s(%s)\n", this->path(), memberName);
 			}
 		}
 		// ObjC2 has no symbols in .o files with categories but not classes, look deeper for those
@@ -508,27 +531,59 @@ bool File<A>::forEachAtom(ld::File::AtomHandler& handler) const
 				// only look at files not already loaded
 				if ( ! state.loaded ) {
 					if ( this->memberHasObjCCategories(member) ) {
-						MemberState& state = this->makeObjectFileForMember(member);
+						typename MemberToStateMap::iterator pos = _instantiatedEntries.find(member);
+						if ( pos == _instantiatedEntries.end() )
+							this->makeObjectFileForMember(member);
 						char memberName[256];
 						member->getName(memberName, sizeof(memberName));
-						didSome |= loadMember(state, handler, "-ObjC forced load of %s(%s)\n", this->path(), memberName);
+						didSome |= loadMember(_instantiatedEntries[member], handler, "-ObjC forced load of %s(%s)\n", this->path(), memberName);
 					}
 				}
 			}
 #ifdef LTO_SUPPORT // ld64-port
 			else if ( validLTOFile(member->content(), member->contentSize(), _objOpts) ) {
 				if ( lto::hasObjCCategory(member->content(), member->contentSize()) ) {
-					MemberState& state = this->makeObjectFileForMember(member);
+					typename MemberToStateMap::iterator pos = _instantiatedEntries.find(member);
+					if ( pos == _instantiatedEntries.end() )
+						this->makeObjectFileForMember(member);
+					else if ( pos->second.file == nullptr )
+						this->makeObjectFileForMember(member);
 					// only look at files not already loaded
-					if ( ! state.loaded ) {
+					if ( ! _instantiatedEntries[member].loaded ) {
 						char memberName[256];
 						member->getName(memberName, sizeof(memberName));
-						didSome |= loadMember(state, handler, "-ObjC forced load of %s(%s)\n", this->path(), memberName);
+						didSome |= loadMember(_instantiatedEntries[member], handler, "-ObjC forced load of %s(%s)\n", this->path(), memberName);
 					}
 				}
 			}
 #endif
 		}
+		// if -ObjC loaded all members, then set _alreadyLoadedAll
+		bool somethingNotLoaded = false;
+		for (const Entry* member=start; member < end; member = member->next()) {
+			char mname[256];
+			member->getName(mname, sizeof(mname));
+			// skip table-of-content member
+			if ( (member==start) && ((strcmp(mname, SYMDEF_SORTED) == 0) || (strcmp(mname, SYMDEF) == 0)) )
+				continue;
+#ifdef SYMDEF_64
+			if ( (member==start) && ((strcmp(mname, SYMDEF_64_SORTED) == 0) || (strcmp(mname, SYMDEF_64) == 0)) )
+				continue;
+#endif
+			typename MemberToStateMap::iterator pos = _instantiatedEntries.find(member);
+			if ( pos != _instantiatedEntries.end() ) {
+				MemberState& state = pos->second;
+				if ( !state.loaded ) {
+					somethingNotLoaded = true;
+					break;
+				}
+			}
+			else {
+				somethingNotLoaded = true;
+			}
+		}
+		if ( !somethingNotLoaded )
+			_alreadyLoadedAll = true;
 	}
 	return didSome;
 }
@@ -559,7 +614,9 @@ public:
 					CheckIsDataSymbolHandler(const char* n) : _name(n), _isData(false) {}
 	virtual void	doAtom(const class ld::Atom& atom) {
 						if ( strcmp(atom.name(), _name) == 0 ) {
-							if ( atom.section().type() != ld::Section::typeCode )
+							if ( atom.section().type() != ld::Section::typeCode
+									// Allow only concrete definitions to override other tentative symbols.
+									&& atom.definition() != ld::Atom::definitionTentative )
 								_isData = true;
 						}
 					}
@@ -687,6 +744,12 @@ ld::archive::File* parse(const uint8_t* fileContent, uint64_t fileLength,
 		case CPU_TYPE_ARM64_32:
 			if ( archive::Parser<arm64_32>::validFile(fileContent, fileLength, opts.objOpts) )
 				return archive::Parser<arm64_32>::parse(fileContent, fileLength, path, modTime, ordinal, opts);
+			break;
+#endif
+#if SUPPORT_ARCH_riscv
+		case CPU_TYPE_RISCV32:
+			if ( archive::Parser<riscv32>::validFile(fileContent, fileLength, opts.objOpts) )
+				return archive::Parser<riscv32>::parse(fileContent, fileLength, path, modTime, ordinal, opts);
 			break;
 #endif
 	}

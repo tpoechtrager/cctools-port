@@ -76,7 +76,6 @@ public:
 	bool						reExportsWeakDefSymbols;
 	bool						_noReExportedDylibs;
 	bool						pieDisabled;
-	bool						hasDataInCode;
 	ld::Internal::FinalSection*	headerAndLoadCommandsSection;
 	ld::Internal::FinalSection*	rebaseSection;
 	ld::Internal::FinalSection*	bindingSection;
@@ -186,8 +185,10 @@ private:
 	void						addLinkEdit(ld::Internal& state);
 	void						addPreloadLinkEdit(ld::Internal& state);
 	void						generateLinkEditInfo(ld::Internal& state);
-	void						buildSymbolTable(ld::Internal& state);
+	void						buildLinkEditOpcodes(ld::Internal& state);
+	void						partitionSymbolTable(ld::Internal& state);
 	void						writeOutputFile(ld::Internal& state);
+	void						assignSymbolIndexes(ld::Internal& state);
 	void						addSectionRelocs(ld::Internal& state, ld::Internal::FinalSection* sect,  
 												const ld::Atom* atom, ld::Fixup* fixupWithTarget, 
 												ld::Fixup* fixupWithMinusTarget, ld::Fixup* fixupWithAddend,
@@ -228,6 +229,8 @@ private:
 	void						makeRebasingInfo(ld::Internal& state);
 	void						makeBindingInfo(ld::Internal& state);
 	void						updateLINKEDITAddresses(ld::Internal& state);
+	void						encodeLINKEDIT(ld::Internal& state);
+	void						buildLINKEDITContent(ld::Internal& state);
 	void						applyFixUps(ld::Internal& state, uint64_t mhAddress, const ld::Atom*  atom, uint8_t* buffer);
 	uint64_t					addressOf(const ld::Internal& state, const ld::Fixup* fixup, const ld::Atom** target);
 	uint64_t					addressAndTarget(const ld::Internal& state, const ld::Fixup* fixup, const ld::Atom** target);
@@ -278,6 +281,10 @@ private:
 																							const ld::Fixup* fixup);
 	void						rangeCheckARM64Page21(int64_t delta, ld::Internal& state, const ld::Atom* atom, 
 																							const ld::Fixup* fixup);
+#if SUPPORT_ARCH_riscv
+	void						rangeCheckRISCVBranch20(int64_t delta, ld::Internal& state, const ld::Atom* atom, 
+																							const ld::Fixup* fixup);
+#endif
 																							
 																							
 	uint64_t					sectionOffsetOf(const ld::Internal& state, const ld::Fixup* fixup);
@@ -373,6 +380,7 @@ private:
 		  bool								_hasDynamicSymbolTable;
 		  bool								_hasLocalRelocations;
 		  bool								_hasExternalRelocations;
+		  bool								_hasRebaseRLE;
 		  bool								_hasOptimizationHints;
 		  bool								_hasCodeSignature;
 	uint64_t								_fileSize;
@@ -380,6 +388,7 @@ private:
 	uint32_t								_encryptedTEXTstartOffset;
 	uint32_t								_encryptedTEXTendOffset;
 public:
+	size_t									maxLibOrdinal() const { return _dylibToOrdinal.size(); }
 	std::vector<const ld::Atom*>			_localAtoms;
 	std::vector<const ld::Atom*>			_exportedAtoms;
 	std::vector<const ld::Atom*>			_importedAtoms;
@@ -389,7 +398,6 @@ public:
 	uint32_t								_globalSymbolsCount;
 	uint32_t								_importSymbolsStartIndex;
 	uint32_t								_importSymbolsCount;
-	std::map<const ld::Atom*, uint32_t>		_atomToSymbolIndex;
 	std::vector<RebaseInfo>					_rebaseInfo;
 	std::vector<BindingInfo>				_bindingInfo;
 	std::vector<BindingInfo>				_lazyBindingInfo;
@@ -397,7 +405,6 @@ public:
 	bool									_hasUnalignedFixup = false;
 	// Note, <= 0 values are indices in to rebases, > 0 are binds.
 	std::vector<int64_t>					_threadedRebaseBindIndices;
-	std::vector<uint64_t>				 	_chainedFixupAddresses;
 	std::unordered_map<const ld::Atom*, uint32_t> _chainedFixupNoAddendBindOrdinals;
 	ChainedFixupBinds						_chainedFixupBinds;
 	std::vector<ChainedFixupSegInfo>    	_chainedFixupSegments;
@@ -411,6 +418,7 @@ public:
 	class RelocationsAtomAbstract*			_sectionsRelocationsAtom;
 	class RelocationsAtomAbstract*			_localRelocsAtom;
 	class RelocationsAtomAbstract*			_externalRelocsAtom;
+	class RebaseRLEAtom*					_rebaseRLEAtom;
 	class ClassicLinkEditAtom*				_symbolTableAtom;
 	class ClassicLinkEditAtom*				_indirectSymbolTableAtom;
 	class StringPoolAtom*					_stringPoolAtom;

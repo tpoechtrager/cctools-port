@@ -91,9 +91,6 @@ void Snapshot::setSnapshotMode(SnapshotMode mode)
             case SNAPSHOT_DEBUG:
                 fRecordArgs = fRecordObjects = fRecordDylibSymbols = fRecordArchiveFiles = fRecordUmbrellaFiles = fRecordDataFiles = true;
                 break;
-            case SNAPSHOT_KEXT:
-                fRecordKext = fRecordArgs = fRecordObjects = fRecordDylibSymbols = fRecordArchiveFiles = fRecordUmbrellaFiles = fRecordDataFiles = true;
-                break;
             default:
                 break;
         }
@@ -113,19 +110,14 @@ void Snapshot::setSnapshotName()
         } else {
             const char *base = basename((char *)fOutputPath);
             if (fRecordKext) {
-                const char *kextobjects;
-                if ((kextobjects = fOptions->kextObjectsPath())) {
-                    fSnapshotLocation = strdup(kextobjects);
-                } else {
-                    fSnapshotLocation = strdup(dirname((char *)fOutputPath));
-                }
+                fSnapshotLocation = strdup(dirname((char *)fOutputPath));
                 asprintf((char **)&fSnapshotName, "%s.%s.ld", base, fArchString);
             } else {
                 time_t now = time(NULL);
                 struct tm t;
                 localtime_r(&now, &t);
                 char buf[PATH_MAX];
-                snprintf(buf, sizeof(buf)-1, "%s-%4.4d-%2.2d-%2.2d-%2.2d%2.2d%2.2d.ld-snapshot", base, t.tm_year+1900, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec);
+                snprintf(buf, sizeof(buf)-1, "%s-%4.4d-%2.2d-%2.2d-%2.2d%2.2d%2.2d.ld-snapshot", base, t.tm_year+1900, t.tm_mon+1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec);
                 fSnapshotName = strdup(buf);
             }
         }
@@ -146,7 +138,7 @@ void Snapshot::buildPath(char *buf, const char *subdir, const char *file)
     if (subdir) {
         strcat(buf, subdir);
         // implicitly create the subdirectory
-        mode_t mode = fRecordKext ? (S_IRUSR|S_IWUSR|S_IXUSR|S_IRGRP|S_IXGRP|S_IROTH|S_IXOTH) : (S_IRUSR|S_IWUSR|S_IXUSR);
+        mode_t mode = fRecordKext ? (S_IRUSR|S_IWUSR|S_IXUSR|S_IRGRP|S_IXGRP|S_IROTH|S_IXOTH) : (S_IRUSR|S_IWUSR|S_IXUSR|S_IROTH);
         mkdir(buf, mode);
         strcat(buf, "/");
     }
@@ -216,7 +208,7 @@ void Snapshot::copyFileToSnapshot(const char *sourcePath, const char *subdir, ch
     char buf[PATH_MAX];
     if (path == NULL) path = buf;
     buildUniquePath(path, subdir, file);
-    mode_t mode = fRecordKext ? (S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH) : (S_IRUSR|S_IWUSR);
+    mode_t mode = fRecordKext ? (S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH) : (S_IRUSR|S_IWUSR|S_IROTH);
     int out_fd = open(path, O_WRONLY|O_CREAT|O_TRUNC, mode);
     int in_fd = open(sourcePath, O_RDONLY);
     int len;
@@ -242,8 +234,17 @@ void Snapshot::createSnapshot()
 
         // provide default name and location
         setSnapshotName();
-        if (fSnapshotLocation == NULL)
-            fSnapshotLocation = "/tmp";        
+        if (fSnapshotLocation == NULL) {
+			fSnapshotLocation = "/tmp";
+			// rdar://89496214 (When building in B&I, ld64 asserts should write the snapshot dir to the .BuildData directory, so it can be found later)
+			if ( const char* traceFile = getenv("LD_TRACE_FILE") ) {
+				char* buildDataDir = strdup(traceFile);
+				if ( char* lastSlash = strrchr(buildDataDir, '/') ) {
+					*lastSlash = '\0';
+					fSnapshotLocation = buildDataDir;
+				}
+			}
+		}
 
         char buf[PATH_MAX];
         fRootDir = (char *)fSnapshotLocation;
@@ -259,7 +260,7 @@ void Snapshot::createSnapshot()
 
         if (!fRecordKext) {
             buildPath(buf, NULL, compileFileString);
-            mode_t mode = fRecordKext ? (S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH) : (S_IXUSR|S_IRUSR|S_IWUSR);
+            mode_t mode = fRecordKext ? (S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH) : (S_IXUSR|S_IRUSR|S_IWUSR|S_IROTH);
             int compileScript = open(buf, O_WRONLY|O_CREAT|O_TRUNC, mode);
             write(compileScript, compile_stubs, strlen(compile_stubs));
             close(compileScript);
@@ -281,7 +282,7 @@ void Snapshot::createSnapshot()
 #if STORE_PID_IN_SNAPSHOT
         char path[PATH_MAX];
         buildUniquePath(path, NULL, pidString);
-        mode = fRecordKext ? (S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH) : (S_IRUSR|S_IWUSR);
+        mode = fRecordKext ? (S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH) : (S_IRUSR|S_IWUSR|S_IROTH);
         int pidfile = open(path, O_WRONLY|O_CREAT|O_TRUNC, mode);
         char pid_buf[32];
         sprintf(pid_buf, "%lu\n", (long unsigned)getpid());
@@ -313,7 +314,7 @@ void Snapshot::writeCommandLine(bool rawArgs)
         char path[PATH_MAX];
         buildPath(path, NULL, filename);
 
-        mode_t mode = fRecordKext ? (S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH) : (S_IXUSR|S_IRUSR|S_IWUSR);
+        mode_t mode = fRecordKext ? (S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH) : (S_IXUSR|S_IRUSR|S_IWUSR|S_IROTH);
         int argsFile = open(path, O_WRONLY|O_CREAT|O_TRUNC, mode);
         FILE *argsStream = fdopen(argsFile, "w");
         
@@ -421,7 +422,7 @@ void Snapshot::recordArch(const char *arch)
         } else {
             char path_buf[PATH_MAX];
             buildUniquePath(path_buf, NULL, "arch");
-            mode_t mode = fRecordKext ? (S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH) : (S_IRUSR|S_IWUSR);
+            mode_t mode = fRecordKext ? (S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH) : (S_IRUSR|S_IWUSR|S_IROTH);
             int fd=open(path_buf, O_WRONLY|O_CREAT|O_TRUNC, mode);
             write(fd, arch, strlen(arch));
             close(fd);
@@ -448,7 +449,7 @@ void Snapshot::recordObjectFile(const char *path)
                 const char * dir;
                 dir = (fRecordKext ? NULL : subdir(objectsString));
                 buildUniquePath(filelist_path, dir, "filelist");
-                mode_t mode = fRecordKext ? (S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH) : (S_IRUSR|S_IWUSR);
+                mode_t mode = fRecordKext ? (S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH) : (S_IRUSR|S_IWUSR|S_IROTH);
                 fFilelistFile = open(filelist_path, O_WRONLY|O_CREAT|O_TRUNC, mode);
 
                 if (!fRecordKext) {
@@ -494,7 +495,7 @@ void Snapshot::addDylibArg(const char *dylib)
             found = true;
     }
     if (!found) {
-        char buf[ARG_MAX];
+        char buf[PATH_MAX];
         sprintf(buf, "%s/%s", subdir(dylibsString), dylib);
         fArgIndicies.push_back(fArgs.size());
         fArgs.push_back(strdup(buf));
@@ -522,7 +523,7 @@ void Snapshot::recordDylibSymbol(ld::dylib::File* dylibFile, const char *name)
                 char path_buf[PATH_MAX];
                 buildUniquePath(path_buf, subdir(isFramework ? frameworkStubsString : dylibStubsString), dylibPath);
 
-                mode_t mode = fRecordKext ? (S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH) : (S_IRUSR|S_IWUSR);
+                mode_t mode = fRecordKext ? (S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH) : (S_IRUSR|S_IWUSR|S_IROTH);
                 dylibFd = open(path_buf, O_WRONLY|O_APPEND|O_CREAT, mode);
                 fDylibSymbols.insert(std::pair<const char *, int>(dylibPath, dylibFd));
                 char *base_name = strdup(basename(path_buf));
@@ -649,7 +650,7 @@ void Snapshot::recordAssertionMessage(const char *fmt, ...)
         } else {
             char path[PATH_MAX];
             buildPath(path, NULL, assertFileString);
-            mode_t mode = fRecordKext ? (S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH) : (S_IRUSR|S_IWUSR);
+            mode_t mode = fRecordKext ? (S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH) : (S_IRUSR|S_IWUSR|S_IROTH);
             int log = open(path, O_WRONLY|O_APPEND|O_CREAT, mode);
             write(log, msg, strlen(msg));
             close(log);

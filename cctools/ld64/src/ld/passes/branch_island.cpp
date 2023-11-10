@@ -296,11 +296,11 @@ static ld::Atom* makeBranchIsland(const Options& opts, ld::Fixup::Kind kind, int
 		case ld::Fixup::kindStoreThumbBranch22:
 		case ld::Fixup::kindStoreTargetAddressARMBranch24:
 		case ld::Fixup::kindStoreTargetAddressThumbBranch22:
-			if ( crossSectionBranch && opts.preferSubArchitecture() && opts.archSupportsThumb2() ) {
+			if ( crossSectionBranch && opts.archSupportsThumb2() ) {
 				return new Thumb2toThumbBranchAbsoluteIslandAtom(name, inSect, finalTarget);
 			}
 			else if ( finalTarget.atom->isThumb() ) {
-				if ( opts.preferSubArchitecture() && opts.archSupportsThumb2() ) {
+				if ( opts.archSupportsThumb2() ) {
 					return new Thumb2toThumbBranchIslandAtom(name, nextTarget, finalTarget);
 				}
 				else if ( opts.outputSlidable() ) {
@@ -334,7 +334,7 @@ static uint64_t textSizeWhenMightNeedBranchIslands(const Options& opts, bool see
 		case CPU_TYPE_ARM:
 			if ( ! seenThumbBranch )
 				return 32000000;  // ARM can branch +/- 32MB
-			else if ( opts.preferSubArchitecture() && opts.archSupportsThumb2() ) 
+			else if ( opts.archSupportsThumb2() )
 				return 16000000;  // thumb2 can branch +/- 16MB
 			else
 				return  4000000;  // thumb1 can branch +/- 4MB
@@ -361,7 +361,7 @@ static uint64_t maxDistanceBetweenIslands(const Options& opts, bool seenThumbBra
 		case CPU_TYPE_ARM:
 			if ( ! seenThumbBranch )
 				return 30*1024*1024;	// 2MB of branch islands per 32MB
-			else if ( opts.preferSubArchitecture() && opts.archSupportsThumb2() ) 
+			else if ( opts.archSupportsThumb2() )
 				return 14*1024*1024;	// 2MB of branch islands per 16MB
 			else
 				return 3500000;			// 0.5MB of branch islands per 4MB
@@ -406,7 +406,7 @@ static uint64_t maxDistanceBetweenIslands(const Options& opts, bool seenThumbBra
 //
 
 
-static void makeIslandsForSection(const Options& opts, ld::Internal& state, ld::Internal::FinalSection* textSection, unsigned stubCount)
+static void makeIslandsForSection(const Options& opts, ld::Internal& state, ld::Internal::FinalSection* textSection, size_t stubsSize)
 {
 	// assign section offsets to each atom in __text section, watch for thumb branches, and find total size
 	bool hasThumbBranches = false;
@@ -439,6 +439,7 @@ static void makeIslandsForSection(const Options& opts, ld::Internal& state, ld::
 				case ld::Fixup::kindStoreTargetAddressThumbBranch22:
 					hasThumbBranches = true;
 					// fall into arm branch case
+					[[clang::fallthrough]];
 				case ld::Fixup::kindStoreARMBranch24:
 				case ld::Fixup::kindStoreTargetAddressARMBranch24:
 					haveBranch = true;
@@ -446,7 +447,7 @@ static void makeIslandsForSection(const Options& opts, ld::Internal& state, ld::
                 default:
                     break;   
 			}
-			if ( haveBranch && (target->contentType() != ld::Atom::typeStub) ) {
+			if ( haveBranch && (target->section().type() != ld::Section::typeStub) && (target->section().type() != ld::Section::typeStubObjC) ) {
 				// <rdar://problem/14792124> haveCrossSectionBranches only applies to -preload builds
 				if ( preload && (sAtomToSectionIndex[atom] != sAtomToSectionIndex[target]) )
 					haveCrossSectionBranches = true;
@@ -465,7 +466,7 @@ static void makeIslandsForSection(const Options& opts, ld::Internal& state, ld::
 		(const_cast<ld::Atom*>(atom))->setSectionOffset(offset);
 		offset += atom->size();
 	}
-	uint64_t totalTextSize = offset + stubCount*16;
+	uint64_t totalTextSize = offset + stubsSize;
 	if ( (totalTextSize < textSizeWhenMightNeedBranchIslands(opts, hasThumbBranches)) && !haveCrossSectionBranches )
 		return;
 	if (_s_log) fprintf(stderr, "ld: section %s size=%llu, might need branch islands\n", textSection->sectionName(), totalTextSize);
@@ -566,7 +567,7 @@ static void makeIslandsForSection(const Options& opts, ld::Internal& state, ld::
 					srcAddr = sAtomToAddress[atom] + fit->offsetInAtom;
 					dstAddr = sAtomToAddress[target] + addend;
 				}
-				if ( target->section().type() == ld::Section::typeStub )
+				if ( (target->section().type() == ld::Section::typeStub) || (target->section().type() == ld::Section::typeStubObjC) )
 					dstAddr = totalTextSize;
 				int64_t displacement = dstAddr - srcAddr;
 				TargetAndOffset finalTargetAndOffset = { target, (uint32_t)addend };
@@ -582,7 +583,6 @@ static void makeIslandsForSection(const Options& opts, ld::Internal& state, ld::
 												island, island->name(), displacement);
 						++islandCount;
 						regionsIslands[0]->push_back(island);
-						state.atomToSection[island] = textSection;
 					}
 					else {
 						island = pos->second;
@@ -606,7 +606,6 @@ static void makeIslandsForSection(const Options& opts, ld::Internal& state, ld::
 								(*region)[finalTargetAndOffset] = island;
 								if (_s_log) fprintf(stderr, "added forward branching island %p %s to region %d for %s\n", island, island->name(), i, atom->name());
 								regionsIslands[i]->push_back(island);
-								state.atomToSection[island] = textSection;
 								++islandCount;
 								nextTarget = island;
 							}
@@ -633,7 +632,6 @@ static void makeIslandsForSection(const Options& opts, ld::Internal& state, ld::
 								(*region)[finalTargetAndOffset] = island;
 								if (_s_log) fprintf(stderr, "added back branching island %p %s to region %d for %s\n", island, island->name(), i, atom->name());
 								regionsIslands[i]->push_back(island);
-								state.atomToSection[island] = textSection;
 								++islandCount;
 								prevTarget = island;
 							}
@@ -747,18 +745,18 @@ void doPass(const Options& opts, ld::Internal& state)
 	}
 	
 	// scan sections for number of stubs
-	unsigned stubCount = 0;
-	for (std::vector<ld::Internal::FinalSection*>::iterator sit=state.sections.begin(); sit != state.sections.end(); ++sit) {
-		ld::Internal::FinalSection* sect = *sit;
+	size_t stubsSize = 0;
+	for (const ld::Internal::FinalSection* sect : state.sections) {
 		if ( sect->type() == ld::Section::typeStub )
-			stubCount = sect->atoms.size();
+			stubsSize += sect->atoms.size() * 16;
+		else if ( sect->type() == ld::Section::typeStubObjC )
+			stubsSize += sect->atoms.size() * 32;
 	}
 
 	// scan sections and add island to each code section
-	for (std::vector<ld::Internal::FinalSection*>::iterator sit=state.sections.begin(); sit != state.sections.end(); ++sit) {
-		ld::Internal::FinalSection* sect = *sit;
-		if ( sect->type() == ld::Section::typeCode ) 
-			makeIslandsForSection(opts, state, sect, stubCount);
+	for (ld::Internal::FinalSection* sect : state.sections) {
+		if ( sect->type() == ld::Section::typeCode )
+			makeIslandsForSection(opts, state, sect, stubsSize);
 	}
 }
 

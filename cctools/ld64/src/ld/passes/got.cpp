@@ -28,6 +28,7 @@
 #include <unistd.h>
 #include <dlfcn.h>
 
+#include <algorithm>
 #include <vector>
 #include <map>
 
@@ -115,7 +116,7 @@ private:
 	static ld::Section						_s_sectionWeak;
 };
 
-ld::Section GOTAuthEntryAtom::_s_section("__DATA", "__got", ld::Section::typeNonLazyPointer);
+ld::Section GOTAuthEntryAtom::_s_section("__DATA", "__auth_got", ld::Section::typeNonLazyPointer);
 ld::Section GOTAuthEntryAtom::_s_sectionWeak("__DATA", "__got_weak", ld::Section::typeNonLazyPointer);
 
 #endif
@@ -139,6 +140,12 @@ static bool gotFixup(const Options& opts, ld::Internal& internal, const ld::Atom
 #if SUPPORT_ARCH_arm64
 		case ld::Fixup::kindStoreTargetAddressARM64GOTLoadPage21:
 		case ld::Fixup::kindStoreTargetAddressARM64GOTLoadPageOff12:
+#endif
+#if SUPPORT_ARCH_riscv
+		case ld::Fixup::kindStoreRISCVhi20PCRelGOT:
+		case ld::Fixup::kindStoreRISCVlo12PCRelGOT:
+		case ld::Fixup::kindStoreRISCVhi20GOT:
+		case ld::Fixup::kindStoreRISCVlo12GOT:
 #endif
 		{
 			// start by assuming this can be optimized
@@ -329,31 +336,61 @@ void doPass(const Options& opts, ld::Internal& internal)
 				if ( optimizable ) {
 					// change from load of GOT entry to lea of target
 					if ( log ) fprintf(stderr, "optimized GOT usage in %s to %s\n", atom->name(), targetOfGOT->name());
-					switch ( fit->binding ) {
-						case ld::Fixup::bindingsIndirectlyBound:
-						case ld::Fixup::bindingDirectlyBound:
-							fit->binding = ld::Fixup::bindingDirectlyBound;
-							fit->u.target = targetOfGOT;
-							switch ( fit->kind ) {
-								case ld::Fixup::kindStoreTargetAddressX86PCRel32GOTLoad:
-									fit->kind = ld::Fixup::kindStoreTargetAddressX86PCRel32GOTLoadNowLEA;
-									break;
-#if SUPPORT_ARCH_arm64
-								case ld::Fixup::kindStoreTargetAddressARM64GOTLoadPage21:
-									fit->kind = ld::Fixup::kindStoreTargetAddressARM64GOTLeaPage21;
-									break;
-								case ld::Fixup::kindStoreTargetAddressARM64GOTLoadPageOff12:
-									fit->kind = ld::Fixup::kindStoreTargetAddressARM64GOTLeaPageOff12;
-									break;
+					if ( fit->clusterSize == ld::Fixup::k2of2 ) {
+						switch (fit->kind ) {
+#if SUPPORT_ARCH_riscv
+							case ld::Fixup::kindStoreRISCVlo12PCRelGOT:
+								fit->kind = ld::Fixup::kindStoreRISCVlo12PCRelwasGOT;
+								fit[-1].binding = ld::Fixup::bindingDirectlyBound;
+								fit[-1].u.target = targetOfGOT;
+								break;
+							case ld::Fixup::kindStoreRISCVlo12GOT:
+								fit->kind = ld::Fixup::kindStoreRISCVlo12wasGOT;
+								fit[-1].binding = ld::Fixup::bindingDirectlyBound;
+								fit[-1].u.target = targetOfGOT;
+								break;
+							case ld::Fixup::kindStoreRISCVhi20PCRelGOT:
+								fit->kind = ld::Fixup::kindStoreRISCVhi20PCRel;
+								fit[-1].binding = ld::Fixup::bindingDirectlyBound;
+								fit[-1].u.target = targetOfGOT;
+								break;
+							case ld::Fixup::kindStoreRISCVhi20GOT:
+								fit->kind = ld::Fixup::kindStoreRISCVhi20;
+								fit[-1].binding = ld::Fixup::bindingDirectlyBound;
+								fit[-1].u.target = targetOfGOT;
+								break;
 #endif
-								default:
-									assert(0 && "unsupported GOT reference kind");
-									break;
-							}
-							break;
-						default:
-							assert(0 && "unsupported GOT reference");
-							break;
+							default:
+								break;
+						}
+					}
+					else {
+						switch ( fit->binding ) {
+							case ld::Fixup::bindingsIndirectlyBound:
+							case ld::Fixup::bindingDirectlyBound:
+								fit->binding = ld::Fixup::bindingDirectlyBound;
+								fit->u.target = targetOfGOT;
+								switch ( fit->kind ) {
+									case ld::Fixup::kindStoreTargetAddressX86PCRel32GOTLoad:
+										fit->kind = ld::Fixup::kindStoreTargetAddressX86PCRel32GOTLoadNowLEA;
+										break;
+#if SUPPORT_ARCH_arm64
+									case ld::Fixup::kindStoreTargetAddressARM64GOTLoadPage21:
+										fit->kind = ld::Fixup::kindStoreTargetAddressARM64GOTLeaPage21;
+										break;
+									case ld::Fixup::kindStoreTargetAddressARM64GOTLoadPageOff12:
+										fit->kind = ld::Fixup::kindStoreTargetAddressARM64GOTLeaPageOff12;
+										break;
+#endif
+									default:
+										assert(0 && "unsupported GOT reference kind");
+										break;
+								}
+								break;
+							default:
+								assert(0 && "unsupported GOT reference");
+								break;
+						}
 					}
 				}
 				else {

@@ -28,6 +28,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
+#include <algorithm>
 #include <vector>
 #include <dlfcn.h>
 #include <math.h>

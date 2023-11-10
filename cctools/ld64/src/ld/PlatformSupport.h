@@ -47,10 +47,8 @@ enum class Platform
     tvOS_simulator      = 8,    // PLATFORM_TVOSSIMULATOR
     watchOS_simulator   = 9,    // PLATFORM_WATCHOSSIMULATOR
     driverKit           = 10,   // PLATFORM_DRIVERKIT
-#if TARGET_FEATURE_REALITYOS
-    realityOS                = 11,   // PLATFORM_WOLF
-    reality_simulator      = 12,   // PLATFORM_WOLFSIMULATOR
-#endif
+    sepOS               = 14,   // PLATFORM_SEPOS
+
 
     freestanding        = 100   // this never shows up in mach-o files, it is for internal tracking in ld64
 };

@@ -18,7 +18,7 @@ if test "x$CXXFLAGS" = "x"; then
   CXXFLAGS="-O3"
 fi
 
-CXXFLAGS="$CXXFLAGS -std=c++1z"
+CXXFLAGS="$CXXFLAGS -std=c++20"
 
 if test "x$build" = "x$host"; then
   CFLAGS="$CFLAGS -isystem /usr/local/include -isystem /usr/pkg/include"
@@ -74,7 +74,7 @@ case "$CCVERSION" in
   ;;
 esac
 
-EXTRAFLAGS="$EXTRAFLAGS -DLD64_VERSION_NUM=711"
+EXTRAFLAGS="$EXTRAFLAGS -DLD64_VERSION_NUM=907"
 
 case "$CXXVERSION" in
   *clang* )
@@ -513,5 +513,6 @@ AC_CONFIG_FILES([ld64/src/ld/Makefile])
 AC_CONFIG_FILES([ld64/src/ld/parsers/Makefile])
 AC_CONFIG_FILES([ld64/src/ld/passes/Makefile])
 AC_CONFIG_FILES([ld64/src/other/Makefile])
+AC_CONFIG_FILES([ld64/src/mach_o/Makefile])
 
 AC_OUTPUT

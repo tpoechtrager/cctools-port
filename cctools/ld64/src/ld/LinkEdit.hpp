@@ -1227,7 +1227,8 @@ void ChainedInfoAtom<A>::encode() const
 	this->_encodedData.bytes().reserve(1024);
 
 	uint16_t format = DYLD_CHAINED_IMPORT;
-	if ( _writer._chainedFixupBinds.hasHugeSymbolStrings() )
+	// the compact format (DYLD_CHAINED_IMPORT) can only support up to 8MB or strings or 240 dylibs (0xF1 or greater is considered negative)
+	if ( _writer._chainedFixupBinds.hasHugeSymbolStrings() || (_writer.maxLibOrdinal() > 240) )
 		format = DYLD_CHAINED_IMPORT_ADDEND64;
 	else if ( _writer._chainedFixupBinds.hasHugeAddends() )
 		format = DYLD_CHAINED_IMPORT_ADDEND64;
@@ -1405,25 +1406,6 @@ private:
 	typedef typename A::P::uint_t				pint_t;
 
 	const ld::Atom*								stubForResolverFunction(const ld::Atom* resolver) const;
-
-	struct TrieEntriesSorter
-	{
-		TrieEntriesSorter(const Options& o) : _options(o) {}
-		
-		 bool operator()(const mach_o::trie::Entry& left, const mach_o::trie::Entry& right)
-		 {
-			unsigned int leftOrder;
-			unsigned int rightOrder;
-			_options.exportedSymbolOrder(left.name, &leftOrder);
-			_options.exportedSymbolOrder(right.name, &rightOrder);
-			if ( leftOrder != rightOrder ) 
-				return (leftOrder < rightOrder);
-			else
-				return (left.address < right.address);
-		 }
-	private:
-		const Options&	_options;
-	};
 	
 	static ld::Section			_s_section;
 };
@@ -1452,28 +1434,36 @@ const ld::Atom* ExportInfoAtom<A>::stubForResolverFunction(const ld::Atom* resol
 template <typename A>
 void ExportInfoAtom<A>::encode() const
 {
-	// make vector of mach_o::trie::Entry for all exported symbols
-	std::vector<const ld::Atom*>& exports = this->_writer._exportedAtoms;
-	uint64_t imageBaseAddress = this->_writer.headerAndLoadCommandsSection->address;
-	std::vector<mach_o::trie::Entry> entries;
-	unsigned int padding = 0;
-	entries.reserve(exports.size());
-	for (std::vector<const ld::Atom*>::const_iterator it = exports.begin(); it != exports.end(); ++it) {
-		const ld::Atom* atom = *it;
-		mach_o::trie::Entry entry;
-		uint64_t flags = (atom->contentType() == ld::Atom::typeTLV) ? EXPORT_SYMBOL_FLAGS_KIND_THREAD_LOCAL : EXPORT_SYMBOL_FLAGS_KIND_REGULAR;
-		uint64_t other = 0;
-		uint64_t address = atom->finalAddress() - imageBaseAddress;
+	uint64_t 							imageBaseAddress = this->_writer.headerAndLoadCommandsSection->address;
+	__block unsigned int				padding          = 0;
+
+
+	std::vector<const ld::Atom*> exportedAtoms;
+	exportedAtoms.reserve(this->_writer._exportedAtoms.size());
+	for (const ld::Atom* atom : this->_writer._exportedAtoms) {
 		if ( atom->definition() == ld::Atom::definitionProxy ) {
-			entry.name = atom->name();
-			entry.flags = flags | EXPORT_SYMBOL_FLAGS_REEXPORT;
-			if ( atom->combine() == ld::Atom::combineByName )
-				entry.flags |= EXPORT_SYMBOL_FLAGS_WEAK_DEFINITION;
-			entry.other = this->_writer.compressedOrdinalForAtom(atom);
-			if ( entry.other == BIND_SPECIAL_DYLIB_SELF ) {
-				warning("not adding explict export for symbol %s because it is already re-exported from dylib %s", entry.name, atom->safeFilePath());
-				continue;
+			if (const ld::dylib::File* dylib = dynamic_cast<const ld::dylib::File*>(atom->file()) ) {
+				if ( dylib->_reExported ) {
+					warning("not adding explicit re-export for symbol '%s' because it is already re-exported from dylib '%s'", atom->name(), dylib->installPath());
+					continue;
+				}
 			}
+		}
+		exportedAtoms.push_back(atom);
+	}
+
+    mach_o::ExportsTrie::Getter get = ^(size_t index) {
+		const ld::Atom* atom = exportedAtoms[index];
+        mach_o::ExportsTrie::Export exportedSymbol;
+		exportedSymbol.name = atom->name();
+		exportedSymbol.flags = (atom->contentType() == ld::Atom::typeTLV) ? EXPORT_SYMBOL_FLAGS_KIND_THREAD_LOCAL : EXPORT_SYMBOL_FLAGS_KIND_REGULAR;
+		exportedSymbol.other = 0;
+		exportedSymbol.offset = atom->finalAddress() - imageBaseAddress;
+		if ( atom->definition() == ld::Atom::definitionProxy ) {
+			exportedSymbol.flags |= EXPORT_SYMBOL_FLAGS_REEXPORT;
+			if ( atom->combine() == ld::Atom::combineByName )
+				exportedSymbol.flags |= EXPORT_SYMBOL_FLAGS_WEAK_DEFINITION;
+			exportedSymbol.other = this->_writer.compressedOrdinalForAtom(atom);
 			if ( atom->isAlias() ) {
 				// alias proxy means symbol was re-exported with a name change
 				const ld::Atom* aliasOf = NULL;
@@ -1484,61 +1474,53 @@ void ExportInfoAtom<A>::encode() const
 					}
 				}
 				assert(aliasOf != NULL);
-				entry.importName = aliasOf->name();
+				exportedSymbol.importName = aliasOf->name();
 			}
 			else {
 				// symbol name stays same as re-export
-				entry.importName = atom->name();
+				exportedSymbol.importName = "";
 			}
-			entries.push_back(entry);
 			//fprintf(stderr, "re-export %s from lib %llu as %s\n", entry.importName, entry.other, entry.name);
 		}
 		else if ( atom->definition() == ld::Atom::definitionAbsolute ) {
-			entry.name = atom->name();
-			entry.flags = _options.canUseAbsoluteSymbols() ? EXPORT_SYMBOL_FLAGS_KIND_ABSOLUTE : EXPORT_SYMBOL_FLAGS_KIND_REGULAR;
-			entry.address = address;
-			entry.other = other;
-			entry.importName = NULL;
-			entries.push_back(entry);
+			exportedSymbol.flags   = _options.canUseAbsoluteSymbols() ? EXPORT_SYMBOL_FLAGS_KIND_ABSOLUTE : EXPORT_SYMBOL_FLAGS_KIND_REGULAR;
+			exportedSymbol.offset  = atom->finalAddress();
 		}
 		else {
 			if ( (atom->definition() == ld::Atom::definitionRegular) && (atom->combine() == ld::Atom::combineByName) )
-				flags |= EXPORT_SYMBOL_FLAGS_WEAK_DEFINITION;
+				exportedSymbol.flags |= EXPORT_SYMBOL_FLAGS_WEAK_DEFINITION;
 			if ( atom->isThumb() )
-				address |= 1;
+				exportedSymbol.offset |= 1;
 			if ( atom->contentType() == ld::Atom::typeResolver ) {
-				flags |= EXPORT_SYMBOL_FLAGS_STUB_AND_RESOLVER;
+				exportedSymbol.flags |= EXPORT_SYMBOL_FLAGS_STUB_AND_RESOLVER;
 				// set normal lookup to return stub address
 				// and add resolver function in new location that newer dyld's can access
-				other = address;
+				exportedSymbol.other = exportedSymbol.offset;
 				const ld::Atom* stub = stubForResolverFunction(atom);
-				address = stub->finalAddress() - imageBaseAddress;
+				exportedSymbol.offset = stub->finalAddress() - imageBaseAddress;
 				if ( stub->isThumb() )
-					address |= 1;
+					exportedSymbol.offset |= 1;
 			}
-			entry.name = atom->name();
-			entry.flags = flags;
-			entry.address = address; 
-			entry.other = other; 
-			entry.importName = NULL;
-			entries.push_back(entry);
 		}
 
-		if (_options.sharedRegionEligible() && strncmp(atom->section().segmentName(), "__DATA", 6) == 0) {
+		if ( _options.sharedRegionEligible() && (strncmp(atom->section().segmentName(), "__DATA", 6) == 0) ) {
 			// Maximum address is 64bit which is 10 bytes as a uleb128. Minimum is 1 byte
 			// Pad the section out so we can deal with addresses getting larger when __DATA segment
-			// is moved before __TEXT in dyld shared cache.
+			// is moved before __TEXT in dyld shared cache
 			padding += 9;
 		}
-	}
+        return exportedSymbol;
+    };
 
-	// sort vector by -exported_symbols_order, and any others by address
-	std::sort(entries.begin(), entries.end(), TrieEntriesSorter(_options));
-	
-	// create trie
-	mach_o::trie::makeTrie(entries, this->_encodedData.bytes());
+	mach_o::ExportsTrie trie(exportedAtoms.size(), get);
+	if ( mach_o::Error err = std::move(trie.buildError()) )
+		throwf("error creating exports trie: %s\n", err.message());
+	size_t          trieSize  = 0;
+	const uint8_t*  trieBytes = trie.bytes(trieSize);
 
-	//Add additional data padding for the unoptimized shared cache
+	this->_encodedData.append_mem(trieBytes, trieSize);
+
+	// Add additional data padding for the dyld shared cache
 	for (unsigned int i = 0; i < padding; ++i)
 		this->_encodedData.append_byte(0);
 
@@ -2084,56 +2066,54 @@ ld::Section DataInCodeAtom<A>::_s_section("__LINKEDIT", "__dataInCode", ld::Sect
 template <typename A>
 void DataInCodeAtom<A>::encode() const
 {
-	if ( this->_writer.hasDataInCode ) {
-		uint64_t mhAddress = 0;
-		for (std::vector<ld::Internal::FinalSection*>::iterator sit = _state.sections.begin(); sit != _state.sections.end(); ++sit) {
-			ld::Internal::FinalSection* sect = *sit;
-			if ( sect->type() == ld::Section::typeMachHeader )
-				mhAddress = sect->address;
-			if ( sect->type() != ld::Section::typeCode )
-				continue;
-			for (std::vector<const ld::Atom*>::iterator ait = sect->atoms.begin(); ait != sect->atoms.end(); ++ait) {
-				const ld::Atom*	atom = *ait;
-				// gather all code-in-data labels
-				std::vector<const ld::Fixup*> dataInCodeLabels;
-				for (ld::Fixup::iterator fit = atom->fixupsBegin(); fit != atom->fixupsEnd(); ++fit) {
-					switch ( fit->kind ) {
-						case ld::Fixup::kindDataInCodeStartData:
-						case ld::Fixup::kindDataInCodeStartJT8:
-						case ld::Fixup::kindDataInCodeStartJT16:
-						case ld::Fixup::kindDataInCodeStartJT32:
-						case ld::Fixup::kindDataInCodeStartJTA32:
-						case ld::Fixup::kindDataInCodeEnd:
-							dataInCodeLabels.push_back(fit);
-							break;
-						default:
-							break;
-					}
+	uint64_t mhAddress = 0;
+	for (std::vector<ld::Internal::FinalSection*>::iterator sit = _state.sections.begin(); sit != _state.sections.end(); ++sit) {
+		ld::Internal::FinalSection* sect = *sit;
+		if ( sect->type() == ld::Section::typeMachHeader )
+			mhAddress = sect->address;
+		if ( sect->type() != ld::Section::typeCode )
+			continue;
+		for (std::vector<const ld::Atom*>::iterator ait = sect->atoms.begin(); ait != sect->atoms.end(); ++ait) {
+			const ld::Atom*	atom = *ait;
+			// gather all code-in-data labels
+			std::vector<const ld::Fixup*> dataInCodeLabels;
+			for (ld::Fixup::iterator fit = atom->fixupsBegin(); fit != atom->fixupsEnd(); ++fit) {
+				switch ( fit->kind ) {
+					case ld::Fixup::kindDataInCodeStartData:
+					case ld::Fixup::kindDataInCodeStartJT8:
+					case ld::Fixup::kindDataInCodeStartJT16:
+					case ld::Fixup::kindDataInCodeStartJT32:
+					case ld::Fixup::kindDataInCodeStartJTA32:
+					case ld::Fixup::kindDataInCodeEnd:
+						dataInCodeLabels.push_back(fit);
+						break;
+					default:
+						break;
 				}
-				// to do: sort labels by address
-				std::sort(dataInCodeLabels.begin(), dataInCodeLabels.end(), FixupByAddressSorter());
-				
-				// convert to array of struct data_in_code_entry
-				ld::Fixup::Kind prevKind = ld::Fixup::kindDataInCodeEnd;
-				uint32_t prevOffset = 0;
-				for ( std::vector<const ld::Fixup*>::iterator sfit = dataInCodeLabels.begin(); sfit != dataInCodeLabels.end(); ++sfit) {
-					if ( ((*sfit)->kind != prevKind) && (prevKind != ld::Fixup::kindDataInCodeEnd) ) {
-						int len = (*sfit)->offsetInAtom - prevOffset;
-						if ( len == 0 )
-							warning("overlapping data-in-code in '%s' at offset 0x%04X", atom->name(), prevOffset);
-						this->encodeEntry(atom->finalAddress()+prevOffset-mhAddress, (*sfit)->offsetInAtom - prevOffset, prevKind);
-					}
-					prevKind = (*sfit)->kind;
-					prevOffset = (*sfit)->offsetInAtom;
+			}
+			// to do: sort labels by address
+			std::sort(dataInCodeLabels.begin(), dataInCodeLabels.end(), FixupByAddressSorter());
+
+			// convert to array of struct data_in_code_entry
+			ld::Fixup::Kind prevKind = ld::Fixup::kindDataInCodeEnd;
+			uint32_t prevOffset = 0;
+			for ( std::vector<const ld::Fixup*>::iterator sfit = dataInCodeLabels.begin(); sfit != dataInCodeLabels.end(); ++sfit) {
+				if ( ((*sfit)->kind != prevKind) && (prevKind != ld::Fixup::kindDataInCodeEnd) ) {
+					int len = (*sfit)->offsetInAtom - prevOffset;
+					if ( len == 0 )
+						warning("overlapping data-in-code in '%s' at offset 0x%04X", atom->name(), prevOffset);
+					this->encodeEntry(atom->finalAddress()+prevOffset-mhAddress, (*sfit)->offsetInAtom - prevOffset, prevKind);
 				}
-				if ( prevKind != ld::Fixup::kindDataInCodeEnd ) {
-					// add entry if function ends with data
-					this->encodeEntry(atom->finalAddress()+prevOffset-mhAddress, atom->size() - prevOffset, prevKind);
-				}
+				prevKind = (*sfit)->kind;
+				prevOffset = (*sfit)->offsetInAtom;
+			}
+			if ( prevKind != ld::Fixup::kindDataInCodeEnd ) {
+				// add entry if function ends with data
+				this->encodeEntry(atom->finalAddress()+prevOffset-mhAddress, atom->size() - prevOffset, prevKind);
 			}
 		}
 	}
-	
+
 	this->_encoded = true;
 }
 
@@ -2256,10 +2236,7 @@ void CodeSignatureAtom::encode() const
 		case ld::Platform::watchOS_simulator:
 		case ld::Platform::driverKit:
 		case ld::Platform::watchOS:
-#if TARGET_FEATURE_REALITYOS
-		case ld::Platform::realityOS:
-		case ld::Platform::reality_simulator:
-#endif
+		case ld::Platform::sepOS:
 			sig_platform = platform;
 			sig_min_version = minVersion;
 			break;
@@ -2275,9 +2252,10 @@ void CodeSignatureAtom::encode() const
 	if ( libcd_set_hash_types_for_platform_version(_sigRef, (int)sig_platform, (int)sig_min_version) != LIBCD_SET_HASH_TYPE_SUCCESS )
 		throw "can't determine codesign hash for output platform";
 
-	// set identifier
-	const char* lastSlash = strrchr(_opts.outputFilePath(), '/');
-	const char* leafName = (lastSlash != nullptr) ? lastSlash+1 : _opts.outputFilePath();
+	// set identifier (use installPath() because it returns a stable name)
+	const char* path      = _opts.installPath();
+	const char* lastSlash = strrchr(path, '/');
+	const char* leafName  = (lastSlash != nullptr) ? lastSlash+1 : path;
 	libcd_set_signing_id(_sigRef, leafName);
 
 	// add flags

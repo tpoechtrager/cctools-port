@@ -28,14 +28,10 @@
 #include <unistd.h>
 #include <dlfcn.h>
 
-#include <vector>
-#include <map>
-#include <unordered_map>
-#include <unordered_set>
-
 #include "ld.hpp"
 #include "MachOFileAbstraction.hpp"
 #include "dtrace_dof.h"
+#include "Containers.h"
 
 // prototype for entry point in libdtrace.dylib
 typedef uint8_t* (*createdof_func_t)(cpu_type_t, unsigned int, const char*[], unsigned int, const char*[], const char*[], uint64_t offsetsInDOF[], size_t* size);
@@ -111,9 +107,8 @@ struct DTraceProbeInfo {
 	uint32_t						offset;
 	const char*						probeName;
 };
-typedef std::unordered_map<const char*, std::vector<DTraceProbeInfo>, CStringHash, CStringEquals>	ProviderToProbes;
-typedef	std::unordered_set<const char*, CStringHash, CStringEquals>  CStringSet;
 
+using ProviderToProbes = CStringMap<std::vector<DTraceProbeInfo>>;
 
 
 void doPass(const Options& opts, ld::Internal& internal)
@@ -131,7 +126,7 @@ void doPass(const Options& opts, ld::Internal& internal)
 	// scan all atoms looking for dtrace probes
 	std::vector<DTraceProbeInfo>					probeSites;
 	std::vector<DTraceProbeInfo>					isEnabledSites;
-	std::map<const ld::Atom*,CStringSet>			atomToDtraceTypes;
+	Map<const ld::Atom*, CStringSet>			atomToDtraceTypes;
 	for (std::vector<ld::Internal::FinalSection*>::iterator sit=internal.sections.begin(); sit != internal.sections.end(); ++sit) {
 		ld::Internal::FinalSection* sect = *sit;
 		if ( sect->type() != ld::Section::typeCode ) 
@@ -237,18 +232,19 @@ void doPass(const Options& opts, ld::Internal& internal)
 		if ( pCreateDOF == NULL )
 			throwf("couldn't find \"dtrace_ld_create_dof\" in /usr/lib/libdtrace.dylib: %s", dlerror());
 		// build list of typedefs/stability infos for this provider
-		CStringSet types;
+		// use an ordered set so that the type names list is deterministic
+		CStringOrderedSet types;
 		for(std::vector<DTraceProbeInfo>::const_iterator it = probes.begin(); it != probes.end(); ++it) {
-			std::map<const ld::Atom*,CStringSet>::iterator pos = atomToDtraceTypes.find(it->atom);
+			auto pos = atomToDtraceTypes.find(it->atom);
 			if ( pos != atomToDtraceTypes.end() ) {
-				for(CStringSet::iterator sit = pos->second.begin(); sit != pos->second.end(); ++sit) {
-					const char* providerStart = strchr(*sit, '$')+1;
+				for(const char* type : pos->second) {
+					const char* providerStart = strchr(type, '$')+1;
 					const char* providerEnd = strchr(providerStart, '$');
 					if ( providerEnd != NULL ) {
 						char aProviderName[providerEnd-providerStart+1];
 						strlcpy(aProviderName, providerStart, providerEnd-providerStart+1);
 						if ( strcmp(aProviderName, providerName) == 0 )
-							types.insert(*sit);
+							types.insert(type);
 					}
 				}
 			}
@@ -257,8 +253,8 @@ void doPass(const Options& opts, ld::Internal& internal)
 		const char* typeNames[typeCount];
 		//fprintf(stderr, "types for %s:\n", providerName);
 		uint32_t index = 0;
-		for(CStringSet::iterator it = types.begin(); it != types.end(); ++it) {
-			typeNames[index] = *it;
+		for(const char* type : types) {
+			typeNames[index] = type;
 			//fprintf(stderr, "\t%s\n", *it);
 			++index;
 		}

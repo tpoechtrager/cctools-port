@@ -43,5 +43,5 @@ libPasses_la_SOURCES =  \
 	code_dedup.cpp \
 	thread_starts.cpp \
 	inits.cpp \
-	objc_constants.cpp
-
+	objc_constants.cpp \
+	objc_stubs.cpp
