@@ -320,7 +320,8 @@ char **envp)
 	    }
 	    new_argv = allocate((argc + 10) * sizeof(char *)); /* cctools-port:
 								  + 8 -> + 10 */
-	    new_argv[0] = as;
+	    /* new_argv[0] = as; */
+	    new_argv[0] = "clang"; /* cctools-port: fix ccache */
 	    j = 1;
 	    /*
 	     * Add "-x assembler" in case the input does not end in .s this must
