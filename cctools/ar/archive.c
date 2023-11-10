@@ -331,11 +331,15 @@ put_arobj(cfp, sb)
 		 * places that write archives to allow testing and comparing
 		 * things for exact binary equality.
 		 */
-		if (getenv("ZERO_AR_DATE") == NULL)
+		if (getenv("ZERO_AR_DATE") != NULL) {
+			tv_sec = (long int)0;
+		} else if (getenv("SOURCE_DATE_EPOCH") != NULL) {
+			/* If the SOURCE_DATE_EPOCH variable is set to something, use it for deterministic timestamps */
+			tv_sec = (long int)strtoll(getenv("SOURCE_DATE_EPOCH"), NULL, 10);
+		} else {
 			/* cctools-port: sb->st_mtimespec.tv_sec -> sb->st_mtime */
 			tv_sec = (long int)sb->st_mtime;
-		else
-			tv_sec = (long int)0;
+		}
 
 		/*
 		 * If not truncating names and the name is too long or contains
