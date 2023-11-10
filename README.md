@@ -31,8 +31,8 @@ Not all of the targets have been tested.
 
 ## DEPENDENCIES ##
 
-`Clang 10+` 
-`libstdc++` or `libc++` with C++20 support; depending on what your compiler uses
+`Clang 10+`  
+`libstdc++` or `libc++` with C++20 support; depending on what your compiler uses  
 `libdispatch-dev`  
 `libblocksruntime` (should be installed by the dispatch library)
 
