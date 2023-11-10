@@ -350,7 +350,24 @@ LDFLAGS=$ORIGLDFLAGS
 CHECK_LLVM
 LDFLAGS="$LDFLAGS $LTO_RPATH"
 
+### Check for Blocks Runtime library ###
+
+AC_CHECK_LIB([BlocksRuntime], [_Block_release], [BLOCKS_RUNTIME_LIB=-lBlocksRuntime], [
+    AC_CHECK_LIB([c], [_Block_release], [], [
+      echo "Required library liblocksruntime not installed" >&2
+      exit 1
+    ])
+    AC_SUBST(BLOCKS_RUNTIME_LIB)
+  ])
+AC_SUBST(BLOCKS_RUNTIME_LIB)
+
 ### Check for dispatch library ###
+
+# FreeBSD requires -lBlocksRuntime for -ldispatch
+if test "x$isdarwin" != "xyes"; then
+  ORIGLDFLAGS=$LDFLAGS
+  LDFLAGS="$LDFLAGS -lBlocksRuntime"
+fi
 
 AC_CHECK_LIB([dispatch], [dispatch_once], [
   AC_CHECK_HEADERS([dispatch/dispatch.h], [DISPATCH_LIB=-ldispatch])], [
@@ -363,17 +380,9 @@ AC_CHECK_LIB([dispatch], [dispatch_once], [
   ])
 AC_SUBST(DISPATCH_LIB)
 
-### Check for Blocks Runtime library ###
-
-AC_CHECK_LIB([BlocksRuntime], [_Block_release], [BLOCKS_RUNTIME_LIB=-lBlocksRuntime], [
-    AC_CHECK_LIB([c], [_Block_release], [], [
-      echo "Required library liblocksruntime not installed" >&2
-      exit 1
-    ])
-    AC_SUBST(BLOCKS_RUNTIME_LIB)
-  ])
-AC_SUBST(BLOCKS_RUNTIME_LIB)
-
+if test "x$isdarwin" != "xyes"; then
+  LDFLAGS=$ORIGLDFLAGS
+fi
 
 ### Check for libfts (musl) ###
 
