@@ -18,6 +18,6 @@ int main(int argc, char *argv[]) {
     execvp(binaryPath, new_argv);
 
     // execvp only returns if an error occurred
-    perror("execvp failed");
+    fprintf(stderr, "Could not execute llvm-otool; llvm-otool comes with llvm 13 onwards\n");
     return EXIT_FAILURE;
 }
