@@ -669,6 +669,7 @@ TAPI_DEF
 TAPI_LIB
 XAR_LIB
 FTS_LIB
+BLOCKS_RUNTIME_LIB
 DISPATCH_LIB
 LLVM_LIB_DIR
 LLVM_INCLUDE_DIR
@@ -3092,7 +3093,7 @@ if test "x$CXXFLAGS" = "x"; then
   CXXFLAGS="-O3"
 fi
 
-CXXFLAGS="$CXXFLAGS -std=c++20"
+CXXFLAGS="$CXXFLAGS -std=c++2a"
 
 if test "x$build" = "x$host"; then
   CFLAGS="$CFLAGS -isystem /usr/local/include -isystem /usr/pkg/include"
@@ -18628,9 +18629,9 @@ fi
 done
 else $as_nop
 
-    { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for dispatch_sync in -lc" >&5
-printf %s "checking for dispatch_sync in -lc... " >&6; }
-if test ${ac_cv_lib_c_dispatch_sync+y}
+    { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for dispatch_once in -lc" >&5
+printf %s "checking for dispatch_once in -lc... " >&6; }
+if test ${ac_cv_lib_c_dispatch_once+y}
 then :
   printf %s "(cached) " >&6
 else $as_nop
@@ -18642,45 +18643,144 @@ cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* Override any GCC internal prototype to avoid an error.
    Use char because int might match the return type of a GCC
    builtin and then its argument prototype would still apply.  */
-char dispatch_sync ();
+char dispatch_once ();
 int
 main (void)
 {
-return dispatch_sync ();
+return dispatch_once ();
   ;
   return 0;
 }
 _ACEOF
 if ac_fn_c_try_link "$LINENO"
 then :
-  ac_cv_lib_c_dispatch_sync=yes
+  ac_cv_lib_c_dispatch_once=yes
 else $as_nop
-  ac_cv_lib_c_dispatch_sync=no
+  ac_cv_lib_c_dispatch_once=no
 fi
 rm -f core conftest.err conftest.$ac_objext conftest.beam \
     conftest$ac_exeext conftest.$ac_ext
 LIBS=$ac_check_lib_save_LIBS
 fi
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_c_dispatch_sync" >&5
-printf "%s\n" "$ac_cv_lib_c_dispatch_sync" >&6; }
-if test "x$ac_cv_lib_c_dispatch_sync" = xyes
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_c_dispatch_once" >&5
+printf "%s\n" "$ac_cv_lib_c_dispatch_once" >&6; }
+if test "x$ac_cv_lib_c_dispatch_once" = xyes
 then :
 
-             for ac_header in dispatch/dispatch.h
-do :
-  ac_fn_c_check_header_compile "$LINENO" "dispatch/dispatch.h" "ac_cv_header_dispatch_dispatch_h" "$ac_includes_default"
+      ac_fn_c_check_header_compile "$LINENO" "dispatch/dispatch.h" "ac_cv_header_dispatch_dispatch_h" "$ac_includes_default"
 if test "x$ac_cv_header_dispatch_dispatch_h" = xyes
 then :
   printf "%s\n" "#define HAVE_DISPATCH_DISPATCH_H 1" >>confdefs.h
- DISPATCH_LIB=
-fi
-
-done
-fi
-
-
 
 fi
+
+else $as_nop
+
+        echo "Required library libdispatch not installed" >&2
+        exit 1
+
+fi
+
+
+
+fi
+
+
+
+### Check for Blocks Runtime library ###
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for _Block_release in -lBlocksRuntime" >&5
+printf %s "checking for _Block_release in -lBlocksRuntime... " >&6; }
+if test ${ac_cv_lib_BlocksRuntime__Block_release+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  ac_check_lib_save_LIBS=$LIBS
+LIBS="-lBlocksRuntime  $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.  */
+char _Block_release ();
+int
+main (void)
+{
+return _Block_release ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"
+then :
+  ac_cv_lib_BlocksRuntime__Block_release=yes
+else $as_nop
+  ac_cv_lib_BlocksRuntime__Block_release=no
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam \
+    conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_BlocksRuntime__Block_release" >&5
+printf "%s\n" "$ac_cv_lib_BlocksRuntime__Block_release" >&6; }
+if test "x$ac_cv_lib_BlocksRuntime__Block_release" = xyes
+then :
+  BLOCKS_RUNTIME_LIB=-lBlocksRuntime
+else $as_nop
+
+    { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for _Block_release in -lc" >&5
+printf %s "checking for _Block_release in -lc... " >&6; }
+if test ${ac_cv_lib_c__Block_release+y}
+then :
+  printf %s "(cached) " >&6
+else $as_nop
+  ac_check_lib_save_LIBS=$LIBS
+LIBS="-lc  $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.  */
+char _Block_release ();
+int
+main (void)
+{
+return _Block_release ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"
+then :
+  ac_cv_lib_c__Block_release=yes
+else $as_nop
+  ac_cv_lib_c__Block_release=no
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam \
+    conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_c__Block_release" >&5
+printf "%s\n" "$ac_cv_lib_c__Block_release" >&6; }
+if test "x$ac_cv_lib_c__Block_release" = xyes
+then :
+  printf "%s\n" "#define HAVE_LIBC 1" >>confdefs.h
+
+  LIBS="-lc $LIBS"
+
+else $as_nop
+
+      echo "Required library liblocksruntime not installed" >&2
+      exit 1
+
+fi
+
+
+
+fi
+
 
 
 
@@ -19231,7 +19331,7 @@ ac_config_files="$ac_config_files ld64/src/Makefile"
 
 ac_config_files="$ac_config_files ld64/src/3rd/Makefile"
 
-ac_config_files="$ac_config_files ld64/src/3rd/BlocksRuntime/Makefile"
+ac_config_files="$ac_config_files ld64/src/mach_o/Makefile"
 
 ac_config_files="$ac_config_files ld64/src/ld/Makefile"
 
@@ -19240,8 +19340,6 @@ ac_config_files="$ac_config_files ld64/src/ld/parsers/Makefile"
 ac_config_files="$ac_config_files ld64/src/ld/passes/Makefile"
 
 ac_config_files="$ac_config_files ld64/src/other/Makefile"
-
-ac_config_files="$ac_config_files ld64/src/mach_o/Makefile"
 
 
 cat >confcache <<\_ACEOF
@@ -20386,12 +20484,11 @@ do
     "ld64/doc/man/Makefile") CONFIG_FILES="$CONFIG_FILES ld64/doc/man/Makefile" ;;
     "ld64/src/Makefile") CONFIG_FILES="$CONFIG_FILES ld64/src/Makefile" ;;
     "ld64/src/3rd/Makefile") CONFIG_FILES="$CONFIG_FILES ld64/src/3rd/Makefile" ;;
-    "ld64/src/3rd/BlocksRuntime/Makefile") CONFIG_FILES="$CONFIG_FILES ld64/src/3rd/BlocksRuntime/Makefile" ;;
+    "ld64/src/mach_o/Makefile") CONFIG_FILES="$CONFIG_FILES ld64/src/mach_o/Makefile" ;;
     "ld64/src/ld/Makefile") CONFIG_FILES="$CONFIG_FILES ld64/src/ld/Makefile" ;;
     "ld64/src/ld/parsers/Makefile") CONFIG_FILES="$CONFIG_FILES ld64/src/ld/parsers/Makefile" ;;
     "ld64/src/ld/passes/Makefile") CONFIG_FILES="$CONFIG_FILES ld64/src/ld/passes/Makefile" ;;
     "ld64/src/other/Makefile") CONFIG_FILES="$CONFIG_FILES ld64/src/other/Makefile" ;;
-    "ld64/src/mach_o/Makefile") CONFIG_FILES="$CONFIG_FILES ld64/src/mach_o/Makefile" ;;
 
   *) as_fn_error $? "invalid argument: \`$ac_config_target'" "$LINENO" 5;;
   esac

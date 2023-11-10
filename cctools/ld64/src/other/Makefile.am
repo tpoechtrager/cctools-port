@@ -17,7 +17,7 @@ AM_CXXFLAGS = \
 	-I$(top_srcdir)/ld64/src/ld \
 	-I$(top_srcdir)/ld64/src/ld/parsers \
 	-I$(top_srcdir)/ld64/src/ld/passes \
-        -DBUILDING_TOOLS
+  -DBUILDING_TOOLS
 
 AM_CFLAGS = \
     -D__DARWIN_UNIX03 \
@@ -46,10 +46,7 @@ ObjectDump_SOURCES = \
 
 ObjectDump_LDADD =  \
 	$(top_builddir)/ld64/src/ld/parsers/libParsers.la \
-	$(top_builddir)/ld64/src/3rd/BlocksRuntime/libBlocksRuntime.la  \
 	$(LTO_RPATH) \
 	$(LTO_LIB) \
-	$(DL_LIB) 
-
-
-
+	$(DL_LIB) \
+	$(BLOCKS_RUNTIME_LIB)

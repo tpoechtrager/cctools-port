@@ -114,9 +114,8 @@ ObjectDump_OBJECTS = $(am_ObjectDump_OBJECTS)
 am__DEPENDENCIES_1 =
 ObjectDump_DEPENDENCIES =  \
 	$(top_builddir)/ld64/src/ld/parsers/libParsers.la \
-	$(top_builddir)/ld64/src/3rd/BlocksRuntime/libBlocksRuntime.la \
 	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
-	$(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
@@ -215,6 +214,7 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BLOCKS_RUNTIME_LIB = @BLOCKS_RUNTIME_LIB@
 CC = @CC@
 CCAS = @CCAS@
 CCASFLAGS = @CCASFLAGS@
@@ -371,7 +371,7 @@ AM_CXXFLAGS = \
 	-I$(top_srcdir)/ld64/src/ld \
 	-I$(top_srcdir)/ld64/src/ld/parsers \
 	-I$(top_srcdir)/ld64/src/ld/passes \
-        -DBUILDING_TOOLS
+  -DBUILDING_TOOLS
 
 AM_CFLAGS = \
     -D__DARWIN_UNIX03 \
@@ -398,10 +398,10 @@ ObjectDump_SOURCES = \
 
 ObjectDump_LDADD = \
 	$(top_builddir)/ld64/src/ld/parsers/libParsers.la \
-	$(top_builddir)/ld64/src/3rd/BlocksRuntime/libBlocksRuntime.la  \
 	$(LTO_RPATH) \
 	$(LTO_LIB) \
-	$(DL_LIB) 
+	$(DL_LIB) \
+	$(BLOCKS_RUNTIME_LIB)
 
 all: all-am
 

@@ -33,11 +33,18 @@ Not all of the targets have been tested.
 
 `Clang 3.4+` 
 
+`libdispatch-dev`  
+`libblocksruntime-dev` (should be installed by the dispatch lib)
+
 SDKs with .tdb stubs (>= Xcode 7) require the TAPI library to be installed.  
 => https://github.com/tpoechtrager/apple-libtapi
 
 musl-libc based systems require the musl-fts library to be installed.
 => https://github.com/pullmoll/musl-fts
+
+Kind of optional, but highly recommended:
+
+`llvm >= 13`              (For `llvm-otool`, otherwise there is no `otool` support)
 
 Optional, but recommended:
 

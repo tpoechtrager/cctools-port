@@ -18,7 +18,7 @@ if test "x$CXXFLAGS" = "x"; then
   CXXFLAGS="-O3"
 fi
 
-CXXFLAGS="$CXXFLAGS -std=c++20"
+CXXFLAGS="$CXXFLAGS -std=c++2a"
 
 if test "x$build" = "x$host"; then
   CFLAGS="$CFLAGS -isystem /usr/local/include -isystem /usr/pkg/include"
@@ -354,11 +354,26 @@ LDFLAGS="$LDFLAGS $LTO_RPATH"
 
 AC_CHECK_LIB([dispatch], [dispatch_once], [
   AC_CHECK_HEADERS([dispatch/dispatch.h], [DISPATCH_LIB=-ldispatch])], [
-    AC_CHECK_LIB([c], [dispatch_sync], [
-      AC_CHECK_HEADERS([dispatch/dispatch.h], [DISPATCH_LIB=])], [])
+    AC_CHECK_LIB([c], [dispatch_once], [
+      AC_CHECK_HEADERS([dispatch/dispatch.h], [])], [
+        echo "Required library libdispatch not installed" >&2
+        exit 1
+      ])
     AC_SUBST(DISPATCH_LIB)
   ])
 AC_SUBST(DISPATCH_LIB)
+
+### Check for Blocks Runtime library ###
+
+AC_CHECK_LIB([BlocksRuntime], [_Block_release], [BLOCKS_RUNTIME_LIB=-lBlocksRuntime], [
+    AC_CHECK_LIB([c], [_Block_release], [], [
+      echo "Required library liblocksruntime not installed" >&2
+      exit 1
+    ])
+    AC_SUBST(BLOCKS_RUNTIME_LIB)
+  ])
+AC_SUBST(BLOCKS_RUNTIME_LIB)
+
 
 ### Check for libfts (musl) ###
 
@@ -508,11 +523,10 @@ AC_CONFIG_FILES([ld64/Makefile])
 AC_CONFIG_FILES([ld64/doc/man/Makefile])
 AC_CONFIG_FILES([ld64/src/Makefile])
 AC_CONFIG_FILES([ld64/src/3rd/Makefile])
-AC_CONFIG_FILES([ld64/src/3rd/BlocksRuntime/Makefile])
+AC_CONFIG_FILES([ld64/src/mach_o/Makefile])
 AC_CONFIG_FILES([ld64/src/ld/Makefile])
 AC_CONFIG_FILES([ld64/src/ld/parsers/Makefile])
 AC_CONFIG_FILES([ld64/src/ld/passes/Makefile])
 AC_CONFIG_FILES([ld64/src/other/Makefile])
-AC_CONFIG_FILES([ld64/src/mach_o/Makefile])
 
 AC_OUTPUT

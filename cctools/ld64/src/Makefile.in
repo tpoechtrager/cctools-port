@@ -191,6 +191,7 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BLOCKS_RUNTIME_LIB = @BLOCKS_RUNTIME_LIB@
 CC = @CC@
 CCAS = @CCAS@
 CCASFLAGS = @CCASFLAGS@
@@ -333,7 +334,7 @@ target_vendor = @target_vendor@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-SUBDIRS = 3rd ld other mach_o
+SUBDIRS = 3rd mach_o ld other
 all: all-recursive
 
 .SUFFIXES:
