@@ -12,7 +12,11 @@ if [ $OPERATING_SYSTEM == "Android" ]; then
 fi
 
 if [ -z "$LLVM_DSYMUTIL" ]; then
-    LLVM_DSYMUTIL=llvm-dsymutil
+    if command -v llvm-dsymutil &>/dev/null; then
+        LLVM_DSYMUTIL=llvm-dsymutil
+    else
+        LLVM_DSYMUTIL=dsymutil
+    fi
 fi
 
 if [ -z "$JOBS" ]; then
@@ -44,6 +48,9 @@ function extract()
             ;;
         *.tar.lzma|*.tlzma)
             lzma -dc $1 | tar $tarflags -
+            ;;
+        *.zip)
+            unzip $1
             ;;
         *)
             echo "unhandled archive type" 1>&2
@@ -136,23 +143,28 @@ echo ""
 OK=0
 
 set +e
-which $LLVM_DSYMUTIL &>/dev/null
+version=$(echo "$($LLVM_DSYMUTIL --version 2>&1)" | grep -oP 'LLVM version \K[^\s]+')
+
 if [ $? -eq 0 ]; then
-    case $($LLVM_DSYMUTIL --version | \
-           grep "LLVM version" | head -1 | awk '{print $3}') in
-        3.8*|3.9*|4.0*|5.0*|6.0*|7.0*|8.0*|9.0*|10*|11*|12*|13*) OK=1 ;;
-    esac
+    major_version=$(echo "$version" | awk -F'\\.' '{print $1}')
+    minor_version=$(echo "$version" | awk -F'\\.' '{print $2}')
+    if ((major_version > 3 || (major_version == 3 && minor_version >= 8))); then
+        OK=1
+
+        if [ "$LLVM_DSYMUTIL" == "llvm-dsymutil" ]; then
+            ln -sf "$(command -v $LLVM_DSYMUTIL)" "$TARGETDIR/bin/dsymutil"
+        fi
+    fi
 fi
 set -e
 
-if [ $OK -eq 1 ]; then
-    ln -sf $(which $LLVM_DSYMUTIL) $TARGETDIR/bin/dsymutil
-    pushd $TARGETDIR/bin &>/dev/null
-    ln -sf $TRIPLE-lipo lipo
-    popd &>/dev/null
-elif ! which dsymutil &>/dev/null; then
+if [ $OK -ne 1 ]; then
     echo "int main(){return 0;}" | cc -xc -O2 -o $TARGETDIR/bin/dsymutil -
 fi
+
+pushd $TARGETDIR/bin &>/dev/null
+ln -sf $TRIPLE-lipo lipo
+popd &>/dev/null
 
 verbose_cmd cc -O2 -Wall -Wextra -pedantic wrapper.c \
     -DSDK_DIR=\"\\\"$WRAPPER_SDKDIR\\\"\" \
@@ -164,13 +176,13 @@ pushd $TARGETDIR/bin &>/dev/null
 verbose_cmd ln -sf $TRIPLE-clang $TRIPLE-clang++
 popd &>/dev/null
 
+rm -rf tmp
+mkdir -p tmp
+
 echo ""
 echo "*** building ldid ***"
 echo ""
 
-rm -rf tmp
-
-mkdir -p tmp
 pushd tmp &>/dev/null
 git_clone_repository https://github.com/tpoechtrager/ldid.git master
 pushd ldid &>/dev/null
@@ -179,11 +191,27 @@ popd &>/dev/null
 popd &>/dev/null
 
 echo ""
+echo "*** building apple-libdispatch ***"
+echo ""
+
+pushd tmp &>/dev/null
+git_clone_repository https://github.com/tpoechtrager/apple-libdispatch.git main
+pushd apple-libdispatch &>/dev/null
+mkdir -p build
+pushd build &>/dev/null
+CC=clang CXX=clang++ \
+    cmake .. -DCMAKE_BUILD_TYPE=RELEASE -DCMAKE_INSTALL_PREFIX=$TARGETDIR
+make install -j$JOBS
+popd &>/dev/null
+popd &>/dev/null
+popd &>/dev/null
+
+echo ""
 echo "*** building apple-libtapi ***"
 echo ""
 
 pushd tmp &>/dev/null
-git_clone_repository https://github.com/tpoechtrager/apple-libtapi.git 1100.0.11
+git_clone_repository https://github.com/tpoechtrager/apple-libtapi.git 1300.6.5
 pushd apple-libtapi &>/dev/null
 INSTALLPREFIX=$TARGETDIR ./build.sh
 ./install.sh
@@ -201,7 +229,12 @@ popd &>/dev/null
 pushd tmp &>/dev/null
 mkdir -p cctools
 pushd cctools &>/dev/null
-../../../../cctools/configure --target=$TRIPLE --prefix=$TARGETDIR --with-libtapi=$TARGETDIR
+../../../../cctools/configure \
+    --target=$TRIPLE \
+    --prefix=$TARGETDIR \
+    --with-libtapi=$TARGETDIR \
+    --with-libdispatch=$TARGETDIR \
+    --with-libblocksruntime=$TARGETDIR
 make -j$JOBS && make install
 popd &>/dev/null
 popd &>/dev/null
