@@ -827,6 +827,8 @@ with_sysroot
 enable_libtool_lock
 enable_lto_support
 with_llvm_config
+with_libblocksruntime
+with_libdispatch
 enable_xar_support
 with_libxar
 enable_tapi_support
@@ -1503,6 +1505,8 @@ Optional Packages:
   --with-sysroot[=DIR]    Search for dependent libraries within DIR (or the
                           compiler's sysroot if not specified).
   --with-llvm-config      llvm config tool
+  --with-libblocksruntime path to the blocks runtime library
+  --with-libdispatch      path to the dispatch library
   --with-libxar           path to the XAR library
   --with-libtapi          path to the apple tapi library
 
@@ -18579,6 +18583,36 @@ LDFLAGS="$LDFLAGS $LTO_RPATH"
 
 ### Check for Blocks Runtime library ###
 
+
+# Check whether --with-libblocksruntime was given.
+if test ${with_libblocksruntime+y}
+then :
+  withval=$with_libblocksruntime; BLOCKS_RUNTIME_DIR=$with_libblocksruntime
+else $as_nop
+  BLOCKS_RUNTIME_DIR=""
+fi
+
+
+if test "x$BLOCKS_RUNTIME_DIR" = "xno"; then
+  BLOCKS_RUNTIME_DIR=""
+fi
+
+if test "x$BLOCKS_RUNTIME_DIR" != "x"; then
+  test -d "$BLOCKS_RUNTIME_DIR/lib" && LDFLAGS="$LDFLAGS -L$BLOCKS_RUNTIME_DIR/lib"
+  test -d "$BLOCKS_RUNTIME_DIR/lib64" && LDFLAGS="$LDFLAGS -L$BLOCKS_RUNTIME_DIR/lib64"
+  test -d "$BLOCKS_RUNTIME_DIR/lib32" && LDFLAGS="$LDFLAGS -L$BLOCKS_RUNTIME_DIR/lib32"
+  if test "x$rpathlink" = "xyes"; then
+    BLOCKS_RUNTIME_RPATH="-Wl,-rpath,$BLOCKS_RUNTIME_DIR/lib,--enable-new-dtags"
+    BLOCKS_RUNTIME_RPATH="$BLOCKS_RUNTIME_RPATH -Wl,-rpath,$BLOCKS_RUNTIME_DIR/lib64,--enable-new-dtags"
+    BLOCKS_RUNTIME_RPATH="$BLOCKS_RUNTIME_RPATH -Wl,-rpath,$BLOCKS_RUNTIME_DIR/lib32,--enable-new-dtags"
+    LDFLAGS="$LDFLAGS $BLOCKS_RUNTIME_RPATH"
+  fi
+  if test "x$isdarwin" = "xyes"; then
+    BLOCKS_RUNTIME_RPATH="-Wl,-rpath,$BLOCKS_RUNTIME_DIR/lib"
+    LDFLAGS="$LDFLAGS $BLOCKS_RUNTIME_RPATH"
+  fi
+fi
+
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for _Block_release in -lBlocksRuntime" >&5
 printf %s "checking for _Block_release in -lBlocksRuntime... " >&6; }
 if test ${ac_cv_lib_BlocksRuntime__Block_release+y}
@@ -18662,7 +18696,7 @@ then :
 
 else $as_nop
 
-      echo "Required library liblocksruntime not installed" >&2
+      echo "Required library libblocksruntime not installed (install libdispatch!)" >&2
       exit 1
 
 fi
@@ -18674,6 +18708,38 @@ fi
 
 
 ### Check for dispatch library ###
+
+
+# Check whether --with-libdispatch was given.
+if test ${with_libdispatch+y}
+then :
+  withval=$with_libdispatch; LIBDISPATCH_DIR=$with_libdispatch
+else $as_nop
+  LIBDISPATCH_DIR=""
+fi
+
+
+if test "x$LIBDISPATCH_DIR" = "xno"; then
+  LIBDISPATCH_DIR=""
+fi
+
+if test "x$LIBDISPATCH_DIR" != "x"; then
+  CXXFLAGS="$CXXFLAGS -isystem $LIBDISPATCH_DIR/include"
+  CPPFLAGS="$CPPFLAGS -isystem $LIBDISPATCH_DIR/include"
+  test -d "$LIBDISPATCH_DIR/lib" && LDFLAGS="$LDFLAGS -L$LIBDISPATCH_DIR/lib"
+  test -d "$LIBDISPATCH_DIR/lib64" && LDFLAGS="$LDFLAGS -L$LIBDISPATCH_DIR/lib64"
+  test -d "$LIBDISPATCH_DIR/lib32" && LDFLAGS="$LDFLAGS -L$LIBDISPATCH_DIR/lib32"
+  if test "x$rpathlink" = "xyes"; then
+    LIBDISPATCH_RPATH="-Wl,-rpath,$LIBDISPATCH_DIR/lib,--enable-new-dtags"
+    LIBDISPATCH_RPATH="$LIBDISPATCH_RPATH -Wl,-rpath,$LIBDISPATCH_DIR/lib64,--enable-new-dtags"
+    LIBDISPATCH_RPATH="$LIBDISPATCH_RPATH -Wl,-rpath,$LIBDISPATCH_DIR/lib32,--enable-new-dtags"
+    LDFLAGS="$LDFLAGS $LIBDISPATCH_RPATH"
+  fi
+  if test "x$isdarwin" = "xyes"; then
+    LIBDISPATCH_RPATH="-Wl,-rpath,$LIBDISPATCH_DIR/lib"
+    LDFLAGS="$LDFLAGS $LIBDISPATCH_RPATH"
+  fi
+fi
 
 # FreeBSD requires -lBlocksRuntime for -ldispatch
 if test "x$isdarwin" != "xyes"; then

@@ -352,9 +352,34 @@ LDFLAGS="$LDFLAGS $LTO_RPATH"
 
 ### Check for Blocks Runtime library ###
 
+AC_ARG_WITH([libblocksruntime],
+    AS_HELP_STRING([--with-libblocksruntime],
+                  [path to the blocks runtime library]),
+    [BLOCKS_RUNTIME_DIR=$with_libblocksruntime], [BLOCKS_RUNTIME_DIR=""])
+
+if test "x$BLOCKS_RUNTIME_DIR" = "xno"; then
+  BLOCKS_RUNTIME_DIR=""
+fi
+
+if test "x$BLOCKS_RUNTIME_DIR" != "x"; then
+  test -d "$BLOCKS_RUNTIME_DIR/lib" && LDFLAGS="$LDFLAGS -L$BLOCKS_RUNTIME_DIR/lib"
+  test -d "$BLOCKS_RUNTIME_DIR/lib64" && LDFLAGS="$LDFLAGS -L$BLOCKS_RUNTIME_DIR/lib64"
+  test -d "$BLOCKS_RUNTIME_DIR/lib32" && LDFLAGS="$LDFLAGS -L$BLOCKS_RUNTIME_DIR/lib32"
+  if test "x$rpathlink" = "xyes"; then
+    BLOCKS_RUNTIME_RPATH="-Wl,-rpath,$BLOCKS_RUNTIME_DIR/lib,--enable-new-dtags"
+    BLOCKS_RUNTIME_RPATH="$BLOCKS_RUNTIME_RPATH -Wl,-rpath,$BLOCKS_RUNTIME_DIR/lib64,--enable-new-dtags"
+    BLOCKS_RUNTIME_RPATH="$BLOCKS_RUNTIME_RPATH -Wl,-rpath,$BLOCKS_RUNTIME_DIR/lib32,--enable-new-dtags"
+    LDFLAGS="$LDFLAGS $BLOCKS_RUNTIME_RPATH"
+  fi
+  if test "x$isdarwin" = "xyes"; then
+    BLOCKS_RUNTIME_RPATH="-Wl,-rpath,$BLOCKS_RUNTIME_DIR/lib"
+    LDFLAGS="$LDFLAGS $BLOCKS_RUNTIME_RPATH"
+  fi
+fi
+
 AC_CHECK_LIB([BlocksRuntime], [_Block_release], [BLOCKS_RUNTIME_LIB=-lBlocksRuntime], [
     AC_CHECK_LIB([c], [_Block_release], [], [
-      echo "Required library liblocksruntime not installed" >&2
+      echo "Required library libblocksruntime not installed (install libdispatch!)" >&2
       exit 1
     ])
     AC_SUBST(BLOCKS_RUNTIME_LIB)
@@ -362,6 +387,33 @@ AC_CHECK_LIB([BlocksRuntime], [_Block_release], [BLOCKS_RUNTIME_LIB=-lBlocksRunt
 AC_SUBST(BLOCKS_RUNTIME_LIB)
 
 ### Check for dispatch library ###
+
+AC_ARG_WITH([libdispatch],
+    AS_HELP_STRING([--with-libdispatch],
+                  [path to the dispatch library]),
+    [LIBDISPATCH_DIR=$with_libdispatch], [LIBDISPATCH_DIR=""])
+
+if test "x$LIBDISPATCH_DIR" = "xno"; then
+  LIBDISPATCH_DIR=""
+fi
+
+if test "x$LIBDISPATCH_DIR" != "x"; then
+  CXXFLAGS="$CXXFLAGS -isystem $LIBDISPATCH_DIR/include"
+  CPPFLAGS="$CPPFLAGS -isystem $LIBDISPATCH_DIR/include"
+  test -d "$LIBDISPATCH_DIR/lib" && LDFLAGS="$LDFLAGS -L$LIBDISPATCH_DIR/lib"
+  test -d "$LIBDISPATCH_DIR/lib64" && LDFLAGS="$LDFLAGS -L$LIBDISPATCH_DIR/lib64"
+  test -d "$LIBDISPATCH_DIR/lib32" && LDFLAGS="$LDFLAGS -L$LIBDISPATCH_DIR/lib32"
+  if test "x$rpathlink" = "xyes"; then
+    LIBDISPATCH_RPATH="-Wl,-rpath,$LIBDISPATCH_DIR/lib,--enable-new-dtags"
+    LIBDISPATCH_RPATH="$LIBDISPATCH_RPATH -Wl,-rpath,$LIBDISPATCH_DIR/lib64,--enable-new-dtags"
+    LIBDISPATCH_RPATH="$LIBDISPATCH_RPATH -Wl,-rpath,$LIBDISPATCH_DIR/lib32,--enable-new-dtags"
+    LDFLAGS="$LDFLAGS $LIBDISPATCH_RPATH"
+  fi
+  if test "x$isdarwin" = "xyes"; then
+    LIBDISPATCH_RPATH="-Wl,-rpath,$LIBDISPATCH_DIR/lib"
+    LDFLAGS="$LDFLAGS $LIBDISPATCH_RPATH"
+  fi
+fi
 
 # FreeBSD requires -lBlocksRuntime for -ldispatch
 if test "x$isdarwin" != "xyes"; then
