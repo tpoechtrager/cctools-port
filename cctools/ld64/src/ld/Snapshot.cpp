@@ -16,8 +16,11 @@
 #include <sys/stat.h>
 #include <libgen.h>
 #include <time.h>
+#if !__has_include(<Block.h>) // ld64-port: openSUSE has the header in block/
+#include <block/Block.h>
+#else
 #include <Block.h>
-
+#endif
 #include "Snapshot.h"
 #include "Options.h"
 
