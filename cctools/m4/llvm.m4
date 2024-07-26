@@ -14,7 +14,8 @@ AC_DEFUN([CHECK_LLVM],
       if test "x$LLVM_CONFIG" = "xno"; then
           AC_PATH_PROGS(LLVM_CONFIG,
               [llvm-config                                              \
-               llvm-config-17.0                                         \
+               llvm-config-18.0 llvm-config-18                          \
+               llvm-config-17.0 llvm-config-17                          \
                llvm-config-16.0 llvm-config-16                          \
                llvm-config-15.0 llvm-config-15                          \
                llvm-config-14.0 llvm-config-14                          \

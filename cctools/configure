@@ -18727,7 +18727,8 @@ fi
     if test "x$enable_lto_support" = "xyes"; then
       if test "x$LLVM_CONFIG" = "xno"; then
           for ac_prog in llvm-config                                              \
-               llvm-config-17.0                                         \
+               llvm-config-18.0 llvm-config-18                          \
+               llvm-config-17.0 llvm-config-17                          \
                llvm-config-16.0 llvm-config-16                          \
                llvm-config-15.0 llvm-config-15                          \
                llvm-config-14.0 llvm-config-14                          \
