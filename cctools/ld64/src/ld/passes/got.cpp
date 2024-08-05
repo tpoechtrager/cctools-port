@@ -153,6 +153,10 @@ static bool gotFixup(const Options& opts, ld::Internal& internal, const ld::Atom
 			// cannot do LEA optimization if target is in another dylib
 			if ( targetOfGOT->definition() == ld::Atom::definitionProxy ) 
 				*optimizable = false;
+			// rdar://95367013 (Linker crashes when using absolute symbols)
+			// cannot do LEA optimization if target is an absolute address
+			if ( targetOfGOT->definition() == ld::Atom::definitionAbsolute )
+				*optimizable = false;
 			// cannot do LEA optimization if target in __huge section
 			if ( internal.usingHugeSections && (targetOfGOT->size() > 1024*1024)
 											&& (   (targetOfGOT->section().type() == ld::Section::typeZeroFill)

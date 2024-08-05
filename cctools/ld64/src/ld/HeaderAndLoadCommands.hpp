@@ -699,6 +699,8 @@ uint32_t HeaderAndLoadCommandsAtom<A>::flags() const
 				bits |= MH_APP_EXTENSION_SAFE;
 			if (_options.isSimulatorSupportDylib())
 				bits |= MH_SIM_SUPPORT;
+			if ( _options.implicitPageZero() )
+				bits |= MH_IMPLICIT_PAGEZERO;
 		}
 		if ( _options.hasExecutableStack() )
 			bits |= MH_ALLOW_STACK_EXECUTION;

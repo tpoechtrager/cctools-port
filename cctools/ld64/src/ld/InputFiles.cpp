@@ -1413,7 +1413,7 @@ void InputFiles::forEachInitialAtom(ld::File::AtomHandler& handler, ld::Internal
             // add implicit __dso_handle label
             handler.doAtom(DSOHandleAtom::_s_atomExecutable);
             handler.doAtom(DSOHandleAtom::_s_atomAll);
-            if ( _options.pageZeroSize() != 0 ) 
+            if ( !_options.implicitPageZero() && (_options.pageZeroSize() != 0) )
                 handler.doAtom(*new PageZeroAtom(_options.pageZeroSize()));
             if ( _options.hasCustomStack() && !_options.needsEntryPointLoadCommand() ) 
                 handler.doAtom(*new CustomStackAtom(_options.customStackSize()));
@@ -1617,7 +1617,8 @@ void InputFiles::dylibs(ld::Internal& state)
 
 	bool skipForPlatform = false;
 	skipForPlatform = _options.platforms().contains(ld::Platform::driverKit) ||
-					  _options.platforms().contains(ld::Platform::sepOS);
+					  _options.platforms().contains(ld::Platform::sepOS) ||
+					  _options.platforms().contains(ld::Platform::freestanding);
 
 	
 	// <rdar://problem/10807040> give an error when -nostdlib is used and libSystem is missing

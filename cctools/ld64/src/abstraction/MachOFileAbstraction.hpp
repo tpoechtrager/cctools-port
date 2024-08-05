@@ -79,7 +79,11 @@
 	#define N_COLD_FUNC 0x0400
 #endif
 
-enum 
+#ifndef MH_IMPLICIT_PAGEZERO
+	#define MH_IMPLICIT_PAGEZERO 0x10000000
+#endif
+
+enum
 {
     RISCV_RELOC_UNSIGNED       = 0,   // for simple pointers
     RISCV_RELOC_SUBTRACTOR     = 1,   // must be followed by a RISCV_RELOC_UNSIGNED

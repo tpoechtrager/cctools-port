@@ -2522,7 +2522,8 @@ struct object *object)
 	    /* Do this in two steps to avoid 32/64-bit casting problems. */
 	    object->seg_linkedit64->filesize -= object->input_sym_info_size;
 	    object->seg_linkedit64->filesize += object->output_sym_info_size;
-	    object->seg_linkedit64->vmsize = object->seg_linkedit64->filesize;
+	    // make vmsize of LINKEDIT a multiple of the page size
+	    object->seg_linkedit64->vmsize = (object->seg_linkedit64->filesize + 0x3FFF) & (-0x4000);
 	}
 
 	/*

@@ -202,7 +202,7 @@ Options::Options(int argc, const char* argv[])
 	  fBundleLoader(NULL), fDtraceScriptName(NULL), fMapPath(NULL),
 	  fDyldInstallPath("/usr/lib/dyld"), fLtoCachePath(NULL), fTempLtoObjectPath(NULL), fOverridePathlibLTO(NULL), fLtoCpu(NULL),
 	  fToolchainPath(NULL),fOrderFilePath(NULL),
-	  fZeroPageSize(ULLONG_MAX), fStackSize(0), fStackAddr(0), fSourceVersion(0), fSDKVersion(0), fExecutableStack(false), 
+	  fZeroPageSize(ULLONG_MAX), fStackSize(0), fStackAddr(0), fSourceVersion(0), fSDKVersion(0), fImplicitPageZero(false), fExecutableStack(false),
 	  fNonExecutableHeap(false), fDisableNonExecutableHeap(false),
 	  fMinimumHeaderPad(32), fSegmentAlignment(LD_PAGE_SIZE), fForceAlignment(false),
 	  fCommonsMode(kCommonsIgnoreDylibs),  fUUIDMode(kUUIDContent), fLocalSymbolHandling(kLocalSymbolsAll), fWarnCommons(false), 
@@ -246,6 +246,7 @@ Options::Options(int argc, const char* argv[])
 	  fSharedRegionEncodingV2(false), fUseDataConstSegment(false),
 	  fUseDataConstSegmentForceOn(false), fUseDataConstSegmentForceOff(false),
 	  fConstSelectorRefs(false), fConstSelectorRefsForceOn(false), fConstSelectorRefsForceOff(false),
+      fConstClassRefs(false),
 	  fUseTextExecSegment(false), fBundleBitcode(false), fHideSymbols(false), fVerifyBitcode(false),
 	  fReverseMapUUIDRename(false), fDeDupe(true), fVerboseDeDupe(false), fMakeInitializersIntoOffsets(false),
 	  fUseLinkedListBinding(false),  fMakeChainedFixupsForceOn(false), fMakeChainedFixupsForceOff(false), fMakeChainedFixups(false),
@@ -257,7 +258,7 @@ Options::Options(int argc, const char* argv[])
 	  fWarnUnusedDylibs(false), fWarnUnusedDylibsForceOn(false), fWarnUnusedDylibsForceOff(false),
 	  fAdHocSign(false), fAdHocSignForceOn(false), fAdHocSignForceOff(false),
 	  fPlatformMismatchesAreWarning(false),
-	  fForceObjCRelativeMethodListsOn(false), fForceObjCRelativeMethodListsOff(false), fUseObjCRelativeMethodLists(false), fObjcSmallStubs(false),
+	  fForceObjCRelativeMethodListsOn(false), fForceObjCRelativeMethodListsOff(false), fUseObjCRelativeMethodLists(false), fObjcSmallStubs(false), fRunHugePass(true),
 	  fSaveTempFiles(false), fLinkSnapshot(this), fSnapshotRequested(false), fPipelineFifo(NULL),
 	  fDependencyInfoPath(NULL), fBuildContextName(NULL), fTraceFileDescriptor(-1), fMaxDefaultCommonAlign(0),
 	  fUnalignedPointerTreatment(kUnalignedPointerIgnore),
@@ -809,23 +810,20 @@ void Options::selectFallbackArch(const char *arch)
 		auto delimPos = fallback.find(':');
 
 		// Check we've got a potentially valid fallback string and that it's this architecture we're falling back from.
-		if ( delimPos == std::string::npos || fallback.substr(0, delimPos) != arch )
-			return;
-
-		std::string fallbackTo = fallback.substr(delimPos + 1);
-		for (const ArchInfo *t = archInfoArray; t->archName != nullptr; ++t) {
-			if ( fallbackTo == t->archName ) {
-				fFallbackArchitecture = t->cpuType;
-				fFallbackSubArchitecture = t->cpuSubType;
+		if ( delimPos != std::string::npos && fallback.substr(0, delimPos) == arch ) {
+			std::string fallbackTo = fallback.substr(delimPos + 1);
+			for (const ArchInfo *t = archInfoArray; t->archName != nullptr; ++t) {
+				if ( fallbackTo == t->archName ) {
+					fFallbackArchitecture = t->cpuType;
+					fFallbackSubArchitecture = t->cpuSubType;
+				}
 			}
 		}
 	}
-	else {
-		// <rdar://problem/39797337> let x86_64h fallback and use x86_64 slice
-		if ( (fArchitecture == CPU_TYPE_X86_64) && (fSubArchitecture == CPU_SUBTYPE_X86_64_H) ) {
-			fFallbackArchitecture    = CPU_TYPE_X86_64;
-			fFallbackSubArchitecture = CPU_SUBTYPE_X86_ALL;
-		}
+	// <rdar://problem/39797337> let x86_64h fallback and use x86_64 slice
+	if ( fFallbackArchitecture == 0 && (fArchitecture == CPU_TYPE_X86_64) && (fSubArchitecture == CPU_SUBTYPE_X86_64_H) ) {
+		fFallbackArchitecture    = CPU_TYPE_X86_64;
+		fFallbackSubArchitecture = CPU_SUBTYPE_X86_ALL;
 	}
 }
 
@@ -2697,6 +2695,12 @@ void Options::parse(int argc, const char* argv[])
 				// force use of ld-classic - nothing to do, because ld is the driver now
 				warning("-ld64 is deprecated, use -ld_classic instead");
 			}
+			else if ( strcmp(arg, "-no_warn_duplicate_libraries") == 0 ) {
+				// there're no duplicate library warnings in ld64, nothing to do
+			}
+			else if ( strcmp(arg, "-warn_duplicate_libraries") == 0 ) {
+				// there're no duplicate library warnings in ld64, nothing to do
+			}
 			else if ( strncmp(arg, "-lazy-l", 7) == 0 ) {
                 snapshotArgCount = 0;
 				FileInfo info = findLibrary(&arg[7], true);
@@ -3279,6 +3283,10 @@ void Options::parse(int argc, const char* argv[])
 				fZeroPageSize = temp;
 				cannotBeUsedWithBitcode(arg);
 			}
+			else if ( strcmp(arg, "-implicit_pagezero") == 0 ) {
+				fImplicitPageZero = true;
+				fZeroPageSize     = ULLONG_MAX;
+			}
 			else if ( strcmp(arg, "-stack_addr") == 0 ) {
 				 const char* address = argv[++i];
 				 if ( address == NULL )
@@ -3364,6 +3372,9 @@ void Options::parse(int argc, const char* argv[])
 					fPlatforms.updateSDKVersion(plat, SDKValue);
 				}
 				else {
+					// free-standing always overrides anything the compiler may have added
+					if ( plat == ld::Platform::freestanding )
+						fPlatforms.clear();
 					fPlatforms.insert(ld::PlatformVersion(plat, minVersValue, SDKValue));
 				}
 				fPlatfromVersionCmdFound = true;
@@ -3875,6 +3886,10 @@ void Options::parse(int argc, const char* argv[])
 			}
 			else if ( strcmp(arg, "-objc_stubs_fast") == 0 ) {
 				fObjcSmallStubs = false;
+			}
+			else if ( strcmp(arg, "-no_huge") == 0 ) {
+				// rdar://113231351 (ld64: add -no_huge option to disable the x86 huge pass)
+				fRunHugePass = false;
 			}
 			else if ( strcmp(arg, "-demangle") == 0 ) {
 				fDemangle = true;
@@ -4850,6 +4865,7 @@ bool Options::sharedCacheEligiblePath(const char* path) const
 			return true;
 	}
 
+
 	// <rdar://problem/48183961> Dylibs with install_names in /Library/Apple/ should be eligible for dyld shared cache
 	if ( platforms().contains(ld::Platform::macOS) ) {
 		if ( (strncmp(path, "/Library/Apple/usr/lib/", 23) == 0) || (strncmp(path, "/Library/Apple/System/Library/", 30) == 0) )
@@ -5084,6 +5100,9 @@ void Options::reconfigureDefaults()
 			case Options::kDynamicLibrary:
 			case Options::kDyld:
 				fUseDataConstSegment = true;
+				// rdar://118247827 (Avoid CONST and DIRTY segments for ExclaveKit dylibs)
+				if ( strncmp(this->installPath(), "/System/ExclaveKit/", 19) == 0 )
+					fUseDataConstSegment = false;
 				break;
 			case Options::kStaticExecutable:
 			case Options::kObjectFile:
@@ -5237,6 +5256,9 @@ void Options::reconfigureDefaults()
 		fConstSelectorRefs = fUseDataConstSegment && fSharedRegionEligible && platforms().minOS(ld::version2022Fall);
 	}
 
+	// by default only dylib built for 2023(e) have const class refs
+	fConstClassRefs = fUseDataConstSegment && platforms().minOS(ld::supportsConstClassRefs);
+
 	if ( fUseDataConstSegment ) {
 		addSectionRename("__DATA", "__got",				"__DATA_CONST", "__got");
 #if SUPPORT_ARCH_arm64e
@@ -5259,6 +5281,7 @@ void Options::reconfigureDefaults()
 		addSectionRename("__DATA", "__objc_classlist",  "__DATA_CONST", "__objc_classlist");
 		addSectionRename("__DATA", "__objc_nlclslist",	"__DATA_CONST", "__objc_nlclslist");
 		addSectionRename("__DATA", "__objc_catlist",	"__DATA_CONST", "__objc_catlist");
+		addSectionRename("__DATA", "__objc_catlist2",	"__DATA_CONST", "__objc_catlist2");
 		addSectionRename("__DATA", "__objc_nlcatlist",	"__DATA_CONST", "__objc_nlcatlist");
 		addSectionRename("__DATA", "__objc_protolist",	"__DATA_CONST", "__objc_protolist");
 		addSectionRename("__DATA", "__objc_imageinfo",	"__DATA_CONST", "__objc_imageinfo");
@@ -5270,6 +5293,11 @@ void Options::reconfigureDefaults()
 		}
 		if ( fConstSelectorRefs ) {
 			addSectionRename("__DATA", "__objc_selrefs",    "__DATA_CONST", "__objc_selrefs");
+		}
+		if ( fConstClassRefs ) {
+			addSectionRename("__DATA", "__objc_classrefs",  "__DATA_CONST", "__objc_classrefs");
+			addSectionRename("__DATA", "__objc_superrefs",  "__DATA_CONST", "__objc_superrefs");
+			addSectionRename("__DATA", "__objc_protorefs",  "__DATA_CONST", "__objc_protorefs");
 		}
 	}
 	if ( fUseTextExecSegment ) {

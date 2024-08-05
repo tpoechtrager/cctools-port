@@ -2351,6 +2351,35 @@ void SectionRelocationsAtom<riscv32>::encodeSectionReloc(ld::Internal::FinalSect
 			relocs.push_back(reloc1);
 			break;
 
+		case ld::Fixup::kindStoreLittleEndian32:
+		case ld::Fixup::kindStoreTargetAddressLittleEndian32:
+			if ( entry.fromTarget != NULL ) {
+				// this is a pointer-diff
+				reloc1.set_r_address(address);
+				reloc1.set_r_symbolnum(symbolNum);
+				reloc1.set_r_pcrel(false);
+				reloc1.set_r_length(2);
+				reloc1.set_r_extern(external);
+				reloc1.set_r_type(RISCV_RELOC_UNSIGNED);
+				reloc2.set_r_address(address);
+				reloc2.set_r_symbolnum(fromSymbolNum);
+				reloc2.set_r_pcrel(false);
+				reloc2.set_r_length(2);
+				reloc2.set_r_extern(fromExternal);
+				reloc2.set_r_type(RISCV_RELOC_SUBTRACTOR);
+				relocs.push_back(reloc2);
+				relocs.push_back(reloc1);
+			} else {
+				// regular pointer
+				reloc1.set_r_address(address);
+				reloc1.set_r_symbolnum(symbolNum);
+				reloc1.set_r_pcrel(false);
+				reloc1.set_r_length(2);
+				reloc1.set_r_extern(external);
+				reloc1.set_r_type(RISCV_RELOC_UNSIGNED);
+				relocs.push_back(reloc1);
+			}
+			break;
 		default:
 			assert(0 && "need to handle risc-v -r reloc");
 

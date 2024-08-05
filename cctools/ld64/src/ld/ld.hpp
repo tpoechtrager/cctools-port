@@ -218,6 +218,8 @@ static const PlatformVersion mac10_16		(Platform::macOS, 0x000A1000);
 static const PlatformVersion mac11_0		(Platform::macOS, 0x000B0000);
 static const PlatformVersion mac12_0		(Platform::macOS, 0x000C0000);
 static const PlatformVersion mac13_0		(Platform::macOS, 0x000D0000);
+static const PlatformVersion mac14_0		(Platform::macOS, 0x000E0000);
+static const PlatformVersion mac14_4		(Platform::macOS, 0x000E0400);
 static const PlatformVersion mac10_Future 	(Platform::macOS, 0x10000000);
 
 static const PlatformVersion iOS_2_0 		(Platform::iOS, 0x00020000);
@@ -237,6 +239,8 @@ static const PlatformVersion iOS_13_4 		(Platform::iOS, 0x000D0400);
 static const PlatformVersion iOS_14_0 		(Platform::iOS, 0x000E0000);
 static const PlatformVersion iOS_15_0		(Platform::iOS, 0x000F0000);
 static const PlatformVersion iOS_16_0		(Platform::iOS, 0x00100000);
+static const PlatformVersion iOS_17_0		(Platform::iOS, 0x00110000);
+static const PlatformVersion iOS_17_4		(Platform::iOS, 0x00110400);
 static const PlatformVersion iOS_Future 	(Platform::iOS, 0x10000000);
 
 static const PlatformVersion watchOS_1_0 		(Platform::watchOS, 0x00010000);
@@ -246,6 +250,8 @@ static const PlatformVersion watchOS_6_0 		(Platform::watchOS, 0x00060000);
 static const PlatformVersion watchOS_7_0 		(Platform::watchOS, 0x00070000);
 static const PlatformVersion watchOS_8_0		(Platform::watchOS, 0x00080000);
 static const PlatformVersion watchOS_9_0		(Platform::watchOS, 0x00090000);
+static const PlatformVersion watchOS_10_0		(Platform::watchOS, 0x000A0000);
+static const PlatformVersion watchOS_10_4		(Platform::watchOS, 0x000A0400);
 static const PlatformVersion watchOS_Future		(Platform::watchOS, 0x10000000);
 
 static const PlatformVersion tvOS_9_0 			(Platform::tvOS, 0x00090000);
@@ -254,6 +260,8 @@ static const PlatformVersion tvOS_13_0 			(Platform::tvOS, 0x000D0000);
 static const PlatformVersion tvOS_14_0 			(Platform::tvOS, 0x000E0000);
 static const PlatformVersion tvOS_15_0			(Platform::tvOS, 0x000F0000);
 static const PlatformVersion tvOS_16_0			(Platform::tvOS, 0x00100000);
+static const PlatformVersion tvOS_17_0			(Platform::tvOS, 0x00110000);
+static const PlatformVersion tvOS_17_4			(Platform::tvOS, 0x00110400);
 static const PlatformVersion tvOS_Future		(Platform::tvOS, 0x10000000);
 
 static const PlatformVersion bridgeOS_1_0 			(Platform::bridgeOS, 0x00010000);
@@ -261,12 +269,14 @@ static const PlatformVersion bridgeOS_4_0 			(Platform::bridgeOS, 0x00040000);
 static const PlatformVersion bridgeOS_5_0 			(Platform::bridgeOS, 0x00050000);
 static const PlatformVersion bridgeOS_6_0			(Platform::bridgeOS, 0x00060000);
 static const PlatformVersion bridgeOS_7_0			(Platform::bridgeOS, 0x00070000);
+static const PlatformVersion bridgeOS_8_0			(Platform::bridgeOS, 0x00080000);
 static const PlatformVersion bridgeOS_Future		(Platform::bridgeOS, 0x10000000);
 
 static const PlatformVersion driverKit_19_0 		(Platform::driverKit, 0x00130000);
 static const PlatformVersion driverKit_20_0 		(Platform::driverKit, 0x00140000);
 static const PlatformVersion driverKit_21_0 		(Platform::driverKit, 0x00150000);
 static const PlatformVersion driverKit_22_0			(Platform::driverKit, 0x00160000);
+static const PlatformVersion driverKit_23_0			(Platform::driverKit, 0x00170000);
 static const PlatformVersion driverKit_Future		(Platform::driverKit, 0x10000000);
 
 
@@ -306,7 +316,9 @@ static const VersionSet version2022Fall ({mac13_0, iOS_16_0, watchOS_9_0, tvOS_1
 });
 
 
-static const VersionSet supportsSplitSegV2 		({mac10_12, iOS_9_0, watchOS_2_0, tvOS_9_0, driverKit_20_0});
+static const VersionSet supportsSplitSegV2 		({mac10_12, iOS_9_0, watchOS_2_0, tvOS_9_0, driverKit_20_0,
+});
+
 // FIXME: Use the comment out line instead.
 static const VersionSet supportsLCBuildVersion 	({mac10_14, iOS_12_0, watchOS_5_0, tvOS_12_0, bridgeOS_1_0});
 
@@ -316,6 +328,9 @@ static const VersionSet supportsPIE				({mac10_5, iOS_4_2,
 static const VersionSet supportsTLV  			({mac10_7, iOS_9_0});
 // simulator does not support chained fixups until iOS 15, watchOS 8, and tvOS 14
 static const VersionSet supportsChainedFixups 	({mac12_0, iOS_sim_15_0, iOS_13_4, watchOS_sim_8_0, watchOS_7_0, tvOS_sim_15_0, tvOS_14_0, bridgeOS_Future});
+
+static const VersionSet supportsConstClassRefs 	({mac14_4, iOS_17_4, watchOS_10_4, tvOS_17_4, bridgeOS_Future,
+});
 
 // Forward declaration for bitcode support
 class Bitcode;

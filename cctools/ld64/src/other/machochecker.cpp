@@ -923,7 +923,8 @@ static bool sharedCacheEligiblePath(const char* path)
 			|| (strncmp(path, "/System/Library/", 16) == 0)
 			|| (strncmp(path, "/System/iOSSupport/usr/lib/", 27) == 0)
 			|| (strncmp(path, "/System/iOSSupport/System/Library/", 34) == 0)
-			|| (strncmp(path, "/System/DriverKit", 17) == 0)
+			|| (strncmp(path, "/System/DriverKit/", 18) == 0)
+			//|| (strncmp(path, "/System/ExclaveKit/", 19) == 0)
 			);
 }
 

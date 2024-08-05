@@ -98,6 +98,10 @@ void doPass(const Options& opts, ld::Internal& state)
 	if ( opts.outputKind() == Options::kObjectFile )
 		return;
 
+	// don't run this pass when disabled with -no_huge
+	if ( !opts.runHugePass() )
+		return;
+
 	// only make make __huge section for x86_64
 	if ( opts.architecture() != CPU_TYPE_X86_64 )
 		return;

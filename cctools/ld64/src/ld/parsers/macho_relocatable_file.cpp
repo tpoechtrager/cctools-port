@@ -3857,7 +3857,7 @@ bool Parser<A>::skip_form(const uint8_t ** offset, const uint8_t * end, uint64_t
       break;
 
 	case DW_FORM_sec_offset:
-	  sz = sizeof(typename A::P::uint_t);
+	  sz = dwarf64 ? 8 : 4;
       break;
 	
 	case DW_FORM_exprloc:
@@ -5985,6 +5985,14 @@ ld::Atom::SymbolTableInclusion ImplicitSizeSection<arm64>::symbolTableInclusion(
 #if SUPPORT_ARCH_arm64_32
 template <>
 ld::Atom::SymbolTableInclusion ImplicitSizeSection<arm64_32>::symbolTableInclusion()
+{
+	return ld::Atom::symbolTableInWithRandomAutoStripLabel;
+}
+#endif
+
+#if SUPPORT_ARCH_riscv
+template <>
+ld::Atom::SymbolTableInclusion ImplicitSizeSection<riscv32>::symbolTableInclusion()
 {
 	return ld::Atom::symbolTableInWithRandomAutoStripLabel;
 }
@@ -8719,7 +8727,7 @@ bool Section<riscv32>::addRelocFixup(class Parser<riscv32>& parser, const macho_
 			break;
 		case RISCV_RELOC_HI20:
 			target.addend = prefixRelocAddend;
-			if ( ! reloc->r_extern() )
+			if ( !reloc->r_extern() )
 				throw "r_extern == 0 and RISCV_RELOC_HI20 not supported";
 			if ( reloc->r_length() != 2 )
 				throw "length != 2 and RISCV_RELOC_HI20 not supported";
@@ -8730,7 +8738,7 @@ bool Section<riscv32>::addRelocFixup(class Parser<riscv32>& parser, const macho_
 			break;
 		case RISCV_RELOC_LO12:
 			target.addend = prefixRelocAddend;
-			if ( ! reloc->r_extern() )
+			if ( !reloc->r_extern() )
 				throw "r_extern == 0 and RISCV_RELOC_LO12 not supported";
 			if ( reloc->r_length() != 2 )
 				throw "length != 2 and RISCV_RELOC_LO12 not supported";
@@ -8742,7 +8750,7 @@ bool Section<riscv32>::addRelocFixup(class Parser<riscv32>& parser, const macho_
 			break;
 		case RISCV_RELOC_HI20_GOT:
 			target.addend = prefixRelocAddend;
-			if ( ! reloc->r_extern() )
+			if ( !reloc->r_extern() )
 				throw "r_extern == 0 and RISCV_RELOC_HI20_GOT not supported";
 			if ( reloc->r_length() != 2 )
 				throw "length != 2 and RISCV_RELOC_HI20_GOT not supported";
@@ -8753,7 +8761,7 @@ bool Section<riscv32>::addRelocFixup(class Parser<riscv32>& parser, const macho_
 			break;
 		case RISCV_RELOC_LO12_GOT:
 			target.addend = prefixRelocAddend;
-			if ( ! reloc->r_extern() )
+			if ( !reloc->r_extern() )
 				throw "r_extern == 0 and RISCV_RELOC_LO12_GOT not supported";
 			if ( reloc->r_length() != 2 )
 				throw "length != 2 and RISCV_RELOC_LO12_GOT not supported";

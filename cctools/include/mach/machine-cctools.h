@@ -156,6 +156,8 @@ extern vm_offset_t		interrupt_stack[];
 #define CPU_TYPE_RS6000		((cpu_type_t) 17)
 #define CPU_TYPE_MC98000	((cpu_type_t) 18)
 #define CPU_TYPE_POWERPC	((cpu_type_t) 18)
+#define CPU_TYPE_RISCV32  ((cpu_type_t) 24) /* cctools-port */
+
 #define CPU_ARCH_ABI64		 0x1000000
 #define CPU_ARCH_ABI64_32	 0x2000000
 #define CPU_TYPE_POWERPC64	((cpu_type_t)(CPU_TYPE_POWERPC | CPU_ARCH_ABI64))
@@ -397,6 +399,9 @@ extern vm_offset_t		interrupt_stack[];
 #define CPU_SUBTYPE_POWERPC_7450	((cpu_subtype_t) 11)
 #define CPU_SUBTYPE_POWERPC_970		((cpu_subtype_t) 100)
 
+/*
+ *  RISC-V subtypes
+ */
 /*
  * VEO subtypes
  * Note: the CPU_SUBTYPE_VEO_ALL will likely change over time to be defined as

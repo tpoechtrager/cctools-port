@@ -4587,9 +4587,7 @@ warn_duplicate_member_names(
 void)
 {
     uint32_t i, j, len, len1, len2;
-    char *undupName;
     int dupCount = 0;
-    const char* lastDupName = NULL;
 
 	for(i = 0; i < narchs; i++){
 	    /* sort in order of ar_names */
@@ -4608,7 +4606,7 @@ void)
 		    if(narchs > 1)
 			fprintf(stderr, "for architecture: %s ",
 				archs[i].arch_flag.name);
-		    fprintf(stderr, "renaming duplicate member name '%.*s' "
+		    fprintf(stderr, "duplicate member name '%.*s' "
 			    "from '%s(%.*s)' and '%s(%.*s)'\n",
 			    (int)len1, archs[i].members[j].member_name,
 			    archs[i].members[j].input_file_name,
@@ -4616,17 +4614,15 @@ void)
 			    archs[i].members[j+1].input_file_name,
 			    (int)len, archs[i].members[j+1].input_base_name);
 		    // rdar://110498050 (Rename duplicate archive member names so dsymutil and lldb and find correct .o file)
-		    // We don't want to change the length of the member name because that will invalidate
-		    // other size calculation throughout these data structures.
-		    // Instead increment the last char of the file name (e.g. 'foo.o' -> 'fop.o')
-		    // If there are more duplicate member names, keep incrementing (e.g. 'foo.o' -> 'foq.o' )
-		    if (lastDupName==NULL || strcmp(archs[i].members[j].member_name, lastDupName) != 0 ) {
-			dupCount = 1;
-			lastDupName = archs[i].members[j].member_name;
-		    }
-		    asprintf(&undupName, "%.*s", (int)len1, archs[i].members[j].member_name);
-		    undupName[len1-3] += dupCount++;
-		    archs[i].members[j].member_name = undupName;
+		    // lldb and dysmutil use the filename/mod-time from debug notes to file the .o file in a static library
+		    // Duplicate file names mean that could be ambiguous.  To disambiguate, we make a synthetic mod-time
+		    // for files that have a duplicate name.
+		    ++dupCount;
+		    // ar_data is a 12 byte field that needs to filled with spaces after the number
+		    memcpy(archs[i].members[j+1].ar_hdr.ar_date, "            ", 12);
+		    char temp[12];
+		    sprintf(temp, "%-u", dupCount);
+		    memcpy(archs[i].members[j+1].ar_hdr.ar_date, temp, strlen(temp));
 		}
 	    }
 

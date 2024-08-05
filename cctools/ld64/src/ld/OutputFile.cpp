@@ -2832,6 +2832,21 @@ static bool chainedFixupBindAddendFitsInline(uint64_t accumulator, uint16_t chai
 	return false;
 }
 
+bool OutputFile::targetNeedsNoFixup(const ld::Atom* toTarget)
+{
+	if ( toTarget->isAlias() && (toTarget->definition() == ld::Atom::definitionProxy) ) {
+		// <rdar://problem/13828711> if target is an import alias, use base of alias
+		for (ld::Fixup::iterator tfit = toTarget->fixupsBegin(), end=toTarget->fixupsEnd(); tfit != end; ++tfit) {
+			if ( tfit->firstInCluster() && (tfit->kind == ld::Fixup::kindNoneFollowOn) && (tfit->binding == ld::Fixup::bindingDirectlyBound) ) {
+				toTarget = tfit->u.target;
+			}
+		}
+	}
+
+	// rdar://95367013 (Linker crashes when using absolute symbols)
+	return toTarget->definition() == ld::Atom::definitionAbsolute;
+}
+
 bool OutputFile::needsBind(const ld::Atom*& toTarget, bool authPtr, uint64_t* accumulator, uint64_t* inlineAddend,
 						   uint32_t* bindOrdinal, uint32_t* libOrdinal) const {
 
@@ -2930,6 +2945,11 @@ bool OutputFile::needsBind(const ld::Atom*& toTarget, bool authPtr, uint64_t* ac
 
 void OutputFile::setFixup64(uint8_t* fixUpLocation, uint64_t accumulator, const ld::Atom* toTarget)
 {
+	if ( targetNeedsNoFixup(toTarget) ) {
+		set64LE(fixUpLocation, accumulator);
+		return;
+	}
+
 	uint32_t bindOrdinal = 0;
 	uint64_t inlineAddend = 0;
 	bool isBind = needsBind(toTarget, false, &accumulator, &inlineAddend, &bindOrdinal);
@@ -3143,6 +3163,11 @@ void OutputFile::setFixup64e(uint8_t* fixUpLocation, uint64_t accumulator, Fixup
 
 void OutputFile::setFixup32(uint8_t* fixUpLocation, uint64_t accumulator, const ld::Atom* toTarget)
 {
+	if ( targetNeedsNoFixup(toTarget) ) {
+		set32LE(fixUpLocation, accumulator);
+		return;
+	}
+
 	uint32_t bindOrdinal = 0;
 	uint64_t inlineAddend = 0;
 	bool isBind = needsBind(toTarget, false, &accumulator, &inlineAddend, &bindOrdinal);
@@ -4218,8 +4243,11 @@ void OutputFile::partitionSymbolTable(ld::Internal& state)
 #if SUPPORT_ARCH_arm64_32
 				  || (_options.architecture() == CPU_TYPE_ARM64_32)
 #endif
-				   ) {
-					// x86_64 .o files need labels on anonymous literal strings
+#if SUPPORT_ARCH_riscv
+				  || (_options.architecture() == CPU_TYPE_RISCV32)
+#endif
+					) {
+					// .o files need labels on anonymous literal strings
 					if ( (sect->type() == ld::Section::typeCString) && (atom->combine() == ld::Atom::combineByNameAndContent) ) {
 						(const_cast<ld::Atom*>(atom))->setSymbolTableInclusion(ld::Atom::symbolTableIn);
 						_localAtoms.push_back(atom);
@@ -5532,6 +5560,9 @@ void OutputFile::buildLinkEditOpcodes(ld::Internal& state)
 													target, minusTarget, targetAddend, minusTargetAddend);
 						}
 						else {
+							if ( targetNeedsNoFixup(target) )
+								continue;
+
 							if ( _hasChainedFixups ) {
 								addChainedFixupLocation(state, sect, atom, fixupWithTarget, fixupWithMinusTarget, fixupWithStore,
 														target, minusTarget, targetAddend, minusTargetAddend);
@@ -5864,6 +5895,9 @@ void OutputFile::buildChainedFixupInfo(ld::Internal& state)
 									assert(0 && "unknown pointer format");
 							}
 						}
+
+						if ( targetNeedsNoFixup(target) )
+							continue;
 
 						unsigned pageIndex = (fixUpAddr - _chainedFixupSegments.back().startAddr)/pageSize;
 						while ( pageIndex >= _chainedFixupSegments.back().pages.size() ) {
@@ -6964,7 +6998,7 @@ void OutputFile::makeSplitSegInfoV2(ld::Internal& state)
 						accumulator |= 1;
 					ld::Internal::FinalSection* targetFinalSection = atomToSection[target];
 					toOffset = accumulator - targetFinalSection->address;
-					if ( target->definition() != ld::Atom::definitionProxy ) {
+					if ( target->definition() != ld::Atom::definitionProxy && target->definition() != ld::Atom::definitionAbsolute ) {
 						if ( target->section().type() == ld::Section::typeMachHeader ) {
 							toSectionIndex = 0;
 						} else if ( target->section().type() == ld::Section::typeLastSection ) {
@@ -7118,7 +7152,8 @@ void OutputFile::makeSplitSegInfoV2(ld::Internal& state)
 						break;
 				}
 				if ( fit->lastInCluster() ) {
-					if ( (kind != 0) && (target != NULL) && (target->definition() != ld::Atom::definitionProxy) ) {
+					if ( (kind != 0) && (target != NULL) && (target->definition() != ld::Atom::definitionProxy)
+							&& (target->definition() != ld::Atom::definitionAbsolute )) {
 						// Classic/chained fixups do weak binding with just a single fixups, with a weak lib ordinal
 						// There's no rebase so we don't want a split seg entry for them.
 						// Opcodes use both a rebase and a bind on top. The rebase needs a split seg entry, just in case
@@ -7264,6 +7299,18 @@ void OutputFile::writeMapFile(ld::Internal& state)
 							if ( c == '\n' ) {
 								*b++ = '\\';
 								*b++ = 'n';
+							}
+							else if ( c == '\r' ) {
+								*b++ = '\\';
+								*b++ = 'r';
+							}
+							else if ( c == '\t' ) {
+								*b++ = '\\';
+								*b++ = 't';
+							}
+							else if ( c == '\"' ) {
+								*b++ = '\\';
+								*b++ = '\"';
 							}
 							else {
 								*b++ = c;

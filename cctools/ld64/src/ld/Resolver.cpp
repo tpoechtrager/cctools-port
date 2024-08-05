@@ -1203,19 +1203,26 @@ void Resolver::markLive(const ld::Atom& atom, WhyLiveBackChain* previous)
 
 }
 
-class NotLiveLTO {
+class LiveLTO {
 public:
 	bool operator()(const ld::Atom* atom) const {
 		if (atom->live() || atom->dontDeadStrip() )
-			return false;
+			return true;
 		// don't kill combinable atoms in first pass
 		switch ( atom->combine() ) {
 			case ld::Atom::combineByNameAndContent:
 			case ld::Atom::combineByNameAndReferences:
-				return false;
-			default:
 				return true;
+			default:
+				return false;
 		}
+	}
+};
+
+class Live {
+public:
+	bool operator()(const ld::Atom* atom) const {
+		return (atom->live() || atom->dontDeadStrip());
 	}
 };
 
@@ -1374,7 +1381,7 @@ void Resolver::deadStripOptimize(bool force)
 	
 	if ( _haveLLVMObjs && !force ) {
 		// <rdar://problem/9777977> don't remove combinable atoms, they may come back in lto output
-		 auto notLiveIt = std::remove_if(_atoms.begin(), _atoms.end(), NotLiveLTO());
+		 auto notLiveIt = std::stable_partition(_atoms.begin(), _atoms.end(), LiveLTO());
 		 // add dead atoms to internal state only when map file was requested
 		 if ( _options.generatedMapPath() != nullptr ) {
 			 std::copy(notLiveIt, _atoms.end(), std::back_inserter(_internal.deadAtoms));
@@ -1383,7 +1390,9 @@ void Resolver::deadStripOptimize(bool force)
 		_symbolTable.removeDeadAtoms();
 	}
 	else {
-		 auto notLiveIt = std::remove_if(_atoms.begin(), _atoms.end(), NotLive());
+		 // rdar://111916798 (ld64 map file contains incorrect dead stripped symbol list) - std::remove_if
+		 // makes no guarantees about values of removed elements, use std::stable_partition instead
+		 auto notLiveIt = std::stable_partition(_atoms.begin(), _atoms.end(), Live());
 		 // add dead atoms to internal state only when map file was requested
 		 if ( _options.generatedMapPath() != nullptr ) {
 			 std::copy(notLiveIt, _atoms.end(), std::back_inserter(_internal.deadAtoms));
@@ -1434,10 +1443,6 @@ void Resolver::remainingUndefines(std::vector<std::string_view>& undefs)
 
 	std::sort(undefs.begin(), undefs.end());
 	undefs.erase(std::unique(undefs.begin(), undefs.end()), undefs.end());
-
-	for (std::string_view undef: undefs) {
-		fprintf(stderr, "undef: %.*s\n", (int)undef.size(), undef.data());
-	}
 }
 
 void Resolver::liveUndefines(std::vector<std::string_view>& undefs)

@@ -767,7 +767,7 @@ ld::Internal::FinalSection* InternalState::addAtom(const ld::Atom& atom)
 	const char* curSectName = atom.section().sectionName();
 	const char* curSegName = atom.section().segmentName();
 	ld::Section::Type sectType = atom.section().type();
-	const ld::File* f = atom.file();
+	const ld::File* f = atom.originalFile();
 	const char* path = (f != NULL) ? f->path() : NULL;
 	if ( atom.section().type() == ld::Section::typeTentativeDefs ) {
 		// tentative definitions don't have a real section name yet

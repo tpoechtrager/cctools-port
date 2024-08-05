@@ -380,6 +380,8 @@ is a hexadecimal number with an optional leading 0x.  If
 .Ar size
 is zero, the linker will not generate a page zero segment.  By default on 32-bit architectures the page zero size
 is 4KB.  On 64-bit architectures, the default size is 4GB.
+.It implicit_pagezero
+When used on main executables, omits the __PAGEZERO segment, and relies on the loader blocking out low memory.
 .It Fl stack_size Ar size
 Specifies the maximum stack size for the main thread in a program.  Without this option a program has a 8MB stack.
 The argument

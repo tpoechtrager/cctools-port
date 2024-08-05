@@ -2273,15 +2273,15 @@ void CodeSignatureAtom::encode() const
 	}
 	libcd_set_exec_seg(_sigRef, 0, textSize, flags);
 
-	// update section size now that code signature size is known
-	codeSignSect->size = libcd_superblob_size(_sigRef);
-
 	// allocate space for code-signature (never used, sign is written directly to output buffer in hash())
-	this->_encodedData.alloc(codeSignSect->size);
+	this->_encodedData.alloc(libcd_superblob_size(_sigRef));
 
 	// align to pointer size
 	this->_encodedData.pad_to_size(8);
 	this->_encoded = true;
+
+	// update section size now that code signature size + padding is known
+	codeSignSect->size = this->_encodedData.size();
 }
 
 void CodeSignatureAtom::hash(uint8_t* wholeFileBuffer) const

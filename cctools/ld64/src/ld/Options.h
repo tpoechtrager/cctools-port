@@ -360,6 +360,7 @@ public:
 	const char*					initFunctionName() const { return fInitFunctionName; }			// only for kDynamicLibrary
 	const char*					dotOutputFile() const;
 	uint64_t					pageZeroSize() const { return fZeroPageSize; }
+	bool						implicitPageZero() const { return fImplicitPageZero; }
 	bool						hasCustomStack() const { return (fStackSize != 0); }
 	uint64_t					customStackSize() const { return fStackSize; }
 	uint64_t					customStackAddr() const { return fStackAddr; }
@@ -558,6 +559,7 @@ public:
 	bool						warnUnusedDylibs() const { return fWarnUnusedDylibs; }
 	bool						useObjCRelativeMethodLists() const { return fUseObjCRelativeMethodLists; }
 	bool						objcSmallStubs() const { return fObjcSmallStubs; }
+	bool						runHugePass() const { return fRunHugePass; }
 	std::vector<std::string>	writeBitcodeLinkOptions() const;
 	std::string					getSDKVersionStr() const;
 	uint8_t						maxDefaultCommonAlign() const { return fMaxDefaultCommonAlign; }
@@ -732,6 +734,7 @@ private:
 	uint64_t							fStackAddr;
 	uint64_t							fSourceVersion;
 	uint32_t							fSDKVersion;
+	bool							    fImplicitPageZero;
 	bool								fExecutableStack;
 	bool								fNonExecutableHeap;
 	bool								fDisableNonExecutableHeap;
@@ -850,6 +853,7 @@ private:
 	bool								fConstSelectorRefs;
 	bool								fConstSelectorRefsForceOn;
 	bool								fConstSelectorRefsForceOff;
+	bool								fConstClassRefs;
 	bool								fUseTextExecSegment;
 	bool								fBundleBitcode;
 	bool								fHideSymbols;
@@ -902,6 +906,7 @@ private:
 	bool								fForceObjCRelativeMethodListsOff;
 	bool								fUseObjCRelativeMethodLists;
 	bool								fObjcSmallStubs;
+	bool								fRunHugePass;
 	std::vector<AliasPair>				fAliases;
 	std::vector<const char*>			fInitialUndefines;
 	NameSet								fAllowedUndefined;

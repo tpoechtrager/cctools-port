@@ -47,11 +47,14 @@
 #undef VALID_THREAD_STATE_FLAVOR
 #include <mach/m88k/thread_status.h>
 #include <mach/i860/thread_status.h>
+#include <machine/types.h> /* Get basic integer types for thread_status.h which get blocked by defining *MACHTYPES_H_ */
 #if defined (__i386__) || defined (__x86_64__)
 #include <mach/i386/thread_status.h>
 #else
 #define __x86_64__
+#define _I386_MACHTYPES_H_ /* Suppress duplicate type errors */
 #include <mach/i386/thread_status.h>
+#undef _I386_MACHTYPES_H_
 #undef __x86_64__
 #endif
 #include <mach/hppa/thread_status.h>
@@ -60,7 +63,9 @@
 #include <mach/arm/thread_status.h>
 #else
 #define __arm__
+#define _ARM_MACHTYPES_H_ /* Suppress duplicate type errors */
 #include <mach/arm/thread_status.h>
+#undef _ARM_MACHTYPES_H_
 #undef __arm__
 #endif
 #include <mach-o/nlist.h>
