@@ -19787,8 +19787,9 @@ ac_config_files="$ac_config_files man/Makefile"
 
 ac_config_files="$ac_config_files misc/Makefile"
 
-ac_config_files="$ac_config_files otool-wrapper/Makefile"
+ac_config_files="$ac_config_files otool/Makefile"
 
+#AC_CONFIG_FILES([otool-wrapper/Makefile])
 ac_config_files="$ac_config_files efitools/Makefile"
 
 ac_config_files="$ac_config_files ld64/Makefile"
@@ -20947,7 +20948,7 @@ do
     "as/ppc64/Makefile") CONFIG_FILES="$CONFIG_FILES as/ppc64/Makefile" ;;
     "man/Makefile") CONFIG_FILES="$CONFIG_FILES man/Makefile" ;;
     "misc/Makefile") CONFIG_FILES="$CONFIG_FILES misc/Makefile" ;;
-    "otool-wrapper/Makefile") CONFIG_FILES="$CONFIG_FILES otool-wrapper/Makefile" ;;
+    "otool/Makefile") CONFIG_FILES="$CONFIG_FILES otool/Makefile" ;;
     "efitools/Makefile") CONFIG_FILES="$CONFIG_FILES efitools/Makefile" ;;
     "ld64/Makefile") CONFIG_FILES="$CONFIG_FILES ld64/Makefile" ;;
     "ld64/doc/man/Makefile") CONFIG_FILES="$CONFIG_FILES ld64/doc/man/Makefile" ;;
