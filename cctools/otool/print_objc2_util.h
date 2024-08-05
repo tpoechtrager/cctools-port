@@ -47,7 +47,8 @@ void indent_pop(
 void print_field_label(
     struct indent* indent,
     const char* label,
-    ...);
+    ...)
+    __attribute__((format(printf, 2, 3)));
 
 /*
  * print_field_scalar() prints a label followed by a formatted value. the label
@@ -56,7 +57,9 @@ void print_field_label(
 void print_field_scalar(
     struct indent* indent,
     const char* label,
-    const char* fmt,...);
+    const char* fmt,
+    ...)
+    __attribute__((format(printf, 3, 4)));
 
 /*
 * warn_about_zerofill prints a warning message when a pointer to Objective-C

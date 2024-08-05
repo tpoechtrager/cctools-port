@@ -183,9 +183,10 @@ int
 GetOpInfo(
 void *DisInfo,
 uint64_t Pc,
-uint64_t Offset, /* should always be passed as 0 for arm or thumb */
-uint64_t Size,   /* should always be passed as 4 for arm or 2 or 4 for thumb */
-int TagType,     /* should always be passed as 1 for either Triple */
+uint64_t Offset,   /* should always be passed as 0 for arm or thumb */
+uint64_t OpSize,   /* should always be passed as 4 for arm or 2 or 4 for thumb */
+uint64_t InstSize, /* should always be passed as 4 for arm or 2 or 4 for thumb */
+int TagType,       /* should always be passed as 1 for either Triple */
 void *TagBuf)
 {
     struct disassemble_info *info;
@@ -209,7 +210,7 @@ void *TagBuf)
 	memset(op_info, '\0', sizeof(struct LLVMOpInfo1));
 	op_info->Value = value;
 
-	if(Offset != 0 || (Size != 4 && Size != 2) || TagType != 1 ||
+	if(Offset != 0 || (OpSize != 4 && OpSize != 2) || TagType != 1 ||
 	   info->verbose == FALSE)
 	    return(0);
 
@@ -443,6 +444,19 @@ void *TagBuf)
 	return(1);
 }
 
+static
+int
+GetOpInfoOld(
+void *DisInfo,
+uint64_t Pc,
+uint64_t Offset,
+uint64_t OpSize,
+int TagType,
+void *TagBuf)
+{
+	return GetOpInfo(DisInfo, Pc, Offset, OpSize, OpSize, TagType, TagBuf);
+}
+
 /*
  * guess_cstring_pointer() is passed the address of what might be a pointer to a
  * literal string in a cstring section.  If that address is in a cstring section
@@ -469,13 +483,19 @@ const uint64_t object_size)
     char *p;
     uint64_t big_load_end;
     const char *name;
+    const char* addr_end;
 
 	host_byte_sex = get_host_byte_sex();
 	swapped = host_byte_sex != load_commands_byte_sex;
 
 	lc = load_commands;
 	big_load_end = 0;
+    addr_end = object_addr + object_size;
 	for(i = 0 ; i < ncmds; i++){
+        if((char *)lc + sizeof(struct load_command) > addr_end){
+          fprintf(stderr, "load command extends beyond the end of the file\n");
+          return(NULL);
+        }
 	    memcpy((char *)&l, (char *)lc, sizeof(struct load_command));
 	    if(swapped)
 		swap_load_command(&l, host_byte_sex);
@@ -486,11 +506,20 @@ const uint64_t object_size)
 		return(NULL);
 	    switch(l.cmd){
 	    case LC_SEGMENT:
+        if((char *)lc+sizeof(struct segment_command) > addr_end){
+          fprintf(stderr, "segment header extends beyond the end of the file\n");
+          return(NULL);
+        }
 		memcpy((char *)&sg, (char *)lc, sizeof(struct segment_command));
 		if(swapped)
 		    swap_segment_command(&sg, host_byte_sex);
 		p = (char *)lc + sizeof(struct segment_command);
 		for(j = 0 ; j < sg.nsects ; j++){
+            if(p + sizeof(struct section) > addr_end){
+              fprintf(stderr, "section header in (%s) extends beyond"
+                      "the end of the file\n", sg.segname);
+              return(NULL);
+            }
 		    memcpy((char *)&s, p, sizeof(struct section));
 		    p += sizeof(struct section);
 		    if(swapped)
@@ -924,13 +953,15 @@ cpu_subtype_t cpusubtype)
 	    break;
 	}
 
+	LLVMOpInfoCallback OpInfo = llvm_disasm_new_getopinfo_abi()
+	    ? GetOpInfo : (LLVMOpInfoCallback)GetOpInfoOld;
 	dc =
 #ifdef STATIC_LLVM
 	    LLVMCreateDisasm
 #else
 	    llvm_create_disasm
 #endif
-		(TripleName, mcpu_default, &dis_info, 1, GetOpInfo, SymbolLookUp);
+		(TripleName, mcpu_default, &dis_info, 1, OpInfo, SymbolLookUp);
 	return(dc);
 }
 
@@ -998,13 +1029,15 @@ cpu_subtype_t cpusubtype)
 	    break;
 	}
 
+	LLVMOpInfoCallback OpInfo = llvm_disasm_new_getopinfo_abi()
+	    ? GetOpInfo : (LLVMOpInfoCallback)GetOpInfoOld;
 	dc =
 #ifdef STATIC_LLVM
 	    LLVMCreateDisasm
 #else
 	    llvm_create_disasm
 #endif
-		(TripleName, mcpu_default, &dis_info, 1, GetOpInfo,
+		(TripleName, mcpu_default, &dis_info, 1, OpInfo,
 		 SymbolLookUp);
 	return(dc);
 }

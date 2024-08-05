@@ -1,3 +1,5 @@
+#ifndef DYLD_BIND_INFO
+#define DYLD_BIND_INFO
 /*
  * enum chain_format_t matches the dyld pointer format uint32_t values used
  * by LC_DYLD_CHAINED_FIXUPS. Note that the CHAIN_FORMAT_ARM64E format is also
@@ -49,6 +51,7 @@ struct dyld_bind_info {
     const char *sectname;
     uint64_t address;
     int bind_type;
+    int lib_ordinal;
     const char *bind_name;
     uint64_t addend;
     const char *dylibname;
@@ -107,6 +110,7 @@ extern const char * get_dyld_bind_info_symbolname(
     uint64_t ndbi,
     struct dyld_bind_info **dbi_index,
     enum chain_format_t chain_format,
+    int *lib_ordinal,
     int64_t *addend);
 
 extern void get_dyld_chained_fixups(
@@ -144,3 +148,4 @@ extern void print_dyld_chained_fixups(
     enum byte_sex load_commands_byte_sex,
     char *object_addr,
     uint64_t object_size);
+#endif

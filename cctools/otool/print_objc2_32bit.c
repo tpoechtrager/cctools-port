@@ -606,6 +606,16 @@ enum bool verbose)
         s = get_section_32(info.sections, info.nsections,
                            "__DATA_DIRTY", "__objc_catlist");
     walk_pointer_list("category", s, &info, print_category_t);
+
+  s = get_section_32(info.sections, info.nsections,
+                         "__DATA", "__objc_catlist2");
+  if(s == NULL)
+      s = get_section_32(info.sections, info.nsections,
+                         "__DATA_CONST", "__objc_catlist2");
+  if(s == NULL)
+      s = get_section_32(info.sections, info.nsections,
+                         "__DATA_DIRTY", "__objc_catlist2");
+  walk_pointer_list("stub classes category", s, &info, print_category_t);
     
     s = get_section_32(info.sections, info.nsections,
                        "__OBJC2", "__protocol_list");
@@ -1220,7 +1230,7 @@ struct info *info)
 
     indent_push(&info->indent, sizeof("list[99]") - 1);
 
-    print_field_scalar(&info->indent, "count", "%llu\n", pl.count);
+    print_field_scalar(&info->indent, "count", "%u\n", pl.count);
 
     p += sizeof(struct protocol_list_t);
     offset += sizeof(struct protocol_list_t);
@@ -1992,6 +2002,7 @@ uint32_t* n_value)
     unsigned int r_symbolnum;
     uint32_t n_strx;
     const char* name;
+    int lib_ordinal;
     
     if(n_value != NULL)
         *n_value = (uint32_t)0;
@@ -2037,7 +2048,26 @@ uint32_t* n_value)
      */
     name = get_dyld_bind_info_symbolname(sect_addr + sect_offset,
                                          info->dbi, info->ndbi, info->dbi_index,
-                                         info->chain_format, NULL);
+                                         info->chain_format, &lib_ordinal, NULL);
+
+    // ObjC patching uses binds to self.  Try find the symbol to get the n_value
+    if (lib_ordinal == BIND_SPECIAL_DYLIB_SELF && name != NULL) {
+        for(i = 0; i < info->nsymbols; i++){
+            // Binds to self can only be to global symbols
+            enum bool isGlobal = ((info->symbols[i].n_type & N_EXT) && ((info->symbols[i].n_type & N_TYPE) == N_SECT));
+            if (!isGlobal)
+                continue;
+            n_strx = info->symbols[i].n_un.n_strx;
+            if(n_strx <= 0 || n_strx >= info->strings_size)
+                break;
+            if (!strcmp(name, info->strings + n_strx)) {
+                if(n_value != NULL)
+                    *n_value = info->symbols[i].n_value;
+                break;
+            }
+        }
+    }
+
     if (name)
         return name;
     

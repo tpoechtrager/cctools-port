@@ -48,8 +48,7 @@ const char* fmt,
 ...)
 {
     /* print the label */
-    print_field_label(indent, label);
-
+    print_field_label(indent, "%s", label);
     /* print the data, if any */
     if (fmt) {
         va_list ap;

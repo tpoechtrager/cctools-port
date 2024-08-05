@@ -33,6 +33,7 @@
 #include <string.h>
 #include <limits.h>
 #include <ar.h>
+#include <mach/machine-cctools.h>
 #include <mach-o/ranlib.h>
 #include <libc.h>
 #include "stuff/bool.h"
@@ -1283,8 +1284,15 @@ void *cookie) /* cookie is not used */
 			    size = ofile->fat_archs[ofile->narch].size;
 			}
 		    }
-		    if(addr + size > ofile->file_addr + ofile->file_size)
-			size = (ofile->file_addr + ofile->file_size) - addr;
+
+		    uint64_t file_end;
+		    if (__builtin_add_overflow((uint64_t)ofile->file_addr, ofile->file_size, &file_end)) {
+		       printf("file too large, exceeds pointer size\n");
+		       abort();
+		    }
+
+		    if(addr >= ofile->file_addr && addr < (const char*)file_end && addr + size > (const char*)file_end)
+			size = (const char*)file_end - addr;
 		}
 		else if(ofile->file_type == OFILE_ARCHIVE){
 		    addr = ofile->member_addr;
@@ -1384,8 +1392,14 @@ void *cookie) /* cookie is not used */
 	 */
 	addr = ofile->object_addr;
 	size = ofile->object_size;
-	if(addr + size > ofile->file_addr + ofile->file_size)
-	    size = (ofile->file_addr + ofile->file_size) - addr;
+	uint64_t file_end;
+	if (__builtin_add_overflow((uint64_t)ofile->file_addr, ofile->file_size, &file_end)) {
+	   printf("file too large, exceeds pointer size\n");
+	   abort();
+	}
+
+	if(addr >= ofile->file_addr && addr < (const char*)file_end && addr + size > (const char*)file_end)
+	    size = (const char*)file_end - addr;
 
 	/*
 	 * Assign some local variables to the values in the mach_header for this
@@ -1510,6 +1524,11 @@ void *cookie) /* cookie is not used */
 	    if(symbols != NULL){
 		if((uintptr_t)symbols % sizeof(uint32_t) ||
 		   ofile->object_byte_sex != get_host_byte_sex()){
+           if ((char*)(symbols + (nsymbols * sizeof(struct nlist)))
+					   > ofile->file_addr + ofile->file_size){
+               printf("symbol table extends beyond the end of the file\n");
+			   return;
+           }
 		    allocated_symbols =
 			allocate(nsymbols * sizeof(struct nlist));
 		    memcpy(allocated_symbols, symbols,
@@ -1647,11 +1666,20 @@ void *cookie) /* cookie is not used */
 	}
 
 	if(Mflag){
-	    if(mods != NULL)
-		print_module_table(mods, nmods, strings, strings_size, vflag);
-	    else
-		print_module_table_64(mods64, nmods, strings, strings_size,
-				      vflag);
+        if(mods != NULL){
+            if ((char*)(mods + nmods) > ofile->file_addr + ofile->file_size){
+                printf("modules extends beyond the end of the file\n");
+                return;
+            }
+            print_module_table(mods, nmods, strings, strings_size, vflag);
+        }
+        else{
+            if ((char*)(mods64 + nmods) > ofile->file_addr + ofile->file_size){
+                printf("modules extends beyond the end of the file\n");
+                return;
+            }
+            print_module_table_64(mods64, nmods, strings, strings_size, vflag);
+        }
 	}
 
 	if(Rflag){
@@ -1726,11 +1754,17 @@ void *cookie) /* cookie is not used */
 	    if(Gflag)
 		print_dices(dices, ndices, vflag);
 	}
-	if(Iflag)
+	if(Iflag){
+	    if ((char*)(indirect_symbols + nindirect_symbols) >
+            ofile->file_addr + ofile->file_size) {
+            printf("indirect symbols extends beyond the end of the file\n");
+            return;
+	    }
 	    print_indirect_symbols(ofile->load_commands, mh_ncmds,mh_sizeofcmds,
 		mh_cputype, ofile->object_byte_sex, indirect_symbols,
 		nindirect_symbols, symbols, symbols64, nsymbols, strings,
 		strings_size, vflag);
+	}
 
 	if(rflag)
 	    print_reloc(ofile->load_commands, mh_ncmds, mh_sizeofcmds,
@@ -1835,14 +1869,15 @@ void *cookie) /* cookie is not used */
 		    if(tflag)
 			printf("(%s,%s) section\n", SEG_TEXT, SECT_TEXT);
 		    else if(xflag){
-			if (mh_filetype == MH_OBJECT)
-			    printf("(%s,%s) section\n", SEG_TEXT, SECT_TEXT);
-			else
-			    printf("(%s,%s) section\n", segnames[i], SECT_TEXT);
+			printf("(%s,%s) section\n", segnames[i], SECT_TEXT);
 		    }
 		    else
 			printf("Contents of (%.16s,%.16s) section\n", segname,
 			       sectname);
+		}
+		if (sect + sect_size > ofile->file_addr + ofile->file_size){
+		  printf("(%s,%s) extends beyond the end of the file\n",  SEG_TEXT, SECT_TEXT);
+		  return;
 		}
 		if(Uflag)
 		    print_text_by_symbols(mh_cputype, ofile->object_byte_sex,
@@ -1907,9 +1942,14 @@ void *cookie) /* cookie is not used */
 
 		if(Xflag == FALSE)
 		    printf("(%s,%s) section\n", SEG_DATA, SECT_DATA);
-		if(sect != NULL)
-		    print_sect(mh_cputype, ofile->object_byte_sex, sect,
-			sect_size, sect_addr, Vflag);
+		if(sect != NULL) {
+		  if (sect + sect_size > ofile->file_addr + ofile->file_size){
+			printf("(%s,%s) extends beyond the end of the file\n", SEG_DATA, SECT_DATA);
+			return;
+		  }
+		  print_sect(mh_cputype, ofile->object_byte_sex, sect,
+		  sect_size, sect_addr, Vflag);
+		}
 	    }
 	}
 
@@ -3377,7 +3417,7 @@ uint32_t* out_nsegname)
 		
 		p = (char *)lc + sizeof(struct segment_command);
 		found = FALSE;
-		for(j = 0; !found && j < sg.nsects ; j++){
+		for(j = 0; j < sg.nsects ; j++){
 		    if(p + sizeof(struct section) >
 		       (char *)load_commands + sizeofcmds){
 			printf("section structure command extends past "
@@ -3397,9 +3437,9 @@ uint32_t* out_nsegname)
 			segnames = realloc(segnames,
 					   sizeof(*segnames)*(nsegname+1));
 			iseg = nsegname++;
-			segnames[iseg] = calloc(1, sizeof(s64.segname) + 1);
-			memcpy(segnames[iseg], s64.segname,
-			       sizeof(s64.segname));
+			segnames[iseg] = calloc(1, sizeof(s.segname) + 1);
+			memcpy(segnames[iseg], s.segname,
+			       sizeof(s.segname));
 			found = TRUE;
 		    }
 		    
@@ -3419,7 +3459,7 @@ uint32_t* out_nsegname)
 		
 		    p = (char *)lc + sizeof(struct segment_command_64);
 		    found = FALSE;
-		for(j = 0; !found && j < sg64.nsects ; j++){
+		for(j = 0; j < sg64.nsects ; j++){
 		    if(p + sizeof(struct section) >
 		       (char *)load_commands + sizeofcmds){
 			printf("section structure command extends past "
@@ -4442,7 +4482,6 @@ uint64_t seg_addr)
 				strings_size, indirect_symbols, nindirect_symbols,
 				cputype, load_commands, ncmds, sizeofcmds,
 				object_addr, object_size, verbose, arm64_dc);
-		
 		else{
 		    printf("Can't disassemble unknown cputype %d\n", cputype);
 		    return;

@@ -147,7 +147,8 @@ GetOpInfo(
 void *DisInfo,
 uint64_t Pc,
 uint64_t Offset, /* should always be passed as 0 for arm64 */
-uint64_t Size,   /* should always be passed as 4 for arm64 */
+uint64_t OpSize, /* should always be passed as 4 for arm64 */
+uint64_t InstSize, /* should always be passed as 4 for arm64 */
 int TagType,     /* should always be passed as 1 for arm64-apple-darwin10 */
 void *TagBuf)
 {
@@ -164,7 +165,7 @@ void *TagBuf)
 	memset(op_info, '\0', sizeof(struct LLVMOpInfo1));
 	op_info->Value = value;
 
-	if(Offset != 0 || Size != 4 || TagType != 1 ||
+	if(Offset != 0 || OpSize != 4 || TagType != 1 ||
 	   dis_info->verbose == FALSE)
 	    return(0);
 
@@ -216,6 +217,18 @@ void *TagBuf)
 	return(0);
 }
 
+static
+int
+GetOpInfoOld(
+void *DisInfo,
+uint64_t Pc,
+uint64_t Offset, /* should always be passed as 0 for arm64 */
+uint64_t OpSize, /* should always be passed as 4 for arm64 */
+int TagType,     /* should always be passed as 1 for arm64-apple-darwin10 */
+void *TagBuf)
+{
+	return GetOpInfo(DisInfo, Pc, Offset, OpSize, OpSize, TagType, TagBuf);
+}
 /*
  * guess_pointer_pointer() is passed the address of what might be a pointer to
  * a reference to an Objective-C class, selector, message ref or cfstring.
@@ -247,6 +260,7 @@ enum bool *cfstring)
     struct section s;
     char *p;
     uint64_t big_load_end;
+    const char* addr_end;
 
 	*classref = FALSE;
 	*selref = FALSE;
@@ -257,7 +271,12 @@ enum bool *cfstring)
 
 	lc = load_commands;
 	big_load_end = 0;
+    addr_end = object_addr + object_size;
 	for(i = 0 ; i < ncmds; i++){
+        if((char *)lc + sizeof(struct load_command) > addr_end){
+          fprintf(stderr, "load command beyond the end of the file\n");
+          return(0);
+        }
 	    memcpy((char *)&l, (char *)lc, sizeof(struct load_command));
 	    if(swapped)
 		swap_load_command(&l, host_byte_sex);
@@ -268,12 +287,21 @@ enum bool *cfstring)
 		return(0);
 	    switch(l.cmd){
 	    case LC_SEGMENT_64:
+        if((char *)lc + sizeof(struct segment_command_64) > addr_end){
+          fprintf(stderr, "segment header extends beyond the end of the file\n");
+          return(0);
+        }
 		memcpy((char *)&sg64, (char *)lc,
 		       sizeof(struct segment_command_64));
 		if(swapped)
 		    swap_segment_command_64(&sg64, host_byte_sex);
 		p = (char *)lc + sizeof(struct segment_command_64);
 		for(j = 0 ; j < sg64.nsects ; j++){
+            if(p + sizeof(struct section_64) > addr_end){
+              fprintf(stderr, "section header in (%s) extends beyond"
+                      "the end of the file\n", sg64.segname);
+              return(0);
+            }
 		    memcpy((char *)&s64, p, sizeof(struct section_64));
 		    p += sizeof(struct section_64);
 		    if(swapped)
@@ -413,13 +441,19 @@ const uint64_t object_size)
     char *p;
     uint64_t big_load_end;
     const char *name;
+    const char* addr_end;
 
 	host_byte_sex = get_host_byte_sex();
 	swapped = host_byte_sex != load_commands_byte_sex;
 
 	lc = load_commands;
 	big_load_end = 0;
+    addr_end = object_addr + object_size;
 	for(i = 0 ; i < ncmds; i++){
+        if((char *)lc + sizeof(struct load_command) > addr_end){
+          fprintf(stderr, "load command extends beyond the end of the file\n");
+          return(0);
+        }
 	    memcpy((char *)&l, (char *)lc, sizeof(struct load_command));
 	    if(swapped)
 		swap_load_command(&l, host_byte_sex);
@@ -430,12 +464,21 @@ const uint64_t object_size)
 		return(NULL);
 	    switch(l.cmd){
 	    case LC_SEGMENT_64:
+        if((char *)lc + sizeof(struct segment_command_64) > addr_end){
+          fprintf(stderr, "segment header extends beyond the end of the file\n");
+          return(0);
+        }
 		memcpy((char *)&sg64, (char *)lc,
 		       sizeof(struct segment_command_64));
 		if(swapped)
 		    swap_segment_command_64(&sg64, host_byte_sex);
 		p = (char *)lc + sizeof(struct segment_command_64);
 		for(j = 0 ; j < sg64.nsects ; j++){
+            if(p + sizeof(struct section_64) > addr_end){
+              fprintf(stderr, "section header in (%s) extends beyond"
+                      "the end of the file\n", sg64.segname);
+              return(NULL);
+            }
 		    memcpy((char *)&s64, p, sizeof(struct section_64));
 		    p += sizeof(struct section_64);
 		    if(swapped)
@@ -505,7 +548,7 @@ struct disassemble_info *info)
 	     */
 	    name = get_dyld_bind_info_symbolname(value, info->dbi, info->ndbi,
 						 NULL, info->chain_format,
-						 NULL);
+						 NULL, NULL);
 	    if(name != NULL){
 		*reference_type =
 		    LLVMDisassembler_ReferenceType_Out_Objc_Class_Ref;
@@ -843,13 +886,15 @@ cpu_subtype_t cpusubtype)
 	    break;
 	}
 
+	LLVMOpInfoCallback OpInfo = llvm_disasm_new_getopinfo_abi()
+	    ? GetOpInfo : (LLVMOpInfoCallback)GetOpInfoOld;
 	dc = 
 #ifdef STATIC_LLVM
 	LLVMCreateDisasm
 #else
 	llvm_create_disasm
 #endif
-	    ("arm64-apple-darwin10", mcpu_default, &dis_info, 1, GetOpInfo,
+	    ("arm64-apple-darwin10", mcpu_default, &dis_info, 1, OpInfo,
 	     SymbolLookUp);
 	return(dc);
 }

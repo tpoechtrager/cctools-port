@@ -217,6 +217,7 @@
 #include <limits.h>
 #include <ar.h>
 #include <libc.h>
+#include <mach/machine-cctools.h>
 #include <mach-o/fat.h>
 #include <mach-o/loader.h>
 #include <mach-o/reloc.h>
@@ -234,6 +235,7 @@
 #include "stuff/guess_short_name.h"
 #include "dyld_bind_info.h"
 #include "ofile_print.h"
+
 
 /* <mach/loader.h> */
 /* The maximum section alignment allowed to be specified, as a power of two */
@@ -2197,6 +2199,12 @@ NS32:
 	    case MH_FILESET:
 		printf("    FILESET");
 		break;
+            case MH_GPU_EXECUTE:
+                printf("GPU_EXECUTE");
+                break;
+            case MH_GPU_DYLIB:
+                printf("  GPU_DYLIB");
+                break;
 	    default:
 		printf(" %10u", filetype);
 		break;
@@ -2315,6 +2323,10 @@ NS32:
 		printf(" SIM_SUPPORT");
 		f &= ~MH_SIM_SUPPORT;
 	    }
+            if(f & MH_IMPLICIT_PAGEZERO){
+                printf(" PAGEZERO");
+                f &= ~MH_IMPLICIT_PAGEZERO;
+            }
 	    if(f != 0 || flags == 0)
 		printf(" 0x%08x", (unsigned int)f);
 	    printf("\n");
@@ -2712,6 +2724,7 @@ enum bool very_verbose)
 
 	    case LC_CODE_SIGNATURE:
 	    case LC_SEGMENT_SPLIT_INFO:
+	    case LC_ATOM_INFO:
 	    case LC_FUNCTION_STARTS:
 	    case LC_DATA_IN_CODE:
 	    case LC_DYLIB_CODE_SIGN_DRS:
@@ -2999,9 +3012,24 @@ enum bool verbose)
 			printf(")\n");
 		    }
 		    if(verbose){
-			printf("\ttime stamp %u ", dl.dylib.timestamp);
-			timestamp = (time_t)dl.dylib.timestamp;
-			printf("%s", ctime(&timestamp));
+                        struct dylib_use_command *du = (struct dylib_use_command*)lc;
+                        if ( (du->marker != DYLIB_USE_MARKER) || (du->nameoff != sizeof(struct dylib_use_command)) ) {
+                            printf("\ttime stamp %u ", dl.dylib.timestamp);
+                            timestamp = (time_t)dl.dylib.timestamp;
+                            printf("%s", ctime(&timestamp));
+                        }
+                        else {
+                            printf("\toptions ");
+                            if ( du->flags & DYLIB_USE_WEAK_LINK )
+                                printf("weak ");
+                            if ( du->flags & DYLIB_USE_REEXPORT )
+                                printf("re-export ");
+                            if ( du->flags & DYLIB_USE_UPWARD )
+                                printf("upward ");
+                            if ( du->flags & DYLIB_USE_DELAYED_INIT )
+                                printf("delay-init ");
+                            printf("\n");
+                        }
 		    }
 		}
 		else{
@@ -3603,7 +3631,10 @@ uint32_t left)
 {
     char *p;
     time_t t;
+    struct dylib_use_command *du = (struct dylib_use_command*)lc;
 
+        if ( (du->marker != DYLIB_USE_MARKER) || (du->nameoff != sizeof(struct dylib_use_command)) )
+            du = NULL;
 	if(dl->cmd == LC_ID_DYLIB)
 	    printf("          cmd LC_ID_DYLIB\n");
 	else if(dl->cmd == LC_LOAD_DYLIB)
@@ -3633,9 +3664,23 @@ uint32_t left)
 	    printf("         name ?(bad offset %u)\n",
 		   dl->dylib.name.offset);
 	}
-	printf("   time stamp %u ", dl->dylib.timestamp);
-	t = dl->dylib.timestamp;
-	printf("%s", ctime(&t));
+        if ( du ) {
+            printf("      options ");
+            if ( du->flags & DYLIB_USE_WEAK_LINK )
+                printf("weak ");
+            if ( du->flags & DYLIB_USE_REEXPORT )
+                printf("re-export ");
+            if ( du->flags & DYLIB_USE_UPWARD )
+                printf("upward ");
+            if ( du->flags & DYLIB_USE_DELAYED_INIT )
+                printf("delay-init ");
+            printf("\n");
+        }
+        else {
+            printf("   time stamp %u ", dl->dylib.timestamp);
+            t = dl->dylib.timestamp;
+            printf("%s", ctime(&t));
+        }
 	printf("      current version ");
 	if(dl->dylib.current_version == 0xffffffff)
 	    printf("n/a\n");
@@ -4040,6 +4085,8 @@ uint64_t object_size)
 	    printf("      cmd LC_CODE_SIGNATURE\n");
 	else if(ld->cmd == LC_SEGMENT_SPLIT_INFO)
 	    printf("      cmd LC_SEGMENT_SPLIT_INFO\n");
+	else if(ld->cmd == LC_ATOM_INFO)
+	    printf("      cmd LC_ATOM_INFO\n");
         else if(ld->cmd == LC_FUNCTION_STARTS)
 	    printf("      cmd LC_FUNCTION_STARTS\n");
         else if(ld->cmd == LC_DATA_IN_CODE)
@@ -4155,6 +4202,12 @@ enum bool verbose)
 	    case PLATFORM_DRIVERKIT:
 		printf("DRIVERKIT\n");
 		break;
+	    case PLATFORM_FIRMWARE:
+		printf("FIRMWARE\n");
+		break;
+	    case PLATFORM_SEPOS:
+		printf("SEPOS\n");
+		break;
 	    default:
 	        printf("%u\n", bv->platform);
 		break;
@@ -4190,6 +4243,30 @@ enum bool verbose)
 	case TOOL_LD:
 	    printf("LD\n");
 	    break;
+	case TOOL_LLD:
+	    printf("LLD\n");
+	    break;
+        case TOOL_METAL:
+            printf("TOOL_METAL\n");
+            break;
+        case TOOL_AIRLLD:
+            printf("AIRLLD\n");
+            break;
+        case TOOL_AIRNT:
+            printf("AIRNT\n");
+            break;
+        case TOOL_AIRNT_PLUGIN:
+            printf("AIRNT_PLUGIN\n");
+            break;
+        case TOOL_AIRPACK:
+            printf("AIRPACK\n");
+            break;
+        case TOOL_GPUARCHIVER:
+            printf("GPUARCHIVER\n");
+            break;
+        case TOOL_METAL_FRAMEWORK:
+            printf("METAL_FRAMEWORK\n");
+            break;
 	default:
 	    printf("%u\n", tool);
 	    break;
@@ -7352,9 +7429,9 @@ enum bool verbose)
 			       cputype == CPU_TYPE_X86_64) {
 				    printf("quad   ");
 			    }
-			    else if(cputype == CPU_TYPE_POWERPC ||
+			   else if(cputype == CPU_TYPE_POWERPC ||
 				    cputype == CPU_TYPE_POWERPC64 ||
-				    cputype == CPU_TYPE_VEO){
+			            cputype == CPU_TYPE_VEO){
 				printf("long   ");
 				predicted = TRUE;
 			    }
@@ -7520,6 +7597,7 @@ static char *arm64_r_types[] = {
 	" 12 (?) ", " 13 (?) ", " 14 (?) ", " 15 (?) "
 };
 
+
 static
 void
 print_r_type(
@@ -7607,6 +7685,10 @@ enum bool verbose)
 	else
 	    printf("module index symbol index\n");
 	for(i = 0; i < ntocs; i++){
+            if((char *)(tocs + i) > object_addr + object_size){
+                printf("table of contents beyond the end of the file\n");
+                return;
+            }
 	    if(verbose){
 		if(tocs[i].module_index > nmods)
 		    printf("%-16u (past the end of the module table) ",

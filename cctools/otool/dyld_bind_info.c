@@ -977,6 +977,7 @@ enum bool print_errors)
                             (*dbi)[n].bind_type = type;
                             (*dbi)[n].addend = addend;
                             (*dbi)[n].dylibname = fromDylib ? fromDylib : "??";
+                            (*dbi)[n].lib_ordinal = libraryOrdinalSet ? libraryOrdinal : 0;
                             (*dbi)[n].symbolname = (symbolName ? symbolName :
                                                     "Symbol name not set");
                             (*dbi)[n].weak_import = *weak_import != '\0';
@@ -1036,6 +1037,7 @@ enum bool print_errors)
                         (*dbi)[n].bind_type = type;
                         (*dbi)[n].addend = addend;
                         (*dbi)[n].dylibname = fromDylib ? fromDylib : "??";
+                        (*dbi)[n].lib_ordinal = libraryOrdinalSet ? libraryOrdinal : 0;
                         (*dbi)[n].symbolname = (symbolName ? symbolName :
                                                 "Symbol name not set");
                         (*dbi)[n].weak_import = *weak_import != '\0';
@@ -1119,6 +1121,7 @@ enum bool print_errors)
                         (*dbi)[n].bind_type = type;
                         (*dbi)[n].addend = addend;
                         (*dbi)[n].dylibname = fromDylib ? fromDylib : "??";
+                        (*dbi)[n].lib_ordinal = libraryOrdinalSet ? libraryOrdinal : 0;
                         (*dbi)[n].symbolname = (symbolName ? symbolName :
                                                 "Symbol name not set");
                         (*dbi)[n].weak_import = *weak_import != '\0';
@@ -1215,6 +1218,7 @@ enum bool print_errors)
                             (*dbi)[n].bind_type = type;
                             (*dbi)[n].addend = addend;
                             (*dbi)[n].dylibname = fromDylib ? fromDylib : "??";
+                            (*dbi)[n].lib_ordinal = libraryOrdinalSet ? libraryOrdinal : 0;
                             (*dbi)[n].symbolname = (symbolName ? symbolName :
                                                     "Symbol name not set");
                             (*dbi)[n].weak_import = *weak_import != '\0';
@@ -1359,6 +1363,7 @@ enum bool print_errors)
                                             (*dbi)[n].sectname = sectname;
                                             (*dbi)[n].address = segStartAddr+segOffset;
                                             (*dbi)[n].bind_type = ordinalTable[ordinal].type;
+                                            (*dbi)[n].lib_ordinal = libraryOrdinal;
                                             (*dbi)[n].addend = ordinalTable[ordinal].addend;
                                             (*dbi)[n].dylibname = fromDylib;
                                             (*dbi)[n].symbolname = ordinalTable[ordinal].symbolName;
@@ -1961,8 +1966,7 @@ uint64_t ndbi)
         key = isAuth ? dbi[n].auth_key : 0;
 
         if (value) {
-            const char* format;
-            format = is32 ? "0x%08llX" : "0x%016llX";
+            const char* const format = is32 ? "0x%08llX" : "0x%016llX";
             snprintf(valuestr, sizeof(valuestr), format, value);
         }
         else {
@@ -2030,6 +2034,7 @@ struct dyld_bind_info *dbi,
 uint64_t ndbi,
 struct dyld_bind_info **dbi_index,
 enum chain_format_t chain_format,
+int *lib_ordinal,
 int64_t *addend)
 {
     uint64_t n;
@@ -2054,6 +2059,8 @@ int64_t *addend)
     }
 
     if (info) {
+        if(chain_format && lib_ordinal != NULL )
+            *lib_ordinal = info->lib_ordinal;
         if(chain_format && addend != NULL)
             *addend = info->addend;
         return info->symbolname;
@@ -2148,6 +2155,7 @@ struct fixup_target
     const char* symbolName;
     uint64_t    addend;
     enum bool   weakImport;
+    int         libraryOrdinal;
 };
 
 /*
@@ -2328,8 +2336,9 @@ static void get_fixup_targets(/* inputs */
                        "(max %u)\n", i, lib_ordinal, ndylibs);
             continue;
         }
-        
+
         (*targets)[i].dylib = dylibName;
+        (*targets)[i].libraryOrdinal = lib_ordinal;
     }
 }
 
@@ -2439,13 +2448,13 @@ static void walk_chain(/* inputs */
                        const char* segname,
                        uint16_t pointer_format,
                        uint16_t pageIndex,
-                       uint16_t chain_offset,
+                       uint32_t chain_offset,
                        /* output */
                        struct dyld_bind_info **dbi,
                        uint64_t *ndbi)
 {
-    void* chain;
-    uint64_t chain_addr;
+    void* chain = NULL;
+    uint64_t chain_addr =0;
     uint32_t max_valid_pointer = 0;
 
     /*
@@ -2464,11 +2473,42 @@ static void walk_chain(/* inputs */
         chain_addr = baseaddr + page_vmoff + chain_offset;
         max_valid_pointer = segInfo->max_valid_pointer;
     }
+    else if ( ((struct mach_header*)object_addr)->filetype == MH_PRELOAD ) {
+        // chain offsets are runtime offset.  The file is mapped raw, so we need to convert
+        if (segs64 != NULL) {
+            for(int i=0; i<nsegs64; ++i) {
+                if (segs64[i]->vmaddr <= (baseaddr + chain_offset)) {
+                    if ((baseaddr + chain_offset < segs64[i]->vmaddr + segs64[i]->vmsize))  {
+                        chain = object_addr + baseaddr + chain_offset - segs64[i]->vmaddr + segs64[i]->fileoff;
+                        chain_addr = baseaddr + chain_offset;
+                        break;
+                    }
+                }
+            }
+        }
+        else {
+            for(int i=0; i<nsegs; ++i) {
+                if (segs[i]->vmaddr <= (baseaddr + chain_offset)) {
+                    if ((baseaddr + chain_offset < segs[i]->vmaddr + segs[i]->vmsize))  {
+                        chain = object_addr + baseaddr + chain_offset - segs[i]->vmaddr + segs[i]->fileoff;
+                        chain_addr = baseaddr + chain_offset;
+                        break;
+                    }
+                }
+            }
+            chain = object_addr + chain_offset + segs[0]->fileoff;
+            chain_addr = baseaddr + chain_offset;
+        }
+    }
     else {
         chain = object_addr + chain_offset;
         chain_addr = baseaddr + chain_offset;
     }
 
+    if ((char*)chain > object_addr + object_size) {
+        printf("chained fixups start beyond the end of the object file\n");
+        return;
+    }
     /* loop over all of the fixups in the chain */
     enum bool done = FALSE;
     while (!done) {
@@ -2486,7 +2526,7 @@ static void walk_chain(/* inputs */
         enum bool auth_addr_div = FALSE;
         uint8_t auth_key = 0;
         int bind_type = 0;
-
+        int libraryOrdinal = 0;
         /*
          * because section-based fixup chains are not confined to their
          * segments, we must look up new segment information for each
@@ -2506,6 +2546,10 @@ static void walk_chain(/* inputs */
         sectname = sectionName(seg_index, chain_addr, segs, nsegs,
                                segs64, nsegs64);
 
+        if ((char*)chain > object_addr + object_size) {
+            printf("chained fixups extend beyond the end of object\n");
+            return;
+        }
         /* set the bind and rebase information from the chain value */
         switch (pointer_format) {
             case DYLD_CHAINED_PTR_ARM64E:
@@ -2556,6 +2600,7 @@ static void walk_chain(/* inputs */
                         symbolName = target->symbolName;
                         dylibName = target->dylib;
                         weakImport = target->weakImport;
+                        libraryOrdinal = target->libraryOrdinal;
                     } else {
                         printErrorFixupBindOrdinal(chain_addr, ordinal,
                                                    ntarget, NULL);
@@ -2585,6 +2630,7 @@ static void walk_chain(/* inputs */
                         symbolName = target->symbolName;
                         dylibName = target->dylib;
                         weakImport = target->weakImport;
+                        libraryOrdinal = target->libraryOrdinal;
                     } else {
                         printErrorFixupBindOrdinal(chain_addr, ordinal,
                                                    ntarget, NULL);
@@ -2648,6 +2694,7 @@ static void walk_chain(/* inputs */
                         symbolName = target->symbolName;
                         dylibName = target->dylib;
                         weakImport = target->weakImport;
+                        libraryOrdinal = target->libraryOrdinal;
                     } else {
                         printErrorFixupBindOrdinal(chain_addr, bind.ordinal,
                                                    ntarget, NULL);
@@ -2724,6 +2771,7 @@ static void walk_chain(/* inputs */
                             symbolName = target->symbolName;
                             dylibName = target->dylib;
                             weakImport = target->weakImport;
+                            libraryOrdinal = target->libraryOrdinal;
                         } else {
                             printErrorFixupBindOrdinal(chain_addr, bind.ordinal,
                                                        ntarget, NULL);
@@ -2802,6 +2850,7 @@ static void walk_chain(/* inputs */
         (*dbi)[dbii].bind_type = bind_type;
         (*dbi)[dbii].addend = addend;
         (*dbi)[dbii].dylibname = dylibName;
+        (*dbi)[dbii].lib_ordinal = libraryOrdinal;
         (*dbi)[dbii].symbolname = symbolName;
         (*dbi)[dbii].weak_import = weakImport;
         (*dbi)[dbii].pointer_value = pointer_value;

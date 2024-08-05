@@ -4497,7 +4497,8 @@ i386GetOpInfo(
 void *DisInfo,
 uint64_t Pc,
 uint64_t Offset,
-uint64_t Width,
+uint64_t OpWidth,
+uint64_t InstWidth,
 int TagType,     /* should currently always be passed as 1 */
 void *TagBuf)
 {
@@ -4511,7 +4512,7 @@ void *TagBuf)
     const char *strings, *name, *add, *sub;
     struct relocation_info *relocs, *rp, *pairp;
     struct scattered_relocation_info *srp, *spairp;
-    uint32_t nrelocs, strings_size, n_strx;
+    uint32_t nrelocs, strings_size, n_strx, symbol_num;
     struct nlist *symbols;
 
 	info = (struct disassemble_info *)DisInfo;
@@ -4522,7 +4523,7 @@ void *TagBuf)
 	memset(op_info, '\0', sizeof(struct LLVMOpInfo1));
 	op_info->Value = value;
 
-	if((Width != 1 && Width != 2 && Width != 4) || TagType != 1 ||
+	if((OpWidth != 1 && OpWidth != 2 && OpWidth != 4) || TagType != 1 ||
 	   info->verbose == FALSE)
 	    return(0);
 
@@ -4550,6 +4551,10 @@ void *TagBuf)
 	 */
 	reloc_found = 0;
 	for(i = 0; i < nrelocs; i++){
+        if ((char*)(&relocs[i]) > info->object_addr + info->object_size) {
+            printf("relocation extend beyond the end of object\n");
+            return(0);
+        }
 	    rp = &relocs[i];
 	    if(rp->r_address & R_SCATTERED){
 		srp = (struct scattered_relocation_info *)rp;
@@ -4660,8 +4665,14 @@ void *TagBuf)
 	nrelocs = info->next_relocs;
 	for(i = 0; i < nrelocs; i++){
 	    if(relocs[i].r_address == seg_offset){
-		if(symbols != NULL)
-		    n_strx = symbols[relocs[i].r_symbolnum].n_un.n_strx;
+        if(symbols != NULL) {
+            symbol_num = relocs[i].r_symbolnum;
+            if ((char*)(&symbols[symbol_num]) > info->object_addr + info->object_size){
+                printf("symbol extend beyond the end of object\n");
+                return(0);
+            }
+            n_strx = symbols[symbol_num].n_un.n_strx;
+        }
 		if(n_strx >= strings_size){
 		    /* Error bad string offset. */
 		    return(0);
@@ -4681,6 +4692,20 @@ void *TagBuf)
 	/* We found no symbolic info so just return zero indicating that. */
 	return(0);
 }
+
+static
+int
+i386GetOpInfoOld(
+void *DisInfo,
+uint64_t Pc,
+uint64_t Offset, /* should always be passed as 0 for arm64 */
+uint64_t OpSize, /* should always be passed as 4 for arm64 */
+int TagType,     /* should always be passed as 1 for arm64-apple-darwin10 */
+void *TagBuf)
+{
+	return i386GetOpInfo(DisInfo, Pc, Offset, OpSize, OpSize, TagType, TagBuf);
+}
+
 
 /*
  * x86_64GetOpInfo() is the operand information call back function for x86_64
@@ -4703,7 +4728,8 @@ x86_64GetOpInfo(
 void *DisInfo,
 uint64_t Pc,
 uint64_t Offset,
-uint64_t Width,
+uint64_t OpWidth,
+uint64_t InstWidth,
 int TagType,     /* should currently always be passed as 1 */
 void *TagBuf)
 {
@@ -4714,7 +4740,7 @@ void *TagBuf)
     uint64_t sect_offset, seg_offset, i;
     const char *strings, *name;
     struct relocation_info *relocs;
-    uint32_t nrelocs, strings_size, n_strx;
+    uint32_t nrelocs, strings_size, n_strx, symbol_num;
     struct nlist_64 *symbols;
 
 	info = (struct disassemble_info *)DisInfo;
@@ -4725,7 +4751,7 @@ void *TagBuf)
 	memset(op_info, '\0', sizeof(struct LLVMOpInfo1));
 	op_info->Value = value;
 
-	if((Width != 1 && Width != 2 && Width != 4 && Width != 0) ||
+	if((OpWidth != 1 && OpWidth != 2 && OpWidth != 4 && OpWidth != 0) ||
 	   TagType != 1 ||
 	   info->verbose == FALSE)
 	    return(0);
@@ -4740,7 +4766,11 @@ void *TagBuf)
 
 	reloc_found = 0;
 	for(i = 0; i < nrelocs; i++){
-	    /* We could also check the Width matches the r_length. */
+        if ((char*)(&relocs[i]) > info->object_addr + info->object_size) {
+            printf("relocation extend beyond the end of object\n");
+            return(0);
+        }
+	    /* We could also check the OpWidth matches the r_length. */
 	    if(relocs[i].r_address == sect_offset){
 		reloc_found = 1;
 		break;
@@ -4754,11 +4784,18 @@ void *TagBuf)
 	     * Value is the offset from the external symbol.
 	     */
 	    if(relocs[i].r_pcrel == 1)
-		op_info->Value -= Pc + Offset + Width;
-	    if(symbols != NULL && relocs[i].r_symbolnum < info->nsymbols)
-		n_strx = symbols[relocs[i].r_symbolnum].n_un.n_strx;
-	    else
-		return(0);
+		op_info->Value -= Pc + Offset + OpWidth;
+        if(symbols != NULL && relocs[i].r_symbolnum < info->nsymbols) {
+            symbol_num = relocs[i].r_symbolnum;
+            if ((char*)(&symbols[symbol_num]) > info->object_addr + info->object_size){
+                printf("symbol extend beyond the end of object\n");
+                return(0);
+            }
+            n_strx = symbols[relocs[i].r_symbolnum].n_un.n_strx;
+        }
+        else{
+		    return(0);
+        }
 	    if(n_strx >= strings_size)
 		return(0);
 	    name = strings + n_strx;
@@ -4782,6 +4819,10 @@ void *TagBuf)
 	relocs = info->ext_relocs;
 	nrelocs = info->next_relocs;
 	for(i = 0; i < nrelocs; i++){
+        if ((char*)(&relocs[i]) > info->object_addr + info->object_size) {
+            printf("relocation extend beyond the end of object\n");
+            return(0);
+        }
 	    if(relocs[i].r_address == seg_offset){
 		/*
 		 * The Value passed in will be adjusted by the Pc if the
@@ -4789,11 +4830,18 @@ void *TagBuf)
 		 * entries the Value is the offset from the external symbol.
 		 */
 		if(relocs[i].r_pcrel == 1)
-		    op_info->Value -= Pc + Offset + Width;
-		if(symbols != NULL)
-		    n_strx = symbols[relocs[i].r_symbolnum].n_un.n_strx;
-		else
-		    return(0);
+		    op_info->Value -= Pc + Offset + OpWidth;
+        if(symbols != NULL) {
+            symbol_num = relocs[i].r_symbolnum;
+            if ((char*)(&symbols[symbol_num]) > info->object_addr + info->object_size){
+                printf("symbol extend beyond the end of object\n");
+                return(0);
+            }
+            n_strx = symbols[relocs[i].r_symbolnum].n_un.n_strx;
+        }
+        else{
+            return(0);
+        }
 		if(n_strx >= strings_size)
 		    return(0);
 		name = strings + n_strx;
@@ -4807,6 +4855,18 @@ void *TagBuf)
 	return(0);
 }
 
+static
+int
+x86_64GetOpInfoOld(
+void *DisInfo,
+uint64_t Pc,
+uint64_t Offset, /* should always be passed as 0 for arm64 */
+uint64_t OpSize, /* should always be passed as 4 for arm64 */
+int TagType,     /* should always be passed as 1 for arm64-apple-darwin10 */
+void *TagBuf)
+{
+	return i386GetOpInfo(DisInfo, Pc, Offset, OpSize, OpSize, TagType, TagBuf);
+}
 /*
  * guess_pointer_pointer() is passed the address of what might be a pointer to
  * a reference to an Objective-C class, selector, message ref or cfstring.
@@ -4836,6 +4896,7 @@ enum bool *cfstring)
     struct section_64 s64;
     char *p;
     uint64_t big_load_end;
+    const char* addr_end;
 
 	*classref = FALSE;
 	*selref = FALSE;
@@ -4846,7 +4907,12 @@ enum bool *cfstring)
 
 	lc = load_commands;
 	big_load_end = 0;
+    addr_end = object_addr + object_size;
 	for(i = 0 ; i < ncmds; i++){
+        if((char *)lc + sizeof(struct load_command) > addr_end){
+          fprintf(stderr, "load command extends beyond the end of the file\n");
+          return(0);
+        }
 	    memcpy((char *)&l, (char *)lc, sizeof(struct load_command));
 	    if(swapped)
 		swap_load_command(&l, host_byte_sex);
@@ -4857,6 +4923,10 @@ enum bool *cfstring)
 		return(0);
 	    switch(l.cmd){
 	    case LC_SEGMENT_64:
+        if((char *)lc + sizeof(struct segment_command_64) > addr_end){
+          fprintf(stderr, "segment header extends beyond the end of the file\n");
+          return(0);
+        }
 		memcpy((char *)&sg64, (char *)lc,
 		       sizeof(struct segment_command_64));
 		if(swapped)
@@ -4866,6 +4936,11 @@ enum bool *cfstring)
 			    j * sizeof(struct section_64) +
 			    sizeof(struct segment_command_64) < sizeofcmds ;
                     j++){
+            if(p + sizeof(struct section_64) > addr_end){
+              fprintf(stderr, "section header in (%s) extends beyond"
+                      "the end of the file\n", sg64.segname);
+              return(0);
+            }
 		    memcpy((char *)&s64, p, sizeof(struct section_64));
 		    p += sizeof(struct section_64);
 		    if(swapped)
@@ -4951,13 +5026,19 @@ const uint64_t object_size)
     char *p;
     uint64_t big_load_end;
     const char *name;
+    const char* addr_end;
 
 	host_byte_sex = get_host_byte_sex();
 	swapped = host_byte_sex != load_commands_byte_sex;
 
 	lc = load_commands;
 	big_load_end = 0;
+    addr_end = object_addr + object_size;
 	for(i = 0 ; i < ncmds; i++){
+        if((char *)lc + sizeof(struct load_command) > addr_end){
+          fprintf(stderr, "load command extends beyond the end of the file\n");
+          return(0);
+        }
 	    memcpy((char *)&l, (char *)lc, sizeof(struct load_command));
 	    if(swapped)
 		swap_load_command(&l, host_byte_sex);
@@ -4968,6 +5049,10 @@ const uint64_t object_size)
 		return(NULL);
 	    switch(l.cmd){
 	    case LC_SEGMENT_64:
+        if((char *)lc + sizeof(struct segment_command_64) > addr_end){
+          fprintf(stderr, "segment header extends beyond the end of the file\n");
+          return(0);
+        }
 		memcpy((char *)&sg64, (char *)lc,
 		       sizeof(struct segment_command_64));
 		if(swapped)
@@ -4977,6 +5062,11 @@ const uint64_t object_size)
 			    j * sizeof(struct section_64) +
 			    sizeof(struct segment_command_64) < sizeofcmds ;
                     j++){
+            if(p + sizeof(struct section_64) > addr_end){
+              fprintf(stderr, "section header in (%s) is beyond"
+                      "the end of the file\n", sg64.segname);
+              return(NULL);
+            }
 		    memcpy((char *)&s64, p, sizeof(struct section_64));
 		    p += sizeof(struct section_64);
 		    if(swapped)
@@ -5081,7 +5171,7 @@ struct disassemble_info *info)
 	     * will be set by dyld as part of the "bind information".
 	     */
 	    name = get_dyld_bind_info_symbolname(value, info->dbi, info->ndbi,
-						 NULL, CHAIN_FORMAT_NONE, NULL);
+						 NULL, CHAIN_FORMAT_NONE, NULL, NULL);
 	    if(name != NULL){
 		*reference_type =
 		    LLVMDisassembler_ReferenceType_Out_Objc_Class_Ref;
@@ -5333,10 +5423,12 @@ LLVMDisasmContextRef
 create_i386_llvm_disassembler(
 void)
 {
-    LLVMDisasmContextRef dc;
+	LLVMDisasmContextRef dc;
+	LLVMOpInfoCallback OpInfo = llvm_disasm_new_getopinfo_abi()
+	    ? i386GetOpInfo : (LLVMOpInfoCallback)i386GetOpInfoOld;
 
 	dc = llvm_create_disasm("i386-apple-darwin10", mcpu, &dis_info, 1,
-				i386GetOpInfo, SymbolLookUp);
+				OpInfo, SymbolLookUp);
 	return(dc);
 }
 
@@ -5351,10 +5443,12 @@ LLVMDisasmContextRef
 create_x86_64_llvm_disassembler(
 void)
 {
-    LLVMDisasmContextRef dc;
+	LLVMDisasmContextRef dc;
+	LLVMOpInfoCallback OpInfo = llvm_disasm_new_getopinfo_abi()
+	    ? x86_64GetOpInfo : (LLVMOpInfoCallback)x86_64GetOpInfoOld;
 
 	dc = llvm_create_disasm("x86_64-apple-darwin10", mcpu, &dis_info, 1,
-				x86_64GetOpInfo, SymbolLookUp);
+				OpInfo, SymbolLookUp);
 	return(dc);
 }
 

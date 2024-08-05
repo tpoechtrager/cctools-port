@@ -672,6 +672,19 @@ enum bool Vflag)
     walk_pointer_list("category", s, &info, print_category_t);
 
     s = get_section_64(info.sections, info.nsections,
+                       "__OBJC2", "__category_list2");
+    if(s == NULL)
+        s = get_section_64(info.sections, info.nsections,
+                           "__DATA", "__objc_catlist2");
+    if(s == NULL)
+        s = get_section_64(info.sections, info.nsections,
+                           "__DATA_CONST", "__objc_catlist2");
+    if(s == NULL)
+        s = get_section_64(info.sections, info.nsections,
+                           "__DATA_DIRTY", "__objc_catlist2");
+    walk_pointer_list("stub classes category", s, &info, print_category_t);
+
+    s = get_section_64(info.sections, info.nsections,
                        "__OBJC2", "__protocol_list");
     if(s == NULL)
         s = get_section_64(info.sections, info.nsections,
@@ -2597,6 +2610,7 @@ int64_t *addend)
     unsigned int r_symbolnum;
     uint32_t n_strx;
     const char *name;
+    int lib_ordinal = 0;
 
     if(n_value != NULL)
         *n_value = 0;
@@ -2683,7 +2697,25 @@ int64_t *addend)
      */
     name = get_dyld_bind_info_symbolname(sect_addr + sect_offset,
                                          info->dbi, info->ndbi, info->dbi_index,
-                                         info->chain_format, addend);
+                                         info->chain_format, &lib_ordinal, addend);
+
+    // ObjC patching uses binds to self.  Try find the symbol to get the n_value
+    if (lib_ordinal == BIND_SPECIAL_DYLIB_SELF && name != NULL) {
+        for(i = 0; i < info->nsymbols; i++){
+            // Binds to self can only be to global symbols
+            enum bool isGlobal = ((info->symbols64[i].n_type & N_EXT) && ((info->symbols64[i].n_type & N_TYPE) == N_SECT));
+            if (!isGlobal)
+                continue;
+            n_strx = info->symbols64[i].n_un.n_strx;
+            if(n_strx <= 0 || n_strx >= info->strings_size)
+                break;
+            if (!strcmp(name, info->strings + n_strx)) {
+                if(n_value != NULL)
+                    *n_value = info->symbols64[i].n_value;
+                break;
+            }
+        }
+    }
 
     /*
      * If we find a bind entry we return the name which may not be printed
