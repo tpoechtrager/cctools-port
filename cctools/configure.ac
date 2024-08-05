@@ -1,4 +1,4 @@
-AC_INIT([cctools], [1009.2], [t.poechtrager@gmail.com])
+AC_INIT([cctools], [1010.6], [t.poechtrager@gmail.com])
 
 AC_CANONICAL_BUILD
 AC_CANONICAL_HOST
@@ -74,7 +74,7 @@ case "$CCVERSION" in
   ;;
 esac
 
-EXTRAFLAGS="$EXTRAFLAGS -DLD64_VERSION_NUM=907"
+EXTRAFLAGS="$EXTRAFLAGS -DLD64_VERSION_NUM=951.9"
 
 case "$CXXVERSION" in
   *clang* )
@@ -330,7 +330,16 @@ AC_COMPILE_IFELSE(
 )
 CFLAGS=$ORIGCFLAGS
 
-
+ORIGCFLAGS=$CFLAGS
+CFLAGS="$CFLAGS -Werror -Wno-vla-cxx-extension"
+AC_MSG_CHECKING([whether $CC supports -Wno-vla-cxx-extension])
+AC_COMPILE_IFELSE(
+  [AC_LANG_SOURCE([[int dummy;]])],
+  [WARNINGS="$WARNINGS -Wno-vla-cxx-extension"
+   AC_MSG_RESULT([yes])],
+  [AC_MSG_RESULT([no])]
+)
+CFLAGS=$ORIGCFLAGS
 
 AC_SUBST([WARNINGS], [$WARNINGS])
 

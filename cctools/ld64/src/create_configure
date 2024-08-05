@@ -34,8 +34,8 @@ fi
 
 echo "#define ALL_SUPPORTED_ARCHS  \"${RC_SUPPORTED_ARCHS}\"" >> ${DERIVED_FILE_DIR}/configure.h
 
-if [ -f "${DT_TOOLCHAIN_DIR}/usr/lib/libswiftDemangle.dylib" ]; then
-	echo "${DT_TOOLCHAIN_DIR}/usr/lib/libswiftDemangle.dylib" >  ${DERIVED_FILE_DIR}/linkExtras
+if [ -f "${TOOLCHAIN_DIR}/usr/lib/libswiftDemangle.dylib" ]; then
+	echo "${TOOLCHAIN_DIR}/usr/lib/libswiftDemangle.dylib" >  ${DERIVED_FILE_DIR}/linkExtras
 	echo "#define DEMANGLE_SWIFT 1" >> ${DERIVED_FILE_DIR}/configure.h
 else
 	echo "" > ${DERIVED_FILE_DIR}/linkExtras
@@ -49,9 +49,5 @@ else
 	echo "#define LD64_VERSION_NUM 0" >> ${DERIVED_FILE_DIR}/configure.h
 fi
 
-if [ -n "${LD_FORCE_16KB_PAGES}" ]; then
-	echo "#define LD_PAGE_SIZE 0x4000" >> ${DERIVED_FILE_DIR}/configure.h
-else
-	echo "#define LD_PAGE_SIZE 0x1000" >> ${DERIVED_FILE_DIR}/configure.h
-fi
+echo "#define LD_PAGE_SIZE 0x1000" >> ${DERIVED_FILE_DIR}/configure.h
 
