@@ -722,6 +722,8 @@ LIBTOOL
 MAINT
 MAINTAINER_MODE_FALSE
 MAINTAINER_MODE_TRUE
+am__xargs_n
+am__rm_f_notfound
 AM_BACKSLASH
 AM_DEFAULT_VERBOSITY
 AM_DEFAULT_V
@@ -3223,7 +3225,7 @@ fi
 CPP="$CC -E"
 
 # FIXME 'subdir-objects' breaks dependency tracking
-am__api_version='1.16'
+am__api_version='1.17'
 
 
   # Find a good install program.  We prefer a C program (faster),
@@ -3325,6 +3327,165 @@ test -z "$INSTALL_SCRIPT" && INSTALL_SCRIPT='${INSTALL}'
 
 test -z "$INSTALL_DATA" && INSTALL_DATA='${INSTALL} -m 644'
 
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether sleep supports fractional seconds" >&5
+printf %s "checking whether sleep supports fractional seconds... " >&6; }
+if test ${am_cv_sleep_fractional_seconds+y}
+then :
+  printf %s "(cached) " >&6
+else case e in #(
+  e) if sleep 0.001 2>/dev/null
+then :
+  am_cv_sleep_fractional_seconds=yes
+else case e in #(
+  e) am_cv_sleep_fractional_seconds=no ;;
+esac
+fi
+ ;;
+esac
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $am_cv_sleep_fractional_seconds" >&5
+printf "%s\n" "$am_cv_sleep_fractional_seconds" >&6; }
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking filesystem timestamp resolution" >&5
+printf %s "checking filesystem timestamp resolution... " >&6; }
+if test ${am_cv_filesystem_timestamp_resolution+y}
+then :
+  printf %s "(cached) " >&6
+else case e in #(
+  e) # Default to the worst case.
+am_cv_filesystem_timestamp_resolution=2
+
+# Only try to go finer than 1 sec if sleep can do it.
+# Don't try 1 sec, because if 0.01 sec and 0.1 sec don't work,
+# - 1 sec is not much of a win compared to 2 sec, and
+# - it takes 2 seconds to perform the test whether 1 sec works.
+#
+# Instead, just use the default 2s on platforms that have 1s resolution,
+# accept the extra 1s delay when using $sleep in the Automake tests, in
+# exchange for not incurring the 2s delay for running the test for all
+# packages.
+#
+am_try_resolutions=
+if test "$am_cv_sleep_fractional_seconds" = yes; then
+  # Even a millisecond often causes a bunch of false positives,
+  # so just try a hundredth of a second. The time saved between .001 and
+  # .01 is not terribly consequential.
+  am_try_resolutions="0.01 0.1 $am_try_resolutions"
+fi
+
+# In order to catch current-generation FAT out, we must *modify* files
+# that already exist; the *creation* timestamp is finer.  Use names
+# that make ls -t sort them differently when they have equal
+# timestamps than when they have distinct timestamps, keeping
+# in mind that ls -t prints the *newest* file first.
+rm -f conftest.ts?
+: > conftest.ts1
+: > conftest.ts2
+: > conftest.ts3
+
+# Make sure ls -t actually works.  Do 'set' in a subshell so we don't
+# clobber the current shell's arguments. (Outer-level square brackets
+# are removed by m4; they're present so that m4 does not expand
+# <dollar><star>; be careful, easy to get confused.)
+if (
+     set X `ls -t conftest.ts[12]` &&
+     {
+       test "$*" != "X conftest.ts1 conftest.ts2" ||
+       test "$*" != "X conftest.ts2 conftest.ts1";
+     }
+); then :; else
+  # If neither matched, then we have a broken ls.  This can happen
+  # if, for instance, CONFIG_SHELL is bash and it inherits a
+  # broken ls alias from the environment.  This has actually
+  # happened.  Such a system could not be considered "sane".
+  printf "%s\n" ""Bad output from ls -t: \"`ls -t conftest.ts[12]`\""" >&5
+  { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: error: in '$ac_pwd':" >&5
+printf "%s\n" "$as_me: error: in '$ac_pwd':" >&2;}
+as_fn_error $? "ls -t produces unexpected output.
+Make sure there is not a broken ls alias in your environment.
+See 'config.log' for more details" "$LINENO" 5; }
+fi
+
+for am_try_res in $am_try_resolutions; do
+  # Any one fine-grained sleep might happen to cross the boundary
+  # between two values of a coarser actual resolution, but if we do
+  # two fine-grained sleeps in a row, at least one of them will fall
+  # entirely within a coarse interval.
+  echo alpha > conftest.ts1
+  sleep $am_try_res
+  echo beta > conftest.ts2
+  sleep $am_try_res
+  echo gamma > conftest.ts3
+
+  # We assume that 'ls -t' will make use of high-resolution
+  # timestamps if the operating system supports them at all.
+  if (set X `ls -t conftest.ts?` &&
+      test "$2" = conftest.ts3 &&
+      test "$3" = conftest.ts2 &&
+      test "$4" = conftest.ts1); then
+    #
+    # Ok, ls -t worked. If we're at a resolution of 1 second, we're done,
+    # because we don't need to test make.
+    make_ok=true
+    if test $am_try_res != 1; then
+      # But if we've succeeded so far with a subsecond resolution, we
+      # have one more thing to check: make. It can happen that
+      # everything else supports the subsecond mtimes, but make doesn't;
+      # notably on macOS, which ships make 3.81 from 2006 (the last one
+      # released under GPLv2). https://bugs.gnu.org/68808
+      #
+      # We test $MAKE if it is defined in the environment, else "make".
+      # It might get overridden later, but our hope is that in practice
+      # it does not matter: it is the system "make" which is (by far)
+      # the most likely to be broken, whereas if the user overrides it,
+      # probably they did so with a better, or at least not worse, make.
+      # https://lists.gnu.org/archive/html/automake/2024-06/msg00051.html
+      #
+      # Create a Makefile (real tab character here):
+      rm -f conftest.mk
+      echo 'conftest.ts1: conftest.ts2' >conftest.mk
+      echo '	touch conftest.ts2' >>conftest.mk
+      #
+      # Now, running
+      #   touch conftest.ts1; touch conftest.ts2; make
+      # should touch ts1 because ts2 is newer. This could happen by luck,
+      # but most often, it will fail if make's support is insufficient. So
+      # test for several consecutive successes.
+      #
+      # (We reuse conftest.ts[12] because we still want to modify existing
+      # files, not create new ones, per above.)
+      n=0
+      make=${MAKE-make}
+      until test $n -eq 3; do
+        echo one > conftest.ts1
+        sleep $am_try_res
+        echo two > conftest.ts2 # ts2 should now be newer than ts1
+        if $make -f conftest.mk | grep 'up to date' >/dev/null; then
+          make_ok=false
+          break # out of $n loop
+        fi
+        n=`expr $n + 1`
+      done
+    fi
+    #
+    if $make_ok; then
+      # Everything we know to check worked out, so call this resolution good.
+      am_cv_filesystem_timestamp_resolution=$am_try_res
+      break # out of $am_try_res loop
+    fi
+    # Otherwise, we'll go on to check the next resolution.
+  fi
+done
+rm -f conftest.ts?
+# (end _am_filesystem_timestamp_resolution)
+ ;;
+esac
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $am_cv_filesystem_timestamp_resolution" >&5
+printf "%s\n" "$am_cv_filesystem_timestamp_resolution" >&6; }
+
+# This check should not be cached, as it may vary across builds of
+# different projects.
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether build environment is sane" >&5
 printf %s "checking whether build environment is sane... " >&6; }
 # Reject unsafe characters in $srcdir or the absolute working directory
@@ -3345,49 +3506,45 @@ esac
 # symlink; some systems play weird games with the mod time of symlinks
 # (eg FreeBSD returns the mod time of the symlink's containing
 # directory).
-if (
-   am_has_slept=no
-   for am_try in 1 2; do
-     echo "timestamp, slept: $am_has_slept" > conftest.file
-     set X `ls -Lt "$srcdir/configure" conftest.file 2> /dev/null`
-     if test "$*" = "X"; then
-	# -L didn't work.
-	set X `ls -t "$srcdir/configure" conftest.file`
-     fi
-     if test "$*" != "X $srcdir/configure conftest.file" \
-	&& test "$*" != "X conftest.file $srcdir/configure"; then
+am_build_env_is_sane=no
+am_has_slept=no
+rm -f conftest.file
+for am_try in 1 2; do
+  echo "timestamp, slept: $am_has_slept" > conftest.file
+  if (
+    set X `ls -Lt "$srcdir/configure" conftest.file 2> /dev/null`
+    if test "$*" = "X"; then
+      # -L didn't work.
+      set X `ls -t "$srcdir/configure" conftest.file`
+    fi
+    test "$2" = conftest.file
+  ); then
+    am_build_env_is_sane=yes
+    break
+  fi
+  # Just in case.
+  sleep "$am_cv_filesystem_timestamp_resolution"
+  am_has_slept=yes
+done
 
-	# If neither matched, then we have a broken ls.  This can happen
-	# if, for instance, CONFIG_SHELL is bash and it inherits a
-	# broken ls alias from the environment.  This has actually
-	# happened.  Such a system could not be considered "sane".
-	as_fn_error $? "ls -t appears to fail.  Make sure there is not a broken
-  alias in your environment" "$LINENO" 5
-     fi
-     if test "$2" = conftest.file || test $am_try -eq 2; then
-       break
-     fi
-     # Just in case.
-     sleep 1
-     am_has_slept=yes
-   done
-   test "$2" = conftest.file
-   )
-then
-   # Ok.
-   :
-else
-   as_fn_error $? "newly created file is older than distributed files!
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $am_build_env_is_sane" >&5
+printf "%s\n" "$am_build_env_is_sane" >&6; }
+if test "$am_build_env_is_sane" = no; then
+  as_fn_error $? "newly created file is older than distributed files!
 Check your system clock" "$LINENO" 5
 fi
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
-printf "%s\n" "yes" >&6; }
+
 # If we didn't sleep, we still need to ensure time stamps of config.status and
 # generated files are strictly newer.
 am_sleep_pid=
-if grep 'slept: no' conftest.file >/dev/null 2>&1; then
-  ( sleep 1 ) &
+if test -e conftest.file || grep 'slept: no' conftest.file >/dev/null 2>&1
+then :
+
+else case e in #(
+  e)   ( sleep "$am_cv_filesystem_timestamp_resolution" ) &
   am_sleep_pid=$!
+ ;;
+esac
 fi
 
 rm -f conftest.file
@@ -3667,17 +3824,13 @@ else
 fi
 rmdir .tst 2>/dev/null
 
+AM_DEFAULT_VERBOSITY=1
 # Check whether --enable-silent-rules was given.
 if test ${enable_silent_rules+y}
 then :
   enableval=$enable_silent_rules;
 fi
 
-case $enable_silent_rules in # (((
-  yes) AM_DEFAULT_VERBOSITY=0;;
-   no) AM_DEFAULT_VERBOSITY=1;;
-    *) AM_DEFAULT_VERBOSITY=1;;
-esac
 am_make=${MAKE-make}
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether $am_make supports nested variables" >&5
 printf %s "checking whether $am_make supports nested variables... " >&6; }
@@ -3700,14 +3853,44 @@ esac
 fi
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $am_cv_make_support_nested_variables" >&5
 printf "%s\n" "$am_cv_make_support_nested_variables" >&6; }
-if test $am_cv_make_support_nested_variables = yes; then
-    AM_V='$(V)'
-  AM_DEFAULT_V='$(AM_DEFAULT_VERBOSITY)'
-else
-  AM_V=$AM_DEFAULT_VERBOSITY
-  AM_DEFAULT_V=$AM_DEFAULT_VERBOSITY
-fi
 AM_BACKSLASH='\'
+
+am__rm_f_notfound=
+if (rm -f && rm -fr && rm -rf) 2>/dev/null
+then :
+
+else case e in #(
+  e) am__rm_f_notfound='""' ;;
+esac
+fi
+
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking xargs -n works" >&5
+printf %s "checking xargs -n works... " >&6; }
+if test ${am_cv_xargs_n_works+y}
+then :
+  printf %s "(cached) " >&6
+else case e in #(
+  e) if test "`echo 1 2 3 | xargs -n2 echo`" = "1 2
+3"
+then :
+  am_cv_xargs_n_works=yes
+else case e in #(
+  e) am_cv_xargs_n_works=no ;;
+esac
+fi ;;
+esac
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $am_cv_xargs_n_works" >&5
+printf "%s\n" "$am_cv_xargs_n_works" >&6; }
+if test "$am_cv_xargs_n_works" = yes
+then :
+  am__xargs_n='xargs -n'
+else case e in #(
+  e)   am__xargs_n='am__xargs_n () { shift; sed "s/ /\\n/g" | while read am__xargs_n_arg; do "" "$am__xargs_n_arg"; done; }'
+ ;;
+esac
+fi
 
 if test "`cd $srcdir && pwd`" != "`pwd`"; then
   # Use -I$(srcdir) only when $(srcdir) != ., so that make's output
@@ -3780,18 +3963,24 @@ _am_tools='gnutar plaintar pax cpio none'
       am_gid=`id -g || echo unknown`
       { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether UID '$am_uid' is supported by ustar format" >&5
 printf %s "checking whether UID '$am_uid' is supported by ustar format... " >&6; }
-      if test $am_uid -le $am_max_uid; then
-         { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+      if test x$am_uid = xunknown; then
+        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: WARNING: ancient id detected; assuming current UID is ok, but dist-ustar might not work" >&5
+printf "%s\n" "$as_me: WARNING: ancient id detected; assuming current UID is ok, but dist-ustar might not work" >&2;}
+      elif test $am_uid -le $am_max_uid; then
+        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
 printf "%s\n" "yes" >&6; }
       else
-         { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
 printf "%s\n" "no" >&6; }
-         _am_tools=none
+        _am_tools=none
       fi
       { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether GID '$am_gid' is supported by ustar format" >&5
 printf %s "checking whether GID '$am_gid' is supported by ustar format... " >&6; }
-      if test $am_gid -le $am_max_gid; then
-         { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+      if test x$gm_gid = xunknown; then
+        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: WARNING: ancient id detected; assuming current GID is ok, but dist-ustar might not work" >&5
+printf "%s\n" "$as_me: WARNING: ancient id detected; assuming current GID is ok, but dist-ustar might not work" >&2;}
+      elif test $am_gid -le $am_max_gid; then
+        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
 printf "%s\n" "yes" >&6; }
       else
         { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
@@ -3905,47 +4094,9 @@ fi
 
 
 
-# POSIX will say in a future version that running "rm -f" with no argument
-# is OK; and we want to be able to make that assumption in our Makefile
-# recipes.  So use an aggressive probe to check that the usage we want is
-# actually supported "in the wild" to an acceptable degree.
-# See automake bug#10828.
-# To make any issue more visible, cause the running configure to be aborted
-# by default if the 'rm' program in use doesn't match our expectations; the
-# user can still override this though.
-if rm -f && rm -fr && rm -rf; then : OK; else
-  cat >&2 <<'END'
-Oops!
 
-Your 'rm' program seems unable to run without file operands specified
-on the command line, even when the '-f' option is present.  This is contrary
-to the behaviour of most rm programs out there, and not conforming with
-the upcoming POSIX standard: <http://austingroupbugs.net/view.php?id=542>
 
-Please tell bug-automake@gnu.org about your system, including the value
-of your $PATH and any error possibly output before this message.  This
-can help us improve future automake versions.
 
-END
-  if test x"$ACCEPT_INFERIOR_RM_PROGRAM" = x"yes"; then
-    echo 'Configuration will proceed anyway, since you have set the' >&2
-    echo 'ACCEPT_INFERIOR_RM_PROGRAM variable to "yes"' >&2
-    echo >&2
-  else
-    cat >&2 <<'END'
-Aborting the configuration process, to ensure you take notice of the issue.
-
-You can download and install GNU coreutils to get an 'rm' implementation
-that behaves properly: <https://www.gnu.org/software/coreutils/>.
-
-If you want to complete the configuration process using your problematic
-'rm' anyway, export the environment variable ACCEPT_INFERIOR_RM_PROGRAM
-to "yes", and re-run configure.
-
-END
-    as_fn_error $? "Your 'rm' program is bad, sorry." "$LINENO" 5
-  fi
-fi
 
 
 
@@ -3988,8 +4139,8 @@ esac
 
 
 
-macro_version='2.5.0.1-38c1-dirty'
-macro_revision='2.5.0.1'
+macro_version='2.4.7'
+macro_revision='2.4.7'
 
 
 
@@ -5510,7 +5661,7 @@ if test yes = "$GCC"; then
   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for ld used by $CC" >&5
 printf %s "checking for ld used by $CC... " >&6; }
   case $host in
-  *-*-mingw* | *-*-windows*)
+  *-*-mingw*)
     # gcc leaves a trailing carriage return, which upsets mingw
     ac_prog=`($CC -print-prog-name=ld) 2>&5 | tr -d '\015'` ;;
   *)
@@ -5639,7 +5790,7 @@ else
 	# Tru64's nm complains that /dev/null is an invalid object file
 	# MSYS converts /dev/null to NUL, MinGW nm treats NUL as empty
 	case $build_os in
-	mingw* | windows*) lt_bad_file=conftest.nm/nofile ;;
+	mingw*) lt_bad_file=conftest.nm/nofile ;;
 	*) lt_bad_file=/dev/null ;;
 	esac
 	case `"$tmp_nm" -B $lt_bad_file 2>&1 | $SED '1q'` in
@@ -5872,7 +6023,7 @@ else case e in #(
     lt_cv_sys_max_cmd_len=-1;
     ;;
 
-  cygwin* | mingw* | windows* | cegcc*)
+  cygwin* | mingw* | cegcc*)
     # On Win9x/ME, this test blows up -- it succeeds, but takes
     # about 5 minutes as the teststring grows exponentially.
     # Worse, since 9x/ME are not pre-emptively multitasking,
@@ -5894,7 +6045,7 @@ else case e in #(
     lt_cv_sys_max_cmd_len=8192;
     ;;
 
-  darwin* | dragonfly* | freebsd* | midnightbsd* | netbsd* | openbsd*)
+  bitrig* | darwin* | dragonfly* | freebsd* | midnightbsd* | netbsd* | openbsd*)
     # This has been around since 386BSD, at least.  Likely further.
     if test -x /sbin/sysctl; then
       lt_cv_sys_max_cmd_len=`/sbin/sysctl -n kern.argmax`
@@ -6037,7 +6188,7 @@ else case e in #(
   e) case $host in
   *-*-mingw* )
     case $build in
-      *-*-mingw* | *-*-windows* ) # actually msys
+      *-*-mingw* ) # actually msys
         lt_cv_to_host_file_cmd=func_convert_file_msys_to_w32
         ;;
       *-*-cygwin* )
@@ -6050,7 +6201,7 @@ else case e in #(
     ;;
   *-*-cygwin* )
     case $build in
-      *-*-mingw* | *-*-windows* ) # actually msys
+      *-*-mingw* ) # actually msys
         lt_cv_to_host_file_cmd=func_convert_file_msys_to_cygwin
         ;;
       *-*-cygwin* )
@@ -6086,9 +6237,9 @@ else case e in #(
   e) #assume ordinary cross tools, or native build.
 lt_cv_to_tool_file_cmd=func_convert_file_noop
 case $host in
-  *-*-mingw* | *-*-windows* )
+  *-*-mingw* )
     case $build in
-      *-*-mingw* | *-*-windows* ) # actually msys
+      *-*-mingw* ) # actually msys
         lt_cv_to_tool_file_cmd=func_convert_file_msys_to_w32
         ;;
     esac
@@ -6124,7 +6275,7 @@ case $reload_flag in
 esac
 reload_cmds='$LD$reload_flag -o $output$reload_objs'
 case $host_os in
-  cygwin* | mingw* | windows* | pw32* | cegcc*)
+  cygwin* | mingw* | pw32* | cegcc*)
     if test yes != "$GCC"; then
       reload_cmds=false
     fi
@@ -6146,8 +6297,9 @@ esac
 
 
 
-# Extract the first word of "file", so it can be a program name with args.
-set dummy file; ac_word=$2
+if test -n "$ac_tool_prefix"; then
+  # Extract the first word of "${ac_tool_prefix}file", so it can be a program name with args.
+set dummy ${ac_tool_prefix}file; ac_word=$2
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
 printf %s "checking for $ac_word... " >&6; }
 if test ${ac_cv_prog_FILECMD+y}
@@ -6168,7 +6320,7 @@ do
   esac
     for ac_exec_ext in '' $ac_executable_extensions; do
   if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
-    ac_cv_prog_FILECMD=":"
+    ac_cv_prog_FILECMD="${ac_tool_prefix}file"
     printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
     break 2
   fi
@@ -6188,6 +6340,66 @@ else
 printf "%s\n" "no" >&6; }
 fi
 
+
+fi
+if test -z "$ac_cv_prog_FILECMD"; then
+  ac_ct_FILECMD=$FILECMD
+  # Extract the first word of "file", so it can be a program name with args.
+set dummy file; ac_word=$2
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+printf %s "checking for $ac_word... " >&6; }
+if test ${ac_cv_prog_ac_ct_FILECMD+y}
+then :
+  printf %s "(cached) " >&6
+else case e in #(
+  e) if test -n "$ac_ct_FILECMD"; then
+  ac_cv_prog_ac_ct_FILECMD="$ac_ct_FILECMD" # Let the user override the test.
+else
+as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  case $as_dir in #(((
+    '') as_dir=./ ;;
+    */) ;;
+    *) as_dir=$as_dir/ ;;
+  esac
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
+    ac_cv_prog_ac_ct_FILECMD="file"
+    printf "%s\n" "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+fi ;;
+esac
+fi
+ac_ct_FILECMD=$ac_cv_prog_ac_ct_FILECMD
+if test -n "$ac_ct_FILECMD"; then
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_ct_FILECMD" >&5
+printf "%s\n" "$ac_ct_FILECMD" >&6; }
+else
+  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+fi
+
+  if test "x$ac_ct_FILECMD" = x; then
+    FILECMD=":"
+  else
+    case $cross_compiling:$ac_tool_warned in
+yes:)
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: WARNING: using cross tools not prefixed with host triplet" >&5
+printf "%s\n" "$as_me: WARNING: using cross tools not prefixed with host triplet" >&2;}
+ac_tool_warned=yes ;;
+esac
+    FILECMD=$ac_ct_FILECMD
+  fi
+else
+  FILECMD="$ac_cv_prog_FILECMD"
+fi
 
 
 
@@ -6323,6 +6535,7 @@ lt_cv_deplibs_check_method='unknown'
 # 'none' -- dependencies not supported.
 # 'unknown' -- same as none, but documents that we really don't know.
 # 'pass_all' -- all dependencies passed with no checks.
+# 'test_compile' -- check by making test program.
 # 'file_magic [[regex]]' -- check by looking for files in library path
 # that responds to the $file_magic_cmd with a given extended regex.
 # If you have 'file' or equivalent on your system and you're not sure
@@ -6349,7 +6562,7 @@ cygwin*)
   lt_cv_file_magic_cmd='func_win32_libid'
   ;;
 
-mingw* | windows* | pw32*)
+mingw* | pw32*)
   # Base MSYS/MinGW do not provide the 'file' command needed by
   # func_win32_libid shell function, so use a weaker test based on 'objdump',
   # unless we find 'file', for example because we are cross-compiling.
@@ -6449,7 +6662,7 @@ newos6*)
   lt_cv_deplibs_check_method=pass_all
   ;;
 
-openbsd*)
+openbsd* | bitrig*)
   if test -z "`echo __ELF__ | $CC -E - | $GREP __ELF__`"; then
     lt_cv_deplibs_check_method='match_pattern /lib[^/]+(\.so\.[0-9]+\.[0-9]+|\.so|_pic\.a)$'
   else
@@ -6517,7 +6730,7 @@ file_magic_glob=
 want_nocaseglob=no
 if test "$build" = "$host"; then
   case $host_os in
-  mingw* | windows* | pw32*)
+  mingw* | pw32*)
     if ( shopt | grep nocaseglob ) >/dev/null 2>&1; then
       want_nocaseglob=yes
     else
@@ -6676,7 +6889,7 @@ else case e in #(
   e) lt_cv_sharedlib_from_linklib_cmd='unknown'
 
 case $host_os in
-cygwin* | mingw* | windows* | pw32* | cegcc*)
+cygwin* | mingw* | pw32* | cegcc*)
   # two different shell functions defined in ltmain.sh;
   # decide which one to use based on capabilities of $DLLTOOL
   case `$DLLTOOL --help 2>&1` in
@@ -6829,7 +7042,7 @@ fi
 
 # Use ARFLAGS variable as AR's operation code to sync the variable naming with
 # Automake.  If both AR_FLAGS and ARFLAGS are specified, AR_FLAGS should have
-# higher priority because that's what people were doing historically (setting
+# higher priority because thats what people were doing historically (setting
 # ARFLAGS for automake and AR_FLAGS for libtool).  FIXME: Make the AR_FLAGS
 # variable obsoleted/removed.
 
@@ -7138,8 +7351,15 @@ old_postinstall_cmds='chmod 644 $oldlib'
 old_postuninstall_cmds=
 
 if test -n "$RANLIB"; then
+  case $host_os in
+  bitrig* | openbsd*)
+    old_postinstall_cmds="$old_postinstall_cmds~\$RANLIB -t \$tool_oldlib"
+    ;;
+  *)
+    old_postinstall_cmds="$old_postinstall_cmds~\$RANLIB \$tool_oldlib"
+    ;;
+  esac
   old_archive_cmds="$old_archive_cmds~\$RANLIB \$tool_oldlib"
-  old_postinstall_cmds="$old_postinstall_cmds~\$RANLIB \$tool_oldlib"
 fi
 
 case $host_os in
@@ -7219,7 +7439,7 @@ case $host_os in
 aix*)
   symcode='[BCDT]'
   ;;
-cygwin* | mingw* | windows* | pw32* | cegcc*)
+cygwin* | mingw* | pw32* | cegcc*)
   symcode='[ABCDGISTW]'
   ;;
 hpux*)
@@ -7234,7 +7454,7 @@ osf*)
   symcode='[BCDEGQRST]'
   ;;
 solaris*)
-  symcode='[BCDRT]'
+  symcode='[BDRT]'
   ;;
 sco3.2v5*)
   symcode='[DT]'
@@ -7298,7 +7518,7 @@ $lt_c_name_lib_hook\
 # Handle CRLF in mingw tool chain
 opt_cr=
 case $build_os in
-mingw* | windows*)
+mingw*)
   opt_cr=`$ECHO 'x\{0,1\}' | tr x '\015'` # option cr in regexp
   ;;
 esac
@@ -7534,9 +7754,7 @@ lt_sysroot=
 case $with_sysroot in #(
  yes)
    if test yes = "$GCC"; then
-     # Trim trailing / since we'll always append absolute paths and we want
-     # to avoid //, if only for less confusing output for the user.
-     lt_sysroot=`$CC --print-sysroot 2>/dev/null | $SED 's:/\+$::'`
+     lt_sysroot=`$CC --print-sysroot 2>/dev/null`
    fi
    ;; #(
  /*)
@@ -7753,7 +7971,7 @@ mips64*-*linux*)
   ;;
 
 x86_64-*kfreebsd*-gnu|x86_64-*linux*|powerpc*-*linux*| \
-s390*-*linux*|s390*-*tpf*|sparc*-*linux*|x86_64-gnu*)
+s390*-*linux*|s390*-*tpf*|sparc*-*linux*)
   # Find out what ABI is being produced by ac_compile, and set linker
   # options accordingly.  Note that the listed cases only cover the
   # situations where additional linker options are needed (such as when
@@ -7772,7 +7990,7 @@ s390*-*linux*|s390*-*tpf*|sparc*-*linux*|x86_64-gnu*)
 	  x86_64-*kfreebsd*-gnu)
 	    LD="${LD-ld} -m elf_i386_fbsd"
 	    ;;
-	  x86_64-*linux*|x86_64-gnu*)
+	  x86_64-*linux*)
 	    case `$FILECMD conftest.o` in
 	      *x86-64*)
 		LD="${LD-ld} -m elf32_x86_64"
@@ -7801,7 +8019,7 @@ s390*-*linux*|s390*-*tpf*|sparc*-*linux*|x86_64-gnu*)
 	  x86_64-*kfreebsd*-gnu)
 	    LD="${LD-ld} -m elf_x86_64_fbsd"
 	    ;;
-	  x86_64-*linux*|x86_64-gnu*)
+	  x86_64-*linux*)
 	    LD="${LD-ld} -m elf_x86_64"
 	    ;;
 	  powerpcle-*linux*)
@@ -8022,23 +8240,23 @@ fi
 test -z "$MANIFEST_TOOL" && MANIFEST_TOOL=mt
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking if $MANIFEST_TOOL is a manifest tool" >&5
 printf %s "checking if $MANIFEST_TOOL is a manifest tool... " >&6; }
-if test ${lt_cv_path_manifest_tool+y}
+if test ${lt_cv_path_mainfest_tool+y}
 then :
   printf %s "(cached) " >&6
 else case e in #(
-  e) lt_cv_path_manifest_tool=no
+  e) lt_cv_path_mainfest_tool=no
   echo "$as_me:$LINENO: $MANIFEST_TOOL '-?'" >&5
   $MANIFEST_TOOL '-?' 2>conftest.err > conftest.out
   cat conftest.err >&5
   if $GREP 'Manifest Tool' conftest.out > /dev/null; then
-    lt_cv_path_manifest_tool=yes
+    lt_cv_path_mainfest_tool=yes
   fi
   rm -f conftest* ;;
 esac
 fi
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $lt_cv_path_manifest_tool" >&5
-printf "%s\n" "$lt_cv_path_manifest_tool" >&6; }
-if test yes != "$lt_cv_path_manifest_tool"; then
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $lt_cv_path_mainfest_tool" >&5
+printf "%s\n" "$lt_cv_path_mainfest_tool" >&6; }
+if test yes != "$lt_cv_path_mainfest_tool"; then
   MANIFEST_TOOL=:
 fi
 
@@ -9438,7 +9656,7 @@ lt_prog_compiler_static=
       # PIC is the default for these OSes.
       ;;
 
-    mingw* | windows* | cygwin* | pw32* | os2* | cegcc*)
+    mingw* | cygwin* | pw32* | os2* | cegcc*)
       # This hack is so that the source file can tell whether it is being
       # built for inclusion in a dll (and should export symbols for example).
       # Although the cygwin gcc ignores -fPIC, still need this for old-style
@@ -9541,7 +9759,7 @@ lt_prog_compiler_static=
       esac
       ;;
 
-    mingw* | windows* | cygwin* | pw32* | os2* | cegcc*)
+    mingw* | cygwin* | pw32* | os2* | cegcc*)
       # This hack is so that the source file can tell whether it is being
       # built for inclusion in a dll (and should export symbols for example).
       lt_prog_compiler_pic='-DDLL_EXPORT'
@@ -9580,12 +9798,6 @@ lt_prog_compiler_static=
       ecc*)
 	lt_prog_compiler_wl='-Wl,'
 	lt_prog_compiler_pic='-KPIC'
-	lt_prog_compiler_static='-static'
-        ;;
-      *flang)
-        # Flang compiler.
-	lt_prog_compiler_wl='-Wl,'
-	lt_prog_compiler_pic='-fPIC'
 	lt_prog_compiler_static='-static'
         ;;
       # icc used to be incompatible with GCC.
@@ -10059,7 +10271,7 @@ printf %s "checking whether the $compiler linker ($LD) supports shared libraries
   extract_expsyms_cmds=
 
   case $host_os in
-  cygwin* | mingw* | windows* | pw32* | cegcc*)
+  cygwin* | mingw* | pw32* | cegcc*)
     # FIXME: the MSVC++ and ICC port hasn't been tested in a loooong time
     # When not using gcc, we currently assume that we are using
     # Microsoft Visual C++ or Intel C++ Compiler.
@@ -10071,7 +10283,7 @@ printf %s "checking whether the $compiler linker ($LD) supports shared libraries
     # we just hope/assume this is gcc and not c89 (= MSVC++ or ICC)
     with_gnu_ld=yes
     ;;
-  openbsd*)
+  openbsd* | bitrig*)
     with_gnu_ld=no
     ;;
   esac
@@ -10174,7 +10386,7 @@ _LT_EOF
       fi
       ;;
 
-    cygwin* | mingw* | windows* | pw32* | cegcc*)
+    cygwin* | mingw* | pw32* | cegcc*)
       # _LT_TAGVAR(hardcode_libdir_flag_spec, ) is actually meaningless,
       # as there is no search path for DLLs.
       hardcode_libdir_flag_spec='-L$libdir'
@@ -10230,7 +10442,7 @@ _LT_EOF
 	cat $export_symbols | $prefix_cmds >> $output_objdir/$libname.def~
 	$CC -Zdll -Zcrtdll -o $output_objdir/$soname $libobjs $deplibs $compiler_flags $output_objdir/$libname.def~
 	emximp -o $lib $output_objdir/$libname.def'
-      old_archive_from_new_cmds='emximp -o $output_objdir/${libname}_dll.a $output_objdir/$libname.def'
+      old_archive_From_new_cmds='emximp -o $output_objdir/${libname}_dll.a $output_objdir/$libname.def'
       enable_shared_with_static_runtimes=yes
       file_list_spec='@'
       ;;
@@ -10721,7 +10933,7 @@ fi
       export_dynamic_flag_spec=-rdynamic
       ;;
 
-    cygwin* | mingw* | windows* | pw32* | cegcc*)
+    cygwin* | mingw* | pw32* | cegcc*)
       # When not using gcc, we currently assume that we are using
       # Microsoft Visual C++ or Intel C++ Compiler.
       # hardcode_libdir_flag_spec is actually meaningless, as there is
@@ -10738,14 +10950,14 @@ fi
 	# Tell ltmain to make .dll files, not .so files.
 	shrext_cmds=.dll
 	# FIXME: Setting linknames here is a bad hack.
-	archive_cmds='$CC -Fe $output_objdir/$soname $libobjs $compiler_flags $deplibs -Wl,-DLL,-IMPLIB:"$tool_output_objdir$libname.dll.lib"~linknames='
+	archive_cmds='$CC -o $output_objdir/$soname $libobjs $compiler_flags $deplibs -Wl,-DLL,-IMPLIB:"$tool_output_objdir$libname.dll.lib"~linknames='
 	archive_expsym_cmds='if   test DEF = "`$SED -n     -e '\''s/^[	 ]*//'\''     -e '\''/^\(;.*\)*$/d'\''     -e '\''s/^\(EXPORTS\|LIBRARY\)\([	 ].*\)*$/DEF/p'\''     -e q     $export_symbols`" ; then
             cp "$export_symbols" "$output_objdir/$soname.def";
             echo "$tool_output_objdir$soname.def" > "$output_objdir/$soname.exp";
           else
             $SED -e '\''s/^/-link -EXPORT:/'\'' < $export_symbols > $output_objdir/$soname.exp;
           fi~
-          $CC -Fe $tool_output_objdir$soname $libobjs $compiler_flags $deplibs "@$tool_output_objdir$soname.exp" -Wl,-DLL,-IMPLIB:"$tool_output_objdir$libname.dll.lib"~
+          $CC -o $tool_output_objdir$soname $libobjs $compiler_flags $deplibs "@$tool_output_objdir$soname.exp" -Wl,-DLL,-IMPLIB:"$tool_output_objdir$libname.dll.lib"~
           linknames='
 	# The linker will not automatically build a static lib if we build a DLL.
 	# _LT_TAGVAR(old_archive_from_new_cmds, )='true'
@@ -11054,7 +11266,7 @@ printf "%s\n" "$lt_cv_irix_exported_symbol" >&6; }
     *nto* | *qnx*)
       ;;
 
-    openbsd*)
+    openbsd* | bitrig*)
       if test -f /usr/libexec/ld.so; then
 	hardcode_direct=yes
 	hardcode_shlibpath_var=no
@@ -11097,7 +11309,7 @@ printf "%s\n" "$lt_cv_irix_exported_symbol" >&6; }
 	cat $export_symbols | $prefix_cmds >> $output_objdir/$libname.def~
 	$CC -Zdll -Zcrtdll -o $output_objdir/$soname $libobjs $deplibs $compiler_flags $output_objdir/$libname.def~
 	emximp -o $lib $output_objdir/$libname.def'
-      old_archive_from_new_cmds='emximp -o $output_objdir/${libname}_dll.a $output_objdir/$libname.def'
+      old_archive_From_new_cmds='emximp -o $output_objdir/${libname}_dll.a $output_objdir/$libname.def'
       enable_shared_with_static_runtimes=yes
       file_list_spec='@'
       ;;
@@ -11539,7 +11751,7 @@ if test yes = "$GCC"; then
     *) lt_awk_arg='/^libraries:/' ;;
   esac
   case $host_os in
-    mingw* | windows* | cegcc*) lt_sed_strip_eq='s|=\([A-Za-z]:\)|\1|g' ;;
+    mingw* | cegcc*) lt_sed_strip_eq='s|=\([A-Za-z]:\)|\1|g' ;;
     *) lt_sed_strip_eq='s|=/|/|g' ;;
   esac
   lt_search_path_spec=`$CC -print-search-dirs | awk $lt_awk_arg | $SED -e "s/^libraries://" -e $lt_sed_strip_eq`
@@ -11597,7 +11809,7 @@ BEGIN {RS = " "; FS = "/|\n";} {
   # AWK program above erroneously prepends '/' to C:/dos/paths
   # for these hosts.
   case $host_os in
-    mingw* | windows* | cegcc*) lt_search_path_spec=`$ECHO "$lt_search_path_spec" |\
+    mingw* | cegcc*) lt_search_path_spec=`$ECHO "$lt_search_path_spec" |\
       $SED 's|/\([A-Za-z]:\)|\1|g'` ;;
   esac
   sys_lib_search_path_spec=`$ECHO "$lt_search_path_spec" | $lt_NL2SP`
@@ -11765,7 +11977,7 @@ bsdi[45]*)
   # libtool to hard-code these into programs
   ;;
 
-cygwin* | mingw* | windows* | pw32* | cegcc*)
+cygwin* | mingw* | pw32* | cegcc*)
   version_type=windows
   shrext_cmds=.dll
   need_version=no
@@ -11797,7 +12009,7 @@ cygwin* | mingw* | windows* | pw32* | cegcc*)
 
       sys_lib_search_path_spec="$sys_lib_search_path_spec /usr/lib/w32api"
       ;;
-    mingw* | windows* | cegcc*)
+    mingw* | cegcc*)
       # MinGW DLLs use traditional 'lib' prefix
       soname_spec='$libname`echo $release | $SED -e 's/[.]/-/g'`$versuffix$shared_ext'
       ;;
@@ -11816,7 +12028,7 @@ cygwin* | mingw* | windows* | pw32* | cegcc*)
     library_names_spec='$libname.dll.lib'
 
     case $build_os in
-    mingw* | windows*)
+    mingw*)
       sys_lib_search_path_spec=
       lt_save_ifs=$IFS
       IFS=';'
@@ -12064,7 +12276,7 @@ linux*android*)
   version_type=none # Android doesn't support versioned libraries.
   need_lib_prefix=no
   need_version=no
-  library_names_spec='$libname$release$shared_ext $libname$shared_ext'
+  library_names_spec='$libname$release$shared_ext'
   soname_spec='$libname$release$shared_ext'
   finish_cmds=
   shlibpath_var=LD_LIBRARY_PATH
@@ -12076,9 +12288,8 @@ linux*android*)
   hardcode_into_libs=yes
 
   dynamic_linker='Android linker'
-  # -rpath works at least for libraries that are not overridden by
-  # libraries installed in system locations.
-  hardcode_libdir_flag_spec='$wl-rpath $wl$libdir'
+  # Don't embed -rpath directories since the linker doesn't support them.
+  hardcode_libdir_flag_spec='-L$libdir'
   ;;
 
 # This must be glibc/ELF.
@@ -12135,7 +12346,7 @@ fi
   # before this can be enabled.
   hardcode_into_libs=yes
 
-  # Ideally, we could use ldconfig to report *all* directories which are
+  # Ideally, we could use ldconfig to report *all* directores which are
   # searched for libraries, however this is still not possible.  Aside from not
   # being certain /sbin/ldconfig is available, command
   # 'ldconfig -N -X -v | grep ^/' on 64bit Fedora does not report /usr/lib64,
@@ -12192,7 +12403,7 @@ newsos6)
   dynamic_linker='ldqnx.so'
   ;;
 
-openbsd*)
+openbsd* | bitrig*)
   version_type=sunos
   sys_lib_dlsearch_path_spec=/usr/lib
   need_lib_prefix=no
@@ -12533,7 +12744,7 @@ else
     lt_cv_dlopen_self=yes
     ;;
 
-  mingw* | windows* | pw32* | cegcc*)
+  mingw* | pw32* | cegcc*)
     lt_cv_dlopen=LoadLibrary
     lt_cv_dlopen_libs=
     ;;
@@ -14395,7 +14606,7 @@ if test yes = "$GCC"; then
   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for ld used by $CC" >&5
 printf %s "checking for ld used by $CC... " >&6; }
   case $host in
-  *-*-mingw* | *-*-windows*)
+  *-*-mingw*)
     # gcc leaves a trailing carriage return, which upsets mingw
     ac_prog=`($CC -print-prog-name=ld) 2>&5 | tr -d '\015'` ;;
   *)
@@ -14510,7 +14721,8 @@ with_gnu_ld=$lt_cv_prog_gnu_ld
         wlarc='$wl'
 
         # ancient GNU ld didn't support --whole-archive et. al.
-        if $LD --help 2>&1 | $GREP 'no-whole-archive' > /dev/null; then
+        if eval "`$CC -print-prog-name=ld` --help 2>&1" |
+	  $GREP 'no-whole-archive' > /dev/null; then
           whole_archive_flag_spec_CXX=$wlarc'--whole-archive$convenience '$wlarc'--no-whole-archive'
         else
           whole_archive_flag_spec_CXX=
@@ -14530,7 +14742,7 @@ with_gnu_ld=$lt_cv_prog_gnu_ld
       # Commands to make compiler produce verbose output that lists
       # what "hidden" libraries, object files and flags are used when
       # linking a shared library.
-      output_verbose_link_cmd='$CC -shared $CFLAGS -v conftest.$objext 2>&1 | $GREP -v "^Configured with:" | $GREP "[-]L"'
+      output_verbose_link_cmd='$CC -shared $CFLAGS -v conftest.$objext 2>&1 | $GREP -v "^Configured with:" | $GREP "\-L"'
 
     else
       GXX=no
@@ -14830,7 +15042,7 @@ fi
         esac
         ;;
 
-      cygwin* | mingw* | windows* | pw32* | cegcc*)
+      cygwin* | mingw* | pw32* | cegcc*)
 	case $GXX,$cc_basename in
 	,cl* | no,cl* | ,icl* | no,icl*)
 	  # Native MSVC or ICC
@@ -14961,7 +15173,7 @@ fi
 	  cat $export_symbols | $prefix_cmds >> $output_objdir/$libname.def~
 	  $CC -Zdll -Zcrtdll -o $output_objdir/$soname $libobjs $deplibs $compiler_flags $output_objdir/$libname.def~
 	  emximp -o $lib $output_objdir/$libname.def'
-	old_archive_from_new_cmds_CXX='emximp -o $output_objdir/${libname}_dll.a $output_objdir/$libname.def'
+	old_archive_From_new_cmds_CXX='emximp -o $output_objdir/${libname}_dll.a $output_objdir/$libname.def'
 	enable_shared_with_static_runtimes_CXX=yes
 	file_list_spec_CXX='@'
 	;;
@@ -15029,7 +15241,7 @@ fi
             # explicitly linking system object files so we need to strip them
             # from the output so that they don't get included in the library
             # dependencies.
-            output_verbose_link_cmd='templist=`($CC -b $CFLAGS -v conftest.$objext 2>&1) | $EGREP "[-]L"`; list= ; for z in $templist; do case $z in conftest.$objext) list="$list $z";; *.$objext);; *) list="$list $z";;esac; done; func_echo_all "$list"'
+            output_verbose_link_cmd='templist=`($CC -b $CFLAGS -v conftest.$objext 2>&1) | $EGREP "\-L"`; list= ; for z in $templist; do case $z in conftest.$objext) list="$list $z";; *.$objext);; *) list="$list $z";;esac; done; func_echo_all "$list"'
             ;;
           *)
             if test yes = "$GXX"; then
@@ -15094,7 +15306,7 @@ fi
 	    # explicitly linking system object files so we need to strip them
 	    # from the output so that they don't get included in the library
 	    # dependencies.
-	    output_verbose_link_cmd='templist=`($CC -b $CFLAGS -v conftest.$objext 2>&1) | $GREP "[-]L"`; list= ; for z in $templist; do case $z in conftest.$objext) list="$list $z";; *.$objext);; *) list="$list $z";;esac; done; func_echo_all "$list"'
+	    output_verbose_link_cmd='templist=`($CC -b $CFLAGS -v conftest.$objext 2>&1) | $GREP "\-L"`; list= ; for z in $templist; do case $z in conftest.$objext) list="$list $z";; *.$objext);; *) list="$list $z";;esac; done; func_echo_all "$list"'
 	    ;;
           *)
 	    if test yes = "$GXX"; then
@@ -15342,7 +15554,7 @@ fi
         ld_shlibs_CXX=yes
 	;;
 
-      openbsd*)
+      openbsd* | bitrig*)
 	if test -f /usr/libexec/ld.so; then
 	  hardcode_direct_CXX=yes
 	  hardcode_shlibpath_var_CXX=no
@@ -15433,7 +15645,7 @@ fi
 	      # Commands to make compiler produce verbose output that lists
 	      # what "hidden" libraries, object files and flags are used when
 	      # linking a shared library.
-	      output_verbose_link_cmd='$CC -shared $CFLAGS -v conftest.$objext 2>&1 | $GREP -v "^Configured with:" | $GREP "[-]L"'
+	      output_verbose_link_cmd='$CC -shared $CFLAGS -v conftest.$objext 2>&1 | $GREP -v "^Configured with:" | $GREP "\-L"'
 
 	    else
 	      # FIXME: insert proper C++ library support
@@ -15517,7 +15729,7 @@ fi
 	        # Commands to make compiler produce verbose output that lists
 	        # what "hidden" libraries, object files and flags are used when
 	        # linking a shared library.
-	        output_verbose_link_cmd='$CC -shared $CFLAGS -v conftest.$objext 2>&1 | $GREP -v "^Configured with:" | $GREP "[-]L"'
+	        output_verbose_link_cmd='$CC -shared $CFLAGS -v conftest.$objext 2>&1 | $GREP -v "^Configured with:" | $GREP "\-L"'
 	      else
 	        # g++ 2.7 appears to require '-G' NOT '-shared' on this
 	        # platform.
@@ -15528,7 +15740,7 @@ fi
 	        # Commands to make compiler produce verbose output that lists
 	        # what "hidden" libraries, object files and flags are used when
 	        # linking a shared library.
-	        output_verbose_link_cmd='$CC -G $CFLAGS -v conftest.$objext 2>&1 | $GREP -v "^Configured with:" | $GREP "[-]L"'
+	        output_verbose_link_cmd='$CC -G $CFLAGS -v conftest.$objext 2>&1 | $GREP -v "^Configured with:" | $GREP "\-L"'
 	      fi
 
 	      hardcode_libdir_flag_spec_CXX='$wl-R $wl$libdir'
@@ -15671,11 +15883,10 @@ if { { eval echo "\"\$as_me\":${as_lineno-$LINENO}: \"$ac_compile\""; } >&5
     case $prev$p in
 
     -L* | -R* | -l*)
-       # Some compilers place space between "-{L,R,l}" and the path.
+       # Some compilers place space between "-{L,R}" and the path.
        # Remove the space.
-       if test x-L = x"$p" ||
-          test x-R = x"$p" ||
-          test x-l = x"$p"; then
+       if test x-L = "$p" ||
+          test x-R = "$p"; then
 	 prev=$p
 	 continue
        fi
@@ -15842,7 +16053,7 @@ lt_prog_compiler_static_CXX=
     beos* | irix5* | irix6* | nonstopux* | osf3* | osf4* | osf5*)
       # PIC is the default for these OSes.
       ;;
-    mingw* | windows* | cygwin* | os2* | pw32* | cegcc*)
+    mingw* | cygwin* | os2* | pw32* | cegcc*)
       # This hack is so that the source file can tell whether it is being
       # built for inclusion in a dll (and should export symbols for example).
       # Although the cygwin gcc ignores -fPIC, still need this for old-style
@@ -15917,7 +16128,7 @@ lt_prog_compiler_static_CXX=
 	  ;;
 	esac
 	;;
-      mingw* | windows* | cygwin* | os2* | pw32* | cegcc*)
+      mingw* | cygwin* | os2* | pw32* | cegcc*)
 	# This hack is so that the source file can tell whether it is being
 	# built for inclusion in a dll (and should export symbols for example).
 	lt_prog_compiler_pic_CXX='-DDLL_EXPORT'
@@ -16416,7 +16627,7 @@ printf %s "checking whether the $compiler linker ($LD) supports shared libraries
   pw32*)
     export_symbols_cmds_CXX=$ltdll_cmds
     ;;
-  cygwin* | mingw* | windows* | cegcc*)
+  cygwin* | mingw* | cegcc*)
     case $cc_basename in
     cl* | icl*)
       exclude_expsyms_CXX='_NULL_IMPORT_DESCRIPTOR|_IMPORT_DESCRIPTOR_.*'
@@ -16739,7 +16950,7 @@ bsdi[45]*)
   # libtool to hard-code these into programs
   ;;
 
-cygwin* | mingw* | windows* | pw32* | cegcc*)
+cygwin* | mingw* | pw32* | cegcc*)
   version_type=windows
   shrext_cmds=.dll
   need_version=no
@@ -16770,7 +16981,7 @@ cygwin* | mingw* | windows* | pw32* | cegcc*)
       soname_spec='`echo $libname | $SED -e 's/^lib/cyg/'``echo $release | $SED -e 's/[.]/-/g'`$versuffix$shared_ext'
 
       ;;
-    mingw* | windows* | cegcc*)
+    mingw* | cegcc*)
       # MinGW DLLs use traditional 'lib' prefix
       soname_spec='$libname`echo $release | $SED -e 's/[.]/-/g'`$versuffix$shared_ext'
       ;;
@@ -16789,7 +17000,7 @@ cygwin* | mingw* | windows* | pw32* | cegcc*)
     library_names_spec='$libname.dll.lib'
 
     case $build_os in
-    mingw* | windows*)
+    mingw*)
       sys_lib_search_path_spec=
       lt_save_ifs=$IFS
       IFS=';'
@@ -17036,7 +17247,7 @@ linux*android*)
   version_type=none # Android doesn't support versioned libraries.
   need_lib_prefix=no
   need_version=no
-  library_names_spec='$libname$release$shared_ext $libname$shared_ext'
+  library_names_spec='$libname$release$shared_ext'
   soname_spec='$libname$release$shared_ext'
   finish_cmds=
   shlibpath_var=LD_LIBRARY_PATH
@@ -17048,9 +17259,8 @@ linux*android*)
   hardcode_into_libs=yes
 
   dynamic_linker='Android linker'
-  # -rpath works at least for libraries that are not overridden by
-  # libraries installed in system locations.
-  hardcode_libdir_flag_spec_CXX='$wl-rpath $wl$libdir'
+  # Don't embed -rpath directories since the linker doesn't support them.
+  hardcode_libdir_flag_spec_CXX='-L$libdir'
   ;;
 
 # This must be glibc/ELF.
@@ -17107,7 +17317,7 @@ fi
   # before this can be enabled.
   hardcode_into_libs=yes
 
-  # Ideally, we could use ldconfig to report *all* directories which are
+  # Ideally, we could use ldconfig to report *all* directores which are
   # searched for libraries, however this is still not possible.  Aside from not
   # being certain /sbin/ldconfig is available, command
   # 'ldconfig -N -X -v | grep ^/' on 64bit Fedora does not report /usr/lib64,
@@ -17164,7 +17374,7 @@ newsos6)
   dynamic_linker='ldqnx.so'
   ;;
 
-openbsd*)
+openbsd* | bitrig*)
   version_type=sunos
   sys_lib_dlsearch_path_spec=/usr/lib
   need_lib_prefix=no
@@ -19970,6 +20180,18 @@ printf %s "checking that generated files are newer than configure... " >&6; }
    fi
    { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: done" >&5
 printf "%s\n" "done" >&6; }
+case $enable_silent_rules in # (((
+  yes) AM_DEFAULT_VERBOSITY=0;;
+   no) AM_DEFAULT_VERBOSITY=1;;
+esac
+if test $am_cv_make_support_nested_variables = yes; then
+    AM_V='$(V)'
+  AM_DEFAULT_V='$(AM_DEFAULT_VERBOSITY)'
+else
+  AM_V=$AM_DEFAULT_VERBOSITY
+  AM_DEFAULT_V=$AM_DEFAULT_VERBOSITY
+fi
+
  if test -n "$EXEEXT"; then
   am__EXEEXT_TRUE=
   am__EXEEXT_FALSE='#'
@@ -21403,18 +21625,19 @@ printf "%s\n" "$as_me: executing $ac_file commands" >&6;}
     cat <<_LT_EOF >> "$cfgfile"
 #! $SHELL
 # Generated automatically by $as_me ($PACKAGE) $VERSION
+# Libtool was configured on host `(hostname || uname -n) 2>/dev/null | sed 1q`:
 # NOTE: Changes made to this file will be lost: look at ltmain.sh.
 
 # Provide generalized library-building support services.
 # Written by Gordon Matzigkeit, 1996
 
-# Copyright (C) 2024 Free Software Foundation, Inc.
+# Copyright (C) 2014 Free Software Foundation, Inc.
 # This is free software; see the source for copying conditions.  There is NO
 # warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
 # GNU Libtool is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
+# the Free Software Foundation; either version 2 of of the License, or
 # (at your option) any later version.
 #
 # As a special exception to the GNU General Public License, if you
@@ -21795,7 +22018,7 @@ hardcode_direct=$hardcode_direct
 
 # Set to "yes" if using DIR/libNAME\$shared_ext during linking hardcodes
 # DIR into the resulting binary and the resulting library dependency is
-# "absolute",i.e. impossible to change by setting \$shlibpath_var if the
+# "absolute",i.e impossible to change by setting \$shlibpath_var if the
 # library is relocated.
 hardcode_direct_absolute=$hardcode_direct_absolute
 
@@ -22038,7 +22261,7 @@ hardcode_direct=$hardcode_direct_CXX
 
 # Set to "yes" if using DIR/libNAME\$shared_ext during linking hardcodes
 # DIR into the resulting binary and the resulting library dependency is
-# "absolute",i.e. impossible to change by setting \$shlibpath_var if the
+# "absolute",i.e impossible to change by setting \$shlibpath_var if the
 # library is relocated.
 hardcode_direct_absolute=$hardcode_direct_absolute_CXX
 

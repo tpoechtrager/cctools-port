@@ -13,5 +13,4 @@ libhelper_la_SOURCES =  \
 	sha1.c \
 	sha256.c \
 	mkpath_np.c \
-	find_executable.c \
 	reallocf.c

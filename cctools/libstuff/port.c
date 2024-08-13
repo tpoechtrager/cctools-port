@@ -490,12 +490,6 @@ char *find_executable(const char *name)
     {
         snprintf(epath, sizeof(epath), "%s/%s", p, name);
 
-        if ((p = realpath(epath, NULL)))
-        {
-            strlcpy(epath, p, sizeof(epath));
-            free(p);
-        }
-
         if (stat(epath, &st) == 0 && access(epath, F_OK|X_OK) == 0)
             return strdup(epath);
 
