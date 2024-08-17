@@ -1505,11 +1505,84 @@ static void getVMInfo(vm_statistics_data_t& info)
 	}
 }
 
+//ld64-port
+#include <sys/wait.h>
 
+/**
+ * Executes the ld64.lld linker with the provided arguments.
+ * This function never returns; it either successfully replaces the current process
+ * with ld64.lld, or it prints an error and exits the program.
+ */
+void execute_ld64_lld(int argc, const char *argv[]) {
+  char *new_argv[argc + 1];
+  new_argv[0] = (char*)"ld64.lld";
+  memcpy(&new_argv[1], argv + 1, (argc - 1) * sizeof(char *));
+  new_argv[argc] = NULL;
+
+  execvp("ld64.lld", new_argv);
+  perror("execvp failed");
+  exit(1);
+}
+
+/**
+ * Determines whether to use the `ld64.lld` linker based on environment variables and arguments.
+ * 
+ * If the environment variables `OSXCROSS_USE_LLD` or `CCTOOLS_PORT_USE_LLD` are set, the function
+ * attempts to use `ld64.lld`. If the environment variables `OSXCROSS_LLD_LD64_FALLBACK` or 
+ * `CCTOOLS_PORT_LLD_LD64_FALLBACK` are also set, the function forks a new process to execute `ld64.lld`. 
+ * If `ld64.lld` fails (exits with a non-zero status), the function prints an error message indicating 
+ * the fallback to `ld64`. If the fallback environment variables are not set, it directly executes `ld64.lld` 
+ * without forking.
+ * 
+ * The check for the `-v` argument ensures that when `-v` is the only argument, the program avoids executing
+ * `ld64.lld` or its fallback. This is important for scenarios such as GCC compilation, where the output
+ * of `-v` might be parsed by the build system.
+ */
+void checkWhetherToUseLLD(int argc, const char *argv[]) {
+  int only_v = (argc == 2 && strcmp(argv[1], "-v") == 0);
+  int use_lld = (getenv("OSXCROSS_USE_LLD") || getenv("CCTOOLS_PORT_USE_LLD")) && !only_v;
+
+  if (use_lld) {
+    int fallback_enabled = getenv("OSXCROSS_LLD_LD64_FALLBACK") || getenv("CCTOOLS_PORT_LLD_LD64_FALLBACK");
+
+    if (!fallback_enabled) {
+      execute_ld64_lld(argc, argv);
+    } else {
+      pid_t pid = fork();
+      if (pid == -1) {
+        perror("fork failed");
+        exit(1);
+      }
+
+      if (pid == 0) {
+        // Child process: Execute ld64.lld
+        execute_ld64_lld(argc, argv);
+      } else {
+        // Parent process
+        int status;
+        if (waitpid(pid, &status, 0) == -1) {
+          perror("waitpid failed");
+          exit(1);
+        }
+
+        if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+          exit(0);
+        } else if (WIFSIGNALED(status)) {
+          exit(1);
+        }
+
+        fprintf(stderr, "ld64.lld exited with status %d. Using ld64 as fallback...\n", WEXITSTATUS(status));
+      }
+    }
+  }
+}
+//ld64-port end
 
 
 int main(int argc, const char* argv[])
 {
+	checkWhetherToUseLLD(argc, argv); // ld64-port
+
 	const char* archName = NULL;
 	bool showArch = false;
 	try {
