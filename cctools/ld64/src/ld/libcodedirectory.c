@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <errno.h>
+#include <fcntl.h>
 #include "3rd/helper.h" // ld64-port
 
 #include <arpa/inet.h>
