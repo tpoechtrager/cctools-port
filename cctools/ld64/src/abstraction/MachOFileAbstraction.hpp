@@ -594,7 +594,7 @@ static const ArchInfo archInfoArray[] = {
 	#define SUPPORT_ARCH_arm_any 1
 #endif
 #if SUPPORT_ARCH_armv6
-	{ "armv6", CPU_TYPE_ARM,     CPU_SUBTYPE_ARM_V6,     "armv6-",   "armv6k-", Thumb2Support::none },
+	{ "armv6", CPU_TYPE_ARM,     CPU_SUBTYPE_ARM_V6,     "armv6-",   "armv6k-", Thumb2Support::none }, /* cctools-port: add armv6k- */
 	#define SUPPORT_ARCH_arm_any 1
 #endif
 #if SUPPORT_ARCH_armv7
