@@ -1496,6 +1496,7 @@ struct ofile *ofile)
 		my_mach_error(r, "Can't vm_deallocate mapped memory for file: "
 			      "%s", ofile->file_name);
 	    }
+		munmap(ofile->file_addr, ofile->file_size);		
 	}
 	if(ofile->file_name != NULL)
 	    free(ofile->file_name);
