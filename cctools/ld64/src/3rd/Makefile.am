@@ -15,5 +15,4 @@ libhelper_la_SOURCES =  \
 	compat_corecrypto/ccsha1.c \
 	compat_corecrypto/ccsha2.c \
 	mkpath_np.c \
-	find_executable.c \
 	reallocf.c
