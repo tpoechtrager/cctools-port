@@ -251,6 +251,7 @@ const char *target_triple)
 	    arch_flag->cpusubtype = CPU_SUBTYPE_ARM_V5TEJ;
 	}
 	else if(strncmp(target_triple, "armv6", n) == 0 ||
+	        strncmp(target_triple, "armv6k", n) == 0 || /* cctools-port */
 	        strncmp(target_triple, "thumbv6", n) == 0){
 	    arch_flag->cputype = CPU_TYPE_ARM;
 	    arch_flag->cpusubtype = CPU_SUBTYPE_ARM_V6;
