@@ -41,6 +41,8 @@
 #include "arm_disasm.h"
 #include "cxa_demangle.h"
 
+#define dis_info arm_dis_info
+
 /* Used by otool(1) to stay or switch out of thumb mode */
 enum bool in_thumb = FALSE;
 
