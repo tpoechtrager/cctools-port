@@ -1,6 +1,4 @@
-#ifndef __CYGWIN__
-#include_next <sys/sysctl.h>
-#else
+#if defined(__CYGWIN__)
 #ifndef __SYSCTL_H__
 #define __SYSCTL_H__
 
@@ -19,4 +17,8 @@ int sysctl(const int *name, u_int namelen, void *oldp,	size_t *oldlenp,
     return -1;
 }
 #endif /* __SYSCTL_H__ */
-#endif /* ! __CYGWIN__ */
+#elif defined(__linux__)
+#include <linux/sysctl.h>
+#else
+#include_next <sys/sysctl.h>
+#endif
