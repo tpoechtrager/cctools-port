@@ -204,6 +204,8 @@ const char* DwarfInstructions<A,R>::parseCFIs(A& addressSpace, pint_t ehSectionS
 		if ( entry >= end )
 			return "too little space allocated for parseCFIs";
 		pint_t nextCFI = p + cfiLength;
+        if ( nextCFI > (ehSectionStart+sectionLength) )
+            return "CFI length too long";
 		uint32_t id = addressSpace.get32(p);
 		if ( id == 0 ) {
 			// is CIE

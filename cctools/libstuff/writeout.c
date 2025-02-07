@@ -383,7 +383,7 @@ enum bool deterministic,
 enum bool *seen_archive)
 {
     uint32_t i, j, k, pad, size;
-    uint64_t file_size, offset;
+    uint64_t file_size, offset, full_size;
     uint32_t i32;
     uint64_t i64;
     enum byte_sex target_byte_sex, host_byte_sex;
@@ -482,10 +482,17 @@ enum bool *seen_archive)
 		}
 	    }
 	    else if(archs[i].type == OFILE_Mach_O){
-		size = archs[i].object->object_size
-		       - archs[i].object->input_sym_info_size
-		       + archs[i].object->output_new_content_size
-		       + archs[i].object->output_sym_info_size;
+            full_size = (uint64_t)archs[i].object->object_size
+                      - (uint64_t)archs[i].object->input_sym_info_size
+                      + (uint64_t)archs[i].object->output_new_content_size
+                      + (uint64_t)archs[i].object->output_sym_info_size;
+            if(full_size > UINT_MAX){
+            error("file too large to create because the size "
+                  "of output for file %s exceeds 32-bits ",
+                  archs[i].file_name);
+            return;
+            }
+            size = (uint32_t)full_size;
 		if(archs[i].fat_arch64 != NULL)
 		    file_size = rnd(file_size, 1 << archs[i].fat_arch64->align);
 		else if(archs[i].fat_arch != NULL)

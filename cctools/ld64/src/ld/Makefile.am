@@ -63,4 +63,5 @@ ld_SOURCES =  \
 	SymbolTable.cpp \
 	PlatformSupport.cpp \
 	ResponseFiles.cpp \
+	FatFile.cpp \
 	code-sign-blobs/blob.cpp

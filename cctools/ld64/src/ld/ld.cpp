@@ -322,10 +322,16 @@ uint32_t InternalState::FinalSection::segmentOrder(const ld::Section& sect, cons
 		if ( strcmp(sect.segmentName(), "__TEXT_EXEC") == 0 )
 			return 2;
 		if ( strcmp(sect.segmentName(), "__DATA_CONST") == 0 )
-			return ((options.outputKind() == Options::kKextBundle) || armCloseStubs) ? 5 : 3;
+			return ((options.outputKind() == Options::kKextBundle) ? 8 : (armCloseStubs ? 5 : 3));
+		if ( strcmp(sect.segmentName(), "__AUTH_CONST") == 0 )
+			return (options.outputKind() == Options::kKextBundle) ? 6 : 4;
+		if ( strcmp(sect.segmentName(), "__OBJC_CONST") == 0 )
+			return 5;
+		if ( strcmp(sect.segmentName(), "__AUTH") == 0 )
+			return (options.outputKind() == Options::kKextBundle) ? 7 : 6;
 		// in -r mode, want __DATA  last so zerofill sections are at end
 		if ( strcmp(sect.segmentName(), "__DATA") == 0 )
-			return (options.outputKind() == Options::kObjectFile) ? 7 : 4;
+			return armCloseStubs ? 4 : ((options.outputKind() == Options::kObjectFile) ? 8 : 7);
 		if ( strcmp(sect.segmentName(), "__OBJC") == 0 ) 
 			return 5;
 		if ( strcmp(sect.segmentName(), "__IMPORT") == 0 )
@@ -462,6 +468,13 @@ uint32_t InternalState::FinalSection::sectionOrder(const ld::Section& sect, uint
 					return 33;
 				else if ( strcmp(sect.sectionName(), "__objc_const_ax") == 0 )
 					return 34;
+				// Sort __llvm_prf_cnts before __llvm_prf_data: the profiling runtime relies on this order
+				// (as well as on both sections being page-aligned) for its continuous counter sync feature
+				// (see rdar://83066065).
+				else if ( strcmp(sect.sectionName(), "__llvm_prf_cnts") == 0 )
+					return 35;
+				else if ( strcmp(sect.sectionName(), "__llvm_prf_data") == 0 )
+					return 36;
 				else
 					return sectionsSeen+40;
 		}

@@ -1961,8 +1961,7 @@ uint64_t ndbi)
         key = isAuth ? dbi[n].auth_key : 0;
 
         if (value) {
-            const char* format;
-            format = is32 ? "0x%08llX" : "0x%016llX";
+            const char* const format = is32 ? "0x%08llX" : "0x%016llX";
             snprintf(valuestr, sizeof(valuestr), format, value);
         }
         else {
@@ -2469,6 +2468,11 @@ static void walk_chain(/* inputs */
         chain_addr = baseaddr + chain_offset;
     }
 
+    if ((char*)chain > object_addr + object_size
+        || (char*)chain_addr > object_addr + object_size) {
+        printf("chained fixups start beyond the end of the object file\n");
+        return;
+    }
     /* loop over all of the fixups in the chain */
     enum bool done = FALSE;
     while (!done) {
@@ -2506,6 +2510,10 @@ static void walk_chain(/* inputs */
         sectname = sectionName(seg_index, chain_addr, segs, nsegs,
                                segs64, nsegs64);
 
+        if ((char*)chain > object_addr + object_size) {
+            printf("chained fixups extend beyond the end of object\n");
+            return;
+        }
         /* set the bind and rebase information from the chain value */
         switch (pointer_format) {
             case DYLD_CHAINED_PTR_ARM64E:

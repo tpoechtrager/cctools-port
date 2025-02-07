@@ -13,7 +13,8 @@
 
 char* progname;
 
-void usage(const char * __restrict format, ...);
+void usage(const char * __restrict format, ...)
+     __attribute__((format(printf, 1, 2)));
 
 int main(int argc, const char * argv[])
 {

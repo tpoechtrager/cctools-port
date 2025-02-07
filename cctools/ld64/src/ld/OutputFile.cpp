@@ -5371,7 +5371,8 @@ void OutputFile::buildChainedFixupInfo(ld::Internal& state)
 	// build table of segments, fixup locations, and symbol targets
 	uint32_t							pageSize     = _options.segmentAlignment();
 	// The kernel and kexts need to support unaligned fixups, so just always force 4k alignment on them
-	if ( _options.isKernel() || (_options.outputKind() == Options::kKextBundle) )
+	// x86_64 binaries are 16KB segments to make rosetta easier, but still use 4KB pages when run natively
+	if ( _options.isKernel() || (_options.outputKind() == Options::kKextBundle) || (_options.architecture() == CPU_TYPE_X86_64) )
 		pageSize = 0x1000;
 	const char* 						curSegName   = "";
 	const ld::Internal::FinalSection* 	firstSegSect = nullptr;
@@ -7565,7 +7566,7 @@ bool OutputFile::ChainedFixupBinds::hasHugeSymbolStrings() const
 {
 	// we need to see if total size of all imported symbols will be >= 8MB
 	// 99.9% of binaries have less than 10,000 imports and easily fit in 8MB of strings
-	if ( _bindsTargets.size() < 10000 )
+	if ( _bindsTargets.size() < 9000 )
 		return false;
 	uint32_t totalStringSize = 0;
 	for (const AtomAndAddend& entry : _bindsTargets) {

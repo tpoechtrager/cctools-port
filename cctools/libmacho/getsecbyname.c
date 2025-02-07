@@ -338,7 +338,7 @@ unsigned long *size)
     struct segment_command *sgp;
     struct section *sp;
     uint32_t i, j;
-    intptr_t slide;
+    uintptr_t slide;
     
 	slide = 0;
 	sp = 0;
@@ -358,7 +358,7 @@ unsigned long *size)
 			   strncmp(sp->segname, segname,
 			   sizeof(sp->segname)) == 0){
 			    *size = sp->size;
-			    return((uint8_t *)(sp->addr) + slide);
+			    return((uint8_t *)(sp->addr + slide));
 			}
 			sp = (struct section *)((char *)sp +
 			     sizeof(struct section));
@@ -377,7 +377,7 @@ const char *segname,
 unsigned long *size)
 {
     struct segment_command *sgp;
-    intptr_t slide;
+    uintptr_t slide;
     uint32_t i;
 
 	slide = 0;

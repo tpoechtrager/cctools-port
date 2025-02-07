@@ -2665,7 +2665,7 @@ static void dump(const char* path)
 				cpu_type_t cputype = OSSwapBigToHostInt32(archs[i].cputype);
 				cpu_type_t cpusubtype = OSSwapBigToHostInt32(archs[i].cpusubtype);
 				if ( ((cputype == sPreferredArch) 
-					&& ((sPreferredSubArch==0) || (sPreferredSubArch==cpusubtype)))
+					&& ((sPreferredSubArch==0) || (sPreferredSubArch==(cpusubtype & ~CPU_SUBTYPE_MASK))))
 					|| (sPreferredArch == 0) ) {	
 					switch(cputype) {
 					case CPU_TYPE_POWERPC:

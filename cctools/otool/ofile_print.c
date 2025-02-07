@@ -4155,6 +4155,12 @@ enum bool verbose)
 	    case PLATFORM_DRIVERKIT:
 		printf("DRIVERKIT\n");
 		break;
+	    case PLATFORM_FIRMWARE:
+		printf("FIRMWARE\n");
+		break;
+	    case PLATFORM_SEPOS:
+		printf("SEPOS\n");
+		break;
 	    default:
 	        printf("%u\n", bv->platform);
 		break;
@@ -4189,6 +4195,9 @@ enum bool verbose)
 	    break;
 	case TOOL_LD:
 	    printf("LD\n");
+	    break;
+	case TOOL_LLD:
+	    printf("LLD\n");
 	    break;
 	default:
 	    printf("%u\n", tool);
@@ -7607,6 +7616,10 @@ enum bool verbose)
 	else
 	    printf("module index symbol index\n");
 	for(i = 0; i < ntocs; i++){
+            if((char *)(tocs + i) > object_addr + object_size){
+                printf("table of contents beyond the end of the file\n");
+                return;
+            }
 	    if(verbose){
 		if(tocs[i].module_index > nmods)
 		    printf("%-16u (past the end of the module table) ",

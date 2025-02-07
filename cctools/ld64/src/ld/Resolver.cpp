@@ -424,6 +424,32 @@ void Resolver::doFile(const ld::File& file)
 			}
 		}
 
+		// verify that all files have the same class_ro_t pointer signing
+		// setting
+		if ( objFile->hasObjC() ) {
+			if ( _internal.objcClassROPointerSigning == ClassROSigningUnknown ) {
+				if (objFile->objcHasSignedClassROs()) {
+					_internal.objcClassROPointerSigning = ClassROSigningEnabled;
+				} else {
+					_internal.objcClassROPointerSigning = ClassROSigningDisabled;
+				}
+			} else if ((_internal.objcClassROPointerSigning == ClassROSigningDisabled && objFile->objcHasSignedClassROs())) {
+				if ( _options.warnOnClassROSigningMismatches() ) {
+					warning("'%s' was built with class_ro_t pointer signing enabled, but previous .o files were not", objFile->path());
+					_internal.objcClassROPointerSigning = ClassROSigningMismatch;
+				} else {
+					throwf("'%s' was built with class_ro_t pointer signing enabled, but previous .o files were not", objFile->path());
+				}
+			} else if ((_internal.objcClassROPointerSigning == ClassROSigningEnabled && !objFile->objcHasSignedClassROs())) {
+				if ( _options.warnOnClassROSigningMismatches() ) {
+					warning("'%s' was not built with class_ro_t pointer signing enabled, but previous .o files were", objFile->path());
+					_internal.objcClassROPointerSigning = ClassROSigningMismatch;
+				} else {
+					throwf("'%s' was not built with class_ro_t pointer signing enabled, but previous .o files were", objFile->path());
+				}
+			}
+		}
+
 		// verify all files use same version of Swift language
 		if ( file.swiftVersion() != 0 ) {
 			_internal.someObjectFileHasSwift = true;
@@ -2021,6 +2047,98 @@ void Resolver::checkChainedFixupsBounds()
 	}
 }
 
+void Resolver::writeDotOutput()
+{
+	const char* dotOutFilePath = _options.dotOutputFile();
+	if ( dotOutFilePath != NULL ) {
+		FILE* out = fopen(dotOutFilePath, "w");
+		if ( out != NULL ) {
+			// print header
+			fprintf(out, "digraph dg\n{\n");
+			fprintf(out, "\tconcentrate = true;\n");
+			fprintf(out, "\trankdir = LR;\n");
+
+			// print each atom as a node
+			for (std::vector<const ld::Atom*>::const_iterator it=_atoms.begin(); it != _atoms.end(); ++it) {
+				const ld::Atom* atom = *it;
+				if ( atom->contentType() != ld::Atom::typeStub ) {
+					const char* name = atom->name();
+					if ( atom->definition() == ld::Atom::definitionProxy ) {
+						fprintf(out, "\taddr%p [ shape = plaintext, label = \"%s\" ];\n", atom, name);
+					}
+					else if ( atom->contentType() == ld::Atom::typeCString ) {
+						char cstring[atom->size()+2];
+						atom->copyRawContent((uint8_t*)cstring);
+						fprintf(out, "\taddr%p [ label = \"string: '", atom);
+						for (const char* s=cstring; *s != '\0'; ++s) {
+							if ( !isprint(*s) || *s == '"' )
+								fprintf(out, "\\x%02hhx", *s);
+							else
+								fputc(*s, out);
+						}
+						fprintf(out, "'\" ];\n");
+					}
+					else {
+						fprintf(out, "\taddr%p [ label = \"%s\" ];\n", atom, name);
+					}
+				}
+			}
+			fprintf(out, "\n");
+
+			// print each reference as an edge
+			for (std::vector<const ld::Atom*>::const_iterator it=_atoms.begin(); it != _atoms.end(); ++it) {
+				const ld::Atom* fromAtom = *it;
+				const ld::Atom* targetAtom = NULL;
+				if ( fromAtom->contentType() != ld::Atom::typeStub ) {
+					std::set<const ld::Atom*> seenTargets;
+					for (ld::Fixup::iterator fit=fromAtom->fixupsBegin(); fit != fromAtom->fixupsEnd(); ++fit) {
+						switch ( fit->binding  ) {
+							case ld::Fixup::bindingDirectlyBound:
+							// no longer defined case ld::Fixup::bindingByNameBound:
+							case ld::Fixup::bindingByContentBound:
+								if ( seenTargets.count(fit->u.target) == 0 ) {
+									seenTargets.insert(fit->u.target);
+									fprintf(out, "\taddr%p -> addr%p;\n", fromAtom, fit->u.target);
+								}
+								break;
+							case ld::Fixup::bindingsIndirectlyBound:
+								targetAtom = _internal.indirectBindingTable[fit->u.bindingIndex];
+								if ( seenTargets.count(targetAtom) == 0 ) {
+									seenTargets.insert(targetAtom);
+									fprintf(out, "\taddr%p -> addr%p;\n", fromAtom, targetAtom);
+								}
+								break;
+							case ld::Fixup::bindingNone: // see  referenceTargetAtomName()
+							case ld::Fixup::bindingByNameUnbound:
+								// ??
+								break;
+						}
+					}
+				}
+			}
+			fprintf(out, "\n");
+
+			// push all imports to bottom of graph
+			fprintf(out, "{ rank = same; ");
+			for (std::vector<const ld::Atom*>::const_iterator it=_atoms.begin(); it != _atoms.end(); ++it) {
+				const ld::Atom* atom = *it;
+				if ( atom->contentType() != ld::Atom::typeStub ) {
+					if ( atom->definition() == ld::Atom::definitionProxy  ) {
+						fprintf(out, "addr%p; ", atom);
+					}
+				}
+			}
+			fprintf(out, "};\n ");
+
+			// print footer
+			fprintf(out, "}\n");
+			fclose(out);
+		}
+		else {
+			warning("could not write dot output file: %s", dotOutFilePath);
+		}
+	}
+}
 void Resolver::resolve()
 {
 	this->initializeState();
@@ -2040,6 +2158,7 @@ void Resolver::resolve()
     _symbolTable.checkDuplicateSymbols();
 	this->buildArchivesList();
 	this->checkChainedFixupsBounds();
+	this->writeDotOutput();
 }
 
 

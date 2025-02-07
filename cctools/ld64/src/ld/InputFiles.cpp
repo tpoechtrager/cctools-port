@@ -67,6 +67,7 @@
 #include "opaque_section_file.h"
 #include "MachOFileAbstraction.hpp"
 #include "Snapshot.h"
+#include "FatFile.h"
 
 #ifndef MAP_RESILIENT_CODESIGN // ld64-port
 #define MAP_RESILIENT_CODESIGN 0
@@ -273,78 +274,75 @@ ld::File* InputFiles::makeFile(const Options::FileInfo& info, bool indirectDylib
 	}
 
 	// if fat file, skip to architecture we want
-	// Note: fat header is always big-endian
-	bool isFatFile = false;
-	uint32_t sliceToUse, sliceCount;
-	const fat_header* fh = (fat_header*)p;
-        sliceCount = 0; // ld64-port
-	if ( fh->magic == OSSwapBigToHostInt32(FAT_MAGIC) ) {
-		isFatFile = true;
-		const struct fat_arch* archs = (struct fat_arch*)(p + sizeof(struct fat_header));
-		bool sliceFound = false;
-		sliceCount = OSSwapBigToHostInt32(fh->nfat_arch);
+	if ( const FatFile* fatFile = FatFile::isFatFile(p) ) {
+		if ( const char* errMsg = fatFile->isInvalid(stat_buf.st_size) )
+			throwf("malformed universal file: %s", errMsg);
+
+		__block bool     sliceFound  = false;
+		__block uint64_t sliceOffset = 0;
+		__block uint64_t sliceLength = 0;
 		// first try to find a slice that match cpu-type and cpu-sub-type
-		for (uint32_t i=0; i < sliceCount; ++i) {
-			if ( (OSSwapBigToHostInt32(archs[i].cputype) == (uint32_t)_options.architecture())
-			  && ((OSSwapBigToHostInt32(archs[i].cpusubtype) & ~CPU_SUBTYPE_MASK) == (uint32_t)_options.subArchitecture()) ) {
-				sliceToUse = i;
-				sliceFound = true;
-				break;
+		fatFile->forEachSlice(^(uint32_t sliceCpuType, uint32_t sliceCpuSubType, const void* sliceStart, uint64_t sliceSize, bool& stop) {
+			if ( (sliceCpuType == (uint32_t)_options.architecture()) && ((sliceCpuSubType & ~CPU_SUBTYPE_MASK) == (uint32_t)_options.subArchitecture()) ) {
+				sliceFound  = true;
+				sliceOffset = (uint8_t*)sliceStart - p;
+				sliceLength = sliceSize;
+				stop		= true;
 			}
-		}
+		});
+		// next, look for any slice that matches just cpu-type
 		if ( !sliceFound && _options.allowSubArchitectureMismatches() ) {
-			// look for any slice that matches just cpu-type
-			for (uint32_t i=0; i < sliceCount; ++i) {
-				if ( OSSwapBigToHostInt32(archs[i].cputype) == (uint32_t)_options.architecture() ) {
-					sliceToUse = i;
-					sliceFound = true;
-					break;
+			fatFile->forEachSlice(^(uint32_t sliceCpuType, uint32_t sliceCpuSubType, const void* sliceStart, uint64_t sliceSize, bool& stop) {
+				if ( sliceCpuType == (uint32_t)_options.architecture() ) {
+					sliceFound  = true;
+					sliceOffset = (uint8_t*)sliceStart - p;
+					sliceLength = sliceSize;
+					stop		= true;
 				}
-			}
+			});
 		}
+		// lastly, try fallback archs
 		if ( !sliceFound ) {
-			// Look for a fallback slice.
-			for (uint32_t i = 0; i < sliceCount; ++i) {
-				if ( OSSwapBigToHostInt32(archs[i].cputype) == (uint32_t)_options.fallbackArchitecture() &&
-					(OSSwapBigToHostInt32(archs[i].cpusubtype) & ~CPU_SUBTYPE_MASK) == (uint32_t)_options.fallbackSubArchitecture() ) {
-					sliceToUse = i;
-					sliceFound = true;
-					break;
+			fatFile->forEachSlice(^(uint32_t sliceCpuType, uint32_t sliceCpuSubType, const void* sliceStart, uint64_t sliceSize, bool& stop) {
+				if ( (sliceCpuType == (uint32_t)_options.fallbackArchitecture()) && ((sliceCpuSubType & ~CPU_SUBTYPE_MASK) == (uint32_t)_options.fallbackSubArchitecture()) ) {
+					sliceFound  = true;
+					sliceOffset = (uint8_t*)sliceStart - p;
+					sliceLength = sliceSize;
+					stop		= true;
 				}
-			}
-		}
-		if ( !sliceFound && (_options.architecture() == CPU_TYPE_ARM64) && (_options.subArchitecture() == CPU_SUBTYPE_ARM64_ALL) ) {
-			// <rdar://problem/65681348> let arm64 executables link against arm64e slice of dylibs
-			for (uint32_t i = 0; i < sliceCount; ++i) {
-				if ( (OSSwapBigToHostInt32(archs[i].cputype) == CPU_TYPE_ARM64) &&
-					(OSSwapBigToHostInt32(archs[i].cpusubtype) & ~CPU_SUBTYPE_MASK) == CPU_SUBTYPE_ARM64E) {
-					sliceToUse = i;
-					sliceFound = true;
-					break;
-				}
+			});
+			if ( !sliceFound && (_options.architecture() == CPU_TYPE_ARM64) && (_options.subArchitecture() == CPU_SUBTYPE_ARM64_ALL) ) {
+				// <rdar://problem/65681348> let arm64 executables link against arm64e slice of dylibs
+				fatFile->forEachSlice(^(uint32_t sliceCpuType, uint32_t sliceCpuSubType, const void* sliceStart, uint64_t sliceSize, bool& stop) {
+					if ( (sliceCpuType == CPU_TYPE_ARM64) && (sliceCpuSubType & ~CPU_SUBTYPE_MASK) == CPU_SUBTYPE_ARM64E) {
+						sliceFound  = true;
+						sliceOffset = (uint8_t*)sliceStart - p;
+						sliceLength = sliceSize;
+						stop		= true;
+					}
+				});
 			}
 		}
 		if ( sliceFound ) {
-			uint32_t fileOffset = OSSwapBigToHostInt32(archs[sliceToUse].offset);
-			len = OSSwapBigToHostInt32(archs[sliceToUse].size);
-			if ( fileOffset+len > stat_buf.st_size ) {
+			if ( sliceOffset+sliceLength > (uint64_t)stat_buf.st_size ) {
 				// <rdar://problem/17593430> file size was read awhile ago.  If file is being written, wait a second to see if big enough now
 				sleep(1);
-				int64_t newFileLen = stat_buf.st_size;
+				uint64_t    newFileLen = stat_buf.st_size;
 				struct stat statBuffer;
 				if ( stat(info.path, &statBuffer) == 0 ) {
 					newFileLen = statBuffer.st_size;
 				}
-				if ( fileOffset+len > newFileLen ) {
-					throwf("truncated fat file. Slice from %u to %llu is past end of file with length %llu", 
-						fileOffset, fileOffset+len, stat_buf.st_size);
+				if ( sliceOffset+sliceLength > newFileLen ) {
+					throwf("truncated fat file. Slice from %llu to %llu is past end of file with length %llu",
+						sliceOffset, sliceOffset+sliceLength, stat_buf.st_size);
 				}
 			}
+			len = sliceLength;
 			// if requested architecture is page aligned within fat file, then remap just that portion of file
 			// ld64-port: remapping the file on Cygwin fails for an unknown reason, so always go the alternative way there
 #ifndef __CYGWIN__
 			static const int page_mask = ::getpagesize() - 1;
-			if ( (fileOffset & page_mask) == 0 ) {
+			if ( (sliceOffset & page_mask) == 0 ) {
 				// unmap whole file
 				munmap((caddr_t)p, stat_buf.st_size);
 				// re-map just part we need
@@ -352,10 +350,10 @@ ld::File* InputFiles::makeFile(const Options::FileInfo& info, bool indirectDylib
 				// On macOS 10.15 MAP_RESILIENT_CODESIGN doesn't work, so we need to first try
 				// with the flag and then without it.
 				int flags = MAP_FILE | MAP_PRIVATE | MAP_RESILIENT_CODESIGN;
-				p = (uint8_t*)::mmap(NULL, len, PROT_READ, flags, fd, fileOffset);
+				p = (uint8_t*)::mmap(NULL, sliceLength, PROT_READ, flags, fd, sliceOffset);
 				if ( p == MAP_FAILED ) {
 					flags &= ~MAP_RESILIENT_CODESIGN;
-					p = (uint8_t*)::mmap(NULL, len, PROT_READ, flags, fd, fileOffset);
+					p = (uint8_t*)::mmap(NULL, sliceLength, PROT_READ, flags, fd, sliceOffset);
 					if ( p == MAP_FAILED ) {
 						throwf("can't re-map file, errno=%d", errno);
 					}
@@ -363,10 +361,14 @@ ld::File* InputFiles::makeFile(const Options::FileInfo& info, bool indirectDylib
 			}
 			else {
 #endif /* __CYGWIN__ */
-				p = &p[fileOffset];
+				p = &p[sliceOffset];
 #ifndef __CYGWIN__
 			}
 #endif /* __CYGWIN__ */
+		}
+		else {
+			char archNamesInFile[256];
+			throwf("file is universal (%s) but does not contain the %s architecture: %s", fatFile->archNames(archNamesInFile), _options.architectureName(), info.path);
 		}
 	}
 	::close(fd);
@@ -515,21 +517,12 @@ ld::File* InputFiles::makeFile(const Options::FileInfo& info, bool indirectDylib
 #endif
 	}
 
-	// error handling
-	if ( ((fat_header*)p)->magic == OSSwapBigToHostInt32(FAT_MAGIC) ) {
-		throwf("missing required architecture %s in file %s (%u slices)", _options.architectureName(), info.path, sliceCount);
-	}
-	else {
-		if ( isFatFile )
-			throwf("file is universal (%u slices) but does not contain the %s architecture: %s", sliceCount, _options.architectureName(), info.path);
-		else {
-			ld::Platform filePlatform;
-			const char* fileArchName = extractFileInfo(p, len, info.path, filePlatform);
-			throwf("building for %s-%s but attempting to link with file built for %s-%s",
-					_options.platforms().to_str().c_str(), _options.architectureName(),
-					ld::nameFromPlatform(filePlatform), fileArchName);
-		}
-	}
+	// error reporting
+	ld::Platform filePlatform;
+	const char* fileArchName = extractFileInfo(p, len, info.path, filePlatform);
+	throwf("building for %s-%s but attempting to link with file built for %s-%s",
+			_options.platforms().to_str().c_str(), _options.architectureName(),
+			ld::nameFromPlatform(filePlatform), fileArchName);
 }
 
 void InputFiles::logDylib(ld::File* file, bool indirect, bool speculative)
@@ -986,7 +979,7 @@ InputFiles::InputFiles(Options& opts)
 	_options(opts), _bundleLoader(NULL), 
 	_exception(NULL), 
 	_indirectDylibOrdinal(ld::File::Ordinal::indirectDylibBase()),
-	_linkerOptionOrdinal(ld::File::Ordinal::linkeOptionBase())
+	_linkerOptionOrdinal(ld::File::Ordinal::linkerOptionBase())
 {
 //	fStartCreateReadersTime = mach_absolute_time();
 #if HAVE_PTHREADS

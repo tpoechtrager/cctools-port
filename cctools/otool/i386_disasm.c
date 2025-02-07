@@ -4511,7 +4511,7 @@ void *TagBuf)
     const char *strings, *name, *add, *sub;
     struct relocation_info *relocs, *rp, *pairp;
     struct scattered_relocation_info *srp, *spairp;
-    uint32_t nrelocs, strings_size, n_strx;
+    uint32_t nrelocs, strings_size, n_strx, symbol_num;
     struct nlist *symbols;
 
 	info = (struct disassemble_info *)DisInfo;
@@ -4550,6 +4550,10 @@ void *TagBuf)
 	 */
 	reloc_found = 0;
 	for(i = 0; i < nrelocs; i++){
+        if ((char*)(&relocs[i]) > info->object_addr + info->object_size) {
+            printf("relocation extend beyond the end of object\n");
+            return(0);
+        }
 	    rp = &relocs[i];
 	    if(rp->r_address & R_SCATTERED){
 		srp = (struct scattered_relocation_info *)rp;
@@ -4660,8 +4664,14 @@ void *TagBuf)
 	nrelocs = info->next_relocs;
 	for(i = 0; i < nrelocs; i++){
 	    if(relocs[i].r_address == seg_offset){
-		if(symbols != NULL)
-		    n_strx = symbols[relocs[i].r_symbolnum].n_un.n_strx;
+        if(symbols != NULL) {
+            symbol_num = relocs[i].r_symbolnum;
+            if ((char*)(&symbols[symbol_num]) > info->object_addr + info->object_size){
+                printf("symbol extend beyond the end of object\n");
+                return(0);
+            }
+            n_strx = symbols[symbol_num].n_un.n_strx;
+        }
 		if(n_strx >= strings_size){
 		    /* Error bad string offset. */
 		    return(0);
@@ -4714,7 +4724,7 @@ void *TagBuf)
     uint64_t sect_offset, seg_offset, i;
     const char *strings, *name;
     struct relocation_info *relocs;
-    uint32_t nrelocs, strings_size, n_strx;
+    uint32_t nrelocs, strings_size, n_strx, symbol_num;
     struct nlist_64 *symbols;
 
 	info = (struct disassemble_info *)DisInfo;
@@ -4740,6 +4750,10 @@ void *TagBuf)
 
 	reloc_found = 0;
 	for(i = 0; i < nrelocs; i++){
+        if ((char*)(&relocs[i]) > info->object_addr + info->object_size) {
+            printf("relocation extend beyond the end of object\n");
+            return(0);
+        }
 	    /* We could also check the Width matches the r_length. */
 	    if(relocs[i].r_address == sect_offset){
 		reloc_found = 1;
@@ -4755,10 +4769,17 @@ void *TagBuf)
 	     */
 	    if(relocs[i].r_pcrel == 1)
 		op_info->Value -= Pc + Offset + Width;
-	    if(symbols != NULL && relocs[i].r_symbolnum < info->nsymbols)
-		n_strx = symbols[relocs[i].r_symbolnum].n_un.n_strx;
-	    else
-		return(0);
+        if(symbols != NULL && relocs[i].r_symbolnum < info->nsymbols) {
+            symbol_num = relocs[i].r_symbolnum;
+            if ((char*)(&symbols[symbol_num]) > info->object_addr + info->object_size){
+                printf("symbol extend beyond the end of object\n");
+                return(0);
+            }
+            n_strx = symbols[relocs[i].r_symbolnum].n_un.n_strx;
+        }
+        else{
+		    return(0);
+        }
 	    if(n_strx >= strings_size)
 		return(0);
 	    name = strings + n_strx;
@@ -4782,6 +4803,10 @@ void *TagBuf)
 	relocs = info->ext_relocs;
 	nrelocs = info->next_relocs;
 	for(i = 0; i < nrelocs; i++){
+        if ((char*)(&relocs[i]) > info->object_addr + info->object_size) {
+            printf("relocation extend beyond the end of object\n");
+            return(0);
+        }
 	    if(relocs[i].r_address == seg_offset){
 		/*
 		 * The Value passed in will be adjusted by the Pc if the
@@ -4790,10 +4815,17 @@ void *TagBuf)
 		 */
 		if(relocs[i].r_pcrel == 1)
 		    op_info->Value -= Pc + Offset + Width;
-		if(symbols != NULL)
-		    n_strx = symbols[relocs[i].r_symbolnum].n_un.n_strx;
-		else
-		    return(0);
+        if(symbols != NULL) {
+            symbol_num = relocs[i].r_symbolnum;
+            if ((char*)(&symbols[symbol_num]) > info->object_addr + info->object_size){
+                printf("symbol extend beyond the end of object\n");
+                return(0);
+            }
+            n_strx = symbols[relocs[i].r_symbolnum].n_un.n_strx;
+        }
+        else{
+            return(0);
+        }
 		if(n_strx >= strings_size)
 		    return(0);
 		name = strings + n_strx;
@@ -4836,6 +4868,7 @@ enum bool *cfstring)
     struct section_64 s64;
     char *p;
     uint64_t big_load_end;
+    const char* addr_end;
 
 	*classref = FALSE;
 	*selref = FALSE;
@@ -4846,7 +4879,12 @@ enum bool *cfstring)
 
 	lc = load_commands;
 	big_load_end = 0;
+    addr_end = object_addr + object_size;
 	for(i = 0 ; i < ncmds; i++){
+        if((char *)lc + sizeof(struct load_command) > addr_end){
+          fprintf(stderr, "load command extends beyond the end of the file\n");
+          return(0);
+        }
 	    memcpy((char *)&l, (char *)lc, sizeof(struct load_command));
 	    if(swapped)
 		swap_load_command(&l, host_byte_sex);
@@ -4857,6 +4895,10 @@ enum bool *cfstring)
 		return(0);
 	    switch(l.cmd){
 	    case LC_SEGMENT_64:
+        if((char *)lc + sizeof(struct segment_command_64) > addr_end){
+          fprintf(stderr, "segment header extends beyond the end of the file\n");
+          return(0);
+        }
 		memcpy((char *)&sg64, (char *)lc,
 		       sizeof(struct segment_command_64));
 		if(swapped)
@@ -4866,6 +4908,11 @@ enum bool *cfstring)
 			    j * sizeof(struct section_64) +
 			    sizeof(struct segment_command_64) < sizeofcmds ;
                     j++){
+            if(p + sizeof(struct section_64) > addr_end){
+              fprintf(stderr, "section header in (%s) extends beyond"
+                      "the end of the file\n", sg64.segname);
+              return(0);
+            }
 		    memcpy((char *)&s64, p, sizeof(struct section_64));
 		    p += sizeof(struct section_64);
 		    if(swapped)
@@ -4951,13 +4998,19 @@ const uint64_t object_size)
     char *p;
     uint64_t big_load_end;
     const char *name;
+    const char* addr_end;
 
 	host_byte_sex = get_host_byte_sex();
 	swapped = host_byte_sex != load_commands_byte_sex;
 
 	lc = load_commands;
 	big_load_end = 0;
+    addr_end = object_addr + object_size;
 	for(i = 0 ; i < ncmds; i++){
+        if((char *)lc + sizeof(struct load_command) > addr_end){
+          fprintf(stderr, "load command extends beyond the end of the file\n");
+          return(0);
+        }
 	    memcpy((char *)&l, (char *)lc, sizeof(struct load_command));
 	    if(swapped)
 		swap_load_command(&l, host_byte_sex);
@@ -4968,6 +5021,10 @@ const uint64_t object_size)
 		return(NULL);
 	    switch(l.cmd){
 	    case LC_SEGMENT_64:
+        if((char *)lc + sizeof(struct segment_command_64) > addr_end){
+          fprintf(stderr, "segment header extends beyond the end of the file\n");
+          return(0);
+        }
 		memcpy((char *)&sg64, (char *)lc,
 		       sizeof(struct segment_command_64));
 		if(swapped)
@@ -4977,6 +5034,11 @@ const uint64_t object_size)
 			    j * sizeof(struct section_64) +
 			    sizeof(struct segment_command_64) < sizeofcmds ;
                     j++){
+            if(p + sizeof(struct section_64) > addr_end){
+              fprintf(stderr, "section header in (%s) is beyond"
+                      "the end of the file\n", sg64.segname);
+              return(NULL);
+            }
 		    memcpy((char *)&s64, p, sizeof(struct section_64));
 		    p += sizeof(struct section_64);
 		    if(swapped)

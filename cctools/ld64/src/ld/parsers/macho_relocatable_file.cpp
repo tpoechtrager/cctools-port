@@ -88,6 +88,7 @@ public:
 												_minOSVersion(0),
 												_canScatterAtoms(false),
 												_hasllvmProfiling(false),
+												_objcHasSignedClassROs(false),
 												_objcHasCategoryClassPropertiesField(false),
 												_srcKind(kSourceUnknown) { }
 	virtual									~File();
@@ -100,6 +101,7 @@ public:
 
 	// overrides of ld::relocatable::File 
 	virtual bool										hasObjC() const					{ return _hasObjC; }
+	virtual bool										objcHasSignedClassROs() const   { return _objcHasSignedClassROs; }
 	virtual bool										objcHasCategoryClassPropertiesField() const 
     																					{ return _objcHasCategoryClassPropertiesField; }
 	virtual uint32_t									cpuSubType() const				{ return _cpuSubType; }
@@ -156,6 +158,7 @@ private:
 	ld::VersionSet							_platforms;
 	bool									_canScatterAtoms;
 	bool									_hasllvmProfiling;
+	bool									_objcHasSignedClassROs;
 	bool									_objcHasCategoryClassPropertiesField;
 	std::vector<std::vector<const char*> >	_linkerOptions;
 	std::unique_ptr<ld::Bitcode>			_bitcode;
@@ -1870,12 +1873,12 @@ ld::relocatable::File* Parser<A>::parse(const ParserOptions& opts)
 		return _file;
 	
 	// make array of
-	uint32_t sortedSectionIndexes[_machOSectionsCount];
+	STACK_ALLOC_IF_SMALL(uint32_t, sortedSectionIndexes, _machOSectionsCount, 64);
 	this->makeSortedSectionsArray(sortedSectionIndexes);
 	
 	// make symbol table sorted by address
 	this->prescanSymbolTable();
-	uint32_t sortedSymbolIndexes[_symbolsInSections];
+	STACK_ALLOC_IF_SMALL(uint32_t, sortedSymbolIndexes, _symbolsInSections, 1024);
 	this->makeSortedSymbolsArray(sortedSymbolIndexes, sortedSectionIndexes);
 		
 	// allocate Section<A> object for each mach-o section
@@ -2226,7 +2229,26 @@ bool Parser<A>::parseLoadCommands(const ld::VersionSet& cmdLinePlatforms, bool i
 				if ( segment != NULL )
 					throw "more than one LC_SEGMENT found in object file";
 				segment = (macho_segment_command<P>*)cmd;
+				{
+					const macho_section<P>* sectionsStart = (macho_section<P>*)((char*)segment + sizeof(macho_segment_command<P>));
+					for (uint32_t si=0; si < segment->nsects(); ++si) {
+						const macho_section<P>* sect = &sectionsStart[si];
+						if ( (sect->addr() < segment->vmaddr()) || ((sect->addr()+sect->size()) > (segment->vmaddr()+segment->vmsize())) )
+							throwf("section %s/%s address out of range", sect->segname(), sect->sectname());
+						uint8_t sectionType = (sect->flags() & SECTION_TYPE);
+						if ( (sectionType == S_ZEROFILL)|| (sectionType == S_THREAD_LOCAL_ZEROFILL) ) {
+							if ( sect->offset() != 0 )
+								throwf("section %s/%s has type zero-fill but non-zero file offset", sect->segname(), sect->sectname());
+						}
+						else {
+							if ( (sect->offset() > fileLength()) || ((sect->offset()+sect->size()) > fileLength()) )
+								throwf("section %s/%s offset out of range", sect->segname(), sect->sectname());
+						}
+					}
+				}
 				break;
+			case 0:
+				throwf("unknown load command 0");
 			default:
 				// ignore unknown load commands
 				break;
@@ -2423,7 +2445,10 @@ void Parser<A>::appendAliasAtoms(uint8_t* p)
 			continue;
 
 		const char* symbolName = this->nameFromSymbol(sym);
-		const char* aliasOfName = &_strings[sym.n_value()];
+		uint32_t aliasStringPoolOffset = sym.n_value();
+		if ( aliasStringPoolOffset > _stringsSize )
+			throwf("indirect symbol name offset too large");
+		const char* aliasOfName = &_strings[aliasStringPoolOffset];
 		bool isHiddenVisibility = (sym.n_type() & N_PEXT);
 		AliasAtom* allocatedSpace = (AliasAtom*)p;
 		new (allocatedSpace) AliasAtom(symbolName, isHiddenVisibility, _file, aliasOfName);
@@ -2663,14 +2688,17 @@ void Parser<A>::makeSections()
 		// objc image info section is really attributes and not content
 		if ( ((strcmp(sect->sectname(), "__image_info") == 0) && (strcmp(sect->segname(), "__OBJC") == 0))
 			|| ((strncmp(sect->sectname(), "__objc_imageinfo", 16) == 0) && (strcmp(sect->segname(), "__DATA") == 0)) ) {
-			//	struct objc_image_info  {
-			//		uint32_t	version;	// initially 0
-			//		uint32_t	flags;
-			//	};
-			// #define OBJC_IMAGE_SUPPORTS_GC   2
-			// #define OBJC_IMAGE_GC_ONLY       4
-			// #define OBJC_IMAGE_IS_SIMULATED  32
-			// #define OBJC_IMAGE_HAS_CATEGORY_CLASS_PROPERTIES  64
+			// struct objc_image_info  {
+			//     uint32_t	version;	// initially 0
+			//     uint32_t	flags;
+			// };
+			//
+			// #define OBJC_IMAGE_SUPPORTS_GC					(1<<1)
+			// #define OBJC_IMAGE_REQUIRES_GC					(1<<2)
+			// #define OBJC_IMAGE_OPTIMIZED_BY_DYLD				(1<<3)
+			// #define OBJC_IMAGE_SIGNED_CLASS_RO			    (1<<4)
+			// #define OBJC_IMAGE_IS_SIMULATED					(1<<5)
+			// #define OBJC_IMAGE_HAS_CATEGORY_CLASS_PROPERTIES	(1<<6)
 			//
 			const uint32_t* contents = (uint32_t*)(_file->fileContent()+sect->offset());
 			if ( (sect->size() >= 8) && (contents[0] == 0) ) {
@@ -2678,6 +2706,7 @@ void Parser<A>::makeSections()
 				_file->_hasObjC = true;
 				_file->_swiftVersion = ((flags >> 8) & 0xFF);
 				_file->_swiftLanguageVersion = ((flags >> 16) & 0xFFFF);
+				_file->_objcHasSignedClassROs = (flags & 16);
                 _file->_objcHasCategoryClassPropertiesField = (flags & 64);
 				if ( sect->size() > 8 ) {
 					warning("section %s/%s has unexpectedly large size %llu in %s", 
@@ -2690,115 +2719,125 @@ void Parser<A>::makeSections()
 			continue;
 		}
 		machOSects[count].sect = sect;
-		switch ( sect->flags() & SECTION_TYPE ) {
-			case S_SYMBOL_STUBS:
-				if ( _stubsSectionNum == 0 ) {
-					_stubsSectionNum = i+1;
-					_stubsMachOSection = sect;
-				}
-				else
-					assert(1 && "multiple S_SYMBOL_STUBS sections");
-			case S_LAZY_SYMBOL_POINTERS:
-				break;
-			case S_4BYTE_LITERALS:
-				totalSectionsSize += sizeof(Literal4Section<A>);
-				machOSects[count++].type = sectionTypeLiteral4;
-				break;
-			case S_8BYTE_LITERALS:
-				totalSectionsSize += sizeof(Literal8Section<A>);
-				machOSects[count++].type = sectionTypeLiteral8;
-				break;
-			case S_16BYTE_LITERALS:
-				totalSectionsSize += sizeof(Literal16Section<A>);
-				machOSects[count++].type = sectionTypeLiteral16;
-				break;
-			case S_NON_LAZY_SYMBOL_POINTERS:
-				totalSectionsSize += sizeof(NonLazyPointerSection<A>);
-				machOSects[count++].type = sectionTypeNonLazy;
-				break;
-			case S_THREAD_LOCAL_VARIABLE_POINTERS:
-				totalSectionsSize += sizeof(TLVPointerSection<A>);
-				machOSects[count++].type = sectionTypeTLVPointers;
-				break;
-			case S_LITERAL_POINTERS:
-				if ( (strcmp(sect->segname(), "__OBJC") == 0) && (strcmp(sect->sectname(), "__cls_refs") == 0) ) {
-					totalSectionsSize += sizeof(Objc1ClassReferences<A>);
-					machOSects[count++].type = sectionTypeObjC1ClassRefs;
-				}
-				else {
-					totalSectionsSize += sizeof(PointerToCStringSection<A>);
-					machOSects[count++].type = sectionTypeCStringPointer;
-				}
-				break;
-			case S_CSTRING_LITERALS:
-				totalSectionsSize += sizeof(CStringSection<A>);
-				machOSects[count++].type = sectionTypeCString;
-				break;
-			case S_MOD_INIT_FUNC_POINTERS:
-			case S_MOD_TERM_FUNC_POINTERS:
-			case S_THREAD_LOCAL_INIT_FUNCTION_POINTERS:
-			case S_INTERPOSING:
-			case S_ZEROFILL:
-			case S_REGULAR:
-			case S_COALESCED:
-			case S_THREAD_LOCAL_REGULAR:
-			case S_THREAD_LOCAL_ZEROFILL:
-				if ( (strcmp(sect->segname(), "__TEXT") == 0) && (strcmp(sect->sectname(), "__eh_frame") == 0) ) {
-					totalSectionsSize += sizeof(CFISection<A>);
-					machOSects[count++].type = sectionTypeCFI;
-				}
-				else if ( (strcmp(sect->segname(), "__DATA") == 0) && (strcmp(sect->sectname(), "__cfstring") == 0) ) {
-					totalSectionsSize += sizeof(CFStringSection<A>);
-					machOSects[count++].type = sectionTypeCFString;
-				}
-				else if ( (strcmp(sect->segname(), "__TEXT") == 0) && (strcmp(sect->sectname(), "__ustring") == 0) ) {
-					totalSectionsSize += sizeof(UTF16StringSection<A>);
-					machOSects[count++].type = sectionTypeUTF16Strings;
-				}
-				else if ( (strcmp(sect->segname(), "__DATA") == 0) && (strncmp(sect->sectname(), "__objc_classrefs", 16) == 0) ) {
-					totalSectionsSize += sizeof(ObjC2ClassRefsSection<A>);
-					machOSects[count++].type = sectionTypeObjC2ClassRefs;
-				}
-				else if ( (strcmp(sect->segname(), "__DATA") == 0) && (strcmp(sect->sectname(), "__objc_catlist") == 0) ) {
-					totalSectionsSize += sizeof(ObjC2ClassOrCategoryListSection<A>);
-					machOSects[count++].type = typeObjC2List;
-				}
-				else if ( (strcmp(sect->segname(), "__DATA") == 0) && (strncmp(sect->sectname(), "__objc_nlcatlist", 16) == 0) ) {
-					totalSectionsSize += sizeof(ObjC2ClassOrCategoryListSection<A>);
-					machOSects[count++].type = typeObjC2List;
-				}
-				else if ( (strcmp(sect->segname(), "__DATA") == 0) && (strncmp(sect->sectname(), "__objc_classlist", 16) == 0) ) {
-					totalSectionsSize += sizeof(ObjC2ClassOrCategoryListSection<A>);
-					machOSects[count++].type = typeObjC2List;
-				}
-				else if ( (strcmp(sect->segname(), "__DATA") == 0) && (strncmp(sect->sectname(), "__objc_nlclslist", 16) == 0) ) {
-					totalSectionsSize += sizeof(ObjC2ClassOrCategoryListSection<A>);
-					machOSects[count++].type = typeObjC2List;
-				}
-				else if ( _AppleObjc && (strcmp(sect->segname(), "__OBJC") == 0) && (strcmp(sect->sectname(), "__class") == 0) ) {
-					totalSectionsSize += sizeof(ObjC1ClassSection<A>);
-					machOSects[count++].type = sectionTypeObjC1Classes;
-				}
-#if 0
-				// Re-enable this once the compiler is ready to not emit __mod_term_func sections.
-				else if ( strcmp(sect->segname(), "__DATA") == 0 && strncmp(sect->sectname(), "__mod_term_func", 15) == 0 ) {
-					if ( _file->_cpuSubType == CPU_SUBTYPE_ARM64E ) {
-						// Make this a hard error when the compiler is ready for it.
-						warning("unexpected __mod_term_func section in arm64e file: %s", _file->leafName());
+		uint8_t machoSectType = sect->flags() & SECTION_TYPE;
+		bool isText = (strcmp(sect->segname(), "__TEXT") == 0) && (strcmp(sect->sectname(), "__text") == 0);
+		if ( isText ) {
+			if ( machoSectType != S_REGULAR )
+				throw "__TEXT/__text has wrong section type";
+			totalSectionsSize += sizeof(SymboledSection<A>);
+			machOSects[count++].type = sectionTypeSymboled;
+		}
+		else {
+			switch ( machoSectType ) {
+				case S_SYMBOL_STUBS:
+					if ( _stubsSectionNum == 0 ) {
+						_stubsSectionNum = i+1;
+						_stubsMachOSection = sect;
 					}
-				}
-#endif
-				else {
-					totalSectionsSize += sizeof(SymboledSection<A>);
-					machOSects[count++].type = sectionTypeSymboled;
-				}
-				break;
-			case S_THREAD_LOCAL_VARIABLES:
-				totalSectionsSize += sizeof(TLVDefsSection<A>);
-				machOSects[count++].type = sectionTypeTLVDefs;
-				break;
-			default:
-				throwf("unknown section type %d", sect->flags() & SECTION_TYPE);
+					else
+						assert(1 && "multiple S_SYMBOL_STUBS sections");
+				case S_LAZY_SYMBOL_POINTERS:
+					break;
+				case S_4BYTE_LITERALS:
+					totalSectionsSize += sizeof(Literal4Section<A>);
+					machOSects[count++].type = sectionTypeLiteral4;
+					break;
+				case S_8BYTE_LITERALS:
+					totalSectionsSize += sizeof(Literal8Section<A>);
+					machOSects[count++].type = sectionTypeLiteral8;
+					break;
+				case S_16BYTE_LITERALS:
+					totalSectionsSize += sizeof(Literal16Section<A>);
+					machOSects[count++].type = sectionTypeLiteral16;
+					break;
+				case S_NON_LAZY_SYMBOL_POINTERS:
+					totalSectionsSize += sizeof(NonLazyPointerSection<A>);
+					machOSects[count++].type = sectionTypeNonLazy;
+					break;
+				case S_THREAD_LOCAL_VARIABLE_POINTERS:
+					totalSectionsSize += sizeof(TLVPointerSection<A>);
+					machOSects[count++].type = sectionTypeTLVPointers;
+					break;
+				case S_LITERAL_POINTERS:
+					if ( (strcmp(sect->segname(), "__OBJC") == 0) && (strcmp(sect->sectname(), "__cls_refs") == 0) ) {
+						totalSectionsSize += sizeof(Objc1ClassReferences<A>);
+						machOSects[count++].type = sectionTypeObjC1ClassRefs;
+					}
+					else {
+						totalSectionsSize += sizeof(PointerToCStringSection<A>);
+						machOSects[count++].type = sectionTypeCStringPointer;
+					}
+					break;
+				case S_CSTRING_LITERALS:
+					totalSectionsSize += sizeof(CStringSection<A>);
+					machOSects[count++].type = sectionTypeCString;
+					break;
+				case S_MOD_INIT_FUNC_POINTERS:
+				case S_MOD_TERM_FUNC_POINTERS:
+				case S_THREAD_LOCAL_INIT_FUNCTION_POINTERS:
+				case S_INTERPOSING:
+				case S_ZEROFILL:
+				case S_REGULAR:
+				case S_COALESCED:
+				case S_THREAD_LOCAL_REGULAR:
+				case S_THREAD_LOCAL_ZEROFILL:
+					if ( (strcmp(sect->segname(), "__TEXT") == 0) && (strcmp(sect->sectname(), "__eh_frame") == 0) ) {
+						totalSectionsSize += sizeof(CFISection<A>);
+						machOSects[count++].type = sectionTypeCFI;
+					}
+					else if ( (strcmp(sect->segname(), "__DATA") == 0) && (strcmp(sect->sectname(), "__cfstring") == 0) ) {
+						totalSectionsSize += sizeof(CFStringSection<A>);
+						machOSects[count++].type = sectionTypeCFString;
+					}
+					else if ( (strcmp(sect->segname(), "__TEXT") == 0) && (strcmp(sect->sectname(), "__ustring") == 0) ) {
+						totalSectionsSize += sizeof(UTF16StringSection<A>);
+						machOSects[count++].type = sectionTypeUTF16Strings;
+					}
+					else if ( (strcmp(sect->segname(), "__DATA") == 0) && (strncmp(sect->sectname(), "__objc_classrefs", 16) == 0) ) {
+						totalSectionsSize += sizeof(ObjC2ClassRefsSection<A>);
+						machOSects[count++].type = sectionTypeObjC2ClassRefs;
+					}
+					else if ( (strcmp(sect->segname(), "__DATA") == 0) && (strcmp(sect->sectname(), "__objc_catlist") == 0) ) {
+						totalSectionsSize += sizeof(ObjC2ClassOrCategoryListSection<A>);
+						machOSects[count++].type = typeObjC2List;
+					}
+					else if ( (strcmp(sect->segname(), "__DATA") == 0) && (strncmp(sect->sectname(), "__objc_nlcatlist", 16) == 0) ) {
+						totalSectionsSize += sizeof(ObjC2ClassOrCategoryListSection<A>);
+						machOSects[count++].type = typeObjC2List;
+					}
+					else if ( (strcmp(sect->segname(), "__DATA") == 0) && (strncmp(sect->sectname(), "__objc_classlist", 16) == 0) ) {
+						totalSectionsSize += sizeof(ObjC2ClassOrCategoryListSection<A>);
+						machOSects[count++].type = typeObjC2List;
+					}
+					else if ( (strcmp(sect->segname(), "__DATA") == 0) && (strncmp(sect->sectname(), "__objc_nlclslist", 16) == 0) ) {
+						totalSectionsSize += sizeof(ObjC2ClassOrCategoryListSection<A>);
+						machOSects[count++].type = typeObjC2List;
+					}
+					else if ( _AppleObjc && (strcmp(sect->segname(), "__OBJC") == 0) && (strcmp(sect->sectname(), "__class") == 0) ) {
+						totalSectionsSize += sizeof(ObjC1ClassSection<A>);
+						machOSects[count++].type = sectionTypeObjC1Classes;
+					}
+	#if 0
+					// Re-enable this once the compiler is ready to not emit __mod_term_func sections.
+					else if ( strcmp(sect->segname(), "__DATA") == 0 && strncmp(sect->sectname(), "__mod_term_func", 15) == 0 ) {
+						if ( _file->_cpuSubType == CPU_SUBTYPE_ARM64E ) {
+							// Make this a hard error when the compiler is ready for it.
+							warning("unexpected __mod_term_func section in arm64e file: %s", _file->leafName());
+						}
+					}
+	#endif
+					else {
+						totalSectionsSize += sizeof(SymboledSection<A>);
+						machOSects[count++].type = sectionTypeSymboled;
+					}
+					break;
+				case S_THREAD_LOCAL_VARIABLES:
+					totalSectionsSize += sizeof(TLVDefsSection<A>);
+					machOSects[count++].type = sectionTypeTLVDefs;
+					break;
+				default:
+					throwf("unknown section type %d", sect->flags() & SECTION_TYPE);
+			}
 		}
 	}
 
@@ -3449,6 +3488,8 @@ const macho_nlist<typename A::P>& Parser<A>::symbolFromIndex(uint32_t index)
 {
 	if ( index > _symbolCount )
 		throw "symbol index out of range";
+	if ( _symbols == NULL )
+		throw "no symbol table";
 	return _symbols[index];
 }
 
@@ -4179,6 +4220,7 @@ void Parser<A>::parseStabs()
 							break;
 						default:
 							warning("unknown stabs type 0x%X in %s", type, _path);
+							useStab = false;
 					}
 					break;
 				case inBeginEnd:
@@ -4766,6 +4808,8 @@ void CFISection<x86_64>::cfiParse(class Parser<x86_64>& parser, uint8_t* buffer,
 									libunwind::CFI_Atom_Info<CFISection<x86_64>::OAS> cfiArray[],
 									uint32_t& count, const pint_t cuStarts[], uint32_t cuCount)
 {
+	if ( this->_machOSection->reloff() + (this->_machOSection->nreloc() * sizeof(macho_relocation_info<P>)) > parser.fileLength() )
+		throwf("relocations for section %s/%s extends beyond end of file,", this->_machOSection->segname(), makeSectionName(this->_machOSection) );
 	const uint32_t sectionSize = this->_machOSection->size();
 	// copy __eh_frame data to buffer
 	memcpy(buffer, file().fileContent() + this->_machOSection->offset(), sectionSize);

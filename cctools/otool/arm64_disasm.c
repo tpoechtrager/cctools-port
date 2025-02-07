@@ -247,6 +247,7 @@ enum bool *cfstring)
     struct section s;
     char *p;
     uint64_t big_load_end;
+    const char* addr_end;
 
 	*classref = FALSE;
 	*selref = FALSE;
@@ -257,7 +258,12 @@ enum bool *cfstring)
 
 	lc = load_commands;
 	big_load_end = 0;
+    addr_end = object_addr + object_size;
 	for(i = 0 ; i < ncmds; i++){
+        if((char *)lc + sizeof(struct load_command) > addr_end){
+          fprintf(stderr, "load command beyond the end of the file\n");
+          return(0);
+        }
 	    memcpy((char *)&l, (char *)lc, sizeof(struct load_command));
 	    if(swapped)
 		swap_load_command(&l, host_byte_sex);
@@ -268,12 +274,21 @@ enum bool *cfstring)
 		return(0);
 	    switch(l.cmd){
 	    case LC_SEGMENT_64:
+        if((char *)lc + sizeof(struct segment_command_64) > addr_end){
+          fprintf(stderr, "segment header extends beyond the end of the file\n");
+          return(0);
+        }
 		memcpy((char *)&sg64, (char *)lc,
 		       sizeof(struct segment_command_64));
 		if(swapped)
 		    swap_segment_command_64(&sg64, host_byte_sex);
 		p = (char *)lc + sizeof(struct segment_command_64);
 		for(j = 0 ; j < sg64.nsects ; j++){
+            if(p + sizeof(struct section_64) > addr_end){
+              fprintf(stderr, "section header in (%s) extends beyond"
+                      "the end of the file\n", sg64.segname);
+              return(0);
+            }
 		    memcpy((char *)&s64, p, sizeof(struct section_64));
 		    p += sizeof(struct section_64);
 		    if(swapped)
@@ -413,13 +428,19 @@ const uint64_t object_size)
     char *p;
     uint64_t big_load_end;
     const char *name;
+    const char* addr_end;
 
 	host_byte_sex = get_host_byte_sex();
 	swapped = host_byte_sex != load_commands_byte_sex;
 
 	lc = load_commands;
 	big_load_end = 0;
+    addr_end = object_addr + object_size;
 	for(i = 0 ; i < ncmds; i++){
+        if((char *)lc + sizeof(struct load_command) > addr_end){
+          fprintf(stderr, "load command extends beyond the end of the file\n");
+          return(0);
+        }
 	    memcpy((char *)&l, (char *)lc, sizeof(struct load_command));
 	    if(swapped)
 		swap_load_command(&l, host_byte_sex);
@@ -430,12 +451,21 @@ const uint64_t object_size)
 		return(NULL);
 	    switch(l.cmd){
 	    case LC_SEGMENT_64:
+        if((char *)lc + sizeof(struct segment_command_64) > addr_end){
+          fprintf(stderr, "segment header extends beyond the end of the file\n");
+          return(0);
+        }
 		memcpy((char *)&sg64, (char *)lc,
 		       sizeof(struct segment_command_64));
 		if(swapped)
 		    swap_segment_command_64(&sg64, host_byte_sex);
 		p = (char *)lc + sizeof(struct segment_command_64);
 		for(j = 0 ; j < sg64.nsects ; j++){
+            if(p + sizeof(struct section_64) > addr_end){
+              fprintf(stderr, "section header in (%s) extends beyond"
+                      "the end of the file\n", sg64.segname);
+              return(NULL);
+            }
 		    memcpy((char *)&s64, p, sizeof(struct section_64));
 		    p += sizeof(struct section_64);
 		    if(swapped)

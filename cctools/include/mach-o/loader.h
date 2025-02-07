@@ -1274,13 +1274,16 @@ struct build_tool_version {
 #define PLATFORM_WATCHOSSIMULATOR 9
 #define PLATFORM_DRIVERKIT 10
 
-#ifndef __APPLE_BLEACH_SDK__
-#endif /* __APPLE_BLEACH_SDK__ */
+
+#define PLATFORM_FIRMWARE 13
+#define PLATFORM_SEPOS 14
+
 
 /* Known values for the tool field above. */
 #define TOOL_CLANG 1
 #define TOOL_SWIFT 2
 #define TOOL_LD	3
+#define TOOL_LLD 4
 
 /*
  * The dyld_info_command contains the file offsets and sizes of 

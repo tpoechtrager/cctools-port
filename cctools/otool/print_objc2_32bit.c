@@ -1220,7 +1220,7 @@ struct info *info)
 
     indent_push(&info->indent, sizeof("list[99]") - 1);
 
-    print_field_scalar(&info->indent, "count", "%llu\n", pl.count);
+    print_field_scalar(&info->indent, "count", "%u\n", pl.count);
 
     p += sizeof(struct protocol_list_t);
     offset += sizeof(struct protocol_list_t);

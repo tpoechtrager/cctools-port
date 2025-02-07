@@ -1052,7 +1052,7 @@ void MachOChecker<A>::verifyNoDylibMain()
 	for(const macho_nlist<P>* p = exportedStart; p < exportedEnd; ++p, ++i) {
 		const char* symName = &fStrings[p->n_strx()];
 		if ( strcmp(symName, "_main") == 0 ) {
-			printf("os_dylib_exports_main\twarn\tdylibs should export '_main' symbol in arch %s\n", archName());
+			printf("os_dylib_exports_main\twarn\tdylibs should not export '_main' symbol in arch %s\n", archName());
 			return;
 		}
 	}

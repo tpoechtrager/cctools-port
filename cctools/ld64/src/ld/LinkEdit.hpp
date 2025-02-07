@@ -2256,10 +2256,7 @@ void CodeSignatureAtom::encode() const
 		case ld::Platform::watchOS_simulator:
 		case ld::Platform::driverKit:
 		case ld::Platform::watchOS:
-#if TARGET_FEATURE_REALITYOS
-		case ld::Platform::realityOS:
-		case ld::Platform::reality_simulator:
-#endif
+		case ld::Platform::sepOS:
 			sig_platform = platform;
 			sig_min_version = minVersion;
 			break;
@@ -2275,9 +2272,10 @@ void CodeSignatureAtom::encode() const
 	if ( libcd_set_hash_types_for_platform_version(_sigRef, (int)sig_platform, (int)sig_min_version) != LIBCD_SET_HASH_TYPE_SUCCESS )
 		throw "can't determine codesign hash for output platform";
 
-	// set identifier
-	const char* lastSlash = strrchr(_opts.outputFilePath(), '/');
-	const char* leafName = (lastSlash != nullptr) ? lastSlash+1 : _opts.outputFilePath();
+	// set identifier (use installPath() because it returns a stable name)
+	const char* path      = _opts.installPath();
+	const char* lastSlash = strrchr(path, '/');
+	const char* leafName  = (lastSlash != nullptr) ? lastSlash+1 : path;
 	libcd_set_signing_id(_sigRef, leafName);
 
 	// add flags

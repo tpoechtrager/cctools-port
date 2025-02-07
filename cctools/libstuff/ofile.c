@@ -1799,13 +1799,19 @@ cleanup:
  * pointer alive as long as they wish.
  */
 static
-void
+enum bool
 member_addr_set(
 struct ofile *ofile,
 char* addr)
 {
     uint64_t offset = ofile->member_offset;
     uint32_t size = ofile->member_size;
+
+    if (addr+offset+size > ofile->file_addr+ofile->file_size){
+      error("address 0x%llx extends beyond the end of the object file %s",
+            (uint64_t)addr+offset+size, ofile->file_name);
+      return(FALSE);
+    }
 
     if (ofile->member_buffer) {
 	free(ofile->member_buffer);
@@ -1820,6 +1826,7 @@ char* addr)
     else {
 	ofile->member_addr = addr + offset;
     }
+    return(TRUE);
 }
 
 /*
@@ -1925,6 +1932,11 @@ struct ofile *ofile)
 
 	/* now we know there is a first member so set it up */
 	ar_hdr = (struct ar_hdr *)(addr + offset);
+	if ((char*)ar_hdr > ofile->file_addr + ofile->file_size){
+	    archive_error(ofile, "truncated or malformed (archive header of "
+			  "member extends past the end of the file)");
+	    return(FALSE);
+	}
 	offset += sizeof(struct ar_hdr);
 	ofile->member_offset = offset;
 	ofile->member_size = (uint32_t)strtoul(ar_hdr->ar_size, NULL, 10);
@@ -1954,7 +1966,8 @@ struct ofile *ofile)
 	    ofile->member_name_size = size_ar_name(ar_hdr);
 	    ar_name_size = 0;
 	}
-	member_addr_set(ofile, addr);
+	if(member_addr_set(ofile, addr) == FALSE)
+	  goto fatcleanup;
 
 	/* Clear these in case there is no table of contents */
 	ofile->toc_addr = NULL;
@@ -2231,6 +2244,11 @@ struct ofile *ofile)
 
 	/* now we know there is a next member so set it up */
 	ar_hdr = (struct ar_hdr *)(addr + offset);
+	if ((char*)ar_hdr > ofile->file_addr + ofile->file_size){
+	    archive_error(ofile, "truncated or malformed (archive header of "
+			    "member extends past the end of the file)");
+	    return(FALSE);
+	}
 	offset += sizeof(struct ar_hdr);
 	ofile->member_offset = offset;
 	ofile->member_size = (uint32_t)strtoul(ar_hdr->ar_size, NULL, 10);
@@ -2282,7 +2300,8 @@ struct ofile *ofile)
 	    ofile->member_name_size = size_ar_name(ar_hdr);
 	    ar_name_size = 0;
 	}
-	member_addr_set(ofile, addr);
+	if(member_addr_set(ofile, addr) == FALSE)
+	  goto cleanup;
 
 	ofile->member_type = OFILE_UNKNOWN;
 	ofile->object_addr = NULL;
@@ -2604,7 +2623,8 @@ struct ofile *ofile)
 		    (uint32_t)strtoul(ar_hdr->ar_size, NULL, 10) - ar_name_size;
 		ofile->member_ar_hdr = ar_hdr;
 		ofile->member_type = OFILE_UNKNOWN;
-		member_addr_set(ofile, addr);
+		if(member_addr_set(ofile, addr) == FALSE)
+		  goto fatcleanup;
 
 		host_byte_sex = get_host_byte_sex();
 
@@ -3485,6 +3505,11 @@ enum bool archives_with_fat_objects)
 	ofile->member_addr = NULL;
 	while(size > offset){
 	    ar_hdr = (struct ar_hdr *)(addr + offset);
+	    if ((char*)ar_hdr > ofile->file_addr + ofile->file_size){
+                archive_error(ofile, "truncated or malformed (archive header of "
+                              "member extends past the end of the file)");
+                return(CHECK_BAD);
+	    }
 	    ofile->member_offset = offset;
 	    ofile->member_size = (uint32_t)strtoul(ar_hdr->ar_size, NULL, 10);
 	    ofile->member_ar_hdr = ar_hdr;

@@ -285,10 +285,10 @@
 
 #if ((__MACH_O_FIXUP_CHAINS__ - 0) < 2)
 // new fixup-chains.h content for version 2
-enum {
-    DYLD_CHAINED_PTR_64_OFFSET      = 6,
-    DYLD_CHAINED_PTR_ARM64E_OFFSET  = 7,
-};
+// enum {
+//     DYLD_CHAINED_PTR_64_OFFSET      = 6,
+//     DYLD_CHAINED_PTR_ARM64E_OFFSET  = 7,
+// };
 #endif
 
 #if ((__MACH_O_FIXUP_CHAINS__ - 0) < 3)
@@ -300,41 +300,41 @@ enum {
 
 #if ((__MACH_O_FIXUP_CHAINS__ - 0) < 4)
 // new fixup-chains.h content for version 4
-enum {
-    DYLD_CHAINED_PTR_ARM64E_KERNEL  	= DYLD_CHAINED_PTR_ARM64E_OFFSET,
-    DYLD_CHAINED_PTR_ARM64E_USERLAND    =  9,    // stride 8, unauth target is vm offset
-    DYLD_CHAINED_PTR_ARM64E_FIRMWARE    = 10,    // stride 4, unauth target is vmaddr
-};
+// enum {
+//     DYLD_CHAINED_PTR_ARM64E_KERNEL  	= DYLD_CHAINED_PTR_ARM64E_OFFSET,
+//     DYLD_CHAINED_PTR_ARM64E_USERLAND    =  9,    // stride 8, unauth target is vm offset
+//     DYLD_CHAINED_PTR_ARM64E_FIRMWARE    = 10,    // stride 4, unauth target is vmaddr
+// };
 #endif
 
 #if ((__MACH_O_FIXUP_CHAINS__ - 0) < 6)
 // new fixup-chains.h content for version 6
-enum {
-    DYLD_CHAINED_PTR_ARM64E_USERLAND24  = 12,    // stride 8, unauth target is vm offset, 24-bit bind
-};
+// enum {
+//     DYLD_CHAINED_PTR_ARM64E_USERLAND24  = 12,    // stride 8, unauth target is vm offset, 24-bit bind
+// };
 // DYLD_CHAINED_PTR_ARM64E_USERLAND24
-struct dyld_chained_ptr_arm64e_bind24
-{
-    uint64_t    ordinal   : 24,
-                zero      :  8,
-                addend    : 19,    // +/-256K
-                next      : 11,    // 8-byte stide
-                bind      :  1,    // == 1
-                auth      :  1;    // == 0
-};
+// struct dyld_chained_ptr_arm64e_bind24
+// {
+//     uint64_t    ordinal   : 24,
+//                 zero      :  8,
+//                 addend    : 19,    // +/-256K
+//                 next      : 11,    // 8-byte stide
+//                 bind      :  1,    // == 1
+//                 auth      :  1;    // == 0
+// };
 
 // DYLD_CHAINED_PTR_ARM64E_USERLAND24
-struct dyld_chained_ptr_arm64e_auth_bind24
-{
-    uint64_t    ordinal   : 24,
-                zero      :  8,
-                diversity : 16,
-                addrDiv   :  1,
-                key       :  2,
-                next      : 11,    // 8-byte stide
-                bind      :  1,    // == 1
-                auth      :  1;    // == 1
-};
+// struct dyld_chained_ptr_arm64e_auth_bind24
+// {
+//     uint64_t    ordinal   : 24,
+//                 zero      :  8,
+//                 diversity : 16,
+//                 addrDiv   :  1,
+//                 key       :  2,
+//                 next      : 11,    // 8-byte stide
+//                 bind      :  1,    // == 1
+//                 auth      :  1;    // == 1
+// };
 
 
 #endif

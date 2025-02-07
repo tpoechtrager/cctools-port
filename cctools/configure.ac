@@ -1,4 +1,4 @@
-AC_INIT([cctools], [986], [t.poechtrager@gmail.com])
+AC_INIT([cctools], [994.1], [t.poechtrager@gmail.com])
 
 AC_CANONICAL_BUILD
 AC_CANONICAL_HOST
@@ -74,7 +74,7 @@ case "$CCVERSION" in
   ;;
 esac
 
-EXTRAFLAGS="$EXTRAFLAGS -DLD64_VERSION_NUM=711"
+EXTRAFLAGS="$EXTRAFLAGS -DLD64_VERSION_NUM=762"
 
 case "$CXXVERSION" in
   *clang* )

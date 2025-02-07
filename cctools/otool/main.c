@@ -1510,6 +1510,11 @@ void *cookie) /* cookie is not used */
 	    if(symbols != NULL){
 		if((uintptr_t)symbols % sizeof(uint32_t) ||
 		   ofile->object_byte_sex != get_host_byte_sex()){
+           if ((char*)(symbols + (nsymbols * sizeof(struct nlist)))
+					   > ofile->file_addr + ofile->file_size){
+               printf("symbol table extends beyond the end of the file\n");
+			   return;
+           }
 		    allocated_symbols =
 			allocate(nsymbols * sizeof(struct nlist));
 		    memcpy(allocated_symbols, symbols,
@@ -1647,11 +1652,20 @@ void *cookie) /* cookie is not used */
 	}
 
 	if(Mflag){
-	    if(mods != NULL)
-		print_module_table(mods, nmods, strings, strings_size, vflag);
-	    else
-		print_module_table_64(mods64, nmods, strings, strings_size,
-				      vflag);
+        if(mods != NULL){
+            if ((char*)(mods + nmods) > ofile->file_addr + ofile->file_size){
+                printf("modules extends beyond the end of the file\n");
+                return;
+            }
+            print_module_table(mods, nmods, strings, strings_size, vflag);
+        }
+        else{
+            if ((char*)(mods64 + nmods) > ofile->file_addr + ofile->file_size){
+                printf("modules extends beyond the end of the file\n");
+                return;
+            }
+            print_module_table_64(mods64, nmods, strings, strings_size, vflag);
+        }
 	}
 
 	if(Rflag){
@@ -1726,11 +1740,17 @@ void *cookie) /* cookie is not used */
 	    if(Gflag)
 		print_dices(dices, ndices, vflag);
 	}
-	if(Iflag)
+	if(Iflag){
+	    if ((char*)(indirect_symbols + nindirect_symbols) >
+            ofile->file_addr + ofile->file_size) {
+            printf("indirect symbols extends beyond the end of the file\n");
+            return;
+	    }
 	    print_indirect_symbols(ofile->load_commands, mh_ncmds,mh_sizeofcmds,
 		mh_cputype, ofile->object_byte_sex, indirect_symbols,
 		nindirect_symbols, symbols, symbols64, nsymbols, strings,
 		strings_size, vflag);
+	}
 
 	if(rflag)
 	    print_reloc(ofile->load_commands, mh_ncmds, mh_sizeofcmds,
@@ -1844,6 +1864,10 @@ void *cookie) /* cookie is not used */
 			printf("Contents of (%.16s,%.16s) section\n", segname,
 			       sectname);
 		}
+		if (sect + sect_size > ofile->file_addr + ofile->file_size){
+		  printf("(%s,%s) extends beyond the end of the file\n",  SEG_TEXT, SECT_TEXT);
+		  return;
+		}
 		if(Uflag)
 		    print_text_by_symbols(mh_cputype, ofile->object_byte_sex,
 			sect, sect_size, sect_addr, sect_flags, sorted_symbols,
@@ -1907,9 +1931,14 @@ void *cookie) /* cookie is not used */
 
 		if(Xflag == FALSE)
 		    printf("(%s,%s) section\n", SEG_DATA, SECT_DATA);
-		if(sect != NULL)
-		    print_sect(mh_cputype, ofile->object_byte_sex, sect,
-			sect_size, sect_addr, Vflag);
+		if(sect != NULL) {
+		  if (sect + sect_size > ofile->file_addr + ofile->file_size){
+			printf("(%s,%s) extends beyond the end of the file\n", SEG_DATA, SECT_DATA);
+			return;
+		  }
+		  print_sect(mh_cputype, ofile->object_byte_sex, sect,
+		  sect_size, sect_addr, Vflag);
+		}
 	    }
 	}
 

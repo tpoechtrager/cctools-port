@@ -215,8 +215,9 @@ Options::Options(int argc, const char* argv[])
 	  fMarkDeadStrippableDylib(false),
 	  fMakeCompressedDyldInfo(true), fMakeCompressedDyldInfoForceOff(false),
 	  fMakeThreadedStartsSection(false), fNoEHLabels(false),
-	  fAllowCpuSubtypeMismatches(false), fAllowCpuSubtypeMismatchesForceOn(false), fEnforceDylibSubtypesMatch(false),
-	  fWarnOnSwiftABIVersionMismatches(false), fUseSimplifiedDylibReExports(false),
+	  fAllowCpuSubtypeMismatches(false), fEnforceDylibSubtypesMatch(false),
+	  fAllowCpuSubtypeMismatchesForceOn(false), fAllowCpuSubtypeMismatchesForceOff(false),
+	  fWarnOnSwiftABIVersionMismatches(false), fWarnOnClassROSigningMismatches(false), fUseSimplifiedDylibReExports(false),
 	  fObjCABIVersion2Override(false), fObjCABIVersion1Override(false), fCanUseUpwardDylib(false),
 	  fFullyLoadArchives(false), fLoadAllObjcObjectsFromArchives(false), fFlatNamespace(false),
 	  fLinkingMainExecutable(false), fForFinalLinkedImage(false), fForStatic(false),
@@ -320,7 +321,7 @@ bool Options::printWhyLive(const char* symbolName) const
 }
 
 
-const char*	Options::dotOutputFile()
+const char*	Options::dotOutputFile() const
 {
 	return fDotOutputFile;
 }
@@ -1144,7 +1145,9 @@ Options::FileInfo Options::findFile(const std::string &path, const ld::dylib::Fi
 	FileInfo result;
 
 	// if absolute path and not a .o file, then use SDK prefix
-	if ( (path[0] == '/') && (strcmp(&path[path.size()-2], ".o") != 0) ) {
+	bool pathIsObjectFile    = (strcmp(&path[path.size()-2], ".o") == 0);
+	bool pathIsStaticLibrary = (strcmp(&path[path.size()-2], ".a") == 0);
+	if ( (path[0] == '/') && !pathIsObjectFile ) {
 		for (const auto* sdkPathDir : fSDKPaths) {
 			auto possiblePath = std::string(sdkPathDir) + path;
 			if ( findFile(possiblePath, {".tbd"}, result) )
@@ -1199,8 +1202,15 @@ Options::FileInfo Options::findFile(const std::string &path, const ld::dylib::Fi
 #endif /* TAPI_SUPPORT */
 
 	// try raw path
-	if ( findFile(path, {".tbd"}, result) )
-		return result;
+	if ( pathIsObjectFile || pathIsStaticLibrary ) {
+		// don't look for .tbd files for .o or .a files
+		if ( findFile(path, { }, result) )
+			return result;
+	}
+	else {
+		if ( findFile(path, {".tbd"}, result) )
+			return result;
+	}
 
 	// not found
 	throwf("file not found: %s", path.c_str());
@@ -3811,7 +3821,6 @@ void Options::parse(int argc, const char* argv[])
 			}
 			else if ( strcmp(arg, "-allow_sub_type_mismatches") == 0 ) {
 				fAllowCpuSubtypeMismatchesForceOn = true;
-				fAllowCpuSubtypeMismatches = true;
 				cannotBeUsedWithBitcode(arg);
 			}
 			else if ( strcmp(arg, "-no_zero_fill_sections") == 0 ) {
@@ -4284,6 +4293,10 @@ void Options::parse(int argc, const char* argv[])
 					fOSOPrefixPath = path;
 				}
 			}
+            else if (strcmp(arg, "-objc_class_ro_signing_mismatch") == 0) {
+                const char* setting = checkForNullArgument(arg, argv[++i]);
+                fWarnOnClassROSigningMismatches = !strcasecmp(setting, "warn");
+            }
 			// put this last so that it does not interfer with other options starting with 'i'
 			else if ( strncmp(arg, "-i", 2) == 0 ) {
 				const char* colon = strchr(arg, ':');
@@ -4718,22 +4731,19 @@ void Options::parsePreCommandLineEnvironmentSettings()
 	}
 	
 	if (getenv("LD_ALLOW_CPU_SUBTYPE_MISMATCHES") != NULL)
-		fAllowCpuSubtypeMismatches = true;
+		fAllowCpuSubtypeMismatchesForceOn = true;
 	
-	if (getenv("LD_DYLIB_CPU_SUBTYPES_MUST_MATCH") != NULL) {
-		// <rdar://problem/70820120> If -allow_sub_type_mismatches is specified on
-		// the command line, that has priority.
-		if ( fAllowCpuSubtypeMismatchesForceOn ) {
-			warning("-allow_sub_type_mismatches overrides LD_DYLIB_CPU_SUBTYPES_MUST_MATCH");
-		}
-		else {
-			fEnforceDylibSubtypesMatch = true;
-		}
-	}
+	if (getenv("LD_DYLIB_CPU_SUBTYPES_MUST_MATCH") != NULL)
+		fAllowCpuSubtypeMismatchesForceOff = true;
 
 	if (getenv("LD_WARN_ON_SWIFT_ABI_VERSION_MISMATCHES") != NULL)
 		fWarnOnSwiftABIVersionMismatches = true;
-	
+
+	const char* classRoMismatch = getenv("LD_OBJC_CLASS_RO_SIGNING_MISMATCH");
+	if (!classRoMismatch)
+		classRoMismatch = "warn";
+	fWarnOnClassROSigningMismatches = !strcasecmp(classRoMismatch, "warn");
+
 	sWarningsSideFilePath = getenv("LD_WARN_FILE");
 	
 	const char* customDyldPath = getenv("LD_DYLD_PATH");
@@ -5210,10 +5220,6 @@ void Options::reconfigureDefaults()
 		addSectionRename("__TEXT", "__stubs",				"__TEXT_EXEC", "__stubs");
 		addSectionRename("__TEXT", "__auth_stubs",			"__TEXT_EXEC", "__auth_stubs");
 	}
-	// <rdar://problem/49907181> automatically move thread local data to __DATA_DIRTY if dirty data is in use
-	if ( fSharedRegionEncodingV2 && !fSymbolsMovesData.empty() ) {
-		addSectionRename("__DATA", "__thread_vars",	        "__DATA_DIRTY", "__thread_vars");
-	}
 
 	// <rdar://problem/5366363> -r -x implies -S
 	if ( (fOutputKind == Options::kObjectFile) && (fLocalSymbolHandling == kLocalSymbolsNone) )
@@ -5293,11 +5299,16 @@ void Options::reconfigureDefaults()
 				fEncryptable = false;
 			break;
 	}
-	if ( !platforms().contains(ld::Platform::iOS) && !platforms().contains(ld::Platform::tvOS) && !platforms().contains(ld::Platform::watchOS)
-#if TARGET_FEATURE_REALITYOS
-		&& !platforms().contains(ld::Platform::realityOS)
-#endif
-		)
+	ld::PlatformSet encryptablePlatforms ( {
+			ld::Platform::iOS,
+			ld::Platform::tvOS,
+			ld::Platform::watchOS,
+			ld::Platform::sepOS,
+	} );
+	bool noEncryptablePlatforms = std::none_of(encryptablePlatforms.begin(), encryptablePlatforms.end(), [this](ld::Platform p) {
+		return platforms().contains(p);
+	} );
+	if ( noEncryptablePlatforms )
 		fEncryptable = false;
 	if ( fEncryptableForceOn )
 		fEncryptable = true;
@@ -5347,6 +5358,19 @@ void Options::reconfigureDefaults()
 #endif
 			fEnforceDylibSubtypesMatch = false;
 			break;
+	}
+
+	if ( fAllowCpuSubtypeMismatchesForceOn ) {
+		if ( fAllowCpuSubtypeMismatchesForceOff ) {
+			// <rdar://problem/70820120> If -allow_sub_type_mismatches is specified on
+			// the command line, that has priority.
+			warning("-allow_sub_type_mismatches overrides LD_DYLIB_CPU_SUBTYPES_MUST_MATCH");
+		}
+		fAllowCpuSubtypeMismatches = true;
+	}
+	else if ( fAllowCpuSubtypeMismatchesForceOff ) {
+		fAllowCpuSubtypeMismatches = false;
+		fEnforceDylibSubtypesMatch = true;
 	}
 		
 		
@@ -5472,7 +5496,8 @@ void Options::reconfigureDefaults()
 		fMakeChainedFixups = false;
 	}
 	// <rdar://problem/49851380> adopt chained fixups for all architectures
-	else if ( platforms().minOS(ld::version2021Fall) ) {
+	// <rdar://problem/85572905> (Backdeploy chained fixups to 13.4)
+	else if ( platforms().minOS(ld::supportsChainedFixups) ) {
 
 		// By default, enable everywhere.
 		fMakeChainedFixups = true;
@@ -5501,8 +5526,11 @@ void Options::reconfigureDefaults()
 		}
 
 		// main executables might be tools and might need to run on older builders.
-		if ( (fOutputKind == Options::kDynamicExecutable) && (fArchitecture == CPU_TYPE_X86_64) ) {
-			fMakeChainedFixups = false;
+		// 2022 and beyond get chained fixups for x86_64 executables
+		if ( ! platforms().minOS(ld::version2022Fall) ) {
+			if ( (fOutputKind == Options::kDynamicExecutable) && (fArchitecture == CPU_TYPE_X86_64) && platforms().contains(ld::Platform::macOS) ) {
+				fMakeChainedFixups = false;
+			}
 		}
 
 		// <rdar://problem/70777415> Disable chained fixups for kext(s).
@@ -5512,10 +5540,18 @@ void Options::reconfigureDefaults()
 			}
 		}
 
-		// Disable for simulator-related code.
-		if ( (fOutputKind == Options::kDynamicLibrary) || (fOutputKind == Options::kDynamicBundle) ) {
-			if ( targetIOSSimulator() || fSimulatorSupportDylib ) {
+		// Disable for the simulator dylibs that have to backdeploy to old OSes for 2022 and beyond
+		if ( platforms().minOS(ld::version2022Fall) ) {
+			if ( fSimulatorSupportDylib ) {
 				fMakeChainedFixups = false;
+			}
+		}
+		// Disable for simulator-related code for 2021.
+		else {
+			if ( (fOutputKind == Options::kDynamicLibrary) || (fOutputKind == Options::kDynamicBundle) ) {
+				if ( targetIOSSimulator() || fSimulatorSupportDylib ) {
+					fMakeChainedFixups = false;
+				}
 			}
 		}
 	}
@@ -6055,10 +6091,7 @@ void Options::checkIllegalOptionCombinations()
 					case ld::Platform::tvOS_simulator:
 					case ld::Platform::freestanding:
 					case ld::Platform::driverKit:
-#if TARGET_FEATURE_REALITYOS
-					case ld::Platform::realityOS:
-					case ld::Platform::reality_simulator:
-#endif
+					case ld::Platform::sepOS:
 						if ( fOutputKind != kKextBundle )
 							warning("-undefined dynamic_lookup is deprecated on %s", nameFromPlatform(platform));
 						break;
@@ -6138,10 +6171,7 @@ void Options::checkIllegalOptionCombinations()
 				case ld::Platform::tvOS_simulator:
 				case ld::Platform::driverKit:
 				case ld::Platform::freestanding:
-#if TARGET_FEATURE_REALITYOS
-				case ld::Platform::realityOS:
-				case ld::Platform::reality_simulator:
-#endif
+				case ld::Platform::sepOS:
 					warning("-flat_namespace is deprecated on %s", nameFromPlatform(platform));
 					break;
 			}
@@ -6941,28 +6971,28 @@ void Options::writeDependencyInfo() const
 	});
 
 	// one time open() of -dependency_info file
-	int fd = open(this->dependencyInfoPath(), O_WRONLY | O_TRUNC | O_CREAT, 0666);
-	if ( fd == -1 )
+	FILE *file = fopen(this->dependencyInfoPath(), "w");
+	if ( file == nullptr )
 		throwf("Could not open or create -dependency_info file: %s", this->dependencyInfoPath());
 
 	// write header
 	uint8_t version = depLinkerVersion;
-	if ( write(fd, &version, 1) == -1 )
+	if ( fwrite(&version, 1, 1, file) != 1 )
 		throwf("write() to -dependency_info failed, errno=%d", errno);
 	extern const char ldVersionString[];
-	if ( write(fd, ldVersionString, strlen(ldVersionString)+1) == -1 )
+	if ( fwrite(ldVersionString, strlen(ldVersionString)+1, 1, file) != 1 )
 		throwf("write() to -dependency_info failed, errno=%d", errno);
 
 	// write each dependency
 	for (const auto& entry: fDependencies) {
 		//printf("%d %s\n", entry.opcode, entry.path.c_str());
-		if ( write(fd, &entry.opcode, 1) == -1 )
+		if ( fwrite(&entry.opcode, 1, 1, file) != 1 )
 			throwf("write() to -dependency_info failed, errno=%d", errno);
-		if ( write(fd, entry.path.c_str(), entry.path.size()+1) == -1 )
+		if ( fwrite(entry.path.c_str(), entry.path.size()+1, 1, file) != 1 )
 			throwf("write() to -dependency_info failed, errno=%d", errno);
 	}
 
-	::close(fd);
+	fclose(file);
 }
 
 

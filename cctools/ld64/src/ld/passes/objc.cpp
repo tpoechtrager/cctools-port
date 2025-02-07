@@ -54,8 +54,8 @@ struct objc_image_info  {
 #define OBJC_IMAGE_SUPPORTS_GC						(1<<1)
 #define OBJC_IMAGE_REQUIRES_GC						(1<<2)
 #define OBJC_IMAGE_OPTIMIZED_BY_DYLD				(1<<3)
-#define OBJC_IMAGE_SUPPORTS_COMPACTION				(1<<4)
-#define OBJC_IMAGE_IS_SIMULATED						(1<<5)
+#define OBJC_IMAGE_SIGNED_CLASS_RO					(1<<4)
+#define OBJC_IMAGE_IS_SIMULATED					(1<<5)
 #define OBJC_IMAGE_HAS_CATEGORY_CLASS_PROPERTIES	(1<<6)
 
 
@@ -66,7 +66,7 @@ struct objc_image_info  {
 template <typename A>
 class ObjCImageInfoAtom : public ld::Atom {
 public:
-											ObjCImageInfoAtom(bool abi2, bool hasCategoryClassProperties, uint8_t swiftVersion, uint16_t swiftLanguageVersion);
+    										ObjCImageInfoAtom(bool abi2, bool hasSignedClassROs, bool hasCategoryClassProperties, uint8_t swiftVersion, uint16_t swiftLanguageVersion);
 
 	virtual const ld::File*					file() const					{ return NULL; }
 	virtual const char*						name() const					{ return "objc image info"; }
@@ -89,13 +89,17 @@ template <typename A> ld::Section ObjCImageInfoAtom<A>::_s_sectionABI2("__DATA",
 
 
 template <typename A>
-ObjCImageInfoAtom<A>::ObjCImageInfoAtom(bool abi2, bool hasCategoryClassProperties, uint8_t swiftVersion, uint16_t swiftLanguageVersion)
+ObjCImageInfoAtom<A>::ObjCImageInfoAtom(bool abi2, bool hasSignedClassROs, bool hasCategoryClassProperties, uint8_t swiftVersion, uint16_t swiftLanguageVersion)
 	: ld::Atom(abi2 ? _s_sectionABI2 : _s_sectionABI1, ld::Atom::definitionRegular, ld::Atom::combineNever,
 							ld::Atom::scopeLinkageUnit, ld::Atom::typeUnclassified, 
 							symbolTableNotIn, false, false, false, ld::Atom::Alignment(2))
-{  
-	
+{
 	uint32_t value = 0;
+
+    if ( hasSignedClassROs ) {
+        value |= OBJC_IMAGE_SIGNED_CLASS_RO;
+    }
+
 	if ( hasCategoryClassProperties ) {
 		value |= OBJC_IMAGE_HAS_CATEGORY_CLASS_PROPERTIES;
 	}
@@ -1295,7 +1299,7 @@ struct AtomSorter
 				// atoms must sort before nonzero sized atoms
 				if ((left->size() == 0 && right->size() > 0) || (left->size() > 0 && right->size() == 0))
 					return left->size() < right->size();
-				return strcmp(left->name(), right->name());
+				return (strcmp(left->name(), right->name()) < 0);
 			}
 		}
 		// <rdar://problem/51479025> don't crash if objc atom does not have an owning file, just sort those to end
@@ -1834,7 +1838,8 @@ static void forEachMethod(ld::Internal& state, const ld::Atom* categoryMethodLis
 					default:
 						assert(0 && "malformed category method list");
 				}
-				assert((methods[methodIndex].typeAtom->contentType() == ld::Atom::typeCString) || (strcmp(methods[methodIndex].typeAtom->section().segmentName(), "__TEXT") == 0));
+				if ( (methods[methodIndex].typeAtom->contentType() != ld::Atom::typeCString) && (strcmp(methods[methodIndex].typeAtom->section().segmentName(), "__TEXT") != 0) )
+					throwf("malformed category method list (%s), type string not in __TEXT in %s", categoryMethodListAtom->name(), categoryMethodListAtom->safeFilePath());
 			}
 			else if ( !isProtocolList && (entryOffset == 2*ptrSize) && (fit->clusterSize == Fixup::k1of1) ) {
 				switch (fit->binding) {
@@ -2301,7 +2306,7 @@ void doPass(const Options& opts, ld::Internal& state)
 
 	// add image info atom
 	// The HasCategoryClassProperties bit is set as often as possible.
-	state.addAtom(*new ObjCImageInfoAtom<A>(isObjC2, !haveCategoriesWithoutClassPropertyStorage, state.swiftVersion, state.swiftLanguageVersion));
+	state.addAtom(*new ObjCImageInfoAtom<A>(isObjC2, state.objcClassROPointerSigning == ClassROSigningEnabled, !haveCategoriesWithoutClassPropertyStorage, state.swiftVersion, state.swiftLanguageVersion));
 }
 
 

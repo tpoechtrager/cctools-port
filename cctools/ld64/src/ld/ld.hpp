@@ -197,6 +197,7 @@ static const PlatformVersion mac10_15		(Platform::macOS, 0x000A0F00);
 static const PlatformVersion mac10_16		(Platform::macOS, 0x000A1000);
 static const PlatformVersion mac11_0		(Platform::macOS, 0x000B0000);
 static const PlatformVersion mac12_0		(Platform::macOS, 0x000C0000);
+static const PlatformVersion mac13_0		(Platform::macOS, 0x000D0000);
 static const PlatformVersion mac10_Future 	(Platform::macOS, 0x10000000);
 
 static const PlatformVersion iOS_2_0 		(Platform::iOS, 0x00020000);
@@ -212,8 +213,10 @@ static const PlatformVersion iOS_10_0 		(Platform::iOS, 0x000A0000);
 static const PlatformVersion iOS_11_0 		(Platform::iOS, 0x000B0000);
 static const PlatformVersion iOS_12_0 		(Platform::iOS, 0x000C0000);
 static const PlatformVersion iOS_13_0 		(Platform::iOS, 0x000D0000);
+static const PlatformVersion iOS_13_4 		(Platform::iOS, 0x000D0400);
 static const PlatformVersion iOS_14_0 		(Platform::iOS, 0x000E0000);
 static const PlatformVersion iOS_15_0		(Platform::iOS, 0x000F0000);
+static const PlatformVersion iOS_16_0		(Platform::iOS, 0x00100000);
 static const PlatformVersion iOS_Future 	(Platform::iOS, 0x10000000);
 
 static const PlatformVersion watchOS_1_0 		(Platform::watchOS, 0x00010000);
@@ -222,6 +225,7 @@ static const PlatformVersion watchOS_5_0 		(Platform::watchOS, 0x00050000);
 static const PlatformVersion watchOS_6_0 		(Platform::watchOS, 0x00060000);
 static const PlatformVersion watchOS_7_0 		(Platform::watchOS, 0x00070000);
 static const PlatformVersion watchOS_8_0		(Platform::watchOS, 0x00080000);
+static const PlatformVersion watchOS_9_0		(Platform::watchOS, 0x00090000);
 static const PlatformVersion watchOS_Future		(Platform::watchOS, 0x10000000);
 
 static const PlatformVersion tvOS_9_0 			(Platform::tvOS, 0x00090000);
@@ -229,32 +233,30 @@ static const PlatformVersion tvOS_12_0 			(Platform::tvOS, 0x000C0000);
 static const PlatformVersion tvOS_13_0 			(Platform::tvOS, 0x000D0000);
 static const PlatformVersion tvOS_14_0 			(Platform::tvOS, 0x000E0000);
 static const PlatformVersion tvOS_15_0			(Platform::tvOS, 0x000F0000);
+static const PlatformVersion tvOS_16_0			(Platform::tvOS, 0x00100000);
 static const PlatformVersion tvOS_Future		(Platform::tvOS, 0x10000000);
 
 static const PlatformVersion bridgeOS_1_0 			(Platform::bridgeOS, 0x00010000);
 static const PlatformVersion bridgeOS_4_0 			(Platform::bridgeOS, 0x00040000);
 static const PlatformVersion bridgeOS_5_0 			(Platform::bridgeOS, 0x00050000);
 static const PlatformVersion bridgeOS_6_0			(Platform::bridgeOS, 0x00060000);
+static const PlatformVersion bridgeOS_7_0			(Platform::bridgeOS, 0x00070000);
 static const PlatformVersion bridgeOS_Future		(Platform::bridgeOS, 0x10000000);
 
 static const PlatformVersion driverKit_19_0 		(Platform::driverKit, 0x00130000);
 static const PlatformVersion driverKit_20_0 		(Platform::driverKit, 0x00140000);
 static const PlatformVersion driverKit_21_0 		(Platform::driverKit, 0x00150000);
+static const PlatformVersion driverKit_22_0			(Platform::driverKit, 0x00160000);
 static const PlatformVersion driverKit_Future		(Platform::driverKit, 0x10000000);
 
-#if TARGET_FEATURE_REALITYOS
-static const PlatformVersion realityOS_1_0			(Platform::realityOS, 0x00000001);
-static const PlatformVersion realityOS_Future		(Platform::realityOS, 0x10000000);
-#endif // TARGET_FEATURE_REALITYOS
+static const PlatformVersion sepOS_1_0				(Platform::sepOS, 0x00010000);
+
 
 // Platform Sets
 static const PlatformSet simulatorPlatforms ( {
        Platform::iOS_simulator,
        Platform::tvOS_simulator,
        Platform::watchOS_simulator,
-#if TARGET_FEATURE_REALITYOS
-       Platform::reality_simulator,
-#endif // TARGET_FEATURE_REALITYOS
 } );
 
 //FIXME do we need to add simulatots to these?
@@ -271,24 +273,23 @@ static const VersionSet version2013 	({mac10_9, iOS_7_0});
 static const VersionSet version2019Fall ({mac10_15, iOS_13_0, watchOS_6_0, tvOS_13_0, bridgeOS_4_0});
 static const VersionSet version2020Fall ({mac10_16, iOS_14_0, watchOS_7_0, tvOS_14_0, bridgeOS_5_0});
 
-#if TARGET_FEATURE_REALITYOS
-static const VersionSet version2021Fall {{mac12_0, iOS_15_0, watchOS_8_0, tvOS_15_0, bridgeOS_6_0, realityOS_1_0}};
-#else
-static const VersionSet version2021Fall {{mac12_0, iOS_15_0, watchOS_8_0, tvOS_15_0, bridgeOS_6_0}};
-#endif // TARGET_FEATURE_REALITYOS
+static const VersionSet version2021Fall ({mac12_0, iOS_15_0, watchOS_8_0, tvOS_15_0, bridgeOS_6_0,
+		sepOS_1_0
+});
+
+static const VersionSet version2022Fall ({mac13_0, iOS_16_0, watchOS_9_0, tvOS_16_0, bridgeOS_7_0,
+		sepOS_1_0
+});
+
 
 static const VersionSet supportsSplitSegV2 		({mac10_12, iOS_9_0, watchOS_2_0, tvOS_9_0, driverKit_20_0});
 // FIXME: Use the comment out line instead.
 static const VersionSet supportsLCBuildVersion 	({mac10_14, iOS_12_0, watchOS_5_0, tvOS_12_0, bridgeOS_1_0});
 
-#if TARGET_FEATURE_REALITYOS
-static const VersionSet supportsPIE				({mac10_5, iOS_4_2, realityOS_1_0});
-#else
 static const VersionSet supportsPIE				({mac10_5, iOS_4_2});
-#endif
 
 static const VersionSet supportsTLV  			({mac10_7, iOS_9_0});
-static const VersionSet supportsChainedFixups 	({mac10_16, iOS_14_0, watchOS_7_0, tvOS_14_0, bridgeOS_Future});
+static const VersionSet supportsChainedFixups 	({mac12_0, iOS_13_4, watchOS_7_0, tvOS_14_0, bridgeOS_Future});
 
 // Forward declaration for bitcode support
 class Bitcode;
@@ -384,9 +385,8 @@ public:
 		static const ld::File::Ordinal LTOOrdinal()			{ return Ordinal(kLTOPartition, 0, 0, 0); }
 
 		// For linker options embedded in object files
-		static const ld::File::Ordinal linkeOptionBase() { return Ordinal(kIndirectDylibPartition, 1, 0, 0); }
-		const Ordinal nextLinkerOptionOrdinal() { return nextCounter(); };
-
+		static const ld::File::Ordinal linkerOptionBase() { return Ordinal(kLinkerOptionPartition, 1, 0, 0); }
+		const Ordinal nextLinkerOptionOrdinal() { return nextMinorIndex(); };
 	};
 	
 	typedef enum { Reloc, Dylib, Archive, Other } Type;
@@ -473,7 +473,8 @@ namespace relocatable {
 		virtual bool						canScatterAtoms() const = 0;
 		virtual bool						hasLongBranchStubs()		{ return false; }
 		virtual bool						hasllvmProfiling() const    { return false; }
-		virtual bool  						hasObjC() const				{ return false; }
+		virtual bool						hasObjC() const				{ return false; }
+		virtual bool						objcHasSignedClassROs() const { return false; }
 		virtual bool						objcHasCategoryClassPropertiesField() const { return false; }
 		virtual LinkerOptionsList*			linkerOptions() const = 0;
 		virtual const ToolVersionList&		toolVersions() const = 0;
@@ -1309,6 +1310,12 @@ struct CStringEquals
 
 typedef	std::unordered_set<const char*, ld::CStringHash, ld::CStringEquals>  CStringSet;
 
+typedef enum {
+	ClassROSigningMismatch = -2,
+	ClassROSigningUnknown  = -1,
+	ClassROSigningDisabled = 0,
+	ClassROSigningEnabled  = 1,
+} ClassROSigning;
 
 class Internal
 {
@@ -1344,7 +1351,8 @@ public:
 										Internal() : bundleLoader(NULL),
 											entryPoint(NULL), classicBindingHelper(NULL),
 											lazyBindingHelper(NULL), compressedFastBinderProxy(NULL),
-											hasObjC(false), hasArm64eABIVersion(false), arm64eABIVersion(0),
+											hasObjC(false), objcClassROPointerSigning(ClassROSigningUnknown),
+											hasArm64eABIVersion(false), arm64eABIVersion(0),
 											swiftVersion(0), swiftLanguageVersion(0),
 											cpuSubType(0), minOSVersion(0),
 											objectFileFoundWithNoVersion(false),
@@ -1383,6 +1391,7 @@ public:
 	const Atom*									lazyBindingHelper;
 	const Atom*									compressedFastBinderProxy;
 	bool										hasObjC;
+	ClassROSigning								objcClassROPointerSigning;
 	bool										hasArm64eABIVersion;
 	uint8_t										arm64eABIVersion;
 	uint8_t										swiftVersion;
