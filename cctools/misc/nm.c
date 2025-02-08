@@ -485,6 +485,9 @@ char **envp)
 	    ofile_process("a.out",  arch_flags, narch_flags, all_archs, TRUE,
 			  cmd_flags.f, TRUE, nm, &cmd_flags);
 
+	/* rdar://problem/89146917 - error check stdout for conformance. */
+	if(ferror(stdout) != 0 || fflush(stdout) != 0)
+	    error("failed to flush output");
 	if(errors == 0)
 	    return(EXIT_SUCCESS);
 	else

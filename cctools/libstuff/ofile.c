@@ -42,6 +42,7 @@
 #include "shlib.h"
 #endif
 #include <libc.h>
+#include <mach/machine-cctools.h>
 #include <mach/mach.h>
 #include "stuff/openstep_mach.h"
 #include <stddef.h>

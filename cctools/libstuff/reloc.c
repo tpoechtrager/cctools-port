@@ -20,7 +20,7 @@
  * 
  * @APPLE_LICENSE_HEADER_END@
  */
-#include <mach/machine.h>
+#include <mach/machine-cctools.h>
 #include <mach-o/reloc.h>
 #include <mach-o/m88k/reloc.h>
 #include <mach-o/ppc/reloc.h>

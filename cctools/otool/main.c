@@ -33,6 +33,7 @@
 #include <string.h>
 #include <limits.h>
 #include <ar.h>
+#include <mach/machine-cctools.h>
 #include <mach-o/ranlib.h>
 #include <libc.h>
 #include "stuff/bool.h"
@@ -1283,8 +1284,15 @@ void *cookie) /* cookie is not used */
 			    size = ofile->fat_archs[ofile->narch].size;
 			}
 		    }
-		    if(addr + size > ofile->file_addr + ofile->file_size)
-			size = (ofile->file_addr + ofile->file_size) - addr;
+
+		    uint64_t file_end;
+		    if (__builtin_add_overflow((uint64_t)ofile->file_addr, ofile->file_size, &file_end)) {
+		       printf("file too large, exceeds pointer size\n");
+		       abort();
+		    }
+
+		    if(addr >= ofile->file_addr && addr < (const char*)file_end && addr + size > (const char*)file_end)
+			size = (const char*)file_end - addr;
 		}
 		else if(ofile->file_type == OFILE_ARCHIVE){
 		    addr = ofile->member_addr;
@@ -1384,8 +1392,14 @@ void *cookie) /* cookie is not used */
 	 */
 	addr = ofile->object_addr;
 	size = ofile->object_size;
-	if(addr + size > ofile->file_addr + ofile->file_size)
-	    size = (ofile->file_addr + ofile->file_size) - addr;
+	uint64_t file_end;
+	if (__builtin_add_overflow((uint64_t)ofile->file_addr, ofile->file_size, &file_end)) {
+	   printf("file too large, exceeds pointer size\n");
+	   abort();
+	}
+
+	if(addr >= ofile->file_addr && addr < (const char*)file_end && addr + size > (const char*)file_end)
+	    size = (const char*)file_end - addr;
 
 	/*
 	 * Assign some local variables to the values in the mach_header for this
@@ -3426,9 +3440,9 @@ uint32_t* out_nsegname)
 			segnames = realloc(segnames,
 					   sizeof(*segnames)*(nsegname+1));
 			iseg = nsegname++;
-			segnames[iseg] = calloc(1, sizeof(s64.segname) + 1);
-			memcpy(segnames[iseg], s64.segname,
-			       sizeof(s64.segname));
+			segnames[iseg] = calloc(1, sizeof(s.segname) + 1);
+			memcpy(segnames[iseg], s.segname,
+			       sizeof(s.segname));
 			found = TRUE;
 		    }
 		    
@@ -4471,7 +4485,6 @@ uint64_t seg_addr)
 				strings_size, indirect_symbols, nindirect_symbols,
 				cputype, load_commands, ncmds, sizeofcmds,
 				object_addr, object_size, verbose, arm64_dc);
-		
 		else{
 		    printf("Can't disassemble unknown cputype %d\n", cputype);
 		    return;

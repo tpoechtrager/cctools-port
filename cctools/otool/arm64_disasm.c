@@ -535,7 +535,7 @@ struct disassemble_info *info)
 	     */
 	    name = get_dyld_bind_info_symbolname(value, info->dbi, info->ndbi,
 						 NULL, info->chain_format,
-						 NULL);
+						 NULL, NULL);
 	    if(name != NULL){
 		*reference_type =
 		    LLVMDisassembler_ReferenceType_Out_Objc_Class_Ref;

@@ -1,4 +1,4 @@
-AC_INIT([cctools], [994.1], [t.poechtrager@gmail.com])
+AC_INIT([cctools], [1001.2], [t.poechtrager@gmail.com])
 
 AC_CANONICAL_BUILD
 AC_CANONICAL_HOST

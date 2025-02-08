@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <limits.h>
 #endif /* RLD */
+#include <mach/machine-cctools.h>
 #include <mach-o/fat.h>
 #include <stuff/best_arch.h>
 

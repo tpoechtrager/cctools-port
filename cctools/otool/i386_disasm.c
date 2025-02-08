@@ -5143,7 +5143,7 @@ struct disassemble_info *info)
 	     * will be set by dyld as part of the "bind information".
 	     */
 	    name = get_dyld_bind_info_symbolname(value, info->dbi, info->ndbi,
-						 NULL, CHAIN_FORMAT_NONE, NULL);
+						 NULL, CHAIN_FORMAT_NONE, NULL, NULL);
 	    if(name != NULL){
 		*reference_type =
 		    LLVMDisassembler_ReferenceType_Out_Objc_Class_Ref;

@@ -120,9 +120,9 @@ int old_frags_var_max_size)	/* Number of chars (already allocated on obstack
        as_fatal("with -n a section directive must be seen before assembly "
 		"can begin");
     }
-    /* cctools-port: Added (intptr_t) cast to silence warning */
-    frag_now->fr_fix = (int)(intptr_t)((char *) (obstack_next_free (&frags)) -
-			     (long)(frag_now->fr_literal) -
+
+    frag_now->fr_fix = (intptr_t)((char *) (obstack_next_free (&frags)) -
+			     (intptr_t)(frag_now->fr_literal) -
 			     old_frags_var_max_size);
  /* Fix up old frag's fr_fix. */
 

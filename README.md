@@ -1,6 +1,6 @@
 # Apple cctools and ld64 port for Linux, *BSD and macOS #
 
-Current Version: cctools: 994.1, ld64: 762.
+Current Version: cctools: 1001.2, ld64: 762.
 Originally ported by [cjacker](http://ios-toolchain-based-on-clang-for-linux.googlecode.com).
 
 ## SUPPORTED HOSTS ##

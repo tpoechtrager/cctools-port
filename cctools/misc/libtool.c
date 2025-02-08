@@ -530,12 +530,22 @@ char **envp)
 		    filelist = argv[i + 1];
 		    dirname = strrchr(filelist, ',');
 		    if(dirname != NULL){
-			*dirname = '\0';
-			dirname++;
+			// <rdar://88352605> Filelist path may include ','
+			// Try opening file assuming that ',' is a part of the list file path
+			// If open fails, fallback and try again assuming there is a dirname too
+			if((fd = open(filelist, O_RDONLY, 0)) == -1) {
+			    *dirname = '\0';
+			    dirname++;
+			    fd = open(filelist, O_RDONLY, 0);
+			} else
+			    dirname = "";
 		    }
-		    else
+		    else {
 			dirname = "";
-		    if((fd = open(filelist, O_RDONLY, 0)) == -1)
+			fd = open(filelist, O_RDONLY, 0);
+		    }
+
+		    if(fd == -1)
 			system_fatal("can't open file list file: %s", filelist);
 		    if(fstat(fd, &stat_buf) == -1)
 			system_fatal("can't stat file list file: %s", filelist);
