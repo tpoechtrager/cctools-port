@@ -98,6 +98,11 @@ static uint32_t strip_all = 1;
 static enum bool default_dyld_executable = FALSE;
 
 /*
+ * This is set if the object is an executable (MH_EXECUTE) that is for use with the dynamic linker.
+ */
+static enum bool dyld_executable = FALSE;
+
+/*
  * When the -N flag is used it may not be possible to strip all nlists because
  * the file is not used by dyld, an MH_KEXT_BUNDLE filetype or has external
  * relocations in the LC_DYSYMTAB.
@@ -1258,7 +1263,8 @@ struct object *object)
 				   section_type == S_LAZY_SYMBOL_POINTERS ||
 				   section_type ==
 						S_LAZY_DYLIB_SYMBOL_POINTERS ||
-				   section_type == S_NON_LAZY_SYMBOL_POINTERS){
+				   section_type == S_NON_LAZY_SYMBOL_POINTERS ||
+				   section_type == S_THREAD_LOCAL_VARIABLE_POINTERS){
 				    s[j].flags = S_REGULAR;
 				    s[j].reserved1 = 0;
 				    s[j].reserved2 = 0;
@@ -1297,7 +1303,8 @@ struct object *object)
 				   section_type == S_LAZY_SYMBOL_POINTERS ||
 				   section_type ==
 						S_LAZY_DYLIB_SYMBOL_POINTERS ||
-				   section_type == S_NON_LAZY_SYMBOL_POINTERS){
+				   section_type == S_NON_LAZY_SYMBOL_POINTERS ||
+				   section_type == S_THREAD_LOCAL_VARIABLE_POINTERS){
 				    s64[j].flags = S_REGULAR;
 				    s64[j].reserved1 = 0;
 				    s64[j].reserved2 = 0;
@@ -1390,12 +1397,15 @@ struct object *object)
 	    flags = object->mh->flags;
 	else
 	    flags = object->mh64->flags;
-	if(strip_all &&
-	   (flags & MH_DYLDLINK) == MH_DYLDLINK &&
-	   object->mh_filetype == MH_EXECUTE)
-	    default_dyld_executable = TRUE;
-	else
+	if((flags & MH_DYLDLINK) == MH_DYLDLINK &&
+	   object->mh_filetype == MH_EXECUTE) {
+	    dyld_executable = TRUE;
+	    default_dyld_executable = strip_all;
+	}
+	else {
+	    dyld_executable = FALSE;
 	    default_dyld_executable = FALSE;
+	}
 	if(Nflag &&
            (mh_flags & MH_DYLDLINK) == MH_DYLDLINK &&
            object->mh_filetype != MH_KEXT_BUNDLE &&
@@ -2621,7 +2631,8 @@ struct object *object)
 			section_type = s->flags & SECTION_TYPE;
 			if(section_type == S_LAZY_SYMBOL_POINTERS ||
 			   section_type == S_LAZY_DYLIB_SYMBOL_POINTERS ||
-			   section_type == S_NON_LAZY_SYMBOL_POINTERS)
+			   section_type == S_NON_LAZY_SYMBOL_POINTERS ||
+			   section_type == S_THREAD_LOCAL_VARIABLE_POINTERS)
 			  stride = 4;
 			else if(section_type == S_SYMBOL_STUBS)
 			    stride = s->reserved2;
@@ -2647,7 +2658,8 @@ struct object *object)
 			section_type = s64->flags & SECTION_TYPE;
 			if(section_type == S_LAZY_SYMBOL_POINTERS ||
 			   section_type == S_LAZY_DYLIB_SYMBOL_POINTERS ||
-			   section_type == S_NON_LAZY_SYMBOL_POINTERS)
+			   section_type == S_NON_LAZY_SYMBOL_POINTERS ||
+			   section_type == S_THREAD_LOCAL_VARIABLE_POINTERS)
 			  stride = 8;
 			else if(section_type == S_SYMBOL_STUBS)
 			    stride = s64->reserved2;
@@ -4539,25 +4551,40 @@ enum bool *nlist_outofsync_with_dyldinfo)
 	/*
 	 * Update the export trie if it has one but only call the the
 	 * prune_trie() routine when we are removing global symbols as is
-	 * done with default stripping of a dyld executable or with the -s
-	 * or -R options.  If we are stripping nlist with the -N flag we must
-	 * leave the export trie as is.
+	 * done by default on executables, unless any of -S/-x/-X/-T flags are specified without any
+	 * options that specifically remove global symbols.
+	 * If we are stripping nlist with the -N flag we must leave the export trie
+	 * as is.
 	 */
-	if(!strip_all_nlists && object->dyld_info != NULL &&
-	   object->dyld_info->export_size != 0 &&
-	   (default_dyld_executable || sfile != NULL || Rfile != NULL)){
-	    const char *error_string;
-	    uint32_t trie_new_size;
+	if(!strip_all_nlists &&
+          (( dyld_executable && !(Sflag || xflag || Xflag || Tflag) ) || Rfile || sfile)){
+		if (object->dyld_info != NULL && object->dyld_info->export_size != 0) {
+			const char *error_string;
+			uint32_t trie_new_size;
 
-	    error_string = prune_trie((uint8_t *)(object->object_addr +
-						 object->dyld_info->export_off),
-		       		      object->dyld_info->export_size,
-		       		      prune,
-				      &trie_new_size);
-	    if(error_string != NULL){
-		error_arch(arch, member, "%s", error_string);
-		return(FALSE);
-	    }
+			error_string = prune_trie((uint8_t *)(object->object_addr + object->dyld_info->export_off),
+					object->dyld_info->export_size,
+					prune,
+					&trie_new_size);
+			if(error_string != NULL){
+				error_arch(arch, member, "LC_DYLD_INFO exports trie prune: %s in: ", error_string);
+				return(FALSE);
+			}
+		}
+
+		if (object->dyld_exports_trie != NULL && object->dyld_exports_trie->datasize != 0) {
+			const char *error_string;
+			uint32_t trie_new_size;
+
+			error_string = prune_trie((uint8_t *)(object->object_addr + object->dyld_exports_trie->dataoff),
+					object->dyld_exports_trie->datasize,
+					prune,
+					&trie_new_size);
+			if(error_string != NULL){
+				error_arch(arch, member, "LC_DYLD_EXPORTS_TRIE trie prune: %s in: ", error_string);
+				return(FALSE);
+			}
+		}
 	}
 #endif /* TRIE_SUPPORT */
 
