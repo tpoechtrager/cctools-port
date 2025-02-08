@@ -50,8 +50,13 @@ const char* FatFile::isInvalidSlice(uint64_t fileLen, const uint8_t* sliceStart,
     }
     else {
         const mach_header* mh = (mach_header*)sliceStart;
-        if ( (mh->magic != MH_MAGIC) && (mh->magic != MH_MAGIC_64) )
+        if ( (mh->magic != MH_MAGIC) && (mh->magic != MH_MAGIC_64) ) {
+            if ( (mh->magic == MH_CIGAM) || (mh->magic == MH_CIGAM_64) ) {
+                // can't link any big endian arches, so no need for subtype checks
+                return nullptr;
+            }
             return "slice content is not mach-o or a static library";
+        }
          if ( mh->cputype != (cpu_type_t)sliceCpuType )
             return "cpu type in slice does not match fat header";
         else if ( (mh->cpusubtype & ~CPU_SUBTYPE_MASK) != (sliceCpuSubType & ~CPU_SUBTYPE_MASK) )
