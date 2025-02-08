@@ -1147,6 +1147,16 @@ check_dylinker_command:
 		}
 		break;
 
+	    case LC_ATOM_INFO:
+	    ld = (struct linkedit_data_command *)lc;
+	    if(ld->cmdsize != sizeof(struct linkedit_data_command)){
+	        error("in swap_object_headers(): malformed load commands "
+			  "(LC_ATOM_INFO command %lu has incorrect "
+			  "cmdsize", i);
+		    return(FALSE);
+		}
+		break;
+
 	    case LC_DYLIB_CODE_SIGN_DRS:
 		ld = (struct linkedit_data_command *)lc;
 		if(ld->cmdsize != sizeof(struct linkedit_data_command)){
@@ -1766,6 +1776,7 @@ check_dylinker_command:
 	    case LC_SEGMENT_SPLIT_INFO:
 	    case LC_FUNCTION_STARTS:
 	    case LC_DATA_IN_CODE:
+	    case LC_ATOM_INFO:
 	    case LC_DYLIB_CODE_SIGN_DRS:
 	    case LC_LINKER_OPTIMIZATION_HINT:
 	    case LC_DYLD_EXPORTS_TRIE:

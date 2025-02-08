@@ -337,6 +337,7 @@ struct load_command {
 #define LC_DYLD_EXPORTS_TRIE (0x33 | LC_REQ_DYLD) /* used with linkedit_data_command, payload is trie */
 #define LC_DYLD_CHAINED_FIXUPS (0x34 | LC_REQ_DYLD) /* used with linkedit_data_command */
 #define LC_FILESET_ENTRY (0x35 | LC_REQ_DYLD) /* used with fileset_entry_command */
+#define LC_ATOM_INFO 0x36 /* used with linkedit_data_command */
 
 /*
  * A variable length string in a load command is represented by an lc_str
@@ -1202,7 +1203,7 @@ struct rpath_command {
 struct linkedit_data_command {
     uint32_t	cmd;		/* LC_CODE_SIGNATURE, LC_SEGMENT_SPLIT_INFO,
 				   LC_FUNCTION_STARTS, LC_DATA_IN_CODE,
-				   LC_DYLIB_CODE_SIGN_DRS,
+				   LC_DYLIB_CODE_SIGN_DRS, LC_ATOM_INFO,
 				   LC_LINKER_OPTIMIZATION_HINT,
 				   LC_DYLD_EXPORTS_TRIE, or
 				   LC_DYLD_CHAINED_FIXUPS. */

@@ -1070,6 +1070,12 @@ struct object *object)
 			   object->output_data_in_code_info_data_size);
 		*size += object->output_data_in_code_info_data_size;
 	    }
+		if(object->output_atom_info_data_size != 0){
+		if(object->output_atom_info_data != NULL)
+			memcpy(p + *size, object->output_atom_info_data,
+			   object->output_atom_info_data_size);
+		*size += object->output_atom_info_data_size;
+		}
 	    if(object->output_code_sign_drs_info_data_size != 0){
 		if(object->output_code_sign_drs_info_data != NULL)
 		    memcpy(p + *size, object->output_code_sign_drs_info_data,
@@ -1142,6 +1148,12 @@ struct object *object)
 			   object->output_data_in_code_info_data_size);
 		*size += object->output_data_in_code_info_data_size;
 	    }
+		if(object->output_atom_info_data_size != 0){
+		if(object->output_atom_info_data != NULL)
+			memcpy(p + *size, object->output_atom_info_data,
+			   object->output_atom_info_data_size);
+		*size += object->output_atom_info_data_size;
+		}
 	    if(object->output_link_opt_hint_info_data_size != 0){
 		if(object->output_link_opt_hint_info_data != NULL)
 		    memcpy(p + *size, object->output_link_opt_hint_info_data,
@@ -1893,6 +1905,7 @@ struct object* object)
     object->split_info_cmd = NULL;
     object->func_starts_info_cmd = NULL;
     object->data_in_code_cmd = NULL;
+    object->atom_info_cmd = NULL;
     object->code_sign_drs_cmd = NULL;
     object->link_opt_hint_cmd = NULL;
     object->dyld_info = NULL;
@@ -1950,6 +1963,10 @@ struct object* object)
 	    case LC_DATA_IN_CODE:
 		object->data_in_code_cmd =
 		    (struct linkedit_data_command *)lc;
+		break;
+		case LC_ATOM_INFO:
+		object->atom_info_cmd =
+			(struct linkedit_data_command *)lc;
 		break;
 	    case LC_DYLIB_CODE_SIGN_DRS:
 		object->code_sign_drs_cmd =

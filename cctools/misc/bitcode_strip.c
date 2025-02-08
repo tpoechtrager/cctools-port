@@ -790,6 +790,15 @@ struct object *object)
 	    offset += object->split_info_cmd->datasize;
 	}
 
+	if(object->atom_info_cmd != NULL){
+		object->output_atom_info_data = object->object_addr +
+		object->atom_info_cmd->dataoff;
+		object->output_atom_info_data_size =
+		object->atom_info_cmd->datasize;
+		object->atom_info_cmd->dataoff = offset;
+		offset += object->atom_info_cmd->datasize;
+	}
+
 	if(object->func_starts_info_cmd != NULL){
 	    object->output_func_start_info_data = object->object_addr +
 		object->func_starts_info_cmd->dataoff;
@@ -1285,10 +1294,17 @@ struct object *object)
 	}
 
 	if(object->split_info_cmd != NULL){
-	    object->output_split_info_data = NULL;
-	    object->output_split_info_data_size = 0;
-	    object->split_info_cmd->dataoff = 0;
-	    object->split_info_cmd->datasize = 0;
+		object->output_split_info_data = NULL;
+		object->output_split_info_data_size = 0;
+		object->split_info_cmd->dataoff = 0;
+		object->split_info_cmd->datasize = 0;
+	}
+
+	if(object->atom_info_cmd != NULL){
+		object->output_atom_info_data = NULL;
+		object->output_atom_info_data_size = 0;
+		object->atom_info_cmd->dataoff = 0;
+		object->atom_info_cmd->datasize = 0;
 	}
 
 	if(object->func_starts_info_cmd != NULL){
@@ -1958,6 +1974,11 @@ struct object *object)
 	if(object->split_info_cmd != NULL)
 	    fatal_arch(arch, member, "malformed MH_OBJECT should not contain a "
 		       "split info load command");
+
+	/* There should be no split info in a .o file. */
+	if(object->atom_info_cmd != NULL)
+		fatal_arch(arch, member, "malformed MH_OBJECT should not contain a "
+			   "atom info load command");
 
 	if(object->func_starts_info_cmd != NULL){
 	    object->input_sym_info_size +=

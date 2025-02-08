@@ -183,6 +183,8 @@ struct object {
     struct linkedit_data_command
 	*data_in_code_cmd;	    /* the data in code load command, if any */
     struct linkedit_data_command
+    *atom_info_cmd;   /* the atom info load command, if any*/
+    struct linkedit_data_command
 	*code_sign_drs_cmd;	    /* the code signing DRs command, if any */
     struct linkedit_data_command
 	*link_opt_hint_cmd;	    /* the linker optimization hint command,
@@ -248,6 +250,8 @@ struct object {
     uint32_t      output_func_start_info_data_size;
     char *output_data_in_code_info_data;
     uint32_t      output_data_in_code_info_data_size;
+    char *output_atom_info_data;
+    uint32_t      output_atom_info_data_size;
     char *output_code_sign_drs_info_data;
     uint32_t      output_code_sign_drs_info_data_size;
     char *output_link_opt_hint_info_data;

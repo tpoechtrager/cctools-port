@@ -4587,6 +4587,9 @@ warn_duplicate_member_names(
 void)
 {
     uint32_t i, j, len, len1, len2;
+    char *undupName;
+    int dupCount = 0;
+    const char* lastDupName = NULL;
 
 	for(i = 0; i < narchs; i++){
 	    /* sort in order of ar_names */
@@ -4605,31 +4608,25 @@ void)
 		    if(narchs > 1)
 			fprintf(stderr, "for architecture: %s ",
 				archs[i].arch_flag.name);
-		    fprintf(stderr, "same member name (%.*s) in output file "
-			    "used for input files: ", (int)len1,
-			    archs[i].members[j].member_name);
-
-		    if(archs[i].members[j].input_ar_hdr != NULL){
-			len = archs[i].members[j].input_base_name_size;
-			fprintf(stderr, "%s(%.*s) and: ",
-				archs[i].members[j].input_file_name, (int)len,
-				archs[i].members[j].input_base_name);
+		    fprintf(stderr, "renaming duplicate member name '%.*s' "
+			    "from '%s(%.*s)' and '%s(%.*s)'\n",
+			    (int)len1, archs[i].members[j].member_name,
+			    archs[i].members[j].input_file_name,
+			    (int)len, archs[i].members[j].input_base_name,
+			    archs[i].members[j+1].input_file_name,
+			    (int)len, archs[i].members[j+1].input_base_name);
+		    // rdar://110498050 (Rename duplicate archive member names so dsymutil and lldb and find correct .o file)
+		    // We don't want to change the length of the member name because that will invalidate
+		    // other size calculation throughout these data structures.
+		    // Instead increment the last char of the file name (e.g. 'foo.o' -> 'fop.o')
+		    // If there are more duplicate member names, keep incrementing (e.g. 'foo.o' -> 'foq.o' )
+		    if (lastDupName==NULL || strcmp(archs[i].members[j].member_name, lastDupName) != 0 ) {
+			dupCount = 1;
+			lastDupName = archs[i].members[j].member_name;
 		    }
-		    else
-			fprintf(stderr, "%s and: ",
-				archs[i].members[j].input_file_name);
-
-		    if(archs[i].members[j+1].input_ar_hdr != NULL){
-			len = archs[i].members[j+1].input_base_name_size;
-			fprintf(stderr, "%s(%.*s) due to use of basename, "
-				"truncation and blank padding\n",
-				archs[i].members[j+1].input_file_name, (int)len,
-				archs[i].members[j+1].input_base_name);
-		    }
-		    else
-			fprintf(stderr, "%s (due to use of basename, truncation"
-				", blank padding or duplicate input files)\n",
-				archs[i].members[j+1].input_file_name);
+		    asprintf(&undupName, "%.*s", (int)len1, archs[i].members[j].member_name);
+		    undupName[len1-3] += dupCount++;
+		    archs[i].members[j].member_name = undupName;
 		}
 	    }
 

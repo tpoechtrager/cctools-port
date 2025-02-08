@@ -383,6 +383,7 @@ map_input(void)
 		break;
 	    case LC_CODE_SIGNATURE:
 	    case LC_SEGMENT_SPLIT_INFO:
+	    case LC_ATOM_INFO:
 	    case LC_FUNCTION_STARTS:
 	    case LC_DATA_IN_CODE:
 	    case LC_DYLIB_CODE_SIGN_DRS:
@@ -685,6 +686,7 @@ replace_sections(void)
 		    is_signed = TRUE;
 		    /* FALLTHROUGH */
 	    case LC_SEGMENT_SPLIT_INFO:
+		case LC_ATOM_INFO:
 	    case LC_FUNCTION_STARTS:
 	    case LC_DATA_IN_CODE:
 	    case LC_DYLIB_CODE_SIGN_DRS:

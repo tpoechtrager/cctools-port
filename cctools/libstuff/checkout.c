@@ -97,6 +97,7 @@ struct object *object)
 	object->split_info_cmd = NULL;
 	object->func_starts_info_cmd = NULL;
 	object->data_in_code_cmd = NULL;
+	object->atom_info_cmd = NULL;
 	object->code_sign_drs_cmd = NULL;
 	object->link_opt_hint_cmd = NULL;
 	object->dyld_info = NULL;
@@ -165,6 +166,13 @@ struct object *object)
 		object->data_in_code_cmd =
 			(struct linkedit_data_command *)lc;
 	    }
+		else if(lc->cmd == LC_ATOM_INFO){
+		if(object->atom_info_cmd != NULL)
+			fatal_arch(arch, member, "malformed file (more than one "
+			"LC_ATOM_INFO load command): ");
+		object->atom_info_cmd =
+			(struct linkedit_data_command *)lc;
+		}
 	    else if(lc->cmd == LC_DYLIB_CODE_SIGN_DRS){
 		if(object->code_sign_drs_cmd != NULL)
 		    fatal_arch(arch, member, "malformed file (more than one "
@@ -522,6 +530,12 @@ struct object *object)
 	       object->data_in_code_cmd->dataoff != offset)
 		order_error(arch, member, "data in code info out of place");
 	    offset += object->data_in_code_cmd->datasize;
+	}
+	if(object->atom_info_cmd != NULL){
+		if(object->atom_info_cmd->dataoff != 0 &&
+		   object->atom_info_cmd->dataoff != offset)
+		order_error(arch, member, "atom info out of place");
+		offset += object->atom_info_cmd->datasize;
 	}
 	if(object->code_sign_drs_cmd != NULL){
 	    if(object->code_sign_drs_cmd->dataoff != 0 &&

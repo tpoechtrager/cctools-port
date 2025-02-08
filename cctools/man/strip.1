@@ -1,4 +1,4 @@
-.TH STRIP 1 "June 23, 2020" "Apple Inc."
+.TH STRIP 1 "June 23, 2023" "Apple Inc."
 .SH NAME
 strip \- remove symbols
 .SH SYNOPSIS
@@ -31,12 +31,9 @@ command is the same as using the
 .B \-u
 and
 .B \-r
-options. If the file does not use the dynamic link editor, the effect of
+options. If the file does not use the dynamic link editor (e.g. -preload or -static), the effect of
 .I strip
-without any options is the same as using the
-.B \-s
-option of
-.IR ld (1).
+without any options is to completely remove the symbol table.
 The options
 .B \-S,
 .B \-x,
@@ -263,7 +260,10 @@ when processing object files.
 Remove any LC_UUID load commands.
 .TP
 .B \-no_split_info
-Remove the LC_SEGMENT_SPLIT_INFO load command and its payload load.
+Remove the LC_SEGMENT_SPLIT_INFO load command and its payload.
+.TP
+.B \-no_atom_info
+Remove the LC_ATOM_INFO load command and its payload.
 .TP
 .B \-no_code_signature_warning
 Don't warn when the code signature would be invalid in the output.

@@ -2120,6 +2120,7 @@ static const struct stabnames stabnames[] = {
     { N_SSYM,  "SSYM" },
     { N_SO,    "SO" },
     { N_OSO,   "OSO" },
+    { N_LIB,   "LIB" },
     { N_LSYM,  "LSYM" },
     { N_BINCL, "BINCL" },
     { N_SOL,   "SOL" },

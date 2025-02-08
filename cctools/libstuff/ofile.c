@@ -4011,7 +4011,7 @@ struct ofile *ofile)
     struct twolevel_hints_command *hints;
     struct linkedit_data_command *code_sig, *split_info, *func_starts,
 			     *data_in_code, *code_sign_drs, *linkedit_data,
-			     *exports_trie, *chained_fixups;
+			     *exports_trie, *chained_fixups, *atom_info;
     struct linkedit_data_command *link_opt_hint;
     struct version_min_command *vers;
     struct build_version_command *bv, *bv1, *bv2;
@@ -4124,6 +4124,7 @@ struct ofile *ofile)
 	code_sig = NULL;
 	func_starts = NULL;
 	data_in_code = NULL;
+	atom_info = NULL;
 	code_sign_drs = NULL;
 	link_opt_hint = NULL;
 	exports_trie = NULL;
@@ -4716,6 +4717,17 @@ struct ofile *ofile)
 		    goto return_bad;
 		}
 		split_info = (struct linkedit_data_command *)lc;
+		goto check_linkedit_data_command;
+
+	    case LC_ATOM_INFO:
+		cmd_name = "LC_ATOM_INFO";
+		element_name = "atom info";
+		if(atom_info != NULL){
+		    Mach_O_error(ofile, "malformed object (more than one "
+			"%s command)", cmd_name);
+		    goto return_bad;
+		}
+		atom_info = (struct linkedit_data_command *)lc;
 		goto check_linkedit_data_command;
 
 	    case LC_CODE_SIGNATURE:

@@ -71,6 +71,7 @@ enum mach_o_part_type {
     MP_EXT_RELOCS,
     MP_LOC_RELOCS,
     MP_SPLIT_INFO,
+    MP_ATOM_INFO,
     MP_SYMBOL_TABLE,
     MP_HINTS_TABLE,
     MP_STRING_TABLE,
@@ -106,6 +107,7 @@ static char *mach_o_part_type_names[] = {
     "MP_EXT_RELOCS",
     "MP_LOC_RELOCS",
     "MP_SPLIT_INFO",
+    "MP_ATOM_INFO",
     "MP_SYMBOL_TABLE",
     "MP_HINTS_TABLE",
     "MP_STRING_TABLE",
@@ -577,7 +579,7 @@ struct file_part *fp)
     struct dylib_module *modtab;
     struct dylib_module_64 *modtab64;
     struct linkedit_data_command *split_info, *code_sig, *func_starts,
-			         *data_in_code, *code_sign_drs;
+			         *data_in_code, *code_sign_drs, *atom_info;
     struct linkedit_data_command *link_opt_hint;
     struct linkedit_data_command *dyld_chained_fixups, *dyld_exports_trie;
     enum bool dylib_stub;
@@ -615,7 +617,8 @@ struct file_part *fp)
 	symbols = NULL;
 	symbols64 = NULL;
 	strings = NULL;
-	split_info = NULL;
+    split_info = NULL;
+    atom_info = NULL;
 	code_sig = NULL;
 	func_starts = NULL;
 	data_in_code = NULL;
@@ -640,6 +643,9 @@ struct file_part *fp)
 	    }
 	    else if(split_info == NULL && lc->cmd == LC_SEGMENT_SPLIT_INFO){
 		split_info = (struct linkedit_data_command *)lc;
+	    }
+	    else if(atom_info == NULL && lc->cmd == LC_ATOM_INFO){
+        atom_info = (struct linkedit_data_command *)lc;
 	    }
 	    else if(code_sig == NULL && lc->cmd == LC_CODE_SIGNATURE){
 		code_sig = (struct linkedit_data_command *)lc;
@@ -855,6 +861,13 @@ struct file_part *fp)
 		mp->offset = fp->offset + split_info->dataoff;
 		mp->size = split_info->datasize;
 		mp->type = MP_SPLIT_INFO;
+		insert_mach_o_part(fp, mp);
+	    }
+	    if(atom_info != NULL && atom_info->datasize != 0){
+		mp = new_mach_o_part();
+		mp->offset = fp->offset + atom_info->dataoff;
+		mp->size = atom_info->datasize;
+		mp->type = MP_ATOM_INFO;
 		insert_mach_o_part(fp, mp);
 	    }
 	    if(dyst->ntoc != 0){
@@ -1395,6 +1408,11 @@ uint64_t page_number)
 			print_arch(fp);
 			printed = TRUE;
 			break;
+		    case MP_ATOM_INFO:
+			printf("File Page %llu contains atom info", page_number);
+			print_arch(fp);
+			printed = TRUE;
+			break;
 		    case MP_LOCAL_SYMBOLS:
 			printf("File Page %llu contains symbol table for "
 			       "non-global symbols", page_number);
@@ -1705,6 +1723,9 @@ struct mach_o_part *mp)
 	    break;
 	case MP_SPLIT_INFO:
 	    printf("local of info to split segments");
+	    break;
+	case MP_ATOM_INFO:
+	    printf("atom info");
 	    break;
 	case MP_LOCAL_SYMBOLS:
 	    printf("symbol table for non-global symbols");
