@@ -1,4 +1,4 @@
-AC_INIT([cctools], [1009.2], [t.poechtrager@gmail.com])
+AC_INIT([cctools], [1010.6], [t.poechtrager@gmail.com])
 
 AC_CANONICAL_BUILD
 AC_CANONICAL_HOST
@@ -330,7 +330,16 @@ AC_COMPILE_IFELSE(
 )
 CFLAGS=$ORIGCFLAGS
 
-
+ORIGCFLAGS=$CFLAGS
+CFLAGS="$CFLAGS -Werror -Wno-vla-cxx-extension"
+AC_MSG_CHECKING([whether $CC supports -Wno-vla-cxx-extension])
+AC_COMPILE_IFELSE(
+  [AC_LANG_SOURCE([[int dummy;]])],
+  [WARNINGS="$WARNINGS -Wno-vla-cxx-extension"
+   AC_MSG_RESULT([yes])],
+  [AC_MSG_RESULT([no])]
+)
+CFLAGS=$ORIGCFLAGS
 
 AC_SUBST([WARNINGS], [$WARNINGS])
 
@@ -502,6 +511,7 @@ AC_CONFIG_FILES([as/ppc/Makefile])
 AC_CONFIG_FILES([as/ppc64/Makefile])
 AC_CONFIG_FILES([man/Makefile])
 AC_CONFIG_FILES([misc/Makefile])
+AC_CONFIG_FILES([otool/Makefile])
 AC_CONFIG_FILES([efitools/Makefile])
 AC_CONFIG_FILES([ld64/Makefile])
 AC_CONFIG_FILES([ld64/doc/man/Makefile])

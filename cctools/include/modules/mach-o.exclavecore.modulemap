@@ -1,0 +1,26 @@
+
+module MachO [system] {
+
+  export *
+
+  module fat {
+    header "fat.h"
+    export *
+  }
+
+  module getsect {
+    header "getsect.h"
+    export *
+  }
+
+  module loader {
+    header "loader.h"
+    export *
+  }
+
+  module nlist {
+    header "nlist.h"
+    export *
+  }
+
+}

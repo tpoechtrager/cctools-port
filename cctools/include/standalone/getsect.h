@@ -30,12 +30,22 @@
 extern "C" {
 #endif /* __cplusplus */
 
-extern uint8_t *getsectiondata(const struct mach_header_64 *mhp,
+extern uint8_t *getsectiondata(
+#if __LP64__
+  const struct mach_header_64* mhp,
+#else
+  const struct mach_header* mhp,
+#endif
                                const char *segname,
                                const char *sectname,
                                unsigned long *size);
 
-extern uint8_t *getsegmentdata(const struct mach_header_64 *mhp,
+extern uint8_t *getsegmentdata(
+#if __LP64__
+  const struct mach_header_64* mhp,
+#else
+  const struct mach_header* mhp,
+#endif
                                const char *segname,
                                unsigned long *size);
 

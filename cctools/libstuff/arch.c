@@ -31,7 +31,6 @@
 #include "stuff/arch.h"
 #include "stuff/allocate.h"
 
-
 /*
  * The array of all currently know architecture flags (terminated with an entry
  * with all zeros).  Pointer to this returned with get_arch_flags().

@@ -1,6 +1,6 @@
 # Apple cctools and ld64 port for Linux, *BSD and macOS #
 
-Current Version: cctools: 1009.2, ld64: 762.
+Current Version: cctools: 1010.6, ld64: 762.
 Originally ported by [cjacker](http://ios-toolchain-based-on-clang-for-linux.googlecode.com).
 
 ## SUPPORTED HOSTS ##
@@ -38,10 +38,6 @@ SDKs with .tdb stubs (>= Xcode 7) require the TAPI library to be installed.
 
 musl-libc based systems require the musl-fts library to be installed.
 => https://github.com/pullmoll/musl-fts
-
-Kind of optional, but highly recommended:
-
-`llvm >= 13`              (For `llvm-otool`, otherwise there is no `otool` support)
 
 Optional, but recommended:
 
