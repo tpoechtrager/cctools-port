@@ -312,22 +312,22 @@ no_throttle:
 #if 0
 	    if (__builtin_available(macOS 10.12, *)) {
 #endif /* 0 */
-#ifdef HAVE_UTIMESAT
+#ifdef HAVE_UTIMENSAT
 		struct timespec times[2] = {0};
 		memcpy(&times[0], &toc_timespec, sizeof(struct timespec));
 		memcpy(&times[1], &toc_timespec, sizeof(struct timespec));
 		time_result = utimensat(AT_FDCWD, output, times, 0);
-#endif /* HAVE_UTIMESAT */
+#endif /* HAVE_UTIMENSAT */
 #if 0
 	    }
 	    else {
 #endif /* 0 */
-#ifndef HAVE_UTIMESAT
+#ifndef HAVE_UTIMENSAT
 		struct timeval times[2] = {0};
 		memcpy(&times[0], &toc_timeval, sizeof(struct timeval));
 		memcpy(&times[1], &toc_timeval, sizeof(struct timeval));
 		time_result = utimes(output, times);
-#endif /* !HAVE_UTIMESAT */
+#endif /* !HAVE_UTIMENSAT */
 #if 0
 	    }
 #endif /* 0 */
