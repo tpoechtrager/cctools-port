@@ -49,13 +49,8 @@
 #include "dyld_bind_info.h"
 #include "fixup-chains.h"
 #include "ofile_print.h"
-#include "m68k_disasm.h"
-#include "i860_disasm.h"
 #include "i386_disasm.h"
-#include "m88k_disasm.h"
 #include "ppc_disasm.h"
-#include "hppa_disasm.h"
-#include "sparc_disasm.h"
 #include "arm_disasm.h"
 #include "arm64_disasm.h"
 #include "llvm-c/Disassembler.h"
@@ -4409,20 +4404,6 @@ uint64_t seg_addr)
 				load_commands, ncmds, sizeofcmds, verbose,
 				llvm_mc, i386_dc, x86_64_dc , object_addr,
 				object_size, &(insts[n]), NULL, 0);
-	 	else if(cputype == CPU_TYPE_MC680x0)
-		    j = m68k_disassemble(sect, (uint32_t)size - i,
-				 (uint32_t)cur_addr, (uint32_t)addr,
-				object_byte_sex, relocs, nrelocs, symbols,
-				nsymbols, sorted_symbols, nsorted_symbols,
-				strings, strings_size, indirect_symbols,
-				nindirect_symbols, load_commands, ncmds,
-				sizeofcmds, verbose);
-		else if(cputype == CPU_TYPE_I860)
-		    j = i860_disassemble(sect, (uint32_t)size - i,
-				 (uint32_t)cur_addr, (uint32_t)addr,
-				object_byte_sex, relocs, nrelocs, symbols,
-				nsymbols, sorted_symbols, nsorted_symbols,
-				strings, strings_size, verbose);
 		else if(cputype == CPU_TYPE_I386)
 		    j = i386_disassemble(sect, (uint32_t)size - i,cur_addr,addr,
 				object_byte_sex, relocs, nrelocs, ext_relocs,
@@ -4433,12 +4414,6 @@ uint64_t seg_addr)
 				load_commands, ncmds, sizeofcmds, verbose,
 				llvm_mc, i386_dc, x86_64_dc, object_addr,
 				object_size, &(insts[n]), NULL, 0);
-		else if(cputype == CPU_TYPE_MC88000)
-		    j = m88k_disassemble(sect, (uint32_t)size - i,
-				 (uint32_t)cur_addr, (uint32_t)addr,
-				object_byte_sex, relocs, nrelocs, symbols,
-				nsymbols, sorted_symbols, nsorted_symbols,
-				strings, strings_size, verbose);
 		else if(cputype == CPU_TYPE_POWERPC ||
 			cputype == CPU_TYPE_VEO)
 		    j = ppc_disassemble(sect, (uint32_t)size - i,
@@ -4448,20 +4423,6 @@ uint64_t seg_addr)
 				nsorted_symbols, strings, strings_size,
 				indirect_symbols, nindirect_symbols,
 				load_commands, ncmds, sizeofcmds, verbose);
-		else if(cputype == CPU_TYPE_HPPA)
-		    j = hppa_disassemble(sect, (uint32_t)size - i,
-				(uint32_t)cur_addr, (uint32_t)addr,
-				object_byte_sex, relocs, nrelocs, symbols,
-				nsymbols, sorted_symbols, nsorted_symbols,
-				strings, strings_size, verbose);
-		else if(cputype == CPU_TYPE_SPARC)
-		    j = sparc_disassemble(sect, (uint32_t)size - i,
-				(uint32_t)cur_addr, (uint32_t)addr,
-				object_byte_sex, relocs, nrelocs, symbols,
-				nsymbols, sorted_symbols, nsorted_symbols,
-				strings, strings_size, indirect_symbols,
-				nindirect_symbols, load_commands, ncmds,
-				sizeofcmds, verbose);
 		else if(cputype == CPU_TYPE_ARM)
 		    j = arm_disassemble(sect, (uint32_t)size - i,
 				(uint32_t)cur_addr, (uint32_t)addr,

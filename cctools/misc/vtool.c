@@ -2640,6 +2640,8 @@ static const struct platform_entry kPlatforms[] = {
     { PLATFORM_DRIVERKIT,           "driverkit",    0 },
     { PLATFORM_FIRMWARE,            "firmware",     0 },
     { PLATFORM_SEPOS,               "sepos",        0 },
+
+
 };
 
 /*
@@ -2814,6 +2816,8 @@ void print_build_version_command(struct build_version_command *bv)
 	case PLATFORM_SEPOS:
 	    printf("SEPOS\n");
 	    break;
+
+
 	default:
 	    printf("%u\n", bv->platform);
 	    break;

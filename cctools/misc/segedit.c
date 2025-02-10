@@ -421,7 +421,7 @@ static
 void
 extract_sections(void)
 {
-    uint32_t i, j, errors;
+    uint32_t i, j;
     struct load_command *lcp;
     struct segment_command *sgp;
     struct segment_command_64 *sgp64;
@@ -455,13 +455,11 @@ extract_sections(void)
 	    lcp = (struct load_command *)((char *)lcp + lcp->cmdsize);
 	}
 
-	errors = 0;
 	ep = extracts;
 	while(ep != NULL){
 	    if(ep->found == 0){
 		error("section (%s,%s) not found in: %s", ep->segname,
 		      ep->sectname, input);
-		errors = 1;
 	    }
 	    ep = ep->next;
 	}
@@ -518,7 +516,7 @@ static
 void
 replace_sections(void)
 {
-    uint32_t i, j, k, l, errors, nsegs, nsects, high_reloc_seg;
+    uint32_t i, j, k, l, nsegs, nsects, high_reloc_seg;
     uint32_t low_noreloc_seg, high_noreloc_seg, low_linkedit;
     uint32_t oldoffset, newoffset, oldsectsize, newsectsize;
     uint64_t oldvmaddr, newvmaddr;
@@ -542,8 +540,6 @@ replace_sections(void)
     uint32_t segalign;
     enum bool is_signed;
     
-	errors = 0;
-
 	high_reloc_seg = 0;
 	low_noreloc_seg = input_size;
 	high_noreloc_seg = 0;
@@ -779,14 +775,12 @@ replace_sections(void)
 	    if(rp->found == 0){
 		error("section (%s,%s) not found in: %s", rp->segname,
 		      rp->sectname, input);
-		errors = 1;
 	    }
 	    else{
 		if(stat(rp->filename, &stat_buf) == -1){
 		    system_error("Can't stat file: %s to replace section "
 				 "(%s,%s) with", rp->filename, rp->segname,
 				 rp->sectname);
-		    errors = 1;
 		}
 		rp->size = (uint32_t)stat_buf.st_size;
 	    }
@@ -1395,13 +1389,11 @@ uint32_t size)
 		    error("can't replace zero fill section (%.16s,"
 			  "%.16s) in: %s", segname,
 			  sectname, input);
-		    errors = 1;
 		}
 		if((seg_flags & SG_NORELOC) == 0){
 		    error("can't replace section (%.16s,%.16s) "
 			  "in: %s because it requires relocation",
 			  segname, sectname, input);
-		    errors = 1;
 		}
 		if(offset + size > input_size)
 		    fatal("truncated or malformed object (section "

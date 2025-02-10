@@ -1324,6 +1324,7 @@ struct build_tool_version {
 #define PLATFORM_SEPOS 14
 
 
+
 /* Known values for the tool field above. */
 #define TOOL_CLANG 1
 #define TOOL_SWIFT 2
