@@ -1,5 +1,5 @@
 //fake headers
-#ifdef __APPLE__
+#if defined(__APPLE__) && __has_include_next(<Availability.h>)
 #include_next <Availability.h>
 
 /*
