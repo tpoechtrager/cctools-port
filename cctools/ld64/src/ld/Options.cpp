@@ -35,7 +35,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <string.h>
-#ifndef __ANDROID__ // ld64-port
+#if __has_include(<spawn.h>)
 #include <spawn.h>
 #endif
 #include <cxxabi.h>
