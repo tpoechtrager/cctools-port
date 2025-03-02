@@ -38,7 +38,7 @@
   1999-05-03 lpd Original version.
  */
 
-#ifndef __APPLE__
+#if !defined(__APPLE__) || (defined(__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__) && __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ < 1050)
 
 #include "md5.h"
 #include "string.h"
