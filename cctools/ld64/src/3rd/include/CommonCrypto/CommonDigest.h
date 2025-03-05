@@ -1,4 +1,5 @@
-#if defined(__APPLE__) && __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ >= 1050
+#if defined(__APPLE__) && \
+    ((defined(__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__) && __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ >= 1050) || !defined(__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__))
 
 #include_next <CommonCrypto/CommonDigest.h>
 
