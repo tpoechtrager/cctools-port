@@ -1999,7 +1999,6 @@ int file_write(const char* path, struct file* fb)
     int res = 0;
     bool warn = false;
     bool resign = false;
-		bool fake_sign = false;  /* cctools-port */
 
 #ifdef CODEDIRECTORY_SUPPORT
     struct codedir** codedirs = NULL;
@@ -2021,7 +2020,6 @@ int file_write(const char* path, struct file* fb)
 	for (uint32_t icmd = 0; !(warn&&resign) && icmd < lcmds->count; ++icmd){
 	    struct load_command* lc = lcmds->items[icmd];
 	    if (lc->cmd == LC_CODE_SIGNATURE) {
-				fake_sign = true; /* cctools-port */
 #ifdef CODEDIRECTORY_SUPPORT
 		struct linkedit_data_command* cs =
 		    (struct linkedit_data_command*)lc;
@@ -2197,11 +2195,6 @@ int file_write(const char* path, struct file* fb)
 		tmppath, strerror(errno));
 	res = -1;
     }
-
-    /* cctools-port */
-    if (0 == res && fake_sign)
-			FAKE_SIGN_BINARY(path, 1);
-    /* cctools-port end */
     
     // try to lean up if something went wrong
     if (res) {
