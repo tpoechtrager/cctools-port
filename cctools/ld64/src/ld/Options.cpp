@@ -4283,9 +4283,6 @@ void Options::parse(int argc, const char* argv[])
 			else if (strcmp(arg, "-no_adhoc_codesign") == 0) {
 				fAdHocSignForceOff = true;
 			}
-			else if (strcmp(arg, "-no_adhoc_codesign") == 0) { // ld64-port
-				fAdHocSign = false;
-			}
 			else if (strcmp(arg, "-oso_prefix") == 0) {
 				const char* path = argv[++i];
 				if ( path == NULL )
