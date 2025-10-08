@@ -23,13 +23,11 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h> // ld64-port
 #include <string.h>
 #include <assert.h>
 //#include <uuid/uuid.h> // ld64-port: commented
 #include <errno.h>
-#if !defined(__APPLE__) && __has_include(<malloc.h>)
-#include <malloc.h> // ld64-port
-#endif
 //#include <TargetConditionals.h> // ld64-port: commented
 
 #include <mach/machine.h>
