@@ -196,6 +196,7 @@ static const PlatformVersion mac10_15		(Platform::macOS, 0x000A0F00);
 static const PlatformVersion mac10_16		(Platform::macOS, 0x000A1000);
 static const PlatformVersion mac10_Future 	(Platform::macOS, 0x10000000);
 
+static const PlatformVersion iOS_1_0 		(Platform::iOS, 0x00010000);
 static const PlatformVersion iOS_2_0 		(Platform::iOS, 0x00020000);
 static const PlatformVersion iOS_3_1 		(Platform::iOS, 0x00030100);
 static const PlatformVersion iOS_4_2 		(Platform::iOS, 0x00040200);
@@ -237,7 +238,8 @@ static const PlatformSet simulatorPlatforms ( {Platform::iOS_simulator, Platform
 
 //FIXME do we need to add simulatots to these?
 //FIXME Are the dates correct?
-static const VersionSet version2007		({mac10_4, iOS_2_0});
+static const VersionSet version2007		({mac10_4, iOS_1_0});
+static const VersionSet version2007Fall ({mac10_5, iOS_1_0});
 static const VersionSet version2008 	({mac10_5, iOS_2_0});
 static const VersionSet version2008Fall ({mac10_5, iOS_3_1});
 static const VersionSet version2009 	({mac10_6, iOS_3_1});
