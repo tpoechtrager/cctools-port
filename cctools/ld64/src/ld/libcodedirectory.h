@@ -5,8 +5,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#ifndef __unused // ld64-port
-#define __unused __attribute__ ((unused))
+#ifndef ATTRIBUTE_UNUSED __unused // ld64-port
+#define ATTRIBUTE_UNUSED __attribute__ ((unused))
 #endif
 
 #if 0 // __has_include(<Kernel/kern/cs_blobs.h>)
@@ -26,7 +26,7 @@ typedef size_t libcd_read_page (libcd *s, int page_no, size_t pos, size_t page_s
 typedef bool libcd_signature_generator (libcd *s, void *user_ctx, size_t signature_size, uint8_t *signature_buf);
 typedef void libcd_log_writer (char *stmt);
 
-void libcd_log_none (char *stmt __unused);
+void libcd_log_none (char *stmt ATTRIBUTE_UNUSED);
 void libcd_log_stderr (char *stmt);
 #define libcd_log_default libcd_log_stderr
 
