@@ -227,7 +227,7 @@ libcd_log_stderr (char *stmt)
 }
 
 void
-libcd_log_none (char *stmt ATTRIBUTE_UNUSED)
+libcd_log_none (char *stmt ATTRIBUTE_UNUSED) // ld64-port: __unused -> ATTRIBUTE_UNUSED
 {}
 
 static libcd_log_writer *_configured_log_writer = libcd_log_default;
