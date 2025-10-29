@@ -951,6 +951,21 @@ cpu_subtype_t cpusubtype)
 	    if(*mcpu_default == '\0')
 		mcpu_default = "cortex-m4";
 	    break;
+	case CPU_SUBTYPE_ARM_V8M_MAIN:
+	    TripleName = "armv8m.main-apple-darwin10";
+	    if(*mcpu_default == '\0')
+		mcpu_default = "cortex-m33";
+	    break;
+	case CPU_SUBTYPE_ARM_V8M_BASE:
+	    TripleName = "armv8m.base-apple-darwin10";
+	    if(*mcpu_default == '\0')
+		mcpu_default = "cortex-m23";
+	    break;
+	case CPU_SUBTYPE_ARM_V8_1M_MAIN:
+	    TripleName = "armv8.1m.main-apple-darwin10";
+	    if(*mcpu_default == '\0')
+		mcpu_default = "cortex-m55";
+	    break;
 	}
 
 	LLVMOpInfoCallback OpInfo = llvm_disasm_new_getopinfo_abi()
@@ -1026,6 +1041,21 @@ cpu_subtype_t cpusubtype)
 	    TripleName = "thumbv7em-apple-darwin10";
 	    if(*mcpu_default == '\0')
 		mcpu_default = "cortex-m4";
+	    break;
+	case CPU_SUBTYPE_ARM_V8M_MAIN:
+	    TripleName = "thumbv8m.main-apple-darwin10";
+	    if(*mcpu_default == '\0')
+		mcpu_default = "cortex-m33";
+	    break;
+	case CPU_SUBTYPE_ARM_V8M_BASE:
+	    TripleName = "thumbv8m.base-apple-darwin10";
+	    if(*mcpu_default == '\0')
+		mcpu_default = "cortex-m23";
+	    break;
+	case CPU_SUBTYPE_ARM_V8_1M_MAIN:
+	    TripleName = "thumbv8.1m.main-apple-darwin10";
+	    if(*mcpu_default == '\0')
+		mcpu_default = "cortex-m55";
 	    break;
 	}
 

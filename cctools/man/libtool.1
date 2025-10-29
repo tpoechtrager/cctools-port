@@ -280,6 +280,10 @@ specified library name.
 .BI \-ref-framework " name"
 This option is used with -static to mean encode an auto-link hint for the
 specified framework name.
+.TP.B \-warn_duplicate_member_names
+When creating a static library, this option means to issue a warning if
+two or more members (object files) have the same leaf name, because they
+would collide if the archive was extracted into a directory.
 .TP
 .I "link editor flags"
 For a dynamic shared library the following
@@ -376,7 +380,7 @@ Print the version of libtool.
 .BI \-filelist " listfile[,dirname]"
 The
 .I listfile
-contains a list of file names and is an alternative way of specifiying file
+contains a list of file names and is an alternative way of specifying file
 names on the command line.   The file names are listed one per line separated
 only by newlines (spaces and tabs are assumed to be part of the file name).
 If the optional directory name,

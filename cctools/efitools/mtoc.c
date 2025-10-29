@@ -357,7 +357,7 @@ char **envp)
 		section_alignment_specified = TRUE;
 		if(align_specified == TRUE &&
 		   section_alignment != file_alignment)
-		    fatal("can't specifiy a -section_alignment value %x (hex) "
+		    fatal("can't specify a -section_alignment value %x (hex) "
 			  "different from the -align value %x (hex)",
 			  section_alignment, file_alignment);
 		i++;
@@ -381,7 +381,7 @@ char **envp)
 		align_specified = TRUE;
 		if(section_alignment_specified == TRUE &&
 		   section_alignment != file_alignment)
-		    fatal("can't specifiy a -section_alignment value %x (hex) "
+		    fatal("can't specify a -section_alignment value %x (hex) "
 			  "different from the -align value %x (hex)",
 			  section_alignment, file_alignment);
 		section_alignment = file_alignment;

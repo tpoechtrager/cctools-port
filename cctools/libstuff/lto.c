@@ -6,6 +6,9 @@
 #include <libc.h>
 #include <sys/file.h>
 #include <dlfcn.h>
+
+#include "mach/machine-cctools.h"
+
 #include <llvm-c/lto.h>
 #include "stuff/ofile.h"
 #include "stuff/llvm.h"
@@ -290,6 +293,21 @@ const char *target_triple)
 	        strncmp(target_triple, "thumbv7em", n) == 0){
 	    arch_flag->cputype = CPU_TYPE_ARM;
 	    arch_flag->cpusubtype = CPU_SUBTYPE_ARM_V7EM;
+	}
+	else if(strncmp(target_triple, "armv8m.main", n) == 0 ||
+	        strncmp(target_triple, "thumbv8m.main", n) == 0){
+	    arch_flag->cputype = CPU_TYPE_ARM;
+	    arch_flag->cpusubtype = CPU_SUBTYPE_ARM_V8M_MAIN;
+	}
+	else if(strncmp(target_triple, "armv8m.base", n) == 0 ||
+	        strncmp(target_triple, "thumbv8m.base", n) == 0){
+	    arch_flag->cputype = CPU_TYPE_ARM;
+	    arch_flag->cpusubtype = CPU_SUBTYPE_ARM_V8M_BASE;
+	}
+	else if(strncmp(target_triple, "armv8.1m.main", n) == 0 ||
+	        strncmp(target_triple, "thumbv8.1m.main", n) == 0){
+	    arch_flag->cputype = CPU_TYPE_ARM;
+	    arch_flag->cpusubtype = CPU_SUBTYPE_ARM_V8_1M_MAIN;
 	}
 	else if(strncmp(target_triple, "arm64", n) == 0){
 	    arch_flag->cputype = CPU_TYPE_ARM64;

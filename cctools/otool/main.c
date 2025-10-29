@@ -465,7 +465,7 @@ char **envp)
 #ifndef LLVM_OTOOL
 		disssembler_version = llvm_disasm_version_string();
 		if(disssembler_version != NULL)
-		    fprintf(stderr, "disassmbler: %s\n", disssembler_version);
+		    fprintf(stderr, "disassembler: %s\n", disssembler_version);
 #endif /* !defined(LLVM_OTOOL) */
 		version = TRUE;
 		continue;
