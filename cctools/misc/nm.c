@@ -375,14 +375,14 @@ char **envp)
 			    break;
 			case 'u':
 			    if(cmd_flags.U == TRUE){
-				error("can't specifiy both -u and -U");
+				error("can't specify both -u and -U");
 				usage();
 			    }
 			    cmd_flags.u = TRUE;
 			    break;
 			case 'U':
 			    if(cmd_flags.u == TRUE){
-				error("can't specifiy both -U and -u");
+				error("can't specify both -U and -u");
 				usage();
 			    }
 			    cmd_flags.U = TRUE;

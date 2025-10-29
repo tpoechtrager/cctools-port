@@ -180,7 +180,7 @@ int main(int argc, char *argv[])
     }
 
     args[i++] = osvermin;
-    args[i++] = "-mlinker-version=955.13";
+    args[i++] = "-mlinker-version=956.6";
     args[i++] = "-Wl,-adhoc_codesign";
     args[i++] = "-Wno-unused-command-line-argument";
 

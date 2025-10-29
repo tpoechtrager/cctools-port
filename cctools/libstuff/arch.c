@@ -106,6 +106,9 @@ static const struct arch_flag arch_flags[] = {
     { "armv7k", CPU_TYPE_ARM,     CPU_SUBTYPE_ARM_V7K },
     { "armv7m", CPU_TYPE_ARM,     CPU_SUBTYPE_ARM_V7M },
     { "armv7em", CPU_TYPE_ARM,    CPU_SUBTYPE_ARM_V7EM },
+    { "armv8m.main", CPU_TYPE_ARM,    CPU_SUBTYPE_ARM_V8M_MAIN },
+    { "armv8m.base", CPU_TYPE_ARM,    CPU_SUBTYPE_ARM_V8M_BASE },
+    { "armv8.1m.main", CPU_TYPE_ARM,    CPU_SUBTYPE_ARM_V8_1M_MAIN },
     { "arm64v8",CPU_TYPE_ARM64,   CPU_SUBTYPE_ARM64_V8 },
     { NULL,	0,		  0 }
 };

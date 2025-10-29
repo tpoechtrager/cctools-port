@@ -857,6 +857,45 @@ uint32_t nfat_archs)
 		    fat_cpusubtype = fat_archs[i].cpusubtype;
 		}
 		if(fat_cputype == cputype &&
+		   fat_cpusubtype == CPU_SUBTYPE_ARM_V8M_MAIN)
+		    return(i);
+	    }
+	    for(i = 0; i < nfat_archs; i++){
+		if(fat_archs64 != NULL){
+		    fat_cputype = fat_archs64[i].cputype;
+		    fat_cpusubtype = fat_archs64[i].cpusubtype;
+		}
+		else{
+		    fat_cputype = fat_archs[i].cputype;
+		    fat_cpusubtype = fat_archs[i].cpusubtype;
+		}
+		if(fat_cputype == cputype &&
+		   fat_cpusubtype == CPU_SUBTYPE_ARM_V8M_BASE)
+		    return(i);
+	    }
+	    for(i = 0; i < nfat_archs; i++){
+		if(fat_archs64 != NULL){
+		    fat_cputype = fat_archs64[i].cputype;
+		    fat_cpusubtype = fat_archs64[i].cpusubtype;
+		}
+		else{
+		    fat_cputype = fat_archs[i].cputype;
+		    fat_cpusubtype = fat_archs[i].cpusubtype;
+		}
+		if(fat_cputype == cputype &&
+		   fat_cpusubtype == CPU_SUBTYPE_ARM_V8_1M_MAIN)
+		    return(i);
+	    }
+	    for(i = 0; i < nfat_archs; i++){
+		if(fat_archs64 != NULL){
+		    fat_cputype = fat_archs64[i].cputype;
+		    fat_cpusubtype = fat_archs64[i].cpusubtype;
+		}
+		else{
+		    fat_cputype = fat_archs[i].cputype;
+		    fat_cpusubtype = fat_archs[i].cpusubtype;
+		}
+		if(fat_cputype == cputype &&
 		   fat_cpusubtype == CPU_SUBTYPE_ARM_ALL)
 		    return(i);
 	    }

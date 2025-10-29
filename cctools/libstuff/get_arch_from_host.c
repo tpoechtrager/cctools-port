@@ -496,6 +496,30 @@ struct arch_flag *specific_arch_flag)
 		if(specific_arch_flag != NULL)
 		    specific_arch_flag->name = "armv7em";
 		return(1);
+	    case CPU_SUBTYPE_ARM_V8M_MAIN:
+		if(family_arch_flag != NULL){
+		    family_arch_flag->name = "arm";
+		    family_arch_flag->cpusubtype = CPU_SUBTYPE_ARM_ALL;
+		}
+		if(specific_arch_flag != NULL)
+		    specific_arch_flag->name = "armv8m.main";
+		return(1);
+	    case CPU_SUBTYPE_ARM_V8M_BASE:
+		if(family_arch_flag != NULL){
+		    family_arch_flag->name = "arm";
+		    family_arch_flag->cpusubtype = CPU_SUBTYPE_ARM_ALL;
+		}
+		if(specific_arch_flag != NULL)
+		    specific_arch_flag->name = "armv8m.base";
+		return(1);
+	    case CPU_SUBTYPE_ARM_V8_1M_MAIN:
+		if(family_arch_flag != NULL){
+		    family_arch_flag->name = "arm";
+		    family_arch_flag->cpusubtype = CPU_SUBTYPE_ARM_ALL;
+		}
+		if(specific_arch_flag != NULL)
+		    specific_arch_flag->name = "armv8.1m.main";
+		return(1);
 	    }
 	    break;
 	case CPU_TYPE_ARM64:
