@@ -2,7 +2,7 @@
 ## DO NOT EDIT - This file generated from ./build-aux/ltmain.in
 ##               by inline-source v2019-02-19.15
 
-# libtool (GNU libtool) 2.5.4.23-5b58-dirty
+# libtool (GNU libtool) 2.6.0
 # Provide generalized library-building support services.
 # Written by Gordon Matzigkeit <gord@gnu.ai.mit.edu>, 1996
 
@@ -31,8 +31,8 @@
 
 PROGRAM=libtool
 PACKAGE=libtool
-VERSION=2.5.4.23-5b58-dirty
-package_revision=2.5.4.23
+VERSION=2.6.0
+package_revision=2.6.0
 
 
 ## ------ ##
@@ -2215,7 +2215,7 @@ func_version ()
 # End:
 
 # Set a version string.
-scriptversion='(GNU libtool) 2.5.4.23-5b58-dirty'
+scriptversion='(GNU libtool) 2.6.0'
 
 # func_version
 # ------------
@@ -3179,11 +3179,39 @@ func_convert_core_msys_to_w32 ()
 {
   $debug_cmd
 
-  # awkward: cmd appends spaces to result
+  # Compatibility for original MSYS
+  if test "Xone" = "X$lt_cv_cmd_slashes"; then
+  func_convert_core_msys_to_w32_result=`( cmd /c echo "$1" ) 2>/dev/null |
+    $SED -e 's/[ ]*$//' -e "$sed_naive_backslashify"`
+  else # Assume 'lt_cv_cmd_slashes = "two"'
   func_convert_core_msys_to_w32_result=`( cmd //c echo "$1" ) 2>/dev/null |
     $SED -e 's/[ ]*$//' -e "$sed_naive_backslashify"`
+  fi
+  if test "$?" -ne 0; then
+      # on failure, ensure result is empty
+      func_convert_core_msys_to_w32_result=
+  fi
 }
 #end: func_convert_core_msys_to_w32
+
+
+# func_convert_core_msys_to_w32_with_cygpath ARG
+# Convert file name or path ARG with cygpath from MSYS format to w32
+# format. Return result in func_convert_core_msys_to_w32_with_cygpath_result.
+func_convert_core_msys_to_w32_with_cygpath ()
+{
+  $debug_cmd
+
+  # Since MSYS2 is packaged with cygpath, call cygpath in $PATH; no need
+  # to use LT_CYGPATH in this case.
+  func_convert_core_msys_to_w32_result=`cygpath "$@" 2>/dev/null |
+	$SED -e 's/[ ]*$//' -e "$sed_naive_backslashify"`
+  if test "$?" -ne 0; then
+      # on failure, ensure result is empty
+      func_convert_core_msys_to_w32_result=
+  fi
+}
+#end: func_convert_core_msys_to_w32_with_cygpath
 
 
 # func_convert_file_check ARG1 ARG2
@@ -3320,8 +3348,13 @@ func_convert_file_msys_to_w32 ()
 
   func_to_host_file_result=$1
   if test -n "$1"; then
-    func_convert_core_msys_to_w32 "$1"
-    func_to_host_file_result=$func_convert_core_msys_to_w32_result
+    if test "Xyes" = "X$cygpath_installed"; then
+      func_convert_core_msys_to_w32_with_cygpath -w "$1"
+      func_to_host_file_result=$func_convert_core_msys_to_w32_with_cygpath_result
+    else
+      func_convert_core_msys_to_w32 "$1"
+      func_to_host_file_result=$func_convert_core_msys_to_w32_result
+    fi
   fi
   func_convert_file_check "$1" "$func_to_host_file_result"
 }
@@ -3372,8 +3405,13 @@ func_convert_file_msys_to_cygwin ()
 
   func_to_host_file_result=$1
   if test -n "$1"; then
-    func_convert_core_msys_to_w32 "$1"
-    func_cygpath -u "$func_convert_core_msys_to_w32_result"
+    if test "Xyes" = "X$cygpath_installed"; then
+      func_convert_core_msys_to_w32_with_cygpath -w "$1"
+      func_cygpath -u "$func_convert_core_msys_to_w32_with_cygpath_result"
+    else
+      func_convert_core_msys_to_w32 "$1"
+      func_cygpath -u "$func_convert_core_msys_to_w32_result"
+    fi
     func_to_host_file_result=$func_cygpath_result
   fi
   func_convert_file_check "$1" "$func_to_host_file_result"
@@ -3474,8 +3512,13 @@ func_convert_path_msys_to_w32 ()
     # and winepath ignores them completely.
     func_stripname : : "$1"
     func_to_host_path_tmp1=$func_stripname_result
-    func_convert_core_msys_to_w32 "$func_to_host_path_tmp1"
-    func_to_host_path_result=$func_convert_core_msys_to_w32_result
+    if test "Xyes" = "X$cygpath_installed"; then
+      func_convert_core_msys_to_w32_with_cygpath -w -p "$func_to_host_path_tmp1"
+      func_to_host_path_result=$func_convert_core_msys_to_w32_with_cygpath_result
+    else
+      func_convert_core_msys_to_w32 "$func_to_host_path_tmp1"
+      func_to_host_path_result=$func_convert_core_msys_to_w32_result
+    fi
     func_convert_path_check : ";" \
       "$func_to_host_path_tmp1" "$func_to_host_path_result"
     func_convert_path_front_back_pathsep ":*" "*:" ";" "$1"
@@ -3539,8 +3582,13 @@ func_convert_path_msys_to_cygwin ()
     # See func_convert_path_msys_to_w32:
     func_stripname : : "$1"
     func_to_host_path_tmp1=$func_stripname_result
-    func_convert_core_msys_to_w32 "$func_to_host_path_tmp1"
-    func_cygpath -u -p "$func_convert_core_msys_to_w32_result"
+    if test "Xyes" = "X$cygpath_installed"; then
+      func_convert_core_msys_to_w32_with_cygpath -w -p "$func_to_host_path_tmp1"
+      func_cygpath -u -p "$func_convert_core_msys_to_w32_with_cygpath_result"
+    else
+      func_convert_core_msys_to_w32 "$func_to_host_path_tmp1"
+      func_cygpath -u -p "$func_convert_core_msys_to_w32_result"
+    fi
     func_to_host_path_result=$func_cygpath_result
     func_convert_path_check : : \
       "$func_to_host_path_tmp1" "$func_to_host_path_result"
@@ -4472,6 +4520,14 @@ func_mode_finish ()
       fi
       echo
 
+      echo "After a 'make install' for many GNU/Linux systems, 'ldconfig LIBDIR'"
+      echo "may need to be executed to help locate newly installed libraries,"
+      echo "but you should consult with a system administrator before updating"
+      echo "the shared library cache as this should be done with great care"
+      echo "and consideration. (See the 'Platform-specific configuration notes'"
+      echo "section of the documentation for more information.)"
+      echo
+
       echo "See any operating system documentation about shared libraries for"
       case $host in
 	solaris2.[6789]|solaris2.1[0-9])
@@ -5062,7 +5118,7 @@ extern \"C\" {
 
 	  # Prepare the list of exported symbols
 	  if test -z "$export_symbols"; then
-	    export_symbols=$output_objdir/$outputname.exp
+	    export_symbols=$output_objdir/$outputname.expsym
 	    $opt_dry_run || {
 	      $RM $export_symbols
 	      eval "$SED -n -e '/^: @PROGRAM@ $/d' -e 's/^.* \(.*\)$/\1/p' "'< "$nlist" > "$export_symbols"'
@@ -5075,8 +5131,8 @@ extern \"C\" {
 	    }
 	  else
 	    $opt_dry_run || {
-	      eval "$SED -e 's/\([].[*^$]\)/\\\\\1/g' -e 's/^/ /' -e 's/$/$/'"' < "$export_symbols" > "$output_objdir/$outputname.exp"'
-	      eval '$GREP -f "$output_objdir/$outputname.exp" < "$nlist" > "$nlist"T'
+	      eval "$SED -e 's/\([].[*^$]\)/\\\\\1/g' -e 's/^/ /' -e 's/$/$/'"' < "$export_symbols" > "$output_objdir/$outputname.expsym"'
+	      eval '$GREP -f "$output_objdir/$outputname.expsym" < "$nlist" > "$nlist"T'
 	      eval '$MV "$nlist"T "$nlist"'
 	      case $host in
 	        *cygwin* | *mingw* | *windows* | *cegcc* )
@@ -5996,6 +6052,7 @@ int setenv (const char *, const char *, int);
 # define getcwd  _getcwd
 # define putenv  _putenv
 # define S_IXUSR _S_IEXEC
+# define MSVC_ISDIR(m)(((m) & S_IFMT) == S_IFDIR)
 #elif defined __MINGW32__
 # define setmode _setmode
 # define stat    _stat
@@ -6391,8 +6448,13 @@ check_executable (const char *path)
   if ((!path) || (!*path))
     return 0;
 
+#ifdef _MSC_VER
+  if ((stat (path, &st) >= 0) && !MSVC_ISDIR (st.st_mode)
+      && (st.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH)))
+#else
   if ((stat (path, &st) >= 0) && !S_ISDIR (st.st_mode)
       && (st.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH)))
+#endif
     return 1;
   else
     return 0;
@@ -7297,8 +7359,13 @@ func_mode_link ()
 	  continue
 	  ;;
 	xlinker)
-	  func_append linker_flags " $qarg"
-	  func_append compiler_flags " $wl$qarg"
+	  func_append linker_flags "$qarg,"
+	  # Args in the var 'compiler_flags' causes warnings in MSVC
+	  func_cc_basename "$CC"
+	  case $func_cc_basename_result in
+	    cl|cl.exe) ;;
+	    *) func_append compiler_flags " $wl$qarg" ;;
+	  esac
 	  prev=
 	  func_append compile_command " $wl$qarg"
 	  func_append finalize_command " $wl$qarg"
@@ -7663,6 +7730,11 @@ func_mode_link ()
 	arg=$func_stripname_result
 	;;
 
+	-Wl,--as-needed|-Wl,--no-as-needed)
+	deplibs="$deplibs $arg"
+	continue
+	;;
+
       -Wl,*)
 	func_stripname '-Wl,' '' "$arg"
 	args=$func_stripname_result
@@ -7672,8 +7744,13 @@ func_mode_link ()
 	  IFS=$save_ifs
           func_quote_arg pretty "$flag"
 	  func_append arg " $wl$func_quote_arg_result"
-	  func_append compiler_flags " $wl$func_quote_arg_result"
-	  func_append linker_flags " $func_quote_arg_result"
+	  # Args in the var 'compiler_flags' causes warnings in MSVC
+	  func_cc_basename "$CC"
+	  case $func_cc_basename_result in
+	     cl|cl.exe) ;;
+	     *) func_append compiler_flags " $wl$func_quote_arg_result" ;;
+	  esac
+	  func_append linker_flags "$func_quote_arg_result,"
 	done
 	IFS=$save_ifs
 	func_stripname ' ' '' "$arg"
@@ -7719,6 +7796,7 @@ func_mode_link ()
       # @file                GCC response files
       # -tp=*                Portland pgcc target processor selection
       # --sysroot=*          for sysroot support
+      # --target=*           for target architecture support
       # -O*, -g*, -flto*, -fwhopr*, -fuse-linker-plugin GCC link-time optimization
       # -specs=*             GCC specs files
       # -stdlib=*            select c++ std lib with clang
@@ -7736,15 +7814,15 @@ func_mode_link ()
       # --unwindlib=*        select unwinder library with clang
       # -f{file|debug|macro|profile}-prefix-map=* needed for lto linking
       # -Wa,*                Pass flags directly to the assembler
-      # -Werror, -Werror=*   Report (specified) warnings as errors
+      # -W*                  Warnings, needed for lto
       -64|-mips[0-9]|-r[0-9][0-9]*|-xarch=*|-xtarget=*|+DA*|+DD*|-q*|-m*| \
-      -t[45]*|-txscale*|-p|-pg|--coverage|-fprofile-*|-F*|@*|-tp=*|--sysroot=*| \
+      -t[45]*|-txscale*|-p|-pg|--coverage|-fprofile-*|-F*|@*|-tp=*|--sysroot=*|--target=*| \
       -O*|-g*|-flto*|-fwhopr*|-fuse-linker-plugin|-fstack-protector*|-no-canonical-prefixes| \
       -stdlib=*|-rtlib=*|--unwindlib=*| \
       -specs=*|-fsanitize=*|-fno-sanitize*|-shared-libsan|-static-libsan| \
       -ffile-prefix-map=*|-fdebug-prefix-map=*|-fmacro-prefix-map=*|-fprofile-prefix-map=*| \
       -fdiagnostics-color*|-frecord-gcc-switches| \
-      -fuse-ld=*|-static-*|-fcilkplus|-Wa,*|-Werror|-Werror=*)
+      -fuse-ld=*|-static-*|-fcilkplus|-W*)
         func_quote_arg pretty "$arg"
 	arg=$func_quote_arg_result
         func_append compile_command " $arg"
@@ -8085,6 +8163,15 @@ func_mode_link ()
 	lib=
 	found=false
 	case $deplib in
+	-Wl,--as-needed|-Wl,--no-as-needed)
+	   if test prog,link = "$linkmode,$pass"; then
+         compile_deplibs="$deplib $compile_deplibs"
+         finalize_deplibs="$deplib $finalize_deplibs"
+       else
+         deplibs="$deplib $deplibs"
+       fi
+       continue
+       ;;
 	-mt|-mthreads|-kthread|-Kthread|-pthread|-pthreads|--thread-safe \
         |-threads|-fopenmp|-fopenmp=*|-openmp|-mp|-xopenmp|-omp|-qsmp=*)
 	  if test prog,link = "$linkmode,$pass"; then
@@ -8243,8 +8330,15 @@ func_mode_link ()
 	  fi
 	  case $linkmode in
 	  lib)
-	    # Linking convenience modules into shared libraries is allowed,
-	    # but linking other static libraries is non-portable.
+	    # Linking convenience modules and compiler provided static libraries
+	    # into shared libraries is allowed, but linking other static
+	    # libraries is non-portable.
+	    case $deplib in
+	      */libgcc*.$libext | */libclang_rt*.$libext)
+		deplibs="$deplib $deplibs"
+		continue
+	      ;;
+	    esac
 	    case " $dlpreconveniencelibs " in
 	    *" $deplib "*) ;;
 	    *)
@@ -10029,7 +10123,7 @@ func_mode_link ()
 	if test -z "$export_symbols"; then
 	  if test yes = "$always_export_symbols" || test -n "$export_symbols_regex"; then
 	    func_verbose "generating symbol list for '$libname.la'"
-	    export_symbols=$output_objdir/$libname.exp
+	    export_symbols=$output_objdir/$libname.expsym
 	    $opt_dry_run || $RM $export_symbols
 	    cmds=$export_symbols_cmds
 	    save_ifs=$IFS; IFS='~'
@@ -10295,7 +10389,7 @@ func_mode_link ()
 
 	    ${skipped_export-false} && {
 	      func_verbose "generating symbol list for '$libname.la'"
-	      export_symbols=$output_objdir/$libname.exp
+	      export_symbols=$output_objdir/$libname.expsym
 	      $opt_dry_run || $RM $export_symbols
 	      libobjs=$output
 	      # Append the command to create the export file.
