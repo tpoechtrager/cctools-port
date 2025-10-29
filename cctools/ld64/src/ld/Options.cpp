@@ -6700,7 +6700,7 @@ void Options::checkIllegalOptionCombinations()
 
 	// can't use -rpath unless targeting 10.5 or later
 	if ( fRPaths.size() > 0 ) {
-		if ( !platforms().minOS(ld::version2007Fall) )
+		if ( !platforms().minOS(ld::version2007Fall) ) // ld64-port: ld::version2008 -> ld::version2007Fall
 			throw "-rpath can only be used when targeting Mac OS X 10.5 or later";
 		switch ( fOutputKind ) {
 			case Options::kDynamicExecutable:
