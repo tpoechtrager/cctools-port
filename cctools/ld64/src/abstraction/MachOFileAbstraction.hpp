@@ -389,6 +389,18 @@ struct dyld_chained_ptr_arm64e_auth_bind24
 	#define CPU_TYPE_RISCV32	24
 #endif
 
+#ifndef CPU_SUBTYPE_ARM_V8M_MAIN
+	#define CPU_SUBTYPE_ARM_V8M_MAIN 17
+#endif
+
+#ifndef CPU_SUBTYPE_ARM_V8M_BASE
+	#define CPU_SUBTYPE_ARM_V8M_BASE 18
+#endif
+
+#ifndef CPU_SUBTYPE_ARM_V8_1M_MAIN
+	#define CPU_SUBTYPE_ARM_V8_1M_MAIN 19
+#endif
+
 #define UNW_ARM64_X0     0
 #define UNW_ARM64_X1     1
 #define UNW_ARM64_X2     2
@@ -627,6 +639,11 @@ static const ArchInfo archInfoArray[] = {
 #endif
 #if SUPPORT_ARCH_armv8
 	{ "armv8", CPU_TYPE_ARM,     CPU_SUBTYPE_ARM_V8,     "thumbv8-", "armv8", Thumb2Support::all },
+	#define SUPPORT_ARCH_arm_any 1
+#endif
+#if SUPPORT_ARCH_armv8m
+	{ "armv8m.main",   CPU_TYPE_ARM,    CPU_SUBTYPE_ARM_V8M_MAIN,    "thumbv8m.main-",   "armv8m.main",   Thumb2Support::all },
+	{ "armv8.1m.main", CPU_TYPE_ARM,    CPU_SUBTYPE_ARM_V8_1M_MAIN,  "thumbv8.1m.main-", "armv8.1m.main", Thumb2Support::all },
 	#define SUPPORT_ARCH_arm_any 1
 #endif
 #if SUPPORT_ARCH_arm64

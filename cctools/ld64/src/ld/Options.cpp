@@ -800,6 +800,9 @@ bool Options::armFirmwareVariant() const {
 		case CPU_SUBTYPE_ARM_V6M:
 		case CPU_SUBTYPE_ARM_V7M:
 		case CPU_SUBTYPE_ARM_V7EM:
+		case CPU_SUBTYPE_ARM_V8M_MAIN:
+		case CPU_SUBTYPE_ARM_V8M_BASE:
+		case CPU_SUBTYPE_ARM_V8_1M_MAIN:
 			return true;
 		default:
 			break;
@@ -4992,7 +4995,8 @@ void Options::reconfigureDefaults()
 		uint32_t iOSMacOSMajorVersion = (iOSMacVersion >> 16) & 0xFFFF;
 
 		// macOS 11 -> iOSMac 14, and so on
-		uint32_t newMajorVersion = macOSMajorVersion + 3;
+		uint32_t newMajorVersion = macOSMajorVersion < 26 ? macOSMajorVersion + 3 : macOSMajorVersion;
+		// rdar://154107557 (ld64 fix handling of zippered versions for macOS 26+)
 		if ( newMajorVersion > iOSMacOSMajorVersion ) {
 			uint32_t newVersion = newMajorVersion << 16;
 			std::string oldVersionString = getVersionString32(iOSMacVersion);

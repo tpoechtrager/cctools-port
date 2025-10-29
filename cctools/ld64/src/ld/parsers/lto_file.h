@@ -93,6 +93,7 @@ struct OptimizeOptions {
 
 extern bool	optimize(   const std::vector<const ld::Atom*>&	allAtoms,
 						ld::Internal&						state,
+						const Options&								ldOptions,
 						const OptimizeOptions&				options,
 						ld::File::AtomHandler&				handler,
 						std::vector<const ld::Atom*>&		newAtoms, 

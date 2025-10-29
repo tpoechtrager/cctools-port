@@ -11,14 +11,29 @@ else
 fi
 
 if [ -z "${RC_SUPPORTED_ARCHS}" ]; then
-	RC_SUPPORTED_ARCHS="i386 x86_64 x86_64h armv6 armv7 armv7s armv7m armv7k arm64 arm64e arm64_32"
+	RC_SUPPORTED_ARCHS="i386 x86_64 x86_64h armv6 armv7 armv7s armv7m armv7em armv7k arm64 arm64e arm64_32"
+fi
+
+# armv7{e}m imply armv8m
+if [[ "$RC_SUPPORTED_ARCHS" == *"armv7m"* || "$RC_SUPPORTED_ARCHS" == *"armv7em"* ]]; then
+	if [[ "$RC_SUPPORTED_ARCHS" != *"armv8m"* ]] ; then
+		RC_SUPPORTED_ARCHS="${RC_SUPPORTED_ARCHS} armv8m.main armv8.1m.main"
+	fi
 fi
 
 RISCV_DEFINED=0
+ALL_SUPPORTED_ARCHS=""
 for ANARCH in ${RC_SUPPORTED_ARCHS}
 do
-    KNOWN_ARCHS=",armv4t,armv5,armv6,armv7,armv7f,armv7k,armv7s,armv6m,armv7m,armv7em,armv8,arm64,arm64v8,i386,x86_64,x86_64h,arm64e,arm64_32,riscv32,"
-    FOUND=`echo "$KNOWN_ARCHS" | grep ",$ANARCH,"`
+  KNOWN_ARCHS=",armv4t,armv5,armv6,armv7,armv7f,armv7k,armv7s,armv6m,armv7m,armv7em,armv8,armv8m.main,armv8.1m.main,arm64,arm64v8,i386,x86_64,x86_64h,arm64e,arm64_32,riscv32,"
+	FOUND=`echo "$KNOWN_ARCHS" | grep ",$ANARCH,"`
+
+	ALL_SUPPORTED_ARCHS="${ALL_SUPPORTED_ARCHS} ${ANARCH}"
+
+	# dots aren't allowed in macro definitions, map all armv8m variants to a single armv8m define
+	if [[ "$ANARCH" == "armv8m.main" || "$ANARCH" == "armv8.1m.main" ]]; then
+		ANARCH="armv8m";
+	fi
 	if [ $FOUND ]; then
 		echo "#define SUPPORT_ARCH_$ANARCH  1" >> ${DERIVED_FILE_DIR}/configure.h
 	else
@@ -39,7 +54,7 @@ if [[ ${RISCV_DEFINED} -eq 0 ]]; then
 	fi
 fi
 
-echo "#define ALL_SUPPORTED_ARCHS  \"${RC_SUPPORTED_ARCHS}\"" >> ${DERIVED_FILE_DIR}/configure.h
+echo "#define ALL_SUPPORTED_ARCHS  \"${ALL_SUPPORTED_ARCHS}\"" >> ${DERIVED_FILE_DIR}/configure.h
 
 if [ -f "${TOOLCHAIN_DIR}/usr/lib/libswiftDemangle.dylib" ]; then
 	echo "${TOOLCHAIN_DIR}/usr/lib/libswiftDemangle.dylib" >  ${DERIVED_FILE_DIR}/linkExtras
