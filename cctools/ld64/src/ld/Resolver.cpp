@@ -2064,7 +2064,7 @@ void Resolver::linkTimeOptimize()
 	
 	std::vector<const ld::Atom*>		newAtoms;
 	std::vector<const char*>			additionalUndefines; 
-	if ( ! lto::optimize(_atoms, _internal, optOpt, *this, newAtoms, additionalUndefines) )
+	if ( ! lto::optimize(_atoms, _internal, _options, optOpt, *this, newAtoms, additionalUndefines) )
 		return; // if nothing done
 	_ltoCodeGenFinished = true;
 	

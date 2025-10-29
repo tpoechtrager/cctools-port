@@ -482,9 +482,15 @@ bool File::allSymbolsAreWeakImported() const
         if ( atom != nullptr ) {
             if ( atom->weakImported() )
                 foundWeakImport = true;
-            else
+            else {
+                // rdar://152679141 (ld64 should not consider $ld$previous renamed symbols to determine implicit weak-imports)
+                // note: this is used only to ignore strong imports, because
+                // if there are no imports at all then we won't implicitly weak-link
+                if ( it.second.installname != nullptr )
+                    continue;
                 foundNonWeakImport = true;
-            //fprintf(stderr, "  weak_import=%d, name=%s\n", atom->weakImported(), it->first);
+            }
+            //fprintf(stderr, "  weak_import=%d, name=%s\n", atom->weakImported(), it.first);
         }
     }
 

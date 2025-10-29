@@ -5978,7 +5978,7 @@ void OutputFile::noteTextReloc(const ld::Atom* atom, const ld::Atom* target)
 		this->pieDisabled = true;
 	}
 	else if ( (target->scope() == ld::Atom::scopeGlobal) && (target->combine() == ld::Atom::combineByName) ) {
-		throwf("illegal text-relocoation (direct reference) to (global,weak) %s in %s from %s in %s", target->name(), target->safeFilePath(), atom->name(), atom->safeFilePath());
+		throwf("illegal text-relocation (direct reference) to (global,weak) %s in %s from %s in %s", target->name(), target->safeFilePath(), atom->name(), atom->safeFilePath());
 	}
 	else {
 		if ( (target->file() != NULL) && (atom->file() != NULL) )
