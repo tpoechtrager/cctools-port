@@ -2617,7 +2617,8 @@ void Options::parse(int argc, const char* argv[])
 				fprintf (stderr, "[Logging ld64 options]\t%s\n", arg);
 
 			// grandfather in old arg name
-			if ( strcmp(arg, "-iphoneos_version_min") == 0 )
+			// ld64-port: added -aspen_version_min
+			if ( strcmp(arg, "-iphoneos_version_min") == 0 || strcmp(arg, "-aspen_version_min") == 0 )
 				arg = "-ios_version_min";
 
 			if ( strcmp(arg, "-macosx_version_min") == 0 )
