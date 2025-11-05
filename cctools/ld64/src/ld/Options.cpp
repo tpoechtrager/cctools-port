@@ -3416,9 +3416,11 @@ void Options::parse(int argc, const char* argv[])
 						value = info->minimumOsVersion;
 						warning("changing %s minOS version from %s to %s", info->printName, versStr, getVersionString32(info->minimumOsVersion).c_str());
 					}
+#if 0 // ld64-port: addded #if 0
 					else {
 						warning("building for %s %s is deprecated", info->printName, versStr);
 					}
+#endif
 				}
 				if (fPlatforms.contains(info->platform)) {
 					std::string existingVersionStr = getVersionString32(fPlatforms.minOS(info->platform));
