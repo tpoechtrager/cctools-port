@@ -51,6 +51,16 @@ const char *BlobCore::stringAt(Offset offset) const
 		return NULL;
 }
 
+//
+// Clone (deep copy) a blob
+//
+BlobCore *BlobCore::clone() const
+{
+	size_t len = this->length();
+	BlobCore *copy = (BlobCore *)malloc(len);
+	if (copy) memcpy(copy, this, len);
+	return copy;
+}
 
 //
 // Read a blob from a standard file stream.
