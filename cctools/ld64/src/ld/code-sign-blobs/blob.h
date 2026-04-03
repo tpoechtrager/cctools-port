@@ -105,6 +105,8 @@ public:
 	char *stringAt(Offset offset);
 	const char *stringAt(Offset offset) const;
 
+	BlobCore *clone() const;
+
 	void *data()						{ return this; }
 	const void *data() const			{ return this; }
 	void length(size_t size)			{ mLength = size; }
