@@ -69,7 +69,7 @@
 #endif
 
 #define bl htonl
-#ifndef __APPLE__ // ld64-port
+#ifndef htonll // ld64-port
 #if __BYTE_ORDER == __LITTLE_ENDIAN
 #define htonll __builtin_bswap64
 #else
