@@ -68,6 +68,12 @@ AC_DEFUN([CHECK_LLVM],
               cp -f $LLVM_INCLUDE_DIR/llvm-c/ExternC.h `dirname ${0}`/include/llvm-c
             fi
 
+            if test -e $LLVM_INCLUDE_DIR/llvm-c/Visibility.h; then
+              cp -f $LLVM_INCLUDE_DIR/llvm-c/Visibility.h `dirname ${0}`/include/llvm-c
+              mkdir -p `dirname ${0}`/include/llvm/Config
+              cp -f $LLVM_INCLUDE_DIR/llvm/Config/llvm-config.h `dirname ${0}`/include/llvm/Config
+            fi
+
             LTO_DEF=-DLTO_SUPPORT
             LTO_LIB="-L${LLVM_LIB_DIR} -lLTO"
 
