@@ -70,7 +70,7 @@
 
 #define bl htonl
 #ifndef htonll // ld64-port
-#if __BYTE_ORDER == __LITTLE_ENDIAN
+#ifdef __LITTLE_ENDIAN__
 #define htonll __builtin_bswap64
 #else
 #define htonll(x) x
