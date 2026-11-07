@@ -150,6 +150,13 @@ int32_t StringPoolAtom::add(const char* str)
 	if ( (_currentBufferUsed+lenNeeded) < kBufferSize ) {
 		_currentBufferUsed += lenNeeded;
 	}
+	else if ( (_currentBufferUsed+lenNeeded) == kBufferSize ) {
+		// the copy ended with trailing '\0' at the end of the current buffer.
+		// we just allocate the next buffer
+		_fullBuffers.push_back(_currentBuffer);
+		_currentBuffer = new char[kBufferSize];
+		_currentBufferUsed = 0;
+	}
 	else {
 		int copied = kBufferSize-_currentBufferUsed-1;
 		// change trailing '\0' that strlcpy added to real char
