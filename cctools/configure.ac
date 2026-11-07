@@ -14,6 +14,10 @@ if test "x$CFLAGS" = "x"; then
   CFLAGS="-O3"
 fi
 
+# Autoconf 2.73 may enable C23, where bool is a keyword and
+# enum bool in include/stuff/bool.h no longer compiles.
+CFLAGS="$CFLAGS -std=gnu11"
+
 if test "x$CXXFLAGS" = "x"; then
   CXXFLAGS="-O3"
 fi
