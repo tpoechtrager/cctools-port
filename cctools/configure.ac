@@ -11,6 +11,9 @@ CC=clang
 CXX=clang++
 CPP="clang -E"
 
+# cctools uses enum bool, which is incompatible with C23.
+CFLAGS="$CFLAGS -std=gnu99"
+
 CFLAGS="$CFLAGS `cat tmp/cflags 2>/dev/null` -isystem /usr/local/include -isystem /usr/pkg/include -O3"
 CXXFLAGS="$CXXFLAGS `cat tmp/cxxflags 2>/dev/null` -isystem /usr/local/include -isystem /usr/pkg/include -O3"
 LDFLAGS="$LDFLAGS -L/usr/local/lib `cat tmp/ldflags 2>/dev/null`"

@@ -14,6 +14,11 @@ function try()
         # Adding the include directory with -I causes the build to fail.
         ln -sf "$LLVM_INC_DIR/llvm-c/lto.h" "include/llvm-c/lto.h"
         ln -sf "$LLVM_INC_DIR/llvm-c/ExternC.h" "include/llvm-c/ExternC.h"
+        if test -f "$LLVM_INC_DIR/llvm-c/Visibility.h"; then
+            ln -sf "$LLVM_INC_DIR/llvm-c/Visibility.h" "include/llvm-c/Visibility.h"
+            mkdir -p include/llvm/Config
+            ln -sf "$LLVM_INC_DIR/llvm/Config/llvm-config.h" "include/llvm/Config/llvm-config.h"
+        fi
         mkdir -p tmp
         echo -n "-Wl,-rpath,$LLVM_LIB_DIR,--enable-new-dtags -L$LLVM_LIB_DIR -lLTO " > tmp/ldflags
         echo -n "-DLTO_SUPPORT=1 " > tmp/cflags
