@@ -880,6 +880,10 @@ InputFiles::InputFiles(Options& opts, const char** archName)
 	
 	// initialize info for parsing input files on worker threads
 	unsigned int ncpus;
+#ifdef __linux__
+	long onlineCPUs = sysconf(_SC_NPROCESSORS_ONLN);
+	ncpus = onlineCPUs > 0 ? onlineCPUs : 1;
+#else
 	int mib[2];
 	size_t len = sizeof(ncpus);
 	mib[0] = CTL_HW;
@@ -887,6 +891,7 @@ InputFiles::InputFiles(Options& opts, const char** archName)
 	if (sysctl(mib, 2, &ncpus, &len, NULL, 0) != 0) {
 		ncpus = 1;
 	}
+#endif
 	_availableWorkers = MIN(ncpus, files.size()); // max # workers we permit
 	_idleWorkers = 0;
 	
