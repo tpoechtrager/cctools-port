@@ -3742,7 +3742,7 @@ bool CFISection<A>::needsRelocating()
 
 template <>
 void CFISection<x86_64>::cfiParse(class Parser<x86_64>& parser, uint8_t* buffer, 
-									libunwind::CFI_Atom_Info<CFISection<x86_64>::OAS> cfiArray[], 
+									libunwind::CFI_Atom_Info<CFISection<x86_64>::OAS> cfiArray[],
 									uint32_t count)
 {
 	// copy __eh_frame data to buffer
@@ -3804,7 +3804,7 @@ void CFISection<x86_64>::cfiParse(class Parser<x86_64>& parser, uint8_t* buffer,
 
 template <>
 void CFISection<x86>::cfiParse(class Parser<x86>& parser, uint8_t* buffer, 
-									libunwind::CFI_Atom_Info<CFISection<x86>::OAS> cfiArray[], 
+									libunwind::CFI_Atom_Info<CFISection<x86>::OAS> cfiArray[],
 									uint32_t count)
 {
 	// create ObjectAddressSpace object for use by libunwind
@@ -3824,7 +3824,7 @@ void CFISection<x86>::cfiParse(class Parser<x86>& parser, uint8_t* buffer,
 
 template <>
 void CFISection<arm>::cfiParse(class Parser<arm>& parser, uint8_t* buffer, 
-									libunwind::CFI_Atom_Info<CFISection<arm>::OAS> cfiArray[], 
+									libunwind::CFI_Atom_Info<CFISection<arm>::OAS> cfiArray[],
 									uint32_t count)
 {
 	// arm does not use zero cost exceptions

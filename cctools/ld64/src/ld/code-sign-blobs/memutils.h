@@ -55,7 +55,7 @@ static const size_t systemAlignment = 4;
 // Get the local alignment for a type, as used by the acting compiler.
 //
 template <class T>
-inline size_t alignof() { struct { char c; T t; } s; return sizeof(s) - sizeof(T); }
+inline size_t alignmentOf() { struct { char c; T t; } s; return sizeof(s) - sizeof(T); }
 
 
 //
