@@ -2724,6 +2724,13 @@ void OutputFile::writeOutputFile(ld::Internal& state)
 		}
 	}
 	
+	// ld64-port: Backport the Apple Silicon output workaround.
+	// https://github.com/tpoechtrager/cctools-port/pull/118
+#if defined(__APPLE__) && defined(__arm64__)
+	// <rdar://problem/66598213> Use write() instead of mmap() on Apple Silicon.
+	outputIsMappableFile = false;
+#endif
+
 	//fprintf(stderr, "outputIsMappableFile=%d, outputIsRegularFile=%d, path=%s\n", outputIsMappableFile, outputIsRegularFile, _options.outputFilePath());
 	
 	int fd;
