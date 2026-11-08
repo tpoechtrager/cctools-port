@@ -113,6 +113,8 @@ struct object *object)
 	object->seg_linkedit64 = NULL;
 	object->notes = NULL;
 	object->nnote = 0;
+        object->lazyLoads = NULL;
+        object->nlazyLoads = 0;
 	dl_id = NULL;
 	lc = object->load_commands;
 	if(object->mh != NULL){
@@ -153,6 +155,19 @@ struct object *object)
 		    fatal_arch(arch, member, "malformed file (more than one "
 			"LC_SEGMENT_SPLIT_INFO load command): ");
 		object->split_info_cmd = (struct linkedit_data_command *)lc;
+	    }
+	    else if(lc->cmd == LC_LAZY_LOAD_DYLIB_INFO){
+		if(object->lazyLoads == NULL) {
+		    object->lazyLoads = (struct LazyLoadCommandAndData*)malloc(sizeof(struct LazyLoadCommandAndData));
+		    object->nlazyLoads = 0;
+		}
+		else {
+		    object->lazyLoads = (struct LazyLoadCommandAndData*)realloc(object->lazyLoads, sizeof(struct LazyLoadCommandAndData)*(object->nlazyLoads+1));
+		}
+		object->lazyLoads[object->nlazyLoads].lc = (struct linkedit_data_command*)lc;
+		object->lazyLoads[object->nlazyLoads].data = NULL;
+		object->lazyLoads[object->nlazyLoads].dataSize = 0;
+		object->nlazyLoads++;
 	    }
 	    else if(lc->cmd == LC_FUNCTION_STARTS){
 		if(object->func_starts_info_cmd != NULL)
@@ -552,6 +567,11 @@ struct object *object)
 	       object->split_info_cmd->dataoff != offset)
 		order_error(arch, member, "split info data out of place");
 	    offset += object->split_info_cmd->datasize;
+	}
+	if(object->nlazyLoads != 0){
+	    for(uint32_t i=0; i <object->nlazyLoads; ++i){
+		offset += object->lazyLoads[i].lc->datasize;
+	    }
 	}
 	if(object->func_starts_info_cmd != NULL){
 	    if(object->func_starts_info_cmd->dataoff != 0 &&

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-BASE_VERSION=955.13
-NEW_VERSION=956.6
+BASE_VERSION=956.6
+NEW_VERSION=957.1
 
 set -e
 
@@ -10,8 +10,8 @@ TMPDIR=`mktemp -d`
 
 pushd $TMPDIR
 
-wget http://www.opensource.apple.com/tarballs/ld64/ld64-$BASE_VERSION.tar.gz
-wget http://www.opensource.apple.com/tarballs/ld64/ld64-$NEW_VERSION.tar.gz
+wget https://www.opensource.apple.com/tarballs/ld64/ld64-$BASE_VERSION.tar.gz
+wget https://www.opensource.apple.com/tarballs/ld64/ld64-$NEW_VERSION.tar.gz
 
 tar xzf ld64-$BASE_VERSION.tar.gz &>/dev/null
 tar xzf ld64-$NEW_VERSION.tar.gz &>/dev/null

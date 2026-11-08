@@ -929,6 +929,11 @@ void Resolver::resolveCurrentUndefines() {
 			continue;
 		}
 
+		// rdar://164281617 (ld64 objc_msgSendClass stubs unsupported check should not apply to -r links)
+		if ( undefsv.starts_with("_objc_msgSendClass$") && _synthesizeObjcMsgSendStubs ) {
+			throwf("objc class message stub to '%s' is not supported.  Use ld, not ld_classic", undefsv.data());
+		}
+
 		// load for previous undefine may also have loaded this undefine, so check again
 		if ( ! _symbolTable.hasName(undefsv) ) {
 			const char* undef = undefsv.data();

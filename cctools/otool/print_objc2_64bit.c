@@ -28,6 +28,7 @@
  *
  * @APPLE_LICENSE_HEADER_END@
  */
+#include <mach/machine-cctools.h>
 #include "stdio.h"
 #include "stddef.h"
 #include "string.h"

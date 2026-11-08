@@ -2759,6 +2759,7 @@ enum bool very_verbose)
 	    case LC_DYLD_CHAINED_FIXUPS:
 	    case LC_FUNCTION_VARIANTS:
 	    case LC_FUNCTION_VARIANT_FIXUPS:
+            case LC_LAZY_LOAD_DYLIB_INFO:
 		memset((char *)&ld, '\0', sizeof(struct linkedit_data_command));
 		size = left < sizeof(struct linkedit_data_command) ?
 		       left : sizeof(struct linkedit_data_command);
@@ -4139,6 +4140,8 @@ uint64_t object_size)
             printf("      cmd LC_FUNCTION_VARIANTS\n");
         else if(ld->cmd == LC_FUNCTION_VARIANT_FIXUPS)
             printf("      cmd LC_FUNCTION_VARIANT_FIXUPS\n");
+        else if(ld->cmd == LC_LAZY_LOAD_DYLIB_INFO)
+            printf("      cmd LC_LAZY_LOAD_DYLIB_INFO\n");
 	else
 	    printf("      cmd %u (?)\n", ld->cmd);
 	printf("  cmdsize %u", ld->cmdsize);

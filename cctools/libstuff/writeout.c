@@ -1070,6 +1070,13 @@ struct object *object)
 			   object->output_split_info_data_size);
 		*size += object->output_split_info_data_size;
 	    }
+	    if(object->nlazyLoads != 0){
+		for(uint32_t i=0; i < object->nlazyLoads; ++i){
+		    memcpy(p + *size, object->lazyLoads[i].data,
+			   object->lazyLoads[i].dataSize);
+		    *size += object->lazyLoads[i].dataSize;
+		}
+	    }
 	    if(object->output_func_start_info_data_size != 0){
 		if(object->output_func_start_info_data != NULL)
 		    memcpy(p + *size, object->output_func_start_info_data,

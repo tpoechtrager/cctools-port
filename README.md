@@ -1,6 +1,6 @@
 # Apple cctools and ld64 port for Linux, *BSD and macOS #
 
-Current Version: cctools: 1030.6.3, ld64: 956.6.  
+Current Version: cctools: 1035.1.102, ld64: 957.1.  
 Originally ported by [cjacker](http://ios-toolchain-based-on-clang-for-linux.googlecode.com).
 
 ## SUPPORTED HOSTS ##
@@ -28,6 +28,11 @@ macOS, iOS, tvOS, watchOS, bridgeOS, Mac Catalyst,
 iOS Simluator, watchOS Simulator, DriverKit
 
 Not all of the targets have been tested.
+
+## TOOLS ##
+
+See [Tools](TOOLS.md) for the cctools and ld64 tool lists, including tools
+retained from earlier cctools releases.
 
 ## DEPENDENCIES ##
 
@@ -72,7 +77,3 @@ This step is only required if you intend to use SDKs with .tdb stubs.
     make install
 
 target = `i386-apple-darwin11`, `x86_64-apple-darwin11`, `arm-apple-darwin11`, ...
-
-## TRAVIS CI ##
-
-[![Build Status](https://travis-ci.org/tpoechtrager/cctools-port.svg?branch=973.0.1-ld64-609)](https://travis-ci.org/tpoechtrager/cctools-port)

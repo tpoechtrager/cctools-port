@@ -37,11 +37,7 @@
 #include "stuff/rnd.h"
 #include "stuff/write64.h"
 
-#include "coff/ms_dos_stub.h"
-#include "coff/filehdr.h"
-#include "coff/aouthdr.h"
-#include "coff/scnhdr.h"
-#include "coff/syment.h"
+#include "coff/coff.h"
 #include "coff/bytesex.h"
 
 #include "coff/base_relocs.h"
@@ -78,7 +74,7 @@ static char **scn_contents = NULL; /* pointers to the section contents */
 /*
  * The value of the -subsystem argument to then set in the PECOFF aouthdr.
  */
-static uint16_t Subsystem = IMAGE_SUBSYSTEM_EFI_APPLICATION;
+static uint16_t Subsystem = EFI_IMAGE_SUBSYSTEM_EFI_APPLICATION;
 
 struct subsystem_argument {
     char *name;
@@ -86,34 +82,34 @@ struct subsystem_argument {
 };
 
 struct subsystem_argument subsystem_arguments[] = {
-    { "application",		IMAGE_SUBSYSTEM_EFI_APPLICATION },
-    { "app",			IMAGE_SUBSYSTEM_EFI_APPLICATION },
-    { "UEFI_APPLICATION",	IMAGE_SUBSYSTEM_EFI_APPLICATION },
-    { "APPLICATION",	        IMAGE_SUBSYSTEM_EFI_APPLICATION },
+    { "application",		EFI_IMAGE_SUBSYSTEM_EFI_APPLICATION },
+    { "app",			EFI_IMAGE_SUBSYSTEM_EFI_APPLICATION },
+    { "UEFI_APPLICATION",	EFI_IMAGE_SUBSYSTEM_EFI_APPLICATION },
+    { "APPLICATION",	        EFI_IMAGE_SUBSYSTEM_EFI_APPLICATION },
 
-    { "boot",			IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER },
-    { "bsdrv",			IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER },
-    { "DXE_DRIVER",		IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER },
-    { "SEC",			IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER },
-    { "peim",			IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER },
-    { "BASE",			IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER },
-    { "PEI_CORE",		IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER },
-    { "PEIM",			IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER },
-    { "DXE_SMM_DRIVER",		IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER },
-    { "TOOL",			IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER },
-    { "USER_DEFINED",		IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER },
-    { "UEFI_DRIVER",		IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER },
-    { "DXE_CORE",		IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER },
-    { "SECURITY_CORE",		IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER },
-    { "COMBINED_PEIM_DRIVER",	IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER },
-    { "PIC_PEIM",		IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER },
-    { "RELOCATABLE_PEIM",	IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER },
-    { "BS_DRIVER",		IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER },
-    { "SMM_CORE",		IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER },
+    { "boot",			EFI_IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER },
+    { "bsdrv",			EFI_IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER },
+    { "DXE_DRIVER",		EFI_IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER },
+    { "SEC",			EFI_IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER },
+    { "peim",			EFI_IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER },
+    { "BASE",			EFI_IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER },
+    { "PEI_CORE",		EFI_IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER },
+    { "PEIM",			EFI_IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER },
+    { "DXE_SMM_DRIVER",		EFI_IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER },
+    { "TOOL",			EFI_IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER },
+    { "USER_DEFINED",		EFI_IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER },
+    { "UEFI_DRIVER",		EFI_IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER },
+    { "DXE_CORE",		EFI_IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER },
+    { "SECURITY_CORE",		EFI_IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER },
+    { "COMBINED_PEIM_DRIVER",	EFI_IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER },
+    { "PIC_PEIM",		EFI_IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER },
+    { "RELOCATABLE_PEIM",	EFI_IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER },
+    { "BS_DRIVER",		EFI_IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER },
+    { "SMM_CORE",		EFI_IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER },
 
-    { "runtime",		IMAGE_SUBSYSTEM_EFI_RUNTIME_DRIVER },
-    { "rtdrv",			IMAGE_SUBSYSTEM_EFI_RUNTIME_DRIVER },
-    { "DXE_RUNTIME_DRIVER",	IMAGE_SUBSYSTEM_EFI_RUNTIME_DRIVER },
+    { "runtime",		EFI_IMAGE_SUBSYSTEM_EFI_RUNTIME_DRIVER },
+    { "rtdrv",			EFI_IMAGE_SUBSYSTEM_EFI_RUNTIME_DRIVER },
+    { "DXE_RUNTIME_DRIVER",	EFI_IMAGE_SUBSYSTEM_EFI_RUNTIME_DRIVER },
 
     { NULL, 0 }
 };
@@ -801,9 +797,9 @@ struct arch *arch)
 		    scnhdrs[j].s_relptr = 0;
 		    scnhdrs[j].s_lnnoptr = 0;
 		    scnhdrs[j].s_nlnno = 0;
-		    scnhdrs[j].s_flags = IMAGE_SCN_MEM_EXECUTE |
-					 IMAGE_SCN_MEM_READ |
-					 IMAGE_SCN_CNT_CODE;
+		    scnhdrs[j].s_flags = EFI_IMAGE_SCN_MEM_EXECUTE |
+					 EFI_IMAGE_SCN_MEM_READ |
+					 EFI_IMAGE_SCN_CNT_CODE;
 		    scn_contents[j] = object_addr + sg->fileoff;
 		    j++;
 		}
@@ -819,11 +815,11 @@ struct arch *arch)
 		    scnhdrs[j].s_relptr = 0;
 		    scnhdrs[j].s_lnnoptr = 0;
 		    scnhdrs[j].s_nlnno = 0;
-		    scnhdrs[j].s_flags = IMAGE_SCN_MEM_READ |
-					 IMAGE_SCN_MEM_WRITE |
-					 IMAGE_SCN_CNT_CODE |
-				         IMAGE_SCN_CNT_INITIALIZED_DATA |
-					 IMAGE_SCN_MEM_EXECUTE;
+		    scnhdrs[j].s_flags = EFI_IMAGE_SCN_MEM_READ |
+					 EFI_IMAGE_SCN_MEM_WRITE |
+					 EFI_IMAGE_SCN_CNT_CODE |
+				         EFI_IMAGE_SCN_CNT_INITIALIZED_DATA |
+					 EFI_IMAGE_SCN_MEM_EXECUTE;
 		    scn_contents[j] = object_addr + sg->fileoff;
 		    j++;
 #ifdef HACK_TO_MATCH_TEST_CASE
@@ -866,9 +862,9 @@ struct arch *arch)
 		    scnhdrs[j].s_relptr = 0;
 		    scnhdrs[j].s_lnnoptr = 0;
 		    scnhdrs[j].s_nlnno = 0;
-		    scnhdrs[j].s_flags = IMAGE_SCN_MEM_READ |
-					 IMAGE_SCN_MEM_WRITE |
-				         IMAGE_SCN_CNT_INITIALIZED_DATA;
+		    scnhdrs[j].s_flags = EFI_IMAGE_SCN_MEM_READ |
+					 EFI_IMAGE_SCN_MEM_WRITE |
+				         EFI_IMAGE_SCN_CNT_INITIALIZED_DATA;
 		    scn_contents[j] = object_addr + sg->fileoff;
 		    j++;
 #else /* defined(HACK_TO_MATCH_TEST_CASE) */
@@ -909,9 +905,9 @@ struct arch *arch)
 	    scnhdrs[j].s_relptr = 0;
 	    scnhdrs[j].s_lnnoptr = 0;
 	    scnhdrs[j].s_nlnno = 0;
-	    scnhdrs[j].s_flags = IMAGE_SCN_MEM_READ |
-				 IMAGE_SCN_CNT_INITIALIZED_DATA |
-				 IMAGE_SCN_MEM_DISCARDABLE;
+	    scnhdrs[j].s_flags = EFI_IMAGE_SCN_MEM_READ |
+				 EFI_IMAGE_SCN_CNT_INITIALIZED_DATA |
+				 EFI_IMAGE_SCN_MEM_DISCARDABLE;
 	    reloc_scnhdr = scnhdrs + j;
 	    scn_contents[j] = reloc_contents;
 	    j++;
@@ -929,9 +925,9 @@ struct arch *arch)
 	    scnhdrs[j].s_relptr = 0;
 	    scnhdrs[j].s_lnnoptr = 0;
 	    scnhdrs[j].s_nlnno = 0;
-	    scnhdrs[j].s_flags = IMAGE_SCN_MEM_READ |
-				 IMAGE_SCN_CNT_INITIALIZED_DATA |
-				 IMAGE_SCN_MEM_DISCARDABLE;
+	    scnhdrs[j].s_flags = EFI_IMAGE_SCN_MEM_READ |
+				 EFI_IMAGE_SCN_CNT_INITIALIZED_DATA |
+				 EFI_IMAGE_SCN_MEM_DISCARDABLE;
 	    debug_scnhdr = scnhdrs + j;
 	    scn_contents[j] = debug_contents;
 	    j++;
@@ -1151,9 +1147,9 @@ struct arch *arch)
 		    scnhdrs[j].s_relptr = 0;
 		    scnhdrs[j].s_lnnoptr = 0;
 		    scnhdrs[j].s_nlnno = 0;
-		    scnhdrs[j].s_flags = IMAGE_SCN_MEM_EXECUTE |
-					 IMAGE_SCN_MEM_READ |
-					 IMAGE_SCN_CNT_CODE;
+		    scnhdrs[j].s_flags = EFI_IMAGE_SCN_MEM_EXECUTE |
+					 EFI_IMAGE_SCN_MEM_READ |
+					 EFI_IMAGE_SCN_CNT_CODE;
 		    scn_contents[j] = object_addr + sg64->fileoff;
 		    j++;
 		}
@@ -1166,11 +1162,11 @@ struct arch *arch)
 		    scnhdrs[j].s_relptr = 0;
 		    scnhdrs[j].s_lnnoptr = 0;
 		    scnhdrs[j].s_nlnno = 0;
-		    scnhdrs[j].s_flags = IMAGE_SCN_MEM_READ |
-					 IMAGE_SCN_MEM_WRITE |
-					 IMAGE_SCN_CNT_CODE |
-				         IMAGE_SCN_CNT_INITIALIZED_DATA |
-					 IMAGE_SCN_MEM_EXECUTE;
+		    scnhdrs[j].s_flags = EFI_IMAGE_SCN_MEM_READ |
+					 EFI_IMAGE_SCN_MEM_WRITE |
+					 EFI_IMAGE_SCN_CNT_CODE |
+				         EFI_IMAGE_SCN_CNT_INITIALIZED_DATA |
+					 EFI_IMAGE_SCN_MEM_EXECUTE;
 		    scn_contents[j] = object_addr + sg64->fileoff;
 		    j++;
 		}
@@ -1216,11 +1212,11 @@ struct arch *arch)
 	    scnhdrs[j].s_relptr = 0;
 	    scnhdrs[j].s_lnnoptr = 0;
 	    scnhdrs[j].s_nlnno = 0;
-	    scnhdrs[j].s_flags = IMAGE_SCN_MEM_READ |
-				 IMAGE_SCN_CNT_INITIALIZED_DATA |
-				 IMAGE_SCN_MEM_DISCARDABLE |
-				 IMAGE_SCN_CNT_CODE |
-				 IMAGE_SCN_MEM_EXECUTE;
+	    scnhdrs[j].s_flags = EFI_IMAGE_SCN_MEM_READ |
+				 EFI_IMAGE_SCN_CNT_INITIALIZED_DATA |
+				 EFI_IMAGE_SCN_MEM_DISCARDABLE |
+				 EFI_IMAGE_SCN_CNT_CODE |
+				 EFI_IMAGE_SCN_MEM_EXECUTE;
 	    reloc_scnhdr = scnhdrs + j;
 	    scn_contents[j] = reloc_contents;
 	    j++;
@@ -1238,11 +1234,11 @@ struct arch *arch)
 	    scnhdrs[j].s_relptr = 0;
 	    scnhdrs[j].s_lnnoptr = 0;
 	    scnhdrs[j].s_nlnno = 0;
-	    scnhdrs[j].s_flags = IMAGE_SCN_MEM_READ |
-				 IMAGE_SCN_CNT_INITIALIZED_DATA |
-				 IMAGE_SCN_MEM_DISCARDABLE |
-				 IMAGE_SCN_CNT_CODE |
-				 IMAGE_SCN_MEM_EXECUTE;
+	    scnhdrs[j].s_flags = EFI_IMAGE_SCN_MEM_READ |
+				 EFI_IMAGE_SCN_CNT_INITIALIZED_DATA |
+				 EFI_IMAGE_SCN_MEM_DISCARDABLE |
+				 EFI_IMAGE_SCN_CNT_CODE |
+				 EFI_IMAGE_SCN_MEM_EXECUTE;
 	    debug_scnhdr = scnhdrs + j;
 	    scn_contents[j] = debug_contents;
 	    j++;
@@ -1301,7 +1297,7 @@ struct ofile *ofile)
 
 	offset = header_size;
 	for(i = 0; i < nscns; i++){
-	    if((scnhdrs[i].s_flags & IMAGE_SCN_CNT_UNINITIALIZED_DATA) == 0){
+	    if((scnhdrs[i].s_flags & EFI_IMAGE_SCN_CNT_UNINITIALIZED_DATA) == 0){
 		/*
 		 * We need to check that the headers can be mapped starting at
 		 * the ImageBase, fixed at zero in this program, and fit before
@@ -1411,16 +1407,16 @@ struct ofile *ofile)
 	    filehdr.f_opthdr = sizeof(struct aouthdr);
 	else
 	    filehdr.f_opthdr = sizeof(struct aouthdr_64);
-	filehdr.f_flags = IMAGE_FILE_EXECUTABLE_IMAGE |
-			  IMAGE_FILE_LINE_NUMS_STRIPPED |
-			  IMAGE_FILE_32BIT_MACHINE |
-			  IMAGE_FILE_DEBUG_STRIPPED;
+	filehdr.f_flags = EFI_IMAGE_FILE_EXECUTABLE_IMAGE |
+			  EFI_IMAGE_FILE_LINE_NUMS_STRIPPED |
+			  EFI_IMAGE_FILE_32BIT_MACHINE |
+			  EFI_IMAGE_FILE_DEBUG_STRIPPED;
 	if(ofile->mh64 != NULL)
-	    filehdr.f_flags |= IMAGE_FILE_LOCAL_SYMS_STRIPPED;
+	    filehdr.f_flags |= EFI_IMAGE_FILE_LOCAL_SYMS_STRIPPED;
 
 	/* next is the aouthdr */
 	if(ofile->mh != NULL){
-	    aouthdr.magic = PE32MAGIC;
+	    aouthdr.magic = EFI_IMAGE_NT_OPTIONAL_HDR32_MAGIC;
 	    aouthdr.vstamp = VSTAMP;
 
       /* 
@@ -1440,8 +1436,8 @@ struct ofile *ofile)
 	    aouthdr.text_start = 0;
 	    aouthdr.data_start = 0;
 	    for(i = 0; i < nscns; i++){
-		if((scnhdrs[i].s_flags & IMAGE_SCN_CNT_UNINITIALIZED_DATA) ==0){
-		    if((scnhdrs[i].s_flags & IMAGE_SCN_MEM_WRITE) == 0){
+		if((scnhdrs[i].s_flags & EFI_IMAGE_SCN_CNT_UNINITIALIZED_DATA) ==0){
+		    if((scnhdrs[i].s_flags & EFI_IMAGE_SCN_MEM_WRITE) == 0){
 			if(aouthdr.text_start == 0)
 			    aouthdr.text_start = scnhdrs[i].s_vaddr;
 		    }
@@ -1486,7 +1482,7 @@ struct ofile *ofile)
 	    }
 	}
 	else{
-	    aouthdr64.magic = PE32PMAGIC;
+	    aouthdr64.magic = EFI_IMAGE_NT_OPTIONAL_HDR64_MAGIC;
 	    aouthdr64.vstamp = VSTAMP;
 
       /* 
@@ -1516,8 +1512,8 @@ struct ofile *ofile)
 #endif
 	    aouthdr64.text_start = 0;
 	    for(i = 0; i < nscns; i++){
-		if((scnhdrs[i].s_flags & IMAGE_SCN_CNT_UNINITIALIZED_DATA) ==0){
-		    if((scnhdrs[i].s_flags & IMAGE_SCN_MEM_WRITE) == 0){
+		if((scnhdrs[i].s_flags & EFI_IMAGE_SCN_CNT_UNINITIALIZED_DATA) ==0){
+		    if((scnhdrs[i].s_flags & EFI_IMAGE_SCN_MEM_WRITE) == 0){
 			if(aouthdr64.text_start == 0)
 			    aouthdr64.text_start = scnhdrs[i].s_vaddr;
 		    }
@@ -1638,7 +1634,7 @@ char *out)
 	 * that was needed.
 	 */ 
 	for(i = 0; i < nscns; i++){
-	    if((scnhdrs[i].s_flags & IMAGE_SCN_CNT_UNINITIALIZED_DATA) == 0){
+	    if((scnhdrs[i].s_flags & EFI_IMAGE_SCN_CNT_UNINITIALIZED_DATA) == 0){
 		memcpy(buf + scnhdrs[i].s_scnptr,
 		       scn_contents[i],
 #ifndef HACK_TO_MATCH_TEST_CASE
@@ -1925,7 +1921,7 @@ struct arch *arch)
 		nsyments++;
 		if(syms[i].n_un.n_strx != 0){
 		    size = strlen(strs + syms[i].n_un.n_strx);
-		    if(size > E_SYMNMLEN)
+		    if(size > EFI_IMAGE_SIZEOF_SHORT_NAME)
 			strsize += strlen(strs + syms[i].n_un.n_strx) + 1;
 		}
 	    }
@@ -1966,22 +1962,22 @@ struct arch *arch)
 	       syms[i].n_sect == bss_n_sect){
 		if(syms[i].n_un.n_strx != 0){
 		    size = strlen(strs + syms[i].n_un.n_strx);
-		    if(size > E_SYMNMLEN){
-			syments[j].e.e.e_zeroes = 0;
-			syments[j].e.e.e_offset = p - strings;
+		    if(size > EFI_IMAGE_SIZEOF_SHORT_NAME){
+			syments[j].name.long_name.zeros = 0;
+			syments[j].name.long_name.strtable_offset = p - strings;
 			strcpy(p, strs + syms[i].n_un.n_strx);
 			p += strlen(strs + syms[i].n_un.n_strx) + 1;
 		    }
 		    else{
-			strncpy(syments[j].e.e_name,
-				strs + syms[i].n_un.n_strx, E_SYMNMLEN);
+			strncpy(syments[j].name.short_name,
+				strs + syms[i].n_un.n_strx, EFI_IMAGE_SIZEOF_SHORT_NAME);
 		    }
 		}
-		syments[j].e_value = syms[i].n_value - bss_addr;
-		syments[j].e_scnum = bss_scnum;
-		syments[j].e_type = 0;
-		syments[j].e_sclass = IMAGE_SYM_CLASS_EXTERNAL;
-		syments[j].e_numaux = 0;
+		syments[j].value = syms[i].n_value - bss_addr;
+		syments[j].scnum = bss_scnum;
+		syments[j].type = 0;
+		syments[j].sclass = IMAGE_SYM_CLASS_EXTERNAL;
+		syments[j].numaux = 0;
 		j++;
 	    }
 	}
@@ -1995,22 +1991,22 @@ struct arch *arch)
 	       syms[i].n_sect == common_n_sect){
 		if(syms[i].n_un.n_strx != 0){
 		    size = strlen(strs + syms[i].n_un.n_strx);
-		    if(size > E_SYMNMLEN){
-			syments[j].e.e.e_zeroes = 0;
-			syments[j].e.e.e_offset = p - strings;
+		    if(size > EFI_IMAGE_SIZEOF_SHORT_NAME){
+			syments[j].name.long_name.zeros = 0;
+			syments[j].name.long_name.strtable_offset = p - strings;
 			strcpy(p, strs + syms[i].n_un.n_strx);
 			p += strlen(strs + syms[i].n_un.n_strx) + 1;
 		    }
 		    else{
-			strncpy(syments[j].e.e_name,
-				strs + syms[i].n_un.n_strx, E_SYMNMLEN);
+			strncpy(syments[j].name.short_name,
+				strs + syms[i].n_un.n_strx, EFI_IMAGE_SIZEOF_SHORT_NAME);
 		    }
 		}
-		syments[j].e_value = syms[i].n_value - common_addr;
-		syments[j].e_scnum = common_scnum;
-		syments[j].e_type = 0;
-		syments[j].e_sclass = IMAGE_SYM_CLASS_EXTERNAL;
-		syments[j].e_numaux = 0;
+		syments[j].value = syms[i].n_value - common_addr;
+		syments[j].scnum = common_scnum;
+		syments[j].type = 0;
+		syments[j].sclass = IMAGE_SYM_CLASS_EXTERNAL;
+		syments[j].numaux = 0;
 		j++;
 	    }
 	}

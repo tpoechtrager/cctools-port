@@ -25,6 +25,7 @@
  * and Mach-O objects files (no 4.3bsd a.out files).  This is also the ranlib(1)
  * program.
  */
+#include <mach/machine-cctools.h>
 #include <mach/mach.h>
 #include "stuff/openstep_mach.h"
 #include <libc.h>
@@ -2121,7 +2122,8 @@ struct ofile *ofile)
 		    if (only_cpusubtype == CPU_SUBTYPE_ARM64_ALL &&
 			member_cpusubtype != CPU_SUBTYPE_ARM64_ALL &&
 			member_cpusubtype != CPU_SUBTYPE_ARM64_V8 &&
-			member_cpusubtype != CPU_SUBTYPE_ARM64E)
+			member_cpusubtype != CPU_SUBTYPE_ARM64E
+			)
 			return;
 		    else if(only_cpusubtype != member_cpusubtype)
 			return;
@@ -2148,7 +2150,8 @@ struct ofile *ofile)
 			if(only_cpusubtype == CPU_SUBTYPE_ARM64_ALL &&
 			   member_cpusubtype != CPU_SUBTYPE_ARM64_ALL &&
 			   member_cpusubtype != CPU_SUBTYPE_ARM64_V8 &&
-			   member_cpusubtype != CPU_SUBTYPE_ARM64E)
+			   member_cpusubtype != CPU_SUBTYPE_ARM64E
+			   )
 				continue;
 			else if (arch_cpusubtype != member_cpusubtype)
 			    continue;

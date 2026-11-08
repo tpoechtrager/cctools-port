@@ -3679,7 +3679,8 @@ enum chain_format_t *chain_format)
 		cputype = mh.cputype;
 		cpusubtype = mh.cpusubtype;
 	    }
-	    if (CPU_TYPE_ARM64 == cputype && CPU_SUBTYPE_ARM64E == cpusubtype)
+	    if (CPU_TYPE_ARM64 == cputype && ((CPU_SUBTYPE_ARM64E == cpusubtype)
+										  ) )
 		*chain_format = CHAIN_FORMAT_ARM64E;
 	    else
 		*chain_format = CHAIN_FORMAT_NONE;

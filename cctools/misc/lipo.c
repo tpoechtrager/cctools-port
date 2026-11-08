@@ -1509,10 +1509,10 @@ struct input_file *input)
 	    input->is_thin = TRUE;
 	    thin->name = input->name;
 	    thin->addr = addr;
-	    if(fat64_flag == FALSE && size > UINT32_MAX)
-		fatal("file too large to be in a fat file because the size "
-		      "field in struct fat_arch is only 32-bits and the size "
-		      "(%llu) of %s exceeds that", size, input->name);
+	    if(fat64_flag == FALSE && size > UINT32_MAX) {
+		// auto enable -fat64 since input file is > 4GB
+		fat64_flag = TRUE;
+	    }
 	    thin->cputype = cputype;
 	    thin->cpusubtype = cpusubtype;
 	    thin->offset = 0;

@@ -28,10 +28,11 @@
     #define __CCTOOLS_DEPRECATED2           __API_DEPRECATED("No longer supported", macos(10.0, 15.4), ios(1.0, 18.4), watchos(1.0, 11.4), tvos(1.0, 18.4))
 #endif
 
+struct i386_thread_state;
 struct i386_float_state;
 
 extern void swap_i386_thread_state(
-    i386_thread_state_t *cpu,
+    struct i386_thread_state *cpu,
     enum NXByteOrder target_byte_order) __CCTOOLS_DEPRECATED2;
 
 /* current i386 thread states */

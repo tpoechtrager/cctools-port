@@ -1638,6 +1638,15 @@ struct object *object)
 		strip_LC_SEGMENT_SPLIT_INFO_command(arch, member, object);
 #endif /* !(NMEDIT) */
 
+	    if(object->nlazyLoads != 0) {
+		for(uint32_t i=0; i <object->nlazyLoads; ++i){
+		    object->input_sym_info_size += object->lazyLoads[i].lc->datasize;
+		    object->lazyLoads[i].data = (uint8_t*)object->object_addr + object->lazyLoads[i].lc->dataoff;
+		    object->lazyLoads[i].dataSize = object->lazyLoads[i].lc->datasize;
+		    object->output_sym_info_size += object->lazyLoads[i].lc->datasize;
+		}
+	    }
+
 	    if(object->func_starts_info_cmd != NULL){
 #ifndef NMEDIT
 		/*
@@ -2034,6 +2043,13 @@ struct object *object)
 		    {
 			object->split_info_cmd->dataoff = offset;
 			offset += object->split_info_cmd->datasize;
+		    }
+		}
+
+		if(object->nlazyLoads != 0){
+		    for(uint32_t i=0; i <object->nlazyLoads; ++i){
+			object->lazyLoads[i].lc->dataoff = offset;
+			offset += object->lazyLoads[i].lc->datasize;
 		    }
 		}
 

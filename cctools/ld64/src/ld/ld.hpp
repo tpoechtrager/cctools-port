@@ -286,6 +286,10 @@ static const PlatformVersion driverKit_23_0			(Platform::driverKit, 0x00170000);
 static const PlatformVersion driverKit_24_0			(Platform::driverKit, 0x00180000);
 static const PlatformVersion driverKit_Future		(Platform::driverKit, 0x10000000);
 
+static const PlatformVersion xrOS_1_0			(Platform::xrOS, 0x00010000);
+static const PlatformVersion xrOS_1_1			(Platform::xrOS, 0x00010100);
+static const PlatformVersion xrOS_2_0			(Platform::xrOS, 0x00020000);
+static const PlatformVersion xrOS_Future		(Platform::xrOS, 0x10000000);
 
 static const PlatformVersion sepOS_1_0				(Platform::sepOS, 0x00010000);
 
@@ -299,6 +303,7 @@ static const PlatformSet simulatorPlatforms ( {
        Platform::iOS_simulator,
        Platform::tvOS_simulator,
        Platform::watchOS_simulator,
+       Platform::xrOS_simulator,
 } );
 
 
@@ -319,12 +324,15 @@ static const VersionSet version2019Fall ({mac10_15, iOS_13_0, watchOS_6_0, tvOS_
 static const VersionSet version2020Fall ({mac10_16, iOS_14_0, watchOS_7_0, tvOS_14_0, bridgeOS_5_0});
 
 static const VersionSet version2021Fall ({mac12_0, iOS_15_0, watchOS_8_0, tvOS_15_0, bridgeOS_6_0,
+	xrOS_1_0,
 });
 
 static const VersionSet version2022Fall ({mac13_0, iOS_16_0, watchOS_9_0, tvOS_16_0, bridgeOS_7_0, sepOS_1_0,
+		xrOS_1_0,
 });
 
 static const VersionSet version2024Fall ({mac15_0, iOS_18_0, watchOS_11_0, tvOS_18_0, bridgeOS_9_0, sepOS_1_0,
+		xrOS_2_0,
 });
 
 
@@ -335,6 +343,7 @@ static const VersionSet supportsSplitSegV2 		({mac10_12, iOS_9_0, watchOS_2_0, t
 static const VersionSet supportsLCBuildVersion 	({mac10_14, iOS_12_0, watchOS_5_0, tvOS_12_0, bridgeOS_1_0});
 
 static const VersionSet supportsPIE				({mac10_5, iOS_4_2,
+	xrOS_1_0,
 });
 
 static const VersionSet supportsTLV  			({mac10_7, iOS_9_0});
@@ -342,6 +351,7 @@ static const VersionSet supportsTLV  			({mac10_7, iOS_9_0});
 static const VersionSet supportsChainedFixups 	({mac12_0, iOS_sim_15_0, iOS_13_4, watchOS_sim_8_0, watchOS_7_0, tvOS_sim_15_0, tvOS_14_0, bridgeOS_Future});
 
 static const VersionSet supportsConstClassRefs 	({mac14_4, iOS_17_4, watchOS_10_4, tvOS_17_4, bridgeOS_Future,
+		xrOS_1_1,
 });
 
 // Forward declaration for bitcode support

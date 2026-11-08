@@ -1,11 +1,6 @@
 #include <string.h>
 #include "stuff/bytesex.h"
 #include "coff/base_relocs.h"
-#include "coff/ms_dos_stub.h"
-#include "coff/filehdr.h"
-#include "coff/aouthdr.h"
-#include "coff/scnhdr.h"
-#include "coff/syment.h"
 #include "coff/bytesex.h"
 #include "coff/debug_directory.h"
 
@@ -230,11 +225,11 @@ enum byte_sex target_byte_sex)
     uint32_t i;
 
 	for(i = 0; i < n; i++){
-	    if(s[i].e.e.e_zeroes == 0)
-		s[i].e.e.e_offset = SWAP_INT(s[i].e.e.e_offset);
-	    s[i].e_value = SWAP_INT(s[i].e_value);
-	    s[i].e_scnum = SWAP_SHORT(s[i].e_scnum);
-	    s[i].e_type = SWAP_SHORT(s[i].e_type);
+	    if(s[i].name.long_name.zeros == 0)
+		s[i].name.long_name.strtable_offset = SWAP_INT(s[i].name.long_name.strtable_offset);
+	    s[i].value = SWAP_INT(s[i].value);
+	    s[i].scnum = SWAP_SHORT(s[i].scnum);
+	    s[i].type = SWAP_SHORT(s[i].type);
 	}
 }
 

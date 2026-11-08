@@ -4833,6 +4833,11 @@ struct ofile *ofile)
 		chained_fixups = (struct linkedit_data_command *)lc;
 		goto check_linkedit_data_command;
 
+	    case LC_LAZY_LOAD_DYLIB_INFO:
+		cmd_name = "LC_LAZY_LOAD_DYLIB_INFO";
+		element_name = "lazy load info";
+		goto check_linkedit_data_command;
+
 check_linkedit_data_command:
 		if(l.cmdsize < sizeof(struct linkedit_data_command)){
 		    Mach_O_error(ofile, "malformed object (%s cmdsize too "

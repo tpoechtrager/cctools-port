@@ -1,6 +1,6 @@
-.TH LIBTOOL 1 "June 23, 2020" "Apple Inc."
+.TH LIBTOOL 1 "February 6, 2025" "Apple Inc."
 .SH NAME
-libtool \- create libraries
+libtool \- create static libraries
 .br
 ranlib \- add or update the table of contents of archive libraries
 .SH SYNOPSIS
@@ -27,40 +27,6 @@ ranlib \- add or update the table of contents of archive libraries
 ]
 [
 .B \-ref-framework
-]
-.IR file ...
-[-filelist listfile[,dirname]]
-.br
-.sp
-.B libtool
-.B \-dynamic
-.BI \-o " output"
-[
-.BI \-install_name " name"
-]
-[
-.BI \-compatibility_version " number"
-]
-[
-.BI \-current_version " number"
-]
-[
-.I "link editor flags"
-]
-[
-.B \-v
-]
-[
-.B \-noall_load
-]
-[
-.B \-
-]
-[
-.BI -arch_only " arch_type"
-]
-[
-.B \-V
 ]
 .IR file ...
 [-filelist listfile[,dirname]]
@@ -106,35 +72,7 @@ that CPU type.  This strategy strongly encourages the implementor of a library
 to create one library that chooses optimum code to run at run time, rather than
 at link time.
 .PP
-.I Libtool
-can create either dynamically linked shared libraries, with
-.B \-dynamic,
-or statically linked (archive) libraries, with
-.B \-static.
-.SH "DYNAMICALLY LINKED SHARED LIBRARIES"
-.PP
-Dynamically linked libraries, unlike statically linked libraries, are Mach-O format
-files and not
-.IR ar (5)
-format files.
-Dynamically linked libraries have two restrictions: No symbol may be defined
-in more than one object file and no common symbol can be used.
-To maximize sharing of a dynamically linked shared library the objects should
-be compiled with the
-.B \-dynamic
-flag of
-.IR cc (1)
-to produce indirect undefined references and position-independent code.
-To build a dynamically linked library,
-.IR libtool ,
-runs the link editor,
-.IR ld (1),
-with
-.B \-dylib
-once for each architecture present in the input objects and then
-.IR lipo (1)
-to create a universal file if needed.
-.SH "ARCHIVE (or statically linked) LIBRARIES"
+.SH "ARCHIVE (or static) LIBRARIES"
 .PP
 .I Libtool
 with
@@ -207,66 +145,6 @@ argument will remain in the argument list.
 Produce a statically linked (archive) library from the input files.
 This is the default.
 .TP
-.B \-dynamic
-Produce a dynamically linked shared library from the input files.
-.TP
-.BI \-install_name " name"
-For a dynamic shared library, this specifies the file
-.I name
-the library will be installed in for programs that use it.  If this is not
-specified the name specified by the
-.BI \-o " output"
-option will be used.
-.TP
-.BI \-compatibility_version " number"
-For a dynamic shared library, this specifies the compatibility version number
-of the library.  When a library is used the compatibility version is checked
-and if the user's version is greater that the library's version, an error
-message is printed and the using program exits. The format of
-.I number
-is
-.I X[.Y[.Z]]
-where
-.I X
-must be a positive non-zero number less than or equal to 65535, and
-.I .Y
-and
-.I .Z
-are optional and if present must be non-negative numbers less than or
-equal to 255.
-If this is not specified then it has a
-value of 0 and no checking is done when the library is used.
-.TP
-.BI \-current_version " number"
-For dynamic shared library files this specifies the current version number
-of the library.  The program using the library can obtain the
-current version of the library programmatically to determine exactly
-which version of the library it is using.
-The format of
-.I number
-is
-.I X[.Y[.Z]]
-where
-.I X
-must be a positive non-zero number less than or equal to 65535, and
-.I .Y
-and
-.I .Z
-are optional and if present must be non-negative numbers less than or
-equal to 255.
-If this is not specified then it has a
-value of 0.
-.TP
-.B \-noall_load
-For dynamic shared library files this specifies the the default behavior of
-loading all members of archives on the command line is not to be done.  This
-option is used by the GNU compiler driver,
-.IR cc (1),
-when used with it's
-.B -dynamiclib
-option.  This is done to allow selective loading of the GNU's compiler's runtime
-support library, libcc_dynamic.a .
-.TP
 .B \-encode_sdk_libraries_as_references
 When creating a static library, this option means any
 static libraries specified on the command line and found in the SDK,
@@ -284,95 +162,6 @@ specified framework name.
 When creating a static library, this option means to issue a warning if
 two or more members (object files) have the same leaf name, because they
 would collide if the archive was extracted into a directory.
-.TP
-.I "link editor flags"
-For a dynamic shared library the following
-.IR ld (1)
-flags are accepted and passed through:
-.BI \-l x,
-.BI \-weak-l x,
-.B \-search_paths_first
-.B \-weak_library,
-.BI \-L dir,
-.BI \-y sym,
-.BI \-u sym,
-.BI \-init sym,
-.BI \-i definition:indirect,
-.B \-seg1addr,
-.B \-segs_read_only_addr,
-.B \-segs_read_write_addr,
-.B \-seg_addr_table,
-.B \-seg_addr_table_filename,
-.B \-segprot,
-.B \-segalign,
-.B \-sectcreate,
-.B \-sectorder,
-.B \-sectorder_detail,
-.B \-sectalign,
-.B \-undefined,
-.B \-read_only_relocs,
-.B \-prebind,
-.B \-prebind_all_twolevel_modules,
-.B \-prebind_allow_overlap,
-.B \-noprebind,
-.B \-framework,
-.B \-weak_framework,
-.B \-umbrella,
-.B \-allowable_client,
-.B \-sub_umbrella,
-.B \-sub_library,
-.B \-F,
-.B \-U,
-.B \-Y,
-.B \-Sn,
-.B \-Si,
-.B \-Sp,
-.B \-S,
-.B \-X,
-.B \-x,
-.B \-whyload,
-.B \-all_load.
-.B \-arch_errors_fatal,
-.B \-dylib_file,
-.B \-run_init_lazily,
-.B \-final_output,
-.B \-macosx_version_min,
-.B \-multiply_defined,
-.B \-multiply_defined_unused,
-.B \-twolevel_namespace,
-.B \-twolevel_namespace_hints,
-.B \-flat_namespace,
-.B \-nomultidefs,
-.B \-headerpad,
-.B \-headerpad_max_install_names,
-.B \-weak_reference_mismatches,
-.B \-M,
-.B \-t,
-.B \-no_arch_warnings,
-.B \-single_module,
-.B \-multi_module,
-.B \-exported_symbols_list,
-.B \-unexported_symbols_list,
-.B \-m,
-.B \-dead_strip,
-.B \-no_dead_strip_inits_and_terms,
-.B \-executable_path,
-.B \-syslibroot,
-.B \-no_uuid.
-See the
-.IR ld (1)
-man page for details on these flags.
-The flag
-.B \-image_base
-is a synonym for
-.B \-seg1addr.
-.TP
-.B \-v
-Verbose mode, which prints the
-.IR ld (1)
-commands and
-.IR lipo (1)
-commands executed.
 .TP
 .B \-V
 Print the version of libtool.
@@ -485,7 +274,7 @@ Write an Xcode dependency info file describing a successful build operation.
 This file describes the inputs directly or indirectly used to create the library
 or dylib.
 .SH "SEE ALSO"
-ld(1), ar(1), otool(1), make(1), redo_prebinding(1), ar(5)
+ld(1), ar(1), otool(1), make(1), ar(5)
 .SH BUGS
 With the way libraries used to be created, errors were possible if the library
 was modified with

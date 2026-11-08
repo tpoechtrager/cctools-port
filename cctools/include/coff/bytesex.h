@@ -3,12 +3,8 @@
 
 #include "stuff/bytesex.h"
 #include "coff/base_relocs.h"
-#include "coff/ms_dos_stub.h"
-#include "coff/filehdr.h"
-#include "coff/aouthdr.h"
-#include "coff/scnhdr.h"
-#include "coff/syment.h"
 #include "coff/debug_directory.h"
+#include "coff/coff.h"
 
 __private_extern__ void swap_base_relocation_block_header(
     struct base_relocation_block_header *h,

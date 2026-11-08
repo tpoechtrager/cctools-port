@@ -346,7 +346,7 @@ struct load_command {
 #define LC_FUNCTION_VARIANTS 0x37 /* used with linkedit_data_command */
 #define LC_FUNCTION_VARIANT_FIXUPS 0x38 /* used with linkedit_data_command */
 #define LC_TARGET_TRIPLE 0x39 /* target triple used to compile */
-
+#define LC_LAZY_LOAD_DYLIB_INFO 0x3A /* used with linkedit_data_command */
 
 
 /*
@@ -1250,8 +1250,8 @@ struct linkedit_data_command {
 				   LC_DYLIB_CODE_SIGN_DRS, LC_ATOM_INFO,
 				   LC_LINKER_OPTIMIZATION_HINT,
 				   LC_DYLD_EXPORTS_TRIE,
-				   LC_FUNCTION_VARIANTS, LC_FUNCTION_VARIANT_FIXUPS, or
-				   LC_DYLD_CHAINED_FIXUPS. */
+				   LC_FUNCTION_VARIANTS, LC_FUNCTION_VARIANT_FIXUPS,
+				   LC_DYLD_CHAINED_FIXUPS, or LC_LAZY_LOAD_DYLIB_INFO */
     uint32_t	cmdsize;	/* sizeof(struct linkedit_data_command) */
     uint32_t	dataoff;	/* file offset of data in __LINKEDIT segment */
     uint32_t	datasize;	/* file size of data in __LINKEDIT segment  */

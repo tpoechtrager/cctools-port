@@ -149,6 +149,12 @@ struct member {
     struct ar_hdr *input_ar_hdr;
 };
 
+struct LazyLoadCommandAndData {
+    struct linkedit_data_command*   lc;
+    uint8_t*                        data;
+    uint32_t                        dataSize;
+};
+
 struct object {
     char *object_addr;		    /* the address of the object file */
     uint32_t object_size;	    /* the size of the object file on input */
@@ -207,6 +213,8 @@ struct object {
 	*encryption_info_command64; /* LC_ENCRYPTION_INFO_64 */
     struct note_command **notes;    /* array of note_command struct pointers */
     uint32_t nnote;                 /* count of notes array */
+    struct LazyLoadCommandAndData* lazyLoads;
+    uint32_t nlazyLoads;
 
     /*
      * This is only used for redo_prebinding and is calculated by breakout()

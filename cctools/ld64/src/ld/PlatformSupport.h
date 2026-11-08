@@ -47,6 +47,8 @@ enum class Platform
     tvOS_simulator      = 8,    // PLATFORM_TVOSSIMULATOR
     watchOS_simulator   = 9,    // PLATFORM_WATCHOSSIMULATOR
     driverKit           = 10,   // PLATFORM_DRIVERKIT
+    xrOS                = 11,   // PLATFORM_XROS
+    xrOS_simulator      = 12,   // PLATFORM_XRSIMULATOR
     sepOS               = 14,   // PLATFORM_SEPOS
 
 
