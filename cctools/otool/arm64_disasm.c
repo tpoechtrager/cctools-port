@@ -17,7 +17,7 @@
 
 #define dis_info arm64_dis_info
 
-struct disassemble_info {
+static struct disassemble_info {
   /* otool(1) specific stuff */
   enum bool verbose;
   /* Relocation information.  */

@@ -62,7 +62,17 @@ AC_DEFUN([CHECK_LLVM],
           # it may cause the build to fail.
 
           if test -e $LLVM_INCLUDE_DIR/llvm-c/lto.h; then
-            cp -f $LLVM_INCLUDE_DIR/llvm-c/lto.h `dirname ${0}`/include/llvm-c
+            cp -f "$LLVM_INCLUDE_DIR/llvm-c/lto.h" "`dirname ${0}`/include/llvm-c/lto.h"
+            # Recent lto.h versions depend on these C API headers.
+            for header in Visibility.h; do
+                if test -f "$LLVM_INCLUDE_DIR/llvm-c/$header"; then
+                    cp -f "$LLVM_INCLUDE_DIR/llvm-c/$header" "`dirname ${0}`/include/llvm-c/$header"
+                fi
+            done
+            if test -f "$LLVM_INCLUDE_DIR/llvm/Config/llvm-config.h"; then
+                mkdir -p "`dirname ${0}`/include/llvm/Config"
+                cp -f "$LLVM_INCLUDE_DIR/llvm/Config/llvm-config.h" "`dirname ${0}`/include/llvm/Config/llvm-config.h"
+            fi
 
             if test -e $LLVM_INCLUDE_DIR/llvm-c/ExternC.h; then
               cp -f $LLVM_INCLUDE_DIR/llvm-c/ExternC.h `dirname ${0}`/include/llvm-c
