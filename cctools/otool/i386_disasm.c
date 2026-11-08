@@ -1617,7 +1617,7 @@ static unsigned int xmm_rm(int r_m, int rex)
 /*
  * This is passed to the llvm disassembler.
  */
-struct disassemble_info {
+static struct disassemble_info {
   enum bool verbose;
   /* Relocation information.  */
   struct relocation_info *sorted_relocs;
