@@ -39,7 +39,17 @@ AC_DEFUN([CHECK_LLVM],
                LTO_DEF=-DLTO_SUPPORT
                # DO NOT include the LLVM include dir directly,
                # it may cause the build to fail.
-               cp -f $LLVM_INCLUDE_DIR/llvm-c/lto.h `dirname ${0}`/include/llvm-c/lto.h
+               cp -f "$LLVM_INCLUDE_DIR/llvm-c/lto.h" "`dirname ${0}`/include/llvm-c/lto.h"
+               # Recent lto.h versions depend on these C API headers.
+               for header in ExternC.h Visibility.h; do
+                   if test -f "$LLVM_INCLUDE_DIR/llvm-c/$header"; then
+                       cp -f "$LLVM_INCLUDE_DIR/llvm-c/$header" "`dirname ${0}`/include/llvm-c/$header"
+                   fi
+               done
+               if test -f "$LLVM_INCLUDE_DIR/llvm/Config/llvm-config.h"; then
+                   mkdir -p "`dirname ${0}`/include/llvm/Config"
+                   cp -f "$LLVM_INCLUDE_DIR/llvm/Config/llvm-config.h" "`dirname ${0}`/include/llvm/Config/llvm-config.h"
+               fi
                AC_SUBST([LTO_DEF])
                AC_SUBST([LTO_RPATH])
                AC_SUBST([LTO_LIB]) ])

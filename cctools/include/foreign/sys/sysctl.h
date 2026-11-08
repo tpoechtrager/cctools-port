@@ -1,4 +1,7 @@
-#ifndef __CYGWIN__
+#if defined(__linux__)
+/* Linux uses sched_getaffinity and /proc instead of sysctl.
+ * glibc 2.32 removed <sys/sysctl.h>. */
+#elif !defined(__CYGWIN__)
 #include_next <sys/sysctl.h>
 #else
 #ifndef __SYSCTL_H__
