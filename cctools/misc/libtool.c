@@ -3215,6 +3215,19 @@ struct ofile *ofile)
 	 * Move the temporary file into its final location
 	 */
 	if (tempfile) {
+	    // cctools-port
+	    /* All input data has been copied. Release the input archive mapping
+	       before replacing it on filesystems that disallow replacing mapped files. */
+	    if (ofile != NULL && ofile->file_addr != NULL &&
+		ofile->file_size != 0) {
+		if (munmap(ofile->file_addr, ofile->file_size) == -1) {
+		    system_fatal("can't unmap input archive: %s", ofile->file_name);
+		    return;
+		}
+		/* Prevent a later ofile_unmap() from releasing the mapping again. */
+		ofile->file_addr = NULL;
+	    }
+	    // cctools-port end
 	    if (rename(tempfile, output)) {
 		system_fatal("can't move the output file to its final location: %s",
 			     output);
