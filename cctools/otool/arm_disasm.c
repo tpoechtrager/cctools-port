@@ -64,7 +64,7 @@ typedef char bfd_byte;
 
 /* HACKS to avoid pulling in all of FSF binutils include/dis-asm.h */
 typedef int (*fprintf_ftype) (void *, const char*, ...);
-struct disassemble_info { /* HACK'ed up for just what we need here */
+static struct disassemble_info { /* HACK'ed up for just what we need here */
   fprintf_ftype fprintf_func;
   void *stream;
 
