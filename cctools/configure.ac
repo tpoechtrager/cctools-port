@@ -28,6 +28,9 @@ if test "x$OBJCFLAGS" = "x"; then
   OBJCFLAGS="-O3"
 fi
 
+# cctools uses enum bool, which is incompatible with C23.
+CFLAGS="$CFLAGS -std=gnu99"
+
 if test "x$build" = "x$host"; then
   CC="clang"
   CXX="clang++"

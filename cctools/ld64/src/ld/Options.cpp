@@ -3816,6 +3816,10 @@ void Options::reconfigureDefaults()
 			fSDKVersion = fMacVersionMin;
 		}
 		else {
+#ifdef __linux__
+			// The Linux host's kernel version is unrelated to the cross target.
+			fSDKVersion = fMacVersionMin;
+#else
 			int mib[2] = { CTL_KERN, KERN_OSRELEASE };
 			char kernVersStr[100];
 			size_t strlen = sizeof(kernVersStr);
@@ -3824,6 +3828,7 @@ void Options::reconfigureDefaults()
 				int minor = (kernVers >> 16) - 4;  // kernel major version is 4 ahead of x in 10.x
 				fSDKVersion = 0x000A0000 + (minor << 8);
 			}
+#endif
 		}
 	}
 	
