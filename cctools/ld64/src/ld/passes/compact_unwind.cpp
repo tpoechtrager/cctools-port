@@ -76,8 +76,8 @@ public:
 	virtual uint64_t						objectAddress() const			{ return 0; }
 	virtual void							copyRawContent(uint8_t buffer[]) const;
 	virtual void							setScope(Scope)					{ }
-	virtual ld::Fixup::iterator				fixupsBegin() const				{ return (ld::Fixup*)&_fixups[0]; }
-	virtual ld::Fixup::iterator				fixupsEnd()	const 				{ return (ld::Fixup*)&_fixups[_fixups.size()]; }
+	virtual ld::Fixup::iterator				fixupsBegin() const				{ return (ld::Fixup*)_fixups.data(); }
+	virtual ld::Fixup::iterator				fixupsEnd()	const 				{ return (ld::Fixup*)(_fixups.data() + _fixups.size()); }
 
 private:
 	typedef typename A::P						P;
@@ -1022,8 +1022,8 @@ public:
 	virtual uint64_t						objectAddress() const			{ return 0; }
 	virtual void							copyRawContent(uint8_t buffer[]) const;
 	virtual void							setScope(Scope)					{ }
-	virtual ld::Fixup::iterator				fixupsBegin() const				{ return (ld::Fixup*)&_fixups[0]; }
-	virtual ld::Fixup::iterator				fixupsEnd()	const 				{ return (ld::Fixup*)&_fixups[_fixups.size()]; }
+	virtual ld::Fixup::iterator				fixupsBegin() const				{ return (ld::Fixup*)_fixups.data(); }
+	virtual ld::Fixup::iterator				fixupsEnd()	const 				{ return (ld::Fixup*)(_fixups.data() + _fixups.size()); }
 
 private:
 	typedef typename A::P						P;
