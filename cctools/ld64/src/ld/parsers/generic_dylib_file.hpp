@@ -80,8 +80,8 @@ public:
 	virtual const char*				name() const override final { return "import-atom"; }
 	virtual uint64_t				size() const override final { return 0; }
 	virtual uint64_t				objectAddress() const override final { return 0; }
-	virtual ld::Fixup::iterator		fixupsBegin() const	override final { return &_undefs[0]; }
-	virtual ld::Fixup::iterator		fixupsEnd()	const override final { return &_undefs[_undefs.size()]; }
+	virtual ld::Fixup::iterator		fixupsBegin() const	override final { return _undefs.data(); }
+	virtual ld::Fixup::iterator		fixupsEnd()	const override final { return _undefs.data() + _undefs.size(); }
 	virtual void					copyRawContent(uint8_t buffer[]) const override final { }
 
 	virtual void					setScope(Scope)		{ }
