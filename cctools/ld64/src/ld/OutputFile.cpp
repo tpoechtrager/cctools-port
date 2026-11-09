@@ -3306,7 +3306,7 @@ void OutputFile::writeAtoms(ld::Internal& state, uint8_t* wholeBuffer)
 					dyld_chained_starts_offsets* startsSection = (dyld_chained_starts_offsets*)(&wholeBuffer[sect->fileOffset]);
 					startsSection->pointer_format = DYLD_CHAINED_PTR_32_FIRMWARE;
 					startsSection->starts_count   = startOffsets.size();
-					memcpy(startsSection->chain_starts, &startOffsets[0], startsArraySize);
+					memcpy(startsSection->chain_starts, startOffsets.data(), startsArraySize);
 				}
 			}
 		}
