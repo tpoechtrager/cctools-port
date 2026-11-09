@@ -98,8 +98,8 @@ void GenericTrie::buildTrieBytes(size_t entriesCount, const std::vector<uint8_t>
     }
 
     // set up trie buffer
-    _trieStart = &_trieBytes[0];
-    _trieEnd   = &_trieBytes[_trieBytes.size()];
+    _trieStart = _trieBytes.data();
+    _trieEnd   = _trieBytes.data() + _trieBytes.size();
 }
 
 Error GenericTrie::Node::addEntry(const WriterEntry& newEntry, const std::vector<uint8_t>& terminalBuffer, std::vector<Node*>& allNodes)
