@@ -74,8 +74,8 @@ public:
 	virtual uint64_t							objectAddress() const { return 0; }
 	virtual void								copyRawContent(uint8_t buffer[]) const { }
 	virtual void								setScope(Scope)		{ }
-	virtual ld::Fixup::iterator					fixupsBegin() const	{ return &_undefs[0]; }
-	virtual ld::Fixup::iterator					fixupsEnd()	const 	{ return &_undefs[_undefs.size()]; }
+	virtual ld::Fixup::iterator					fixupsBegin() const	{ return _undefs.data(); }
+	virtual ld::Fixup::iterator					fixupsEnd()	const 	{ return _undefs.data() + _undefs.size(); }
 
 	// for adding references to symbols outside bitcode file
 	void										addReference(const char* nm)
