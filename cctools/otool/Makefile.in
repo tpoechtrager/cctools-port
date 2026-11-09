@@ -110,8 +110,8 @@ am__dirstamp = $(am__leading_dot)dirstamp
 am_otool_OBJECTS = otool-main.$(OBJEXT) \
 	$(top_builddir)/libstuff/otool-ofile.$(OBJEXT) \
 	otool-ofile_print.$(OBJEXT) otool-i386_disasm.$(OBJEXT) \
-	otool-arm_disasm.$(OBJEXT) otool-print_objc.$(OBJEXT) \
-	otool-print_objc2_32bit.$(OBJEXT) \
+	otool-ppc_disasm.$(OBJEXT) otool-arm_disasm.$(OBJEXT) \
+	otool-print_objc.$(OBJEXT) otool-print_objc2_32bit.$(OBJEXT) \
 	otool-print_objc2_64bit.$(OBJEXT) \
 	otool-print_objc2_util.$(OBJEXT) otool-print_bitcode.$(OBJEXT) \
 	otool-coff_print.$(OBJEXT) otool-arm64_disasm.$(OBJEXT) \
@@ -361,6 +361,7 @@ otool_SOURCES = \
 	$(top_srcdir)/libstuff/ofile.c \
 	ofile_print.c \
 	i386_disasm.c \
+	ppc_disasm.c \
 	arm_disasm.c \
 	print_objc.c \
 	print_objc2_32bit.c \
@@ -497,6 +498,12 @@ otool-i386_disasm.o: i386_disasm.c
 
 otool-i386_disasm.obj: i386_disasm.c
 	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(otool_CFLAGS) $(CFLAGS) -c -o otool-i386_disasm.obj `if test -f 'i386_disasm.c'; then $(CYGPATH_W) 'i386_disasm.c'; else $(CYGPATH_W) '$(srcdir)/i386_disasm.c'; fi`
+
+otool-ppc_disasm.o: ppc_disasm.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(otool_CFLAGS) $(CFLAGS) -c -o otool-ppc_disasm.o `test -f 'ppc_disasm.c' || echo '$(srcdir)/'`ppc_disasm.c
+
+otool-ppc_disasm.obj: ppc_disasm.c
+	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(otool_CFLAGS) $(CFLAGS) -c -o otool-ppc_disasm.obj `if test -f 'ppc_disasm.c'; then $(CYGPATH_W) 'ppc_disasm.c'; else $(CYGPATH_W) '$(srcdir)/ppc_disasm.c'; fi`
 
 otool-arm_disasm.o: arm_disasm.c
 	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(otool_CFLAGS) $(CFLAGS) -c -o otool-arm_disasm.o `test -f 'arm_disasm.c' || echo '$(srcdir)/'`arm_disasm.c

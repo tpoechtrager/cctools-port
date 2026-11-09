@@ -50,13 +50,10 @@
 #include "fixup-chains.h"
 #include "ofile_print.h"
 #include "i386_disasm.h"
+#include "ppc_disasm.h"
 #include "arm_disasm.h"
 #include "arm64_disasm.h"
 #include "llvm-c/Disassembler.h"
-
-#ifndef LLVMDisassembler_Option_Color
-#define LLVMDisassembler_Option_Color 32
-#endif
 
 /* Name of this program for error messages (argv[0]) */
 char *progname = NULL;
@@ -76,7 +73,6 @@ enum bool Uflag = FALSE; /* print the text symbol by symbol,
 enum bool no_show_raw_insn = FALSE; /* no raw inst, for llvm-objdump testing
 				       with 32-bit arm */
 enum bool show_latency = FALSE; /* show latency numbers when disassembling */
-enum bool use_color = FALSE; /* use color when disassembling */
 #ifdef LLVM_OTOOL
 enum bool show_objdump_command = FALSE; /* print the objdump command */
 static char* object_tool_path = "otool-classic"; /* path to object tool */
@@ -428,9 +424,6 @@ char **envp)
 	if(argc <= 1)
 	    usage();
 
-	// Enable color disassembly by default if stdout is displayed.
-	use_color = isatty(STDOUT_FILENO);
-
 #ifdef LLVM_OTOOL
 	orig_argc = argc;
 	orig_argv = argv;
@@ -553,21 +546,9 @@ char **envp)
 		no_show_raw_insn = TRUE;
 		continue;
 	    }
-		if(strcmp(argv[i], "-show-latency") == 0){
-			show_latency = TRUE;
-			continue;
-		}
 		if(strcmp(argv[i], "-no-show-latency") == 0){
-			show_latency = FALSE;
-			continue;
-		}
-		if(strcmp(argv[i], "-use-color") == 0){
-			use_color = TRUE;
-			continue;
-		}
-		if(strcmp(argv[i], "-no-use-color") == 0){
-			use_color = FALSE;
-			continue;
+		show_latency = TRUE;
+		continue;
 		}
 	    if(argv[i][1] == 'p'){
 		if(argc <=  i + 1){
@@ -4306,19 +4287,11 @@ uint64_t seg_addr)
 			llvm_disasm_set_options(arm_dc,
 				LLVMDisassembler_Option_PrintLatency);
 		}
-		if(use_color){
-			llvm_disasm_set_options(arm_dc,
-				LLVMDisassembler_Option_Color);
-		}
 		llvm_disasm_set_options(thumb_dc,
 		    LLVMDisassembler_Option_PrintImmHex);
 		if(show_latency){
 			llvm_disasm_set_options(thumb_dc,
 				LLVMDisassembler_Option_PrintLatency);
-		}
-		if(use_color){
-		  llvm_disasm_set_options(thumb_dc,
-				LLVMDisassembler_Option_Color);
 		}
 		if(eflag){
 		    llvm_disasm_set_options(arm_dc,
@@ -4341,10 +4314,6 @@ uint64_t seg_addr)
 			llvm_disasm_set_options(i386_dc,
 				LLVMDisassembler_Option_PrintLatency);
 		}
-		if(use_color){
-			llvm_disasm_set_options(i386_dc,
-				LLVMDisassembler_Option_Color);
-		}
 		if(eflag)
 		    llvm_disasm_set_options(i386_dc,
 			LLVMDisassembler_Option_UseMarkup);
@@ -4363,31 +4332,23 @@ uint64_t seg_addr)
 			llvm_disasm_set_options(x86_64_dc,
 				LLVMDisassembler_Option_PrintLatency);
 		}
-		if(use_color){
-			llvm_disasm_set_options(x86_64_dc,
-				LLVMDisassembler_Option_Color);
-		}
 		if(eflag)
 		    llvm_disasm_set_options(x86_64_dc,
 			LLVMDisassembler_Option_UseMarkup);
+	    }
+	    if(cputype == CPU_TYPE_ARM64 || cputype == CPU_TYPE_ARM64_32){
+		arm64_dc = create_arm64_llvm_disassembler(cpusubtype);
+		if(arm64_dc == NULL){
+		    printf("can't create arm64 llvm disassembler\n");
+		    return;
 		}
-		if(cputype == CPU_TYPE_ARM64 || cputype == CPU_TYPE_ARM64_32){
-			arm64_dc = create_arm64_llvm_disassembler(cpusubtype);
-			if(arm64_dc == NULL){
-			    printf("can't create arm64 llvm disassembler\n");
-			    return;
-			}
+		llvm_disasm_set_options(arm64_dc,
+		    LLVMDisassembler_Option_PrintImmHex);
+		if(show_latency){
 			llvm_disasm_set_options(arm64_dc,
-			    LLVMDisassembler_Option_PrintImmHex);
-			if(show_latency){
-				llvm_disasm_set_options(arm64_dc,
-					LLVMDisassembler_Option_PrintLatency);
-			}
-			if(use_color){
-				llvm_disasm_set_options(arm64_dc,
-					LLVMDisassembler_Option_Color);
-			}
+				LLVMDisassembler_Option_PrintLatency);
 		}
+	    }
 	    if(gflag){
 		ninsts = 100;
 		insts = allocate(sizeof(struct inst) * ninsts);
@@ -4425,7 +4386,15 @@ uint64_t seg_addr)
 			    printf("\t");
 		    }
 		}
-		if(cputype == CPU_TYPE_X86_64)
+		if(cputype == CPU_TYPE_POWERPC64)
+		    j = ppc_disassemble(sect, (uint32_t)size - i,
+				(uint32_t)cur_addr, (uint32_t)addr,
+				object_byte_sex, relocs, nrelocs, symbols,
+				symbols64, nsymbols, sorted_symbols,
+				nsorted_symbols, strings, strings_size,
+				indirect_symbols, nindirect_symbols,
+				load_commands, ncmds, sizeofcmds, verbose);
+		else if(cputype == CPU_TYPE_X86_64)
 		    j = i386_disassemble(sect, (uint32_t)size - i, cur_addr, addr,
 				object_byte_sex, relocs, nrelocs, ext_relocs,
 				next_relocs, loc_relocs, nloc_relocs, dbi, ndbi,
@@ -4445,6 +4414,15 @@ uint64_t seg_addr)
 				load_commands, ncmds, sizeofcmds, verbose,
 				llvm_mc, i386_dc, x86_64_dc, object_addr,
 				object_size, &(insts[n]), NULL, 0);
+		else if(cputype == CPU_TYPE_POWERPC ||
+			cputype == CPU_TYPE_VEO)
+		    j = ppc_disassemble(sect, (uint32_t)size - i,
+					(uint32_t)cur_addr, (uint32_t)addr,
+				object_byte_sex, relocs, nrelocs, symbols,
+				symbols64, nsymbols, sorted_symbols,
+				nsorted_symbols, strings, strings_size,
+				indirect_symbols, nindirect_symbols,
+				load_commands, ncmds, sizeofcmds, verbose);
 		else if(cputype == CPU_TYPE_ARM)
 		    j = arm_disassemble(sect, (uint32_t)size - i,
 				(uint32_t)cur_addr, (uint32_t)addr,

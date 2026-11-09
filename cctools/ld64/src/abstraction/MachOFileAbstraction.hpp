@@ -641,7 +641,7 @@ static const ArchInfo archInfoArray[] = {
 #if SUPPORT_ARCH_arm64_32
 	{ "arm64_32", CPU_TYPE_ARM64_32,   CPU_SUBTYPE_ARM64_32_V8,  "arm64_32-",  "aarch64_32-", Thumb2Support::none },
 #endif
-#if SUPPORT_ARCH_riscv32
+#if SUPPORT_ARCH_riscv
 	{ "riscv32", CPU_TYPE_RISCV32, CPU_SUBTYPE_RISCV32_ALL, "riscv32-", "", Thumb2Support::none },
 #endif
 	{ NULL, 0, 0, NULL, NULL, Thumb2Support::none }

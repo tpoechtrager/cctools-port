@@ -22,82 +22,77 @@
  */
 #include <architecture/byte_order.h>
 #include <mach/i386/thread_status.h>
-#include <Availability.h>
-
-#ifndef __CCTOOLS_DEPRECATED2
-    #define __CCTOOLS_DEPRECATED2           __API_DEPRECATED("No longer supported", macos(10.0, 15.4), ios(1.0, 18.4), watchos(1.0, 11.4), tvos(1.0, 18.4))
-#endif
 
 struct i386_float_state;
 
 extern void swap_i386_thread_state(
     i386_thread_state_t *cpu,
-    enum NXByteOrder target_byte_order) __CCTOOLS_DEPRECATED2;
+    enum NXByteOrder target_byte_order);
 
 /* current i386 thread states */
 #if i386_THREAD_STATE == 1
 extern void swap_i386_float_state(
     struct i386_float_state *fpu,
-    enum NXByteOrder target_byte_order) __CCTOOLS_DEPRECATED2;
+    enum NXByteOrder target_byte_order);
 
 extern void swap_i386_exception_state(
     i386_exception_state_t *exc,
-    enum NXByteOrder target_byte_order) __CCTOOLS_DEPRECATED2;
+    enum NXByteOrder target_byte_order);
 #endif /* i386_THREAD_STATE == 1 */
 
 /* i386 thread states on older releases */
 #if i386_THREAD_STATE == -1
 extern void swap_i386_thread_fpstate(
     i386_thread_fpstate_t *fpu,
-    enum NXByteOrder target_byte_order) __CCTOOLS_DEPRECATED2;
+    enum NXByteOrder target_byte_order);
 
 extern void swap_i386_thread_exceptstate(
     i386_thread_exceptstate_t *exc,
-    enum NXByteOrder target_byte_order) __CCTOOLS_DEPRECATED2;
+    enum NXByteOrder target_byte_order);
 
 extern void swap_i386_thread_cthreadstate(
     i386_thread_cthreadstate_t *user,
-    enum NXByteOrder target_byte_order) __CCTOOLS_DEPRECATED2;
+    enum NXByteOrder target_byte_order);
 #endif /* i386_THREAD_STATE == -1 */
 
 #ifdef x86_THREAD_STATE64
 extern void swap_x86_thread_state64(
     x86_thread_state64_t *cpu,
-    enum NXByteOrder target_byte_order) __CCTOOLS_DEPRECATED2;
+    enum NXByteOrder target_byte_order);
 
 extern void swap_x86_state_hdr(
     x86_state_hdr_t *hdr,
-    enum NXByteOrder target_byte_order) __CCTOOLS_DEPRECATED2;
+    enum NXByteOrder target_byte_order);
 
 extern void swap_x86_float_state64(
     x86_float_state64_t *fpu,
-    enum NXByteOrder target_byte_order) __CCTOOLS_DEPRECATED2;
+    enum NXByteOrder target_byte_order);
 
 extern void swap_x86_exception_state64(
     x86_exception_state64_t *exc,
-    enum NXByteOrder target_byte_order) __CCTOOLS_DEPRECATED2;
+    enum NXByteOrder target_byte_order);
 
 extern void swap_x86_thread_state(
     x86_thread_state_t *cpu,
-    enum NXByteOrder target_byte_order) __CCTOOLS_DEPRECATED2;
+    enum NXByteOrder target_byte_order);
 
 extern void swap_x86_float_state(
     x86_float_state_t *fpu,
-    enum NXByteOrder target_byte_order) __CCTOOLS_DEPRECATED2;
+    enum NXByteOrder target_byte_order);
 
 extern void swap_x86_exception_state(
     x86_exception_state_t *exc,
-    enum NXByteOrder target_byte_order) __CCTOOLS_DEPRECATED2;
+    enum NXByteOrder target_byte_order);
 
 extern void swap_x86_debug_state32(
     x86_debug_state32_t *debug,
-    enum NXByteOrder target_byte_order) __CCTOOLS_DEPRECATED2;
+    enum NXByteOrder target_byte_order);
 
 extern void swap_x86_debug_state64(
     x86_debug_state64_t *debug,
-    enum NXByteOrder target_byte_order) __CCTOOLS_DEPRECATED2;
+    enum NXByteOrder target_byte_order);
 
 extern void swap_x86_debug_state(
     x86_debug_state_t *debug,
-    enum NXByteOrder target_byte_order) __CCTOOLS_DEPRECATED2;
+    enum NXByteOrder target_byte_order);
 #endif /* x86_THREAD_STATE64 */

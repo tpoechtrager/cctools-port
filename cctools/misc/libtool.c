@@ -59,9 +59,6 @@
 #ifdef LTO_SUPPORT
 #include "stuff/lto.h"
 #endif /* LTO_SUPPORT */
-#if 0 // cctools-port
-#include <mach-o/cctools_helpers.h>
-#endif
 
 #include <mach/mach_init.h>
 #if defined(__OPENSTEP__) || defined(__GONZO_BUNSEN_BEAKER__)
@@ -70,12 +67,6 @@
 #include <servers/bootstrap.h>
 #endif
 
-// can't include "stuff/breakout.h" because it also declares `arch` and other structs used here
-extern struct ofile* breakout(const char *filename, void** archs, uint32_t* narchs, enum bool);
-
-
-// if a member file in a static library has this name, then force load it
-#define ALWAYS_LOAD_MEMBER_NAME "__ALWAYS_LOAD.o"
 
 /*
  * This is used internally to build the table of contents.
@@ -132,12 +123,6 @@ struct cmd_flags {
     uint32_t
 	nfiles;		/* number of file name arguments */
     char **filelist;	/* filelist argument the file name argument came from */
-    const char **reflibs;	/* lib names to embedded references to */
-    uint32_t
-	nreflibs;	/* number of libnames */
-    const char **reffw;	/* framework names to embedded references to */
-    uint32_t
-	nreffw;		/* number of framework */
     enum bool
 	no_files_ok;	/* ok to see no files */
     enum bool ranlib;	/* set if this is run as ranlib not libtool */
@@ -203,7 +188,6 @@ struct cmd_flags {
     enum bool toc64;	/* force the use of the 64-bit toc */
     enum bool fat64;	/* force the use of 64-bit fat files
 			   when a fat is to be created */
-    enum bool sdk_libs_as_refs;
 };
 static struct cmd_flags cmd_flags = { 0 };
 
@@ -472,9 +456,6 @@ char **envp)
 	maxfiles = argc;
         cmd_flags.files = allocate(sizeof(char *) * maxfiles);
         cmd_flags.filelist = allocate(sizeof(char *) * maxfiles);
-	cmd_flags.reflibs = allocate(sizeof(char *) * maxfiles);
-	cmd_flags.reffw = allocate(sizeof(char *) * maxfiles);
-
         memset(cmd_flags.filelist, '\0', sizeof(char *) * maxfiles);
 	for(i = 1; i < argc; i++){
 	    if(argv[i][0] == '-'){
@@ -1080,20 +1061,6 @@ char **envp)
 		    /* We need to ignore -g[gdb,codeview,stab][number] flags */
 			;
 		}
-		else if(strncmp(argv[i], "-ref-l", 6) == 0){
-		    cmd_flags.reflibs[cmd_flags.nreflibs++] = &argv[i][6];
-		}
-		else if(strcmp(argv[i], "-ref-framework") == 0){
-		    if(i + 1 >= argc){
-			error("not enough arguments follow %s", argv[i]);
-			usage();
-		    }
-		    ++i;
-		    cmd_flags.reffw[cmd_flags.nreffw++] = argv[i];
-		}
-		else if(strcmp(argv[i], "-encode_sdk_libraries_as_references") == 0){
-		    cmd_flags.sdk_libs_as_refs = TRUE;
-		}
 		else if(strcmp(argv[i], "-pg") == 0){
 		    if(cmd_flags.ranlib == TRUE){
 			error("unknown option: %s", argv[i]);
@@ -1533,18 +1500,6 @@ void)
 		    continue;
 		file_name = file_name_from_l_flag(cmd_flags.files[i]);
 		if(file_name != NULL) {
-		    if(cmd_flags.sdk_libs_as_refs && (next_root != NULL)) {
-			size_t sdkLen = strlen(next_root);
-			if(strlen(file_name) > sdkLen) {
-			    if(strncmp(file_name,next_root,sdkLen) == 0){
-				// lib is in SDK, switch to auto-link hint
-				const char* libArg = cmd_flags.files[i];
-				cmd_flags.reflibs[cmd_flags.nreflibs++] = &libArg[2];
-				continue;
-			    }
-			}
-		    }
-
 		    if(ofile_map(file_name, NULL, NULL, ofiles + i, TRUE) ==
 		       FALSE)
 			continue;
@@ -1765,35 +1720,6 @@ ranlib_fat_error:
 	    }
 	    errors += previous_errors;
 	}
-    
-
-	// if any -ref args are used in -static mode, build extra .o file that lists them
-	if((cmd_flags.nreflibs != 0) || (cmd_flags.nreffw != 0)){
-	    if(cmd_flags.dynamic == FALSE){
-		// make a .o file for each arch in the output file
-		for(int i=0; i < narchs; ++i){
-	            fatal("ref libs are not supported by cctools-port for now."); // cctools-port
-#if 0
-		    char extraFilePath[PATH_MAX];
-		    make_obj_file_with_linker_options(archs[i].arch_flag.cputype, archs[i].arch_flag.cpusubtype,
-						       cmd_flags.nreflibs, cmd_flags.reflibs,
-						       cmd_flags.nreffw, cmd_flags.reffw,
-						       extraFilePath);
-		    void* dummyArchs[1];
-		    uint32_t dummynarchs = 0;
-		    struct ofile* extraObj = breakout(extraFilePath, dummyArchs, &dummynarchs, FALSE);
-		    extraObj->file_name        = ALWAYS_LOAD_MEMBER_NAME;
-		    extraObj->member_name      = extraObj->file_name;
-		    extraObj->member_name_size = 15;
-		    extraObj->member_size      = (uint32_t)extraObj->file_size;
-		    extraObj->member_type      = OFILE_Mach_O;
-		    add_member(extraObj);
-		    unlink(extraFilePath);
-#endif
-		}
-	    }
-	}
-
 	if(cmd_flags.ranlib == FALSE && errors == 0)
 	    create_library(cmd_flags.output, NULL);
 
@@ -1989,7 +1915,7 @@ struct ofile *ofile)
 	 * If this did not come from an archive get the stat info which is
 	 * needed to fill in the archive header for this member.
 	 */
-	if((ofile->member_ar_hdr == NULL) && (strcmp(ofile->file_name,ALWAYS_LOAD_MEMBER_NAME) != 0)){
+	if(ofile->member_ar_hdr == NULL){
 	    if(stat(ofile->file_name, &stat_buf) == -1){
 		system_error("can't stat file: %s", ofile->file_name);
 		return;
@@ -4158,10 +4084,8 @@ char *output)
 		    }
 		}
 		else{
-		    if(cmd_flags.no_warning_for_no_symbols == FALSE){
-			if(strcmp(member->member_name, ALWAYS_LOAD_MEMBER_NAME) != 0)
-			    warn_member(arch, member, "has no symbols");
-		    }
+		    if(cmd_flags.no_warning_for_no_symbols == FALSE)
+			warn_member(arch, member, "has no symbols");
 		}
 	    }
 #ifdef LTO_SUPPORT
@@ -4691,8 +4615,6 @@ void)
 		if(strncmp(archs[i].members[j].member_name,
 			   archs[i].members[j+1].member_name,
 			   len) == 0){
-		    if(strcmp(archs[i].members[j].member_name, ALWAYS_LOAD_MEMBER_NAME) == 0)
-			continue;
 		    fprintf(stderr, "%s: warning ", progname);
 		    if(narchs > 1)
 			fprintf(stderr, "for architecture: %s ",

@@ -95,12 +95,16 @@
 #import <mach-o/stab.h>
 #import <mach-o/loader.h>
 #import <mach-o/reloc.h>
+#import <mach-o/hppa/reloc.h>
+#import <mach-o/sparc/reloc.h>
+#import <mach-o/ppc/reloc.h>
 #import <mach-o/arm/reloc.h>
 #import <stuff/breakout.h>
 #import <stuff/best_arch.h>
 #import <stuff/allocate.h>
 #import <stuff/errors.h>
 #import <stuff/rnd.h>
+#import <stuff/hppa.h>
 #import <stuff/execute.h>
 #import <stuff/guess_short_name.h>
 #import <stuff/seg_addr_table.h> /* cctools-port: uncommented */
@@ -509,6 +513,15 @@ static void update_local_relocs(
 static void update_generic_local_relocs(
     uint32_t vmslide);
 
+static void update_hppa_local_relocs(
+    uint32_t vmslide);
+
+static void update_sparc_local_relocs(
+    uint32_t vmslide);
+
+static void update_ppc_local_relocs(
+    uint32_t vmslide);
+
 static void update_arm_local_relocs(
     uint32_t vmslide);
 
@@ -516,6 +529,15 @@ static void update_external_relocs(
     uint32_t vmslide);
 
 static void update_generic_external_relocs(
+    uint32_t vmslide);
+
+static void update_hppa_external_relocs(
+    uint32_t vmslide);
+
+static void update_sparc_external_relocs(
+    uint32_t vmslide);
+
+static void update_ppc_external_relocs(
     uint32_t vmslide);
 
 static void update_arm_external_relocs(
@@ -5897,8 +5919,20 @@ update_local_relocs(
 uint32_t vmslide)
 {
 	switch(arch->object->mh_cputype){
+	case CPU_TYPE_MC680x0:
+	    update_generic_local_relocs(vmslide);
+	    break;
 	case CPU_TYPE_I386:
 	    update_generic_local_relocs(vmslide);
+	    break;
+	case CPU_TYPE_HPPA:
+	    update_hppa_local_relocs(vmslide);
+	    break;
+	case CPU_TYPE_SPARC:
+	    update_sparc_local_relocs(vmslide);
+	    break;
+	case CPU_TYPE_POWERPC:
+	    update_ppc_local_relocs(vmslide);
 	    break;
 	case CPU_TYPE_ARM:
 	    update_arm_local_relocs(vmslide);
@@ -6028,6 +6062,735 @@ uint32_t vmslide)
 	     */
 	    if((arch_locrelocs[i].r_address & R_SCATTERED) != 0){
 		sreloc->r_value = r_value;
+	    }
+	}
+}
+
+/*
+ * update_hppa_local_relocs() updates of the items with local relocation
+ * entries for the hppa architecture.
+ */
+static
+void
+update_hppa_local_relocs(
+uint32_t vmslide)
+{
+    uint32_t i, r_address, r_pcrel, r_length, r_value, value;
+    char *p;
+    uint32_t instruction, immediate;
+    enum bool no_sect;
+    struct scattered_relocation_info *sreloc;
+    struct relocation_info *pair_reloc;
+    struct scattered_relocation_info *spair_reloc;
+    enum reloc_type_hppa r_type, pair_r_type;
+    uint32_t other_half;
+    uint32_t hi21, lo14;
+    uint32_t w, w1, w2;
+
+	sreloc = NULL;
+	pair_reloc = NULL;
+	spair_reloc = NULL;
+	other_half = 0;
+	r_value = 0;
+
+	for(i = 0; i < arch_nlocrel; i++){
+	    if((arch_locrelocs[i].r_address & R_SCATTERED) != 0){
+		sreloc = (struct scattered_relocation_info *)
+			 (arch_locrelocs + i);
+		r_address = sreloc->r_address;
+		r_pcrel = sreloc->r_pcrel;
+		r_length = sreloc->r_length;
+		r_value = sreloc->r_value;
+		r_type = (enum reloc_type_hppa)sreloc->r_type;
+		no_sect = FALSE;
+	    }
+	    else{
+		r_address = arch_locrelocs[i].r_address;
+		r_pcrel = arch_locrelocs[i].r_pcrel;
+		r_length = arch_locrelocs[i].r_length;
+		r_type = (enum reloc_type_hppa)arch_locrelocs[i].r_type;
+		no_sect = arch_locrelocs[i].r_symbolnum == NO_SECT;
+	    }
+	    /*
+	     * If this relocation type has a pair break out it's fields.
+	     */
+	    pair_r_type = 0;
+	    if(r_type == HPPA_RELOC_HI21 ||
+	       r_type == HPPA_RELOC_LO14 ||
+	       r_type == HPPA_RELOC_BR17){
+		if(i + 1 == arch_nlocrel){
+		    error("malformed file: %s (missing pair local "
+			  "relocation entry for entry %u) (for architecture "
+			  "%s)", arch->file_name, i, arch_name);
+		    redo_exit(2);
+		}
+		pair_reloc = arch_locrelocs + i + 1;
+		if((pair_reloc->r_address & R_SCATTERED) != 0){
+		    spair_reloc = (struct scattered_relocation_info *)
+				  pair_reloc;
+		    pair_r_type = spair_reloc->r_type;
+		    other_half  = spair_reloc->r_address;
+		}
+		else{
+		    pair_r_type = pair_reloc->r_type;
+		    other_half  = pair_reloc->r_address;
+		}
+		i++;
+		if(pair_r_type != HPPA_RELOC_PAIR){
+		    error("malformed file: %s (pair local relocation entry "
+			  "for entry %u is not of r_type HPPA_RELOC_PAIR) "
+			  "(for architecture %s)", arch->file_name, i,
+			  arch_name);
+		    redo_exit(2);
+		}
+	    }
+
+	    /*
+	     * If this relocation entry pc relative, which means the value of
+	     * the pc will get added to it when it is executed, the item being
+	     * relocated has the value of the pc subtracted from it.  So to
+	     * relocate this, the amount the image has been slid has to be
+	     * subtracted from it also.
+	     */
+	    value = 0;
+	    if(r_pcrel)
+		value -= vmslide;
+	    /*
+	     * Since this is a local relocation entry and all sections are
+	     * moving by the same amount everything gets moved except those
+	     * things that are defined that are not in a section.  We are
+	     * counting on not seeing any section difference relocation entries
+	     * and pcrel section based (which would work but be nops).
+	     */
+	    if(no_sect == FALSE){
+		value += vmslide;
+		r_value += vmslide;
+	    }
+
+	    p = contents_pointer_for_vmaddr(r_address +
+				(arch_split_segs == TRUE ?
+				 arch_segs_read_write_addr : arch_seg1addr),
+					    1 << r_length);
+	    if(p == NULL){
+		error("malformed file: %s (for architecture %s) (bad r_address"
+		      " field for local relocation entry %u)",
+		      arch->file_name, arch_name, i);
+		redo_exit(2);
+	    }
+
+	    if(r_type == HPPA_RELOC_VANILLA){
+		switch(r_length){
+		case 0: /* byte */
+		    value += get_arch_byte(p);
+		    if( (value & 0xffffff00) &&
+		       ((value & 0xffffff80) != 0xffffff80)){
+			error("prebinding can't be redone for: %s (for "
+			    "architecture %s) because of relocation overflow "
+			    "(local relocation entry %u does not fit in 1 "
+			    "byte)", arch->file_name, arch_name, i);
+			redo_exit(2);
+		    }
+		    set_arch_byte(p, value);
+		    break;
+		case 1: /* word (2 byte) */
+		    value += get_arch_short(p);
+		    if( (value & 0xffff0000) &&
+		       ((value & 0xffff8000) != 0xffff8000)){
+			error("prebinding can't be redone for: %s (for "
+			    "architecture %s) because of relocation overflow "
+			    "(local relocation entry %u does not fit in 2 "
+			    "bytes)", arch->file_name, arch_name, i);
+			redo_exit(2);
+		    }
+		    set_arch_short(p, value);
+		    break;
+		case 2: /* long (4 byte) */
+		    value += get_arch_long(p);
+		    set_arch_long(p, value);
+		    break;
+		}
+	    }
+	    /*
+	     * Do hppa specific relocation based on the r_type.
+	     */
+	    else{
+		switch(r_type){
+		case HPPA_RELOC_PB_LA_PTR:
+		    /* note r_value is incremented by vmslide above */
+		    break;
+		case HPPA_RELOC_HI21:
+		    instruction = get_arch_long(p);
+		    immediate = sign_ext(other_half, 14) +
+		               (assemble_21(instruction & 0x1fffff) << 11);
+		    calc_hppa_HILO(value + immediate, 0, &hi21, &lo14);
+		    instruction = (instruction & 0xffe00000) |
+				  dis_assemble_21(hi21 >> 11);
+		    set_arch_long(p, instruction);
+		    other_half = lo14 & 0x3fff;
+		    break;
+		case HPPA_RELOC_LO14:
+		    instruction = get_arch_long(p);
+		    immediate = low_sign_ext(instruction & 0x3fff, 14) +
+                                (other_half << 11);
+		    calc_hppa_HILO(value + immediate, 0, &hi21, &lo14);
+		    lo14 = low_sign_unext(lo14, 14);
+		    instruction = (instruction & 0xffffc000) |
+				  (lo14 & 0x3fff);
+		    set_arch_long(p, instruction);
+		    other_half = hi21 >> 11;
+		    break;
+		case HPPA_RELOC_BR17:
+		    instruction = get_arch_long(p);
+		    immediate = assemble_17((instruction & 0x1f0000) >> 16,
+			                    (instruction & 0x1ffc) >> 2,
+				             instruction & 1);
+		    immediate = (sign_ext(immediate, 17) << 2) +
+				(other_half << 11);
+		    calc_hppa_HILO(value + immediate, 0, &hi21, &lo14);
+		    lo14 >>= 2;
+		    dis_assemble_17(lo14, &w1, &w2, &w);
+		    instruction = (instruction & 0xffe0e002) |
+				  (w1 << 16) | (w2 << 2) | w;
+		    set_arch_long(p, instruction);
+		    other_half = hi21 >> 11;
+		    break;
+		case HPPA_RELOC_BL17:
+		    instruction = get_arch_long(p);
+		    immediate = assemble_17((instruction & 0x1f0000) >> 16,
+			                    (instruction & 0x1ffc) >> 2,
+				             instruction & 1);
+		    if((immediate & 0x10000) != 0)
+			immediate |= 0xfffe0000;
+		    immediate <<= 2;
+		    immediate += value;
+		    if(U_ABS(immediate) > 0x3ffff){
+			error("prebinding can't be redone for: %s (for "
+			    "architecture %s) because of relocation overflow "
+			    "(local relocation entry %u displacement "
+			    "too large to fit)", arch->file_name, arch_name, i);
+		    }
+		    immediate >>= 2;
+		    dis_assemble_17(immediate, &w1, &w2, &w);
+		    instruction = (instruction & 0xffe0e002) |
+				  (w1 << 16) | (w2 << 2) | w;
+		    set_arch_long(p, instruction);
+		    break;
+		default:
+		    error("malformed file: %s (local relocation entry "
+			  "%u has unknown r_type) (for architecture %s)",
+			  arch->file_name, i, arch_name);
+		    redo_exit(2);
+		    break;
+		}
+	    }
+	    /*
+	     * Update the parts of the relocation entries that are effected by
+	     * sliding this to a different address.
+	     */
+	    if((arch_locrelocs[i].r_address & R_SCATTERED) != 0){
+		sreloc->r_value = r_value;
+	    }
+	    if(pair_r_type == HPPA_RELOC_PAIR){
+		if((pair_reloc->r_address & R_SCATTERED) != 0)
+		    spair_reloc->r_address = other_half;
+		else
+		    pair_reloc->r_address = other_half;
+	    }
+	}
+}
+
+/*
+ * update_sparc_local_relocs() updates of the items with local relocation
+ * entries for the sparc architecture.
+ */
+static
+void
+update_sparc_local_relocs(
+uint32_t vmslide)
+{
+    uint32_t i, r_address, r_pcrel, r_length, r_value, value;
+    char *p;
+    uint32_t instruction, immediate;
+    enum bool no_sect;
+    struct scattered_relocation_info *sreloc;
+    struct relocation_info *pair_reloc;
+    struct scattered_relocation_info *spair_reloc;
+    enum reloc_type_sparc r_type, pair_r_type;
+    uint32_t other_half;
+
+	sreloc = NULL;
+	pair_reloc = NULL;
+	spair_reloc = NULL;
+	other_half = 0;
+	r_value = 0;
+
+	for(i = 0; i < arch_nlocrel; i++){
+	    if((arch_locrelocs[i].r_address & R_SCATTERED) != 0){
+		sreloc = (struct scattered_relocation_info *)
+			 (arch_locrelocs + i);
+		r_address = sreloc->r_address;
+		r_pcrel = sreloc->r_pcrel;
+		r_length = sreloc->r_length;
+		r_value = sreloc->r_value;
+		r_type = (enum reloc_type_sparc)sreloc->r_type;
+		no_sect = FALSE;
+	    }
+	    else{
+		r_address = arch_locrelocs[i].r_address;
+		r_pcrel = arch_locrelocs[i].r_pcrel;
+		r_length = arch_locrelocs[i].r_length;
+		r_type = (enum reloc_type_sparc)arch_locrelocs[i].r_type;
+		no_sect = arch_locrelocs[i].r_symbolnum == NO_SECT;
+	    }
+	    /*
+	     * If this relocation type has a pair break out it's fields.
+	     */
+	    pair_r_type = 0;
+	    if(r_type == SPARC_RELOC_HI22 ||
+	       r_type == SPARC_RELOC_LO10 ){
+		if(i + 1 == arch_nlocrel){
+		    error("malformed file: %s (missing pair local "
+			  "relocation entry for entry %u) (for architecture "
+			  "%s)", arch->file_name, i, arch_name);
+		    redo_exit(2);
+		}
+		pair_reloc = arch_locrelocs + i + 1;
+		if((pair_reloc->r_address & R_SCATTERED) != 0){
+		    spair_reloc = (struct scattered_relocation_info *)
+				  pair_reloc;
+		    pair_r_type = spair_reloc->r_type;
+		    other_half  = spair_reloc->r_address;
+		}
+		else{
+		    pair_r_type = pair_reloc->r_type;
+		    other_half  = pair_reloc->r_address;
+		}
+		i++;
+		if(pair_r_type != SPARC_RELOC_PAIR){
+		    error("malformed file: %s (pair local relocation entry "
+			  "for entry %u is not of r_type SPARC_RELOC_PAIR) "
+			  "(for architecture %s)", arch->file_name, i,
+			  arch_name);
+		    redo_exit(2);
+		}
+	    }
+
+	    /*
+	     * If this relocation entry pc relative, which means the value of
+	     * the pc will get added to it when it is executed, the item being
+	     * relocated has the value of the pc subtracted from it.  So to
+	     * relocate this, the amount the image has been slid has to be
+	     * subtracted from it also.
+	     */
+	    value = 0;
+	    if(r_pcrel)
+		value -= vmslide;
+	    /*
+	     * Since this is a local relocation entry and all sections are
+	     * moving by the same amount everything gets moved except those
+	     * things that are defined that are not in a section.  We are
+	     * counting on not seeing any section difference relocation entries
+	     * and pcrel section based (which would work but be nops).
+	     */
+	    if(no_sect == FALSE){
+		value += vmslide;
+		r_value += vmslide;
+	    }
+
+	    p = contents_pointer_for_vmaddr(r_address +
+				(arch_split_segs == TRUE ?
+				 arch_segs_read_write_addr : arch_seg1addr),
+					    1 << r_length);
+	    if(p == NULL){
+		error("malformed file: %s (for architecture %s) (bad r_address"
+		      " field for local relocation entry %u)",
+		      arch->file_name, arch_name, i);
+		redo_exit(2);
+	    }
+
+	    if(r_type == SPARC_RELOC_VANILLA){
+		switch(r_length){
+		case 0: /* byte */
+		    value += get_arch_byte(p);
+		    if( (value & 0xffffff00) &&
+		       ((value & 0xffffff80) != 0xffffff80)){
+			error("prebinding can't be redone for: %s (for "
+			    "architecture %s) because of relocation overflow "
+			    "(local relocation entry %u does not fit in 1 "
+			    "byte)", arch->file_name, arch_name, i);
+			redo_exit(2);
+		    }
+		    set_arch_byte(p, value);
+		    break;
+		case 1: /* word (2 byte) */
+		    value += get_arch_short(p);
+		    if( (value & 0xffff0000) &&
+		       ((value & 0xffff8000) != 0xffff8000)){
+			error("prebinding can't be redone for: %s (for "
+			    "architecture %s) because of relocation overflow "
+			    "(local relocation entry %u does not fit in 2 "
+			    "bytes)", arch->file_name, arch_name, i);
+			redo_exit(2);
+		    }
+		    set_arch_short(p, value);
+		    break;
+		case 2: /* long (4 byte) */
+		    value += get_arch_long(p);
+		    set_arch_long(p, value);
+		    break;
+		}
+	    }
+	    /*
+	     * Do SPARC specific relocation based on the r_type.
+	     */
+	    else {
+		switch(r_type) {
+		case SPARC_RELOC_PB_LA_PTR:
+		    /* note r_value is incremented by vmslide above */
+		    break;
+		case SPARC_RELOC_HI22:
+		    instruction = get_arch_long(p);
+		    immediate = ((instruction & 0x3fffff) << 10) | other_half;
+		    immediate += value;
+		    instruction = (instruction & 0xffc00000) |
+				  ((immediate >> 10) & 0x3fffff);
+		    set_arch_long(p, instruction);
+		    other_half = immediate & 0x3ff;
+		    break;
+
+		case SPARC_RELOC_LO10:
+		    instruction = get_arch_long(p);
+		    immediate = (instruction & 0x3ff) | (other_half << 10);
+		    immediate += value;
+		    instruction = (instruction & 0xfffffc00) |
+					(immediate & 0x3ff);
+		    set_arch_long(p, instruction);
+		    other_half = (immediate >> 10) & 0x3fffff;
+		    break;
+
+		case SPARC_RELOC_WDISP22:
+		    instruction = get_arch_long(p);
+		    immediate = (instruction & 0x3fffff);
+		    if((immediate & 0x200000) != 0)
+			    immediate |= 0xffc00000;
+		    immediate <<= 2;
+		    immediate += value;
+		    if((immediate & 0xff800000) != 0xff800000 &&
+				    (immediate & 0xff800000) != 0x00) {
+			error("prebinding can't be redone for: %s (for "
+			    "architecture %s) because of relocation overflow "
+			    "(local relocation entry %u displacement too "
+			    "large to fit)", arch->file_name, arch_name, i);
+		    }
+		    immediate >>= 2;
+		    instruction = (instruction & 0xffc00000) |
+				    (immediate & 0x3fffff);
+		    set_arch_long(p, instruction);
+		    break;
+
+		case SPARC_RELOC_WDISP30:
+		    instruction = get_arch_long(p);
+		    immediate = (instruction & 0x3fffffff);
+		    immediate <<= 2;
+		    immediate += value;
+		    immediate >>= 2;
+		    instruction = (instruction & 0xc0000000) |
+				    (immediate & 0x3fffffff);
+		    set_arch_long(p, instruction);
+		    break;
+
+		default:
+		    error("malformed file: %s (local relocation entry "
+			  "%u has unknown r_type) (for architecture %s)",
+			  arch->file_name, i, arch_name);
+		    redo_exit(2);
+		    break;
+		}
+	    }
+
+	    /*
+	     * Update the parts of the relocation entries that are effected by
+	     * sliding this to a different address.
+	     */
+	    if((arch_locrelocs[i].r_address & R_SCATTERED) != 0){
+		sreloc->r_value = r_value;
+	    }
+	    if(pair_r_type == SPARC_RELOC_PAIR){
+		if((pair_reloc->r_address & R_SCATTERED) != 0)
+		    spair_reloc->r_address = other_half;
+		else
+		    pair_reloc->r_address = other_half;
+	    }
+	}
+}
+
+/*
+ * update_ppc_local_relocs() updates of the items with local relocation
+ * entries for the ppc architecture.
+ */
+static
+void
+update_ppc_local_relocs(
+uint32_t vmslide)
+{
+    uint32_t i, r_address, r_pcrel, r_length, r_value, value;
+    char *p;
+    uint32_t instruction, immediate;
+    enum bool no_sect;
+    struct scattered_relocation_info *sreloc;
+    struct relocation_info *pair_reloc;
+    struct scattered_relocation_info *spair_reloc;
+    enum reloc_type_ppc r_type, pair_r_type;
+    uint32_t other_half;
+
+	sreloc = NULL;
+	pair_reloc = NULL;
+	spair_reloc = NULL;
+	other_half = 0;
+	r_value = 0;
+
+	for(i = 0; i < arch_nlocrel; i++){
+	    if((arch_locrelocs[i].r_address & R_SCATTERED) != 0){
+		sreloc = (struct scattered_relocation_info *)
+			 (arch_locrelocs + i);
+		r_address = sreloc->r_address;
+		r_pcrel = sreloc->r_pcrel;
+		r_length = sreloc->r_length;
+		r_value = sreloc->r_value;
+		r_type = (enum reloc_type_ppc)sreloc->r_type;
+		no_sect = FALSE;
+	    }
+	    else{
+		r_address = arch_locrelocs[i].r_address;
+		r_pcrel = arch_locrelocs[i].r_pcrel;
+		r_length = arch_locrelocs[i].r_length;
+		r_type = (enum reloc_type_ppc)arch_locrelocs[i].r_type;
+		no_sect = arch_locrelocs[i].r_symbolnum == NO_SECT;
+	    }
+	    /*
+	     * If this relocation type has a pair break out it's fields.
+	     */
+	    pair_r_type = 0;
+	    if(r_type == PPC_RELOC_HI16 || r_type == PPC_RELOC_LO16 ||
+	       r_type == PPC_RELOC_HA16 || r_type == PPC_RELOC_LO14){
+		if(i + 1 == arch_nlocrel){
+		    error("malformed file: %s (missing pair local "
+			  "relocation entry for entry %u) (for architecture "
+			  "%s)", arch->file_name, i, arch_name);
+		    redo_exit(2);
+		}
+		pair_reloc = arch_locrelocs + i + 1;
+		if((pair_reloc->r_address & R_SCATTERED) != 0){
+		    spair_reloc = (struct scattered_relocation_info *)
+				    pair_reloc;
+		    pair_r_type = spair_reloc->r_type;
+		    other_half  = spair_reloc->r_address;
+		}
+		else{
+		    pair_r_type = pair_reloc->r_type;
+		    other_half  = pair_reloc->r_address;
+		}
+		i++;
+		if(pair_r_type != PPC_RELOC_PAIR){
+		    error("malformed file: %s (pair local relocation entry "
+			  "for entry %u is not of r_type PPC_RELOC_PAIR) "
+			  "(for architecture %s)", arch->file_name, i,
+			  arch_name);
+		    redo_exit(2);
+		}
+	    }
+
+	    /*
+	     * If this relocation entry pc relative, which means the value of
+	     * the pc will get added to it when it is executed, the item being
+	     * relocated has the value of the pc subtracted from it.  So to
+	     * relocate this, the amount the image is slid has to be subtracted
+	     * from it also.
+	     */
+	    value = 0;
+	    if(r_pcrel)
+		value -= vmslide;
+	    /*
+	     * Since this is a local relocation entry and all sections are
+	     * moving by the same amount everything gets moved except those
+	     * things that are defined that are not in a section.  We are
+	     * counting on not seeing any section difference relocation entries
+	     * and pcrel section based (which would work but be nops).
+	     */
+	    if(no_sect == FALSE){
+		value += vmslide;
+		r_value += vmslide;
+	    }
+
+	    p = contents_pointer_for_vmaddr(r_address +
+				(arch_split_segs == TRUE ?
+				 arch_segs_read_write_addr : arch_seg1addr),
+				 1 << r_length);
+	    if(p == NULL){
+		error("malformed file: %s (for architecture %s) (bad r_address"
+		      " field for local relocation entry %u)",
+		      arch->file_name, arch_name, i);
+		redo_exit(2);
+	    }
+
+	    if(r_type == PPC_RELOC_VANILLA){
+		switch(r_length){
+		case 0: /* byte */
+		    value += get_arch_byte(p);
+		    if( (value & 0xffffff00) &&
+		       ((value & 0xffffff80) != 0xffffff80)){
+			error("prebinding can't be redone for: %s (for "
+			    "architecture %s) because of relocation overflow "
+			    "(local relocation entry %u does not fit in 1 "
+			    "byte)", arch->file_name, arch_name, i);
+			redo_exit(2);
+		    }
+		    set_arch_byte(p, value);
+		    break;
+		case 1: /* word (2 byte) */
+		    value += get_arch_short(p);
+		    if( (value & 0xffff0000) &&
+		       ((value & 0xffff8000) != 0xffff8000)){
+			error("prebinding can't be redone for: %s (for "
+			    "architecture %s) because of relocation overflow "
+			    "(local relocation entry %u does not fit in 2 "
+			    "bytes)", arch->file_name, arch_name, i);
+			redo_exit(2);
+		    }
+		    set_arch_short(p, value);
+		    break;
+		case 2: /* long (4 byte) */
+		    value += get_arch_long(p);
+		    set_arch_long(p, value);
+		    break;
+		}
+	    }
+	    /*
+	     * Do ppc specific relocation based on the r_type.
+	     */
+	    else{
+		switch(r_type){
+		case PPC_RELOC_PB_LA_PTR:
+		    /* note r_value is incremented by vmslide above */
+		    break;
+		case PPC_RELOC_HI16:
+		    instruction = get_arch_long(p);
+		    immediate = ((instruction & 0xffff) << 16) | other_half;
+		    immediate += value;
+		    instruction = (instruction & 0xffff0000) |
+				 ((immediate >> 16) & 0xffff);
+		    set_arch_long(p, instruction);
+		    other_half = immediate & 0xffff;
+		    break;
+		case PPC_RELOC_LO16:
+		    instruction = get_arch_long(p);
+		    immediate = (other_half << 16) | (instruction & 0xffff);
+		    immediate += value;
+		    instruction = (instruction & 0xffff0000) |
+				  (immediate & 0xffff);
+		    set_arch_long(p, instruction);
+		    other_half = (immediate >> 16) & 0xffff;
+		    break;
+		case PPC_RELOC_HA16:
+		    instruction = get_arch_long(p);
+		    if((other_half & 0x00008000) != 0)
+			immediate = ((instruction & 0xffff) << 16) +
+				    (0xffff0000 + other_half);
+		    else
+			immediate = ((instruction & 0xffff) << 16) +
+				    (other_half);
+		    immediate += value;
+		    if((immediate & 0x00008000) != 0)
+			instruction = (instruction & 0xffff0000) |
+				      (((immediate + 0x00008000) >> 16) & 0xffff);
+		    else
+			instruction = (instruction & 0xffff0000) |
+				      ((immediate >> 16) & 0xffff);
+		    set_arch_long(p, instruction);
+		    other_half = immediate & 0xffff;
+		    break;
+		case PPC_RELOC_LO14:
+		    instruction = get_arch_long(p);
+		    immediate = (other_half << 16) | (instruction & 0xfffc);
+		    immediate += value;
+		    if((immediate & 0x3) != 0){
+			error("prebinding can't be redone for: %s (for "
+			    "architecture %s) because of relocated value "
+			    "not a multiple of 4 bytes for local relocation "
+			    "entry %u", arch->file_name, arch_name, i);
+		    }
+		    instruction = (instruction & 0xffff0003) |
+				  (immediate & 0xfffc);
+		    set_arch_long(p, instruction);
+		    other_half = (immediate >> 16) & 0xffff;
+		    break;
+		case PPC_RELOC_BR14:
+		    instruction = get_arch_long(p);
+		    immediate = instruction & 0xfffc;
+		    if((immediate & 0x8000) != 0)
+			immediate |= 0xffff0000;
+		    immediate += value;
+		    if((immediate & 0x3) != 0){
+			error("prebinding can't be redone for: %s (for "
+			    "architecture %s) because of relocated value "
+			    "not a multiple of 4 bytes for local relocation "
+			    "entry %u", arch->file_name, arch_name, i);
+		    }
+		    if((immediate & 0xfffe0000) != 0xfffe0000 &&
+		       (immediate & 0xfffe0000) != 0x00000000){
+			error("prebinding can't be redone for: %s (for "
+			    "architecture %s) because of relocation overflow "
+			    "(local relocation entry %u displacement "
+			    "too large to fit)", arch->file_name, arch_name, i);
+		    }
+		    instruction = (instruction & 0xffff0003) |
+				  (immediate & 0xfffc);
+		    set_arch_long(p, instruction);
+		    break;
+		case PPC_RELOC_BR24:
+		    instruction = get_arch_long(p);
+		    immediate = instruction & 0x03fffffc;
+		    if((immediate & 0x02000000) != 0)
+			immediate |= 0xfc000000;
+		    immediate += value;
+		    if((immediate & 0x3) != 0){
+			error("prebinding can't be redone for: %s (for "
+			    "architecture %s) because of relocated value "
+			    "not a multiple of 4 bytes for local relocation "
+			    "entry %u", arch->file_name, arch_name, i);
+		    }
+		    if((immediate & 0xfe000000) != 0xfe000000 &&
+		       (immediate & 0xfe000000) != 0x00000000){
+			error("prebinding can't be redone for: %s (for "
+			    "architecture %s) because of relocation overflow "
+			    "(local relocation entry %u displacement too "
+			    "large to fit)", arch->file_name, arch_name, i);
+		    }
+		    instruction = (instruction & 0xfc000003) |
+				  (immediate & 0x03fffffc);
+		    set_arch_long(p, instruction);
+		    break;
+		default:
+		    error("malformed file: %s (local relocation entry "
+			  "%u has unknown r_type) (for architecture %s)",
+			  arch->file_name, i, arch_name);
+		    redo_exit(2);
+		    break;
+		}
+	    }
+
+	    /*
+	     * Update the parts of the relocation entries that are effected by
+	     * sliding this to a different address.
+	     */
+	    if((arch_locrelocs[i].r_address & R_SCATTERED) != 0){
+		sreloc->r_value = r_value;
+	    }
+	    if(pair_r_type == PPC_RELOC_PAIR){
+		if((pair_reloc->r_address & R_SCATTERED) != 0)
+		    spair_reloc->r_address = other_half;
+		else
+		    pair_reloc->r_address = other_half;
 	    }
 	}
 }
@@ -6195,8 +6958,20 @@ update_external_relocs(
 uint32_t vmslide)
 {
 	switch(arch->object->mh_cputype){
+	case CPU_TYPE_MC680x0:
+	    update_generic_external_relocs(vmslide);
+	    break;
 	case CPU_TYPE_I386:
 	    update_generic_external_relocs(vmslide);
+	    break;
+	case CPU_TYPE_HPPA:
+	    update_hppa_external_relocs(vmslide);
+	    break;
+	case CPU_TYPE_SPARC:
+	    update_sparc_external_relocs(vmslide);
+	    break;
+	case CPU_TYPE_POWERPC:
+	    update_ppc_external_relocs(vmslide);
 	    break;
 	case CPU_TYPE_ARM:
 	    update_arm_external_relocs(vmslide);
@@ -6229,7 +7004,7 @@ uint32_t vmslide)
             mh_flags = arch->object->mh->flags;
         else
             mh_flags = arch->object->mh64->flags;
-    
+
 	for(i = 0; i < arch_nextrel; i++){
 	    /* check the r_symbolnum field */
 	    if(arch_extrelocs[i].r_symbolnum > arch_nsyms){
@@ -6243,7 +7018,7 @@ uint32_t vmslide)
 	     * If the symbol this relocation entry is refering to is not in a
 	     * section then its slide is 0 otherwise it is slid by the the
 	     * vmslide.
-	     */ 
+	     */
 	    arch_symbol = arch_symbols + arch_extrelocs[i].r_symbolnum;
 	    if(arch_symbol->n_sect == NO_SECT)
 		symbol_slide = 0;
@@ -6259,7 +7034,7 @@ uint32_t vmslide)
 	    name = arch_strings + arch_symbol->n_un.n_strx;
 	    if((arch_symbol->n_type & N_TYPE) == N_PBUD){
                 if(unprebinding == TRUE){
-                    /* 
+                    /*
                      * If we are unprebinding, we need to use the newly zeroed
                      * symbol table entry, rather than looking up the symbol
                      */
@@ -6357,6 +7132,958 @@ uint32_t vmslide)
 		      arch->file_name, i, arch_name);
 		redo_exit(2);
 	    }
+	}
+}
+
+/*
+ * update_hppa_external_relocs() updates of the items with external relocation
+ * entries for the hppa architecture.  It only deals with external relocation
+ * entries that are using prebound undefined symbols.
+ */
+static
+void
+update_hppa_external_relocs(
+uint32_t vmslide)
+{
+    uint32_t i, value, symbol_slide;
+    char *name, *p;
+    struct nlist *defined_symbol, *arch_symbol;
+    enum link_state *module_state;
+    struct lib *lib;
+    uint32_t instruction, immediate;
+    uint32_t other_half;
+    uint32_t hi21, lo14;
+    uint32_t w, w1, w2;
+    uint32_t mh_flags;
+
+        if(arch->object->mh != NULL)
+            mh_flags = arch->object->mh->flags;
+        else
+            mh_flags = arch->object->mh64->flags;
+
+	for(i = 0; i < arch_nextrel; i++){
+	    /* check the r_symbolnum field */
+	    if(arch_extrelocs[i].r_symbolnum > arch_nsyms){
+		error("malformed file: %s (bad symbol table index for "
+		      "external relocation entry %u) (for architecture %s)",
+		      arch->file_name, i, arch_name);
+		redo_exit(2);
+	    }
+	    /* check to see if it needs a pair and has a correct one */
+	    if(arch_extrelocs[i].r_type == HPPA_RELOC_HI21 ||
+	       arch_extrelocs[i].r_type == HPPA_RELOC_LO14 ||
+	       arch_extrelocs[i].r_type == HPPA_RELOC_BR17){
+		if(i + 1 == arch_nextrel){
+		    error("malformed file: %s (missing pair external "
+			  "relocation entry for entry %u) (for architecture "
+			  "%s)", arch->file_name, i, arch_name);
+		    redo_exit(2);
+		}
+		if(arch_extrelocs[i + 1].r_type != HPPA_RELOC_PAIR){
+		    error("malformed file: %s (pair external relocation entry "
+			  "for entry %u is not of r_type HPPA_RELOC_PAIR) (for"
+			  " architecture %s)", arch->file_name, i, arch_name);
+		    redo_exit(2);
+		}
+	    }
+
+	    /*
+	     * If the symbol this relocation entry is refering to is not in a
+	     * section then its slide is 0 otherwise it is slid by the the
+	     * vmslide.
+	     */
+	    arch_symbol = arch_symbols + arch_extrelocs[i].r_symbolnum;
+	    if(arch_symbol->n_sect == NO_SECT)
+		symbol_slide = 0;
+	    else
+		symbol_slide = vmslide;
+
+	    /*
+	     * If this is a prebound undefined symbol look up the symbol being
+	     * referenced by this relocation entry to get the defined symbol's
+	     * value to be used.  If it is not a prebound undefined symbol use
+	     * the arch_symbol.
+	     */
+	    name = arch_strings + arch_symbol->n_un.n_strx;
+	    if((arch_symbol->n_type & N_TYPE) == N_PBUD){
+                if(unprebinding == TRUE){
+                    /*
+                     * If we are unprebinding, we need to use the newly zeroed
+                     * symbol table entry, rather than looking up the symbol
+                     */
+                     defined_symbol = arch->object->output_symbols +
+				      arch_extrelocs[i].r_symbolnum;
+                }
+                else{
+                    lookup_symbol(name,
+                                get_primary_lib(ARCH_LIB, arch_symbol),
+                                get_weak(arch_symbol),
+                                &defined_symbol, &module_state, &lib,
+                                NULL, NULL, NO_INDR_LOOP);
+                }
+	    }
+	    else
+		defined_symbol = arch_symbol;
+
+	    p = contents_pointer_for_vmaddr(arch_extrelocs[i].r_address +
+				(arch_split_segs == TRUE ?
+				 arch_segs_read_write_addr : arch_seg1addr),
+					    1 << arch_extrelocs[i].r_length);
+	    if(p == NULL){
+		error("malformed file: %s (for architecture %s) (bad r_address"
+		      " field for external relocation entry %u)",
+		      arch->file_name, arch_name, i);
+		redo_exit(2);
+	    }
+
+	    if(arch_extrelocs[i].r_type == HPPA_RELOC_VANILLA){
+		switch(arch_extrelocs[i].r_length){
+		case 0: /* byte */
+		    value = get_arch_byte(p);
+		    if(unprebinding == TRUE)
+			value = value - arch_symbol->n_value;
+		    else{
+			if((mh_flags & MH_PREBINDABLE) == MH_PREBINDABLE)
+			    value = value + defined_symbol->n_value +
+				    symbol_slide;
+			else
+			    value = (value - arch_symbol->n_value) +
+				    defined_symbol->n_value + symbol_slide;
+			if(arch_extrelocs[i].r_pcrel)
+			    value -= vmslide;
+		    }
+		    if( (value & 0xffffff00) &&
+		       ((value & 0xffffff80) != 0xffffff80)){
+			error("prebinding can't be redone for: %s (for "
+			    "architecture %s) because of relocation overflow "
+			    "(external relocation for symbol %s does not fit "
+			    "in 1 byte)", arch->file_name, arch_name, name);
+			redo_exit(2);
+		    }
+		    set_arch_byte(p, value);
+		    break;
+		case 1: /* word (2 byte) */
+		    value = get_arch_short(p);
+		    if(unprebinding == TRUE)
+			value = value - arch_symbol->n_value;
+		    else{
+			if((mh_flags & MH_PREBINDABLE) == MH_PREBINDABLE)
+			    value = value + defined_symbol->n_value +
+				    symbol_slide;
+			else
+			    value = (value - arch_symbol->n_value) +
+				    defined_symbol->n_value + symbol_slide;
+			if(arch_extrelocs[i].r_pcrel)
+			    value -= vmslide;
+		    }
+		    if( (value & 0xffff0000) &&
+		       ((value & 0xffff8000) != 0xffff8000)){
+			error("prebinding can't be redone for: %s (for "
+			    "architecture %s) because of relocation overflow "
+			    "(external relocation for symbol %s does not fit "
+			    "in 2 bytes)", arch->file_name, arch_name, name);
+			redo_exit(2);
+		    }
+		    set_arch_short(p, value);
+		    break;
+		case 2: /* long (4 byte) */
+		    value = get_arch_long(p);
+		    if(unprebinding == TRUE)
+			value = value - arch_symbol->n_value;
+		    else{
+			if((mh_flags & MH_PREBINDABLE) == MH_PREBINDABLE)
+			    value = value + defined_symbol->n_value +
+				    symbol_slide;
+			else
+			    value = (value - arch_symbol->n_value) +
+				    defined_symbol->n_value + symbol_slide;
+			if(arch_extrelocs[i].r_pcrel)
+			    value -= vmslide;
+		    }
+		    set_arch_long(p, value);
+		    break;
+		default:
+		    error("malformed file: %s (external relocation entry "
+			  "%u has bad r_length) (for architecture %s)",
+			  arch->file_name, i, arch_name);
+		    redo_exit(2);
+		}
+	    }
+	    /*
+	     * Do hppa specific relocation based on the r_type.
+	     */
+	    else{
+		instruction = get_arch_long(p);
+		switch(arch_extrelocs[i].r_type){
+		case HPPA_RELOC_HI21:
+		    other_half  = arch_extrelocs[i + 1].r_address;
+		    immediate = sign_ext(other_half, 14) +
+		               (assemble_21(instruction & 0x1fffff) << 11);
+		    if(unprebinding == TRUE)
+			immediate -= arch_symbol->n_value;
+		    else{
+			if((mh_flags & MH_PREBINDABLE) == MH_PREBINDABLE)
+			    immediate += defined_symbol->n_value + symbol_slide;
+			else
+			    immediate += defined_symbol->n_value + symbol_slide
+					 - arch_symbol->n_value;
+			if(arch_extrelocs[i].r_pcrel)
+			    immediate -= vmslide;
+		    }
+		    calc_hppa_HILO(immediate, 0, &hi21, &lo14);
+		    instruction = (instruction & 0xffe00000) |
+				  dis_assemble_21(hi21 >> 11);
+		    arch_extrelocs[i + 1].r_address = lo14 & 0x3fff;
+		    break;
+		case HPPA_RELOC_LO14:
+		    other_half  = arch_extrelocs[i + 1].r_address;
+		    immediate = low_sign_ext(instruction & 0x3fff, 14) +
+                                (other_half << 11);
+		    if(unprebinding == TRUE)
+			immediate -= arch_symbol->n_value;
+		    else{
+			if((mh_flags & MH_PREBINDABLE) == MH_PREBINDABLE)
+			    immediate += defined_symbol->n_value + symbol_slide;
+			else
+			    immediate += defined_symbol->n_value + symbol_slide
+					 - arch_symbol->n_value;
+			if(arch_extrelocs[i].r_pcrel)
+			    immediate -= vmslide;
+		    }
+		    calc_hppa_HILO(immediate, 0, &hi21, &lo14);
+		    lo14 = low_sign_unext(lo14, 14);
+		    instruction = (instruction & 0xffffc000) |
+				  (lo14 & 0x3fff);
+		    arch_extrelocs[i + 1].r_address = hi21 >> 11;
+		    break;
+		case HPPA_RELOC_BR17:
+		    other_half  = arch_extrelocs[i + 1].r_address;
+		    immediate = assemble_17((instruction & 0x1f0000) >> 16,
+			                    (instruction & 0x1ffc) >> 2,
+				             instruction & 1);
+		    immediate = (sign_ext(immediate, 17) << 2) +
+				(other_half << 11);
+		    if(unprebinding == TRUE)
+			immediate -= arch_symbol->n_value;
+		    else{
+			if((mh_flags & MH_PREBINDABLE) == MH_PREBINDABLE)
+			    immediate += defined_symbol->n_value + symbol_slide;
+			else
+			    immediate += defined_symbol->n_value + symbol_slide
+					 - arch_symbol->n_value;
+			if(arch_extrelocs[i].r_pcrel)
+			    immediate -= vmslide;
+		    }
+		    calc_hppa_HILO(immediate, 0, &hi21, &lo14);
+		    lo14 >>= 2;
+		    dis_assemble_17(lo14, &w1, &w2, &w);
+		    instruction = (instruction & 0xffe0e002) |
+				  (w1 << 16) | (w2 << 2) | w;
+		    arch_extrelocs[i + 1].r_address = hi21 >> 11;
+		    break;
+		case HPPA_RELOC_BL17:
+		    immediate = assemble_17((instruction & 0x1f0000) >> 16,
+			                    (instruction & 0x1ffc) >> 2,
+				             instruction & 1);
+		    if((immediate & 0x10000) != 0)
+			immediate |= 0xfffe0000;
+		    immediate <<= 2;
+		    if(unprebinding == TRUE)
+			immediate -= arch_symbol->n_value;
+		    else{
+			if((mh_flags & MH_PREBINDABLE) == MH_PREBINDABLE)
+			    immediate += defined_symbol->n_value + symbol_slide;
+			else
+			    immediate += defined_symbol->n_value + symbol_slide
+					 - arch_symbol->n_value;
+			if(arch_extrelocs[i].r_pcrel)
+			    immediate -= vmslide;
+		    }
+		    if(U_ABS(immediate) > 0x3ffff){
+			error("prebinding can't be redone for: %s (for "
+			    "architecture %s) because of relocation overflow "
+			    "(external relocation for symbol %s displacement "
+			    "too large to fit)", arch->file_name, arch_name,
+			    name);
+			redo_exit(2);
+		    }
+		    immediate >>= 2;
+		    dis_assemble_17(immediate, &w1, &w2, &w);
+		    instruction = (instruction & 0xffe0e002) |
+				  (w1 << 16) | (w2 << 2) | w;
+		    break;
+		default:
+		    error("malformed file: %s (external relocation entry "
+			  "%u has unknown r_type) (for architecture %s)",
+			  arch->file_name, i, arch_name);
+		    redo_exit(2);
+		}
+		set_arch_long(p, instruction);
+	    }
+	    /*
+	     * If the relocation entry had a pair step over it.
+	     */
+	    if(arch_extrelocs[i].r_type == HPPA_RELOC_HI21 ||
+	       arch_extrelocs[i].r_type == HPPA_RELOC_LO14 ||
+	       arch_extrelocs[i].r_type == HPPA_RELOC_BR17)
+		i++;
+	}
+}
+
+/*
+ * update_sparc_external_relocs() updates of the items with external relocation
+ * entries for the sparc architecture.  It only deals with external relocation
+ * entries that are using prebound undefined symbols.
+ */
+static
+void
+update_sparc_external_relocs(
+uint32_t vmslide)
+{
+    uint32_t i, value, symbol_slide;
+    char *name, *p;
+    struct nlist *defined_symbol, *arch_symbol;
+    enum link_state *module_state;
+    struct lib *lib;
+    uint32_t instruction, immediate;
+    uint32_t other_half;
+    uint32_t mh_flags;
+
+        if(arch->object->mh != NULL)
+            mh_flags = arch->object->mh->flags;
+        else
+            mh_flags = arch->object->mh64->flags;
+
+	for(i = 0; i < arch_nextrel; i++){
+	    /* check the r_symbolnum field */
+	    if(arch_extrelocs[i].r_symbolnum > arch_nsyms){
+		error("malformed file: %s (bad symbol table index for "
+		      "external relocation entry %u) (for architecture %s)",
+		      arch->file_name, i, arch_name);
+		redo_exit(2);
+	    }
+	    /* check to see if it needs a pair and has a correct one */
+	    if(arch_extrelocs[i].r_type == SPARC_RELOC_LO10 ||
+	       arch_extrelocs[i].r_type == SPARC_RELOC_HI22){
+		if(i + 1 == arch_nextrel){
+		    error("malformed file: %s (missing pair external "
+			  "relocation entry for entry %u) (for architecture "
+			  "%s)", arch->file_name, i, arch_name);
+		    redo_exit(2);
+		}
+		if(arch_extrelocs[i + 1].r_type != SPARC_RELOC_PAIR){
+		    error("malformed file: %s (pair external relocation entry "
+			  "for entry %u is not of r_type SPARC_RELOC_PAIR) "
+			  "(for architecture %s)", arch->file_name, i,
+			  arch_name);
+		    redo_exit(2);
+		}
+	    }
+
+	    /*
+	     * If the symbol this relocation entry is refering to is not in a
+	     * section then its slide is 0 otherwise it is slid by the the
+	     * vmslide.
+	     */
+	    arch_symbol = arch_symbols + arch_extrelocs[i].r_symbolnum;
+	    if(arch_symbol->n_sect == NO_SECT)
+		symbol_slide = 0;
+	    else
+		symbol_slide = vmslide;
+
+	    /*
+	     * If this is a prebound undefined symbol look up the symbol being
+	     * referenced by this relocation entry to get the defined symbol's
+	     * value to be used.  If it is not a prebound undefined symbol use
+	     * the arch_symbol.
+	     */
+	    name = arch_strings + arch_symbol->n_un.n_strx;
+	    if((arch_symbol->n_type & N_TYPE) == N_PBUD){
+                if(unprebinding == TRUE){
+                    /*
+                     * If we are unprebinding, we need to use the newly zeroed
+                     * symbol table entry, rather than looking up the symbol
+                     */
+                     defined_symbol = arch->object->output_symbols +
+				      arch_extrelocs[i].r_symbolnum;
+                }
+                else{
+                    lookup_symbol(name,
+                                get_primary_lib(ARCH_LIB, arch_symbol),
+                                get_weak(arch_symbol),
+                                &defined_symbol, &module_state, &lib,
+                                NULL, NULL, NO_INDR_LOOP);
+                }
+	    }
+	    else
+		defined_symbol = arch_symbol;
+
+	    p = contents_pointer_for_vmaddr(arch_extrelocs[i].r_address +
+				(arch_split_segs == TRUE ?
+				 arch_segs_read_write_addr : arch_seg1addr),
+					    1 << arch_extrelocs[i].r_length);
+	    if(p == NULL){
+		error("malformed file: %s (for architecture %s) (bad r_address"
+		      " field for external relocation entry %u)",
+		      arch->file_name, arch_name, i);
+		redo_exit(2);
+	    }
+
+	    if(arch_extrelocs[i].r_type == SPARC_RELOC_VANILLA){
+		switch(arch_extrelocs[i].r_length){
+		case 0: /* byte */
+		    value = get_arch_byte(p);
+		    if(unprebinding == TRUE)
+			value = value - arch_symbol->n_value;
+		    else{
+			if((mh_flags & MH_PREBINDABLE) == MH_PREBINDABLE)
+			    value = value + defined_symbol->n_value +
+				    symbol_slide;
+			else
+			    value = (value - arch_symbol->n_value) +
+				    defined_symbol->n_value + symbol_slide;
+			if(arch_extrelocs[i].r_pcrel)
+			    value -= vmslide;
+		    }
+		    if( (value & 0xffffff00) &&
+		       ((value & 0xffffff80) != 0xffffff80)){
+			error("prebinding can't be redone for: %s (for "
+			    "architecture %s) because of relocation overflow "
+			    "(external relocation for symbol %s does not fit "
+			    "in 1 byte)", arch->file_name, arch_name, name);
+			redo_exit(2);
+		    }
+		    set_arch_byte(p, value);
+		    break;
+		case 1: /* word (2 byte) */
+		    value = get_arch_short(p);
+		    if(unprebinding == TRUE)
+			value = value - arch_symbol->n_value;
+		    else{
+			if((mh_flags & MH_PREBINDABLE) == MH_PREBINDABLE)
+			    value = value + defined_symbol->n_value +
+				    symbol_slide;
+			else
+			    value = (value - arch_symbol->n_value) +
+				    defined_symbol->n_value + symbol_slide;
+			if(arch_extrelocs[i].r_pcrel)
+			    value -= vmslide;
+		    }
+		    if( (value & 0xffff0000) &&
+		       ((value & 0xffff8000) != 0xffff8000)){
+			error("prebinding can't be redone for: %s (for "
+			    "architecture %s) because of relocation overflow "
+			    "(external relocation for symbol %s does not fit "
+			    "in 2 bytes)", arch->file_name, arch_name, name);
+			redo_exit(2);
+		    }
+		    set_arch_short(p, value);
+		    break;
+		case 2: /* long (4 byte) */
+		    value = get_arch_long(p);
+		    if(unprebinding == TRUE)
+			value = value - arch_symbol->n_value;
+		    else{
+			if((mh_flags & MH_PREBINDABLE) == MH_PREBINDABLE)
+			    value = value + defined_symbol->n_value +
+				    symbol_slide;
+			else
+			    value = (value - arch_symbol->n_value) +
+				    defined_symbol->n_value + symbol_slide;
+			if(arch_extrelocs[i].r_pcrel)
+			    value -= vmslide;
+		    }
+		    set_arch_long(p, value);
+		    break;
+		default:
+		    error("malformed file: %s (external relocation entry "
+			  "%u has bad r_length) (for architecture %s)",
+			  arch->file_name, i, arch_name);
+		    redo_exit(2);
+		}
+	    }
+	    /*
+	     * Do SPARC specific relocation based on the r_type.
+	     */
+	    else{
+		instruction = get_arch_long(p);
+		switch(arch_extrelocs[i].r_type){
+		case SPARC_RELOC_HI22:
+		    other_half = (arch_extrelocs[i + 1].r_address) & 0x3ff;
+		    immediate = ((instruction & 0x3fffff) << 10) | other_half;
+		    if(unprebinding == TRUE)
+			immediate -= arch_symbol->n_value;
+		    else{
+			if((mh_flags & MH_PREBINDABLE) == MH_PREBINDABLE)
+			    immediate += defined_symbol->n_value + symbol_slide;
+			else
+			    immediate += defined_symbol->n_value + symbol_slide
+					 - arch_symbol->n_value;
+			if(arch_extrelocs[i].r_pcrel)
+				immediate -= vmslide;
+		    }
+		    instruction = (instruction & 0xffc00000) |
+				  ((immediate >> 10) & 0x3fffff);
+		    arch_extrelocs[i + 1].r_address = immediate & 0x3ff;
+		    break;
+		case SPARC_RELOC_LO10:
+		    other_half = ((arch_extrelocs[i + 1].r_address) >> 10) &
+				 0x3fffff;
+		    immediate = (instruction & 0x3ff) | (other_half << 10);
+		    if(unprebinding == TRUE)
+			immediate -= arch_symbol->n_value;
+		    else{
+			if((mh_flags & MH_PREBINDABLE) == MH_PREBINDABLE)
+			    immediate += defined_symbol->n_value + symbol_slide;
+			else
+			    immediate += defined_symbol->n_value + symbol_slide
+					 - arch_symbol->n_value;
+			if(arch_extrelocs[i].r_pcrel)
+				immediate -= vmslide;
+		    }
+		    instruction = (instruction & 0xfffffc00) |
+				  (immediate & 0x3ff);
+		    arch_extrelocs[i + 1].r_address =
+				  (immediate >> 10) & 0x3fffff;
+		    break;
+
+		case SPARC_RELOC_WDISP22:
+		    immediate = (instruction & 0x3fffff);
+		    if((immediate & 0x200000) != 0)
+			    immediate |= 0xffc00000;
+		    immediate <<= 2;
+		    if(unprebinding == TRUE)
+			immediate -= arch_symbol->n_value;
+		    else{
+			if((mh_flags & MH_PREBINDABLE) == MH_PREBINDABLE)
+			    immediate += defined_symbol->n_value + symbol_slide;
+			else
+			    immediate += defined_symbol->n_value + symbol_slide
+					 - arch_symbol->n_value;
+			if(arch_extrelocs[i].r_pcrel)
+				immediate -= vmslide;
+		    }
+		    if((immediate & 0xff800000) != 0xff800000 &&
+				    (immediate & 0xff800000) != 0x00) {
+			error("prebinding can't be redone for: %s (for "
+			    "architecture %s) because of relocation overflow "
+			    "(external relocation for symbol %s displacement "
+			    "too large to fit)", arch->file_name, arch_name,
+			    name);
+			redo_exit(2);
+		    }
+		    immediate >>= 2;
+		    instruction = (instruction & 0xffc00000) |
+				    (immediate & 0x3fffff);
+		    break;
+		case SPARC_RELOC_WDISP30:
+		    immediate = (instruction & 0x3fffffff);
+		    immediate <<= 2;
+		    if(unprebinding == TRUE)
+			immediate -= arch_symbol->n_value;
+		    else{
+			if((mh_flags & MH_PREBINDABLE) == MH_PREBINDABLE)
+			    immediate += defined_symbol->n_value + symbol_slide;
+			else
+			    immediate += defined_symbol->n_value + symbol_slide
+					 - arch_symbol->n_value;
+			if(arch_extrelocs[i].r_pcrel)
+				immediate -= vmslide;
+		    }
+		    immediate >>= 2;
+		    instruction = (instruction & 0xc0000000) |
+				    (immediate & 0x3fffffff);
+		    break;
+		default:
+		    error("malformed file: %s (external relocation entry "
+			  "%u has unknown r_type) (for architecture %s)",
+			  arch->file_name, i, arch_name);
+		    redo_exit(2);
+		}
+		set_arch_long(p, instruction);
+	    }
+	    /*
+	     * If the relocation entry had a pair step over it.
+	     */
+	    if(arch_extrelocs[i].r_type == SPARC_RELOC_LO10 ||
+	       arch_extrelocs[i].r_type == SPARC_RELOC_HI22)
+		i++;
+	}
+}
+
+/*
+ * update_ppc_external_relocs() updates of the items with external relocation
+ * entries for the ppc architecture.  It only deals with external relocation
+ * entries that are using prebound undefined symbols.
+ */
+static
+void
+update_ppc_external_relocs(
+uint32_t vmslide)
+{
+    uint32_t i, value, symbol_slide;
+    char *name, *p;
+    struct nlist *defined_symbol, *arch_symbol;
+    enum link_state *module_state;
+    struct lib *lib;
+    uint32_t instruction, immediate;
+    uint32_t other_half, br14_disp_sign;
+    uint32_t mh_flags;
+
+        if(arch->object->mh != NULL)
+            mh_flags = arch->object->mh->flags;
+        else
+            mh_flags = arch->object->mh64->flags;
+
+	for(i = 0; i < arch_nextrel; i++){
+	    /* check the r_symbolnum field */
+	    if(arch_extrelocs[i].r_symbolnum > arch_nsyms){
+		error("malformed file: %s (bad symbol table index for "
+		      "external relocation entry %u) (for architecture %s)",
+		      arch->file_name, i, arch_name);
+		redo_exit(2);
+	    }
+	    /* check to see if it needs a pair and has a correct one */
+	    if(arch_extrelocs[i].r_type == PPC_RELOC_HI16 ||
+	       arch_extrelocs[i].r_type == PPC_RELOC_LO16 ||
+	       arch_extrelocs[i].r_type == PPC_RELOC_HA16 ||
+	       arch_extrelocs[i].r_type == PPC_RELOC_LO14){
+		if(i + 1 == arch_nextrel){
+		    error("malformed file: %s (missing pair external "
+			  "relocation entry for entry %u) (for architecture "
+			  "%s)", arch->file_name, i, arch_name);
+		    redo_exit(2);
+		}
+		if(arch_extrelocs[i + 1].r_type != PPC_RELOC_PAIR){
+		    error("malformed file: %s (pair external relocation entry "
+			  "for entry %u is not of r_type PPC_RELOC_PAIR) "
+			  "(for architecture %s)", arch->file_name, i,
+			  arch_name);
+		    redo_exit(2);
+		}
+	    }
+
+	    /*
+	     * If the symbol this relocation entry is refering to is not in a
+	     * section then its slide is 0 otherwise it is slid by the the
+	     * vmslide.
+	     */
+	    arch_symbol = arch_symbols + arch_extrelocs[i].r_symbolnum;
+	    if(arch_symbol->n_sect == NO_SECT)
+		symbol_slide = 0;
+	    else
+		symbol_slide = vmslide;
+
+	    /*
+	     * If this is a prebound undefined symbol look up the symbol being
+	     * referenced by this relocation entry to get the defined symbol's
+	     * value to be used.  If it is not a prebound undefined symbol use
+	     * the arch_symbol.
+	     */
+	    name = arch_strings + arch_symbol->n_un.n_strx;
+	    if((arch_symbol->n_type & N_TYPE) == N_PBUD)
+		if(unprebinding == TRUE){
+		    /*
+		     * If we are unprebinding, we need to use the newly zeroed
+		     * symbol table entry, rather than looking up the symbol
+		     */
+		     defined_symbol = arch->object->output_symbols +
+				      arch_extrelocs[i].r_symbolnum;
+		}
+		else{
+		    lookup_symbol(name,
+				get_primary_lib(ARCH_LIB, arch_symbol),
+				get_weak(arch_symbol),
+				&defined_symbol, &module_state, &lib,
+				NULL, NULL, NO_INDR_LOOP);
+		}
+	    else
+		defined_symbol = arch_symbol;
+
+	    p = contents_pointer_for_vmaddr(arch_extrelocs[i].r_address +
+				(arch_split_segs == TRUE ?
+				 arch_segs_read_write_addr : arch_seg1addr),
+				 1 << arch_extrelocs[i].r_length);
+	    if(p == NULL){
+		error("malformed file: %s (for architecture %s) (bad r_address"
+		      " field for external relocation entry %u)",
+		      arch->file_name, arch_name, i);
+		redo_exit(2);
+	    }
+
+	    if(arch_extrelocs[i].r_type == PPC_RELOC_VANILLA){
+		switch(arch_extrelocs[i].r_length){
+		case 0: /* byte */
+		    value = get_arch_byte(p);
+		    if(unprebinding == TRUE)
+			value = value - arch_symbol->n_value;
+		    else{
+			if((mh_flags & MH_PREBINDABLE) == MH_PREBINDABLE)
+			    value = value + defined_symbol->n_value +
+				    symbol_slide;
+			else
+			    value = (value - arch_symbol->n_value) +
+				    defined_symbol->n_value + symbol_slide;
+			if(arch_extrelocs[i].r_pcrel)
+			    value -= vmslide;
+		    }
+		    if( (value & 0xffffff00) &&
+		       ((value & 0xffffff80) != 0xffffff80)){
+			error("prebinding can't be redone for: %s (for "
+			    "architecture %s) because of relocation overflow "
+			    "(external relocation for symbol %s does not fit "
+			    "in 1 byte)", arch->file_name, arch_name, name);
+			redo_exit(2);
+		    }
+		    set_arch_byte(p, value);
+		    break;
+		case 1: /* word (2 byte) */
+		    value = get_arch_short(p);
+		    if(unprebinding == TRUE)
+			value = value - arch_symbol->n_value;
+		    else{
+			if((mh_flags & MH_PREBINDABLE) == MH_PREBINDABLE)
+			    value = value + defined_symbol->n_value +
+				    symbol_slide;
+			else
+			    value = (value - arch_symbol->n_value) +
+				    defined_symbol->n_value + symbol_slide;
+			if(arch_extrelocs[i].r_pcrel)
+			    value -= vmslide;
+		    }
+		    if( (value & 0xffff0000) &&
+		       ((value & 0xffff8000) != 0xffff8000)){
+			error("prebinding can't be redone for: %s (for "
+			    "architecture %s) because of relocation overflow "
+			    "(external relocation for symbol %s does not fit "
+			    "in 2 bytes)", arch->file_name, arch_name, name);
+			redo_exit(2);
+		    }
+		    set_arch_short(p, value);
+		    break;
+		case 2: /* long (4 byte) */
+		    value = get_arch_long(p);
+		    if(unprebinding == TRUE)
+			value = value - arch_symbol->n_value;
+		    else{
+			if((mh_flags & MH_PREBINDABLE) == MH_PREBINDABLE)
+			    value = value + defined_symbol->n_value +
+				    symbol_slide;
+			else
+			    value = (value - arch_symbol->n_value) +
+				   defined_symbol->n_value + symbol_slide;
+			if(arch_extrelocs[i].r_pcrel)
+			    value -= vmslide;
+		    }
+		    set_arch_long(p, value);
+		    break;
+		default:
+		    error("malformed file: %s (external relocation entry "
+			  "%u has bad r_length) (for architecture %s)",
+			  arch->file_name, i, arch_name);
+		    redo_exit(2);
+		}
+	    }
+	    /*
+	     * Do PPC specific relocation based on the r_type.
+	     */
+	    else{
+		instruction = get_arch_long(p);
+		switch(arch_extrelocs[i].r_type){
+		    case PPC_RELOC_HI16:
+			other_half = (arch_extrelocs[i + 1].r_address) & 0xffff;
+			immediate = ((instruction & 0xffff) << 16) | other_half;
+			if(unprebinding == TRUE)
+			    immediate -= arch_symbol->n_value;
+			else{
+			    if((mh_flags & MH_PREBINDABLE) == MH_PREBINDABLE)
+				immediate += defined_symbol->n_value +
+					     symbol_slide;
+			    else
+				immediate += defined_symbol->n_value +
+					     symbol_slide -
+					     arch_symbol->n_value;
+			    if(arch_extrelocs[i].r_pcrel)
+				immediate -= vmslide;
+			}
+			instruction = (instruction & 0xffff0000) |
+				      ((immediate >> 16) & 0xffff);
+			arch_extrelocs[i + 1].r_address = immediate & 0xffff;
+			break;
+		    case PPC_RELOC_LO16:
+			other_half = (arch_extrelocs[i + 1].r_address) & 0xffff;
+			immediate = (other_half << 16) | (instruction & 0xffff);
+			if(unprebinding == TRUE)
+			    immediate -= arch_symbol->n_value;
+			else{
+			    if((mh_flags & MH_PREBINDABLE) == MH_PREBINDABLE)
+				immediate += defined_symbol->n_value +
+					     symbol_slide;
+			    else
+				immediate += defined_symbol->n_value +
+					     symbol_slide -
+					     arch_symbol->n_value;
+			    if(arch_extrelocs[i].r_pcrel)
+				immediate -= vmslide;
+			}
+			instruction = (instruction & 0xffff0000) |
+				      (immediate & 0xffff);
+			arch_extrelocs[i + 1].r_address =
+					  (immediate >> 16) & 0xffff;
+			break;
+		    case PPC_RELOC_HA16:
+			other_half = (arch_extrelocs[i + 1].r_address) & 0xffff;
+			immediate = ((instruction & 0xffff) << 16) | other_half;
+			if(unprebinding == TRUE)
+			    immediate -= arch_symbol->n_value;
+			else{
+			    if((mh_flags & MH_PREBINDABLE) == MH_PREBINDABLE)
+				immediate += defined_symbol->n_value +
+					     symbol_slide;
+			    else
+				immediate += defined_symbol->n_value +
+					     symbol_slide -
+					     arch_symbol->n_value;
+			    if(arch_extrelocs[i].r_pcrel)
+				immediate -= vmslide;
+			}
+			if((immediate & 0x00008000) != 0)
+			    instruction = (instruction & 0xffff0000) |
+					  (((immediate + 0x00008000) >> 16) &
+					    0xffff);
+			else
+			    instruction = (instruction & 0xffff0000) |
+					  ((immediate >> 16) & 0xffff);
+			arch_extrelocs[i + 1].r_address = immediate & 0xffff;
+			break;
+		    case PPC_RELOC_LO14:
+			other_half = (arch_extrelocs[i + 1].r_address) & 0xffff;
+			immediate = (other_half << 16) | (instruction & 0xfffc);
+			if(unprebinding == TRUE)
+			    immediate -= arch_symbol->n_value;
+			else{
+			    if((mh_flags & MH_PREBINDABLE) == MH_PREBINDABLE)
+				immediate += defined_symbol->n_value +
+					     symbol_slide;
+			    else
+				immediate += defined_symbol->n_value +
+					     symbol_slide -
+					     arch_symbol->n_value;
+			    if(arch_extrelocs[i].r_pcrel)
+				immediate -= vmslide;
+			}
+			if((immediate & 0x3) != 0){
+			    error("prebinding can't be redone for: %s (for "
+				"architecture %s) because of relocated value "
+				"not a multiple of 4 bytes", arch->file_name,
+				arch_name);
+			    redo_exit(2);
+			}
+			instruction = (instruction & 0xffff0003) |
+				      (immediate & 0xfffc);
+			arch_extrelocs[i + 1].r_address =
+				      (immediate >> 16) & 0xffff;
+			break;
+		    case PPC_RELOC_BR14:
+			br14_disp_sign = (instruction & 0x8000);
+			immediate = instruction & 0xfffc;
+			if((immediate & 0x8000) != 0)
+			    immediate |= 0xffff0000;
+			if(unprebinding == TRUE)
+			    immediate -= arch_symbol->n_value;
+			else{
+			    if((mh_flags & MH_PREBINDABLE) == MH_PREBINDABLE)
+				immediate += defined_symbol->n_value +
+					     symbol_slide;
+			    else
+				immediate += defined_symbol->n_value +
+					     symbol_slide -
+					     arch_symbol->n_value;
+			    if(arch_extrelocs[i].r_pcrel)
+				immediate -= vmslide;
+			}
+			if((immediate & 0x3) != 0){
+			    error("prebinding can't be redone for: %s (for "
+				"architecture %s) because of relocated value "
+				"not a multiple of 4 bytes", arch->file_name,
+				arch_name);
+			    redo_exit(2);
+			}
+			if((immediate & 0xfffe0000) != 0xfffe0000 &&
+			   (immediate & 0xfffe0000) != 0x00000000){
+			    error("prebinding can't be redone for: %s (for "
+				"architecture %s) because of relocation "
+				"overflow (external relocation for symbol %s "
+				"displacement too large to fit)",
+				arch->file_name, arch_name, name);
+			    redo_exit(2);
+			}
+			instruction = (instruction & 0xffff0003) |
+				      (immediate & 0xfffc);
+			/*
+			 * If this is a branch conditional B-form where
+			 * the branch condition is not branch always and
+			 * the sign of the displacement is different
+			 * after relocation then flip the Y-bit to
+			 * preserve the sense of the branch prediction.
+			 */
+			if((instruction & 0xfc000000) == 0x40000000 &&
+			  (instruction & 0x03e00000) != 0x02800000 &&
+			   (instruction & 0x00008000) != br14_disp_sign)
+			    instruction ^= (1 << 21);
+			break;
+		    case PPC_RELOC_BR24:
+			immediate = instruction & 0x03fffffc;
+			if((immediate & 0x02000000) != 0)
+			    immediate |= 0xfc000000;
+			if(unprebinding == TRUE)
+			    immediate -= arch_symbol->n_value;
+			else{
+			    if((mh_flags & MH_PREBINDABLE) == MH_PREBINDABLE)
+				immediate += defined_symbol->n_value +
+					     symbol_slide;
+			    else
+				immediate += defined_symbol->n_value +
+					     symbol_slide -
+					     arch_symbol->n_value;
+			    if(arch_extrelocs[i].r_pcrel)
+				immediate -= vmslide;
+			}
+			if((immediate & 0x3) != 0){
+			    error("prebinding can't be redone for: %s (for "
+				"architecture %s) because of relocated value "
+				"not a multiple of 4 bytes", arch->file_name,
+				arch_name);
+			    redo_exit(2);
+			}
+			if((immediate & 0xfe000000) != 0xfe000000 &&
+			  (immediate & 0xfe000000) != 0x00000000){
+			    error("prebinding can't be redone for: %s (for "
+				"architecture %s) because of relocation "
+				"overflow (external relocation for symbol %s "
+				"displacement too large to fit)",
+				arch->file_name, arch_name, name);
+			    redo_exit(2);
+			}
+			instruction = (instruction & 0xfc000003) |
+				      (immediate & 0x03fffffc);
+			break;
+		    default:
+			error("malformed file: %s (external relocation entry "
+			      "%u has unknown r_type) (for architecture %s)",
+			      arch->file_name, i, arch_name);
+			redo_exit(2);
+		    }
+		    set_arch_long(p, instruction);
+	    }
+	    /*
+	     * If the relocation entry had a pair step over it.
+	     */
+	    if(arch_extrelocs[i].r_type == PPC_RELOC_HI16 ||
+	       arch_extrelocs[i].r_type == PPC_RELOC_LO16 ||
+	       arch_extrelocs[i].r_type == PPC_RELOC_HA16 ||
+	       arch_extrelocs[i].r_type == PPC_RELOC_LO14)
+		i++;
 	}
 }
 
@@ -7104,8 +8831,16 @@ check_pb_la_ptr_reloc_cputype(
 unsigned int reloc_type)
 {
     switch(arch->object->mh_cputype){
+	case CPU_TYPE_MC680x0:
+	    return (reloc_type == GENERIC_RELOC_PB_LA_PTR);
 	case CPU_TYPE_I386:
 	    return (reloc_type == GENERIC_RELOC_PB_LA_PTR);
+	case CPU_TYPE_HPPA:
+	    return (reloc_type == HPPA_RELOC_PB_LA_PTR);
+	case CPU_TYPE_SPARC:
+	    return (reloc_type == SPARC_RELOC_PB_LA_PTR);
+	case CPU_TYPE_POWERPC:
+	    return (reloc_type == PPC_RELOC_PB_LA_PTR);
 	}
     return FALSE;
 }

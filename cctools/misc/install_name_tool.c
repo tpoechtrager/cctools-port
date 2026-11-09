@@ -616,8 +616,6 @@ uint32_t *header_size)
     struct arch_flag arch_flag;
     struct rpath_command *rpath1, *rpath2;
     enum bool delete;
-    enum bool has_codesign_lc = FALSE;
-    uint32_t  reserve_padding = 0;
 
 	for(i = 0; i < nrpaths; i++)
 	    rpaths[i].found = FALSE;
@@ -740,9 +738,6 @@ uint32_t *header_size)
 		}
 		break;
 
-        case LC_CODE_SIGNATURE:
-        has_codesign_lc = TRUE;
-        break;
 	    case LC_RPATH:
 		rpath1 = (struct rpath_command *)lc1;
 		path1 = (char *)rpath1 + rpath1->path.offset;
@@ -804,11 +799,8 @@ uint32_t *header_size)
 			     (int)strlen(add_rpaths[i].new) + 1, cmd_round);
 	    new_sizeofcmds += new_size;
 	}
-    // rdar://139215820 (install_name_tool/vtool should reserve sufficient space for LC_CODE_SIGNATURE)
-    if ( !has_codesign_lc )
-        reserve_padding += sizeof(struct linkedit_data_command);
 
-    if((new_sizeofcmds + sizeof_mach_header + reserve_padding) > low_fileoff){
+	if(new_sizeofcmds + sizeof_mach_header > low_fileoff){
 	    error("changing install names or rpaths can't be redone for: %s "
 		  "(for architecture %s) because larger updated load commands "
 		  "do not fit (the program must be relinked, and you may need "

@@ -45,7 +45,7 @@ extern bool isObjectFile(const uint8_t* fileContent, uint64_t fileLength, cpu_ty
 
 extern bool hasObjCCategory(const uint8_t* fileContent, uint64_t fileLength);
 
-extern std::vector<std::string> softloadRuntimeSymbols(cpu_type_t arch);
+extern std::vector<std::string> softloadRuntimeSymbols();
 
 extern ld::relocatable::File* parse(const uint8_t* fileContent, uint64_t fileLength,
 									const char* path, time_t modTime, ld::File::Ordinal ordinal,

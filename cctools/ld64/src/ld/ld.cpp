@@ -208,8 +208,8 @@ InternalState::FinalSection::FinalSection(const ld::Section& sect, uint32_t sect
 	  _segmentOrder(segmentOrder(sect, opts)),
 	  _sectionOrder(sectionOrder(sect, sectionsSeen, opts))
 {
-	//fprintf(stderr, "FinalSection(%16s, %16s) _segmentOrder=%3d, type=%d, _sectionOrder=0x%08X\n",
-	//		this->segmentName(), this->sectionName(), this->type(), _segmentOrder, _sectionOrder);
+	//fprintf(stderr, "FinalSection(%16s, %16s) _segmentOrder=%3d, _sectionOrder=0x%08X\n",
+	//		this->segmentName(), this->sectionName(), _segmentOrder, _sectionOrder);
 }
 
 const ld::Section& InternalState::FinalSection::outputSection(const ld::Section& sect, bool mergeZeroFill)
@@ -352,8 +352,6 @@ uint32_t InternalState::FinalSection::sectionOrder(const ld::Section& sect, uint
 		return 0;
 	if ( sect.type() == ld::Section::typeMachHeader )
 		return 1;
-	if ( sect.type() == ld::Section::typeLastContentSection )
-		return INT_MAX - 1;
 	if ( sect.type() == ld::Section::typeLastSection )
 		return INT_MAX;
 	const std::vector<const char*>* sectionList = options.sectionOrder(sect.segmentName());
@@ -887,14 +885,7 @@ ld::Internal::FinalSection* InternalState::addAtom(const ld::Atom& atom)
 			// last atom in section$end$ atom, insert before it
 			const ld::Atom* endAtom = fs->atoms.back();
 			fs->atoms.pop_back();
-
-			// there can be two sectionEnd atoms one for the content and one for page aligned segment end
-			const ld::Atom* contentEndAtom = (fs->atoms.size() >= 1 && fs->atoms.back()->contentType() == ld::Atom::typeSectionEnd) ? fs->atoms.back() : nullptr;
-			if ( contentEndAtom )
-				fs->atoms.pop_back();
 			fs->atoms.push_back(&atom);
-			if ( contentEndAtom )
-				fs->atoms.push_back(contentEndAtom);
 			fs->atoms.push_back(endAtom);
 		}
 		else {
@@ -1019,8 +1010,6 @@ bool InternalState::hasZeroForFileOffset(const ld::Section* sect)
 		case ld::Section::typePageZero:
 		case ld::Section::typeStack:
 		case ld::Section::typeTentativeDefs:
-		case ld::Section::typeLastSection:
-		case ld::Section::typeLastContentSection:
 			return true;
 		default:
 			break;
@@ -1352,31 +1341,9 @@ uint64_t InternalState::assignFileOffsets()
 	uint64_t fileOffset = 0;
 	lastSegName = "";
 	if ( log ) fprintf(stderr, "All segments with file offsets:\n");
-
 	for (std::vector<ld::Internal::FinalSection*>::iterator it = sections.begin(); it != sections.end(); ++it) {
 		ld::Internal::FinalSection* sect = *it;
-		bool zeroFileOffset = hasZeroForFileOffset(sect);
-
-		// if this is the segment$start section and the only other sections in this
-		// segment are segment$end and/or real zerofill sections then treat it as zerofill too
-		if ( sect->type() == ld::Section::typeFirstSection ) {
-			bool allOtherSectionsInSegmentAreZero = true;
-			bool hasNonHiddenSection = false;
-
-			for ( auto followSectIt = std::next(it); followSectIt != sections.end(); ++followSectIt ) {
-				ld::Internal::FinalSection* followSect = *followSectIt;
-				if ( strcmp(sect->segmentName(), followSect->segmentName()) != 0 ) {
-					break;
-				}
-
-				allOtherSectionsInSegmentAreZero &= hasZeroForFileOffset(followSect);
-				hasNonHiddenSection |= !followSect->isSectionHidden();
-			}
-
-			zeroFileOffset |= allOtherSectionsInSegmentAreZero && hasNonHiddenSection;
-		}
-
-		if ( zeroFileOffset ) {
+		if ( hasZeroForFileOffset(sect) ) {
 			// fileoff of zerofill sections is moot, but historically it is set to zero
 			sect->fileOffset = 0;
 
@@ -1403,16 +1370,6 @@ uint64_t InternalState::assignFileOffsets()
 		if ( log ) fprintf(stderr, "  fileoffset=0x%08llX, address=0x%08llX, hidden=%d, size=%lld, alignment=%02d, section=%s,%s\n",
 				sect->fileOffset, sect->address, sect->isSectionHidden(), sect->size, sect->alignment, 
 				sect->segmentName(), sect->sectionName());
-	}
-
-	// round up segment$end addresses to the real segment end (page aligned address)
-	for (std::vector<ld::Internal::FinalSection*>::iterator it = sections.begin(); it != sections.end(); ++it) {
-		ld::Internal::FinalSection* sect = *it;
-		if ( sect->type() == ld::Section::typeLastSection ) {
-			uint64_t addr = sect->address;
-			addr = (sect->address + _options.segmentAlignment() - 1) & -((uint64_t)_options.segmentAlignment());
-			sect->address = addr;
-		}
 	}
 
 #if 0

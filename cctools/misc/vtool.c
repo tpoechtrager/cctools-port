@@ -1319,8 +1319,6 @@ int command_set(struct file* fb)
     // that will be modified
     off_t sectoffset = fb->fat_archs[fb->fat_arch_idx].size;
     uint32_t modvlcsize = 0;
-    bool has_codesign_lc = false;
-    uint32_t reserve_padding = 0;
     
     for (uint32_t icmd = 0; icmd < lcmds->count; ++icmd)
     {
@@ -1402,10 +1400,6 @@ int command_set(struct file* fb)
 	    if (modify)
 		modvlcsize += lc->cmdsize;
 	}
-	else if (lc->cmd == LC_CODE_SIGNATURE)
-	{
-            has_codesign_lc = true;
-	}
     } // for (uint32_t icmd = 0; icmd < lcmds->count; ++icmd)
     
     // compute the size requirements for our new load commands by
@@ -1426,13 +1420,9 @@ int command_set(struct file* fb)
 	    sizeofnewcmds += sizeof(struct build_version_command);
     }
     
-    // rdar://139215820 (install_name_tool/vtool should reserve sufficient space for LC_CODE_SIGNATURE)
-    if ( !has_codesign_lc )
-        reserve_padding += sizeof(struct linkedit_data_command);
-
     // verify the load commands still fit below the start of section data.
     uint32_t totalcmdspace = (uint32_t)(sectoffset - fb->mh_size);
-    if (totalcmdspace < (sizeofnewcmds + reserve_padding))
+    if (totalcmdspace < sizeofnewcmds)
     {
 	if (fb->nfat_arch > 1 || gOptions.narch) {
 	    const NXArchInfo* archInfo = NULL;
@@ -2648,20 +2638,8 @@ static const struct platform_entry kPlatforms[] = {
     { PLATFORM_IOSSIMULATOR,        "iossim",       0 },
     { PLATFORM_WATCHOSSIMULATOR,    "watchossim",   0 },
     { PLATFORM_DRIVERKIT,           "driverkit",    0 },
-    { PLATFORM_VISIONOS,            "visionos",     0 },
-    { PLATFORM_VISIONOSSIMULATOR,   "visionossim",  0 },
     { PLATFORM_FIRMWARE,            "firmware",     0 },
     { PLATFORM_SEPOS,               "sepos",        0 },
-    { PLATFORM_MACOS_EXCLAVECORE,   "macos-exclavecore",   0 },
-    { PLATFORM_MACOS_EXCLAVEKIT,    "macos-exclavekit",    0 },
-    { PLATFORM_IOS_EXCLAVECORE,     "ios-exclavecore",     0 },
-    { PLATFORM_IOS_EXCLAVEKIT,      "ios-exclavekit",      0 },
-    { PLATFORM_TVOS_EXCLAVECORE,    "tvos-exclavecore",    0 },
-    { PLATFORM_TVOS_EXCLAVEKIT,     "tvos-exclavekit",     0 },
-    { PLATFORM_WATCHOS_EXCLAVECORE, "watchos-exclavecore", 0 },
-    { PLATFORM_WATCHOS_EXCLAVEKIT,  "watchos-exclavekit",  0 },
-    { PLATFORM_VISIONOS_EXCLAVECORE, "visionos-exclavecore", 0 },
-    { PLATFORM_VISIONOS_EXCLAVEKIT,  "visionos-exclavekit",  0 },
 
 
 };
@@ -2832,47 +2810,11 @@ void print_build_version_command(struct build_version_command *bv)
 	case PLATFORM_DRIVERKIT:
 	    printf("DRIVERKIT\n");
 	    break;
-	case PLATFORM_VISIONOS:
-	    printf("VISIONOS\n");
-	    break;
-	case PLATFORM_VISIONOSSIMULATOR:
-	    printf("VISIONOSSIMULATOR\n");
-	    break;
 	case PLATFORM_FIRMWARE:
 	    printf("FIRMWARE\n");
 	    break;
 	case PLATFORM_SEPOS:
 	    printf("SEPOS\n");
-	    break;
-	case PLATFORM_MACOS_EXCLAVECORE:
-	    printf("MACOS_EXCLAVECORE\n");
-	    break;
-	case PLATFORM_MACOS_EXCLAVEKIT:
-	    printf("MACOS_EXCLAVEKIT\n");
-	    break;
-	case PLATFORM_IOS_EXCLAVECORE:
-	    printf("IOS_EXCLAVECORE\n");
-	    break;
-	case PLATFORM_IOS_EXCLAVEKIT:
-	    printf("IOS_EXCLAVEKIT\n");
-	    break;
-	case PLATFORM_TVOS_EXCLAVECORE:
-	    printf("TVOS_EXCLAVECORE\n");
-	    break;
-	case PLATFORM_TVOS_EXCLAVEKIT:
-	    printf("TVOS_EXCLAVEKIT\n");
-	    break;
-	case PLATFORM_WATCHOS_EXCLAVECORE:
-	    printf("WATCHOS_EXCLAVECORE\n");
-	    break;
-	case PLATFORM_WATCHOS_EXCLAVEKIT:
-	    printf("WATCHOS_EXCLAVEKIT\n");
-	    break;
-	case PLATFORM_VISIONOS_EXCLAVECORE:
-	    printf("VISIONOS_EXCLAVECORE\n");
-	    break;
-	case PLATFORM_VISIONOS_EXCLAVEKIT:
-	    printf("VISIONOS_EXCLAVEKIT\n");
 	    break;
 
 

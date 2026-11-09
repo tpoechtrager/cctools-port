@@ -343,11 +343,6 @@ struct load_command {
 #define LC_DYLD_CHAINED_FIXUPS (0x34 | LC_REQ_DYLD) /* used with linkedit_data_command */
 #define LC_FILESET_ENTRY (0x35 | LC_REQ_DYLD) /* used with fileset_entry_command */
 #define LC_ATOM_INFO 0x36 /* used with linkedit_data_command */
-#define LC_FUNCTION_VARIANTS 0x37 /* used with linkedit_data_command */
-#define LC_FUNCTION_VARIANT_FIXUPS 0x38 /* used with linkedit_data_command */
-#define LC_TARGET_TRIPLE 0x39 /* target triple used to compile */
-
-
 
 /*
  * A variable length string in a load command is represented by an lc_str
@@ -1231,16 +1226,6 @@ struct rpath_command {
 };
 
 /*
- * The target_triple_command contains a string which specifies the
- * target triple (e.g. "arm64e-apple-macosx15.0.0") used to compile the code.
- */
-struct target_triple_command {
-    uint32_t	 cmd;		/* LC_TARGET_TRIPLE */
-    uint32_t	 cmdsize;	/* including string */
-    union lc_str triple;	/* target triple string */
-};
-
-/*
  * The linkedit_data_command contains the offsets and sizes of a blob
  * of data in the __LINKEDIT segment.  
  */
@@ -1249,8 +1234,7 @@ struct linkedit_data_command {
 				   LC_FUNCTION_STARTS, LC_DATA_IN_CODE,
 				   LC_DYLIB_CODE_SIGN_DRS, LC_ATOM_INFO,
 				   LC_LINKER_OPTIMIZATION_HINT,
-				   LC_DYLD_EXPORTS_TRIE,
-				   LC_FUNCTION_VARIANTS, LC_FUNCTION_VARIANT_FIXUPS, or
+				   LC_DYLD_EXPORTS_TRIE, or
 				   LC_DYLD_CHAINED_FIXUPS. */
     uint32_t	cmdsize;	/* sizeof(struct linkedit_data_command) */
     uint32_t	dataoff;	/* file offset of data in __LINKEDIT segment */
@@ -1335,20 +1319,9 @@ struct build_tool_version {
 #define PLATFORM_VISIONOS 11
 #define PLATFORM_VISIONOSSIMULATOR 12
 
+
 #define PLATFORM_FIRMWARE 13
 #define PLATFORM_SEPOS 14
-
-#define PLATFORM_MACOS_EXCLAVECORE 15
-#define PLATFORM_MACOS_EXCLAVEKIT 16
-#define PLATFORM_IOS_EXCLAVECORE 17
-#define PLATFORM_IOS_EXCLAVEKIT 18
-#define PLATFORM_TVOS_EXCLAVECORE 19
-#define PLATFORM_TVOS_EXCLAVEKIT 20
-#define PLATFORM_WATCHOS_EXCLAVECORE 21
-#define PLATFORM_WATCHOS_EXCLAVEKIT 22
-#define PLATFORM_VISIONOS_EXCLAVECORE 23
-#define PLATFORM_VISIONOS_EXCLAVEKIT 24
-
 
 
 

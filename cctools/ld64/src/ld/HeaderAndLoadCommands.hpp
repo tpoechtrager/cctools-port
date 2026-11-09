@@ -365,8 +365,6 @@ unsigned int HeaderAndLoadCommandsAtom<A>::segmentCount() const
 			if ( (*it)->type() == ld::Section::typeLinkEdit )
 				continue; // for -preload, don't put hidden __LINKEDIT segment into output
 		}
-		if ( (*it)->type() == ld::Section::typeAbsoluteSymbols )
-			continue; // don't put __DATA into output, if it's only 'section' is absolute symbols
 		if ( strcmp(lastSegName, (*it)->segmentName()) != 0 ) {
 			lastSegName = (*it)->segmentName();
 			++count;
@@ -983,8 +981,6 @@ uint32_t HeaderAndLoadCommandsAtom<A>::sectionFlags(ld::Internal::FinalSection* 
 			return S_REGULAR;
 		case ld::Section::typeLastSection:
 			assert(0 && "typeLastSection should not make it to final linked image");
-		case ld::Section::typeLastContentSection:
-			assert(0 && "typeLastContentSection should not make it to final linked image");
 			return S_REGULAR;
 		case ld::Section::typeDebug:
 			return S_REGULAR | S_ATTR_DEBUG;
@@ -1009,7 +1005,6 @@ bool HeaderAndLoadCommandsAtom<A>::sectionTakesNoDiskSpace(ld::Internal::FinalSe
 		case ld::Section::typeAbsoluteSymbols:
 		case ld::Section::typeTentativeDefs:
 		case ld::Section::typeLastSection:
-		case ld::Section::typeLastContentSection:
 			return true;
 		default:
 			break;
@@ -1032,8 +1027,6 @@ uint8_t* HeaderAndLoadCommandsAtom<A>::copySegmentLoadCommands(uint8_t* p, uint8
 			if ( (*it)->type() == ld::Section::typeLinkEdit )
 				continue; // for -preload, don't put hidden __LINKEDIT segment into output
 		}
-		if ( (*it)->type() == ld::Section::typeAbsoluteSymbols )
-			continue; // don't put __DATA into output, if it's only 'section' is absolute symbols
 		if ( strcmp(lastSegName, sect->segmentName()) != 0 ) {
 			SegInfo si(sect->segmentName(), _options);
 			segs.push_back(si);

@@ -1048,18 +1048,6 @@ struct object *object)
 			   object->output_dyld_exports_trie_data_size);
 		*size += object->output_dyld_exports_trie_data_size;
 	    }
-	    if(object->output_function_variants_data_size != 0){
-		if(object->output_function_variants_data != NULL)
-		    memcpy(p + *size, object->output_function_variants_data,
-			   object->output_function_variants_data_size);
-		*size += object->output_function_variants_data_size;
-	    }
-	    if(object->output_function_variant_fixups_data_size != 0){
-		if(object->output_function_variant_fixups_data != NULL)
-		    memcpy(p + *size, object->output_function_variant_fixups_data,
-			   object->output_function_variant_fixups_data_size);
-		*size += object->output_function_variant_fixups_data_size;
-	    }
 	    memcpy(p + *size, object->output_loc_relocs,
 		   dyst->nlocrel * sizeof(struct relocation_info));
 	    *size += dyst->nlocrel *
@@ -1923,8 +1911,6 @@ struct object* object)
     object->dyld_info = NULL;
     object->dyld_exports_trie = NULL;
     object->dyld_chained_fixups = NULL;
-	object->function_variants = NULL;
-	object->function_variant_fixups = NULL;
     object->encryption_info_command = NULL;
     object->encryption_info_command64 = NULL;
     /* TODO: Consider sections, sections64, notes */
@@ -1999,12 +1985,6 @@ struct object* object)
 		break;
 	    case LC_DYLD_CHAINED_FIXUPS:
 		object->dyld_chained_fixups = (struct linkedit_data_command*)lc;
-		break;
-	    case LC_FUNCTION_VARIANTS:
-	   	object->function_variants = (struct linkedit_data_command*)lc;
-		break;
-	    case LC_FUNCTION_VARIANT_FIXUPS:
-		object->function_variant_fixups = (struct linkedit_data_command*)lc;
 		break;
 	    case LC_ENCRYPTION_INFO:
 		object->encryption_info_command =

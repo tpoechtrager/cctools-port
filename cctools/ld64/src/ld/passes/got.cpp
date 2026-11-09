@@ -136,7 +136,7 @@ static bool gotFixup(const Options& opts, ld::Internal& internal, const ld::Atom
 		case ld::Fixup::kindStoreTargetAddressARM64GOTLoadPage21:
 		case ld::Fixup::kindStoreTargetAddressARM64GOTLoadPageOff12:
 #endif
-#if SUPPORT_ARCH_riscv32
+#if SUPPORT_ARCH_riscv
 		case ld::Fixup::kindStoreRISCVhi20PCRelGOT:
 		case ld::Fixup::kindStoreRISCVlo12PCRelGOT:
 		case ld::Fixup::kindStoreRISCVhi20GOT:
@@ -334,7 +334,7 @@ void doPass(const Options& opts, ld::Internal& internal)
 					if ( log ) fprintf(stderr, "optimized GOT usage in %s to %s\n", atom->name(), targetOfGOT->name());
 					if ( fit->clusterSize == ld::Fixup::k2of2 ) {
 						switch (fit->kind ) {
-#if SUPPORT_ARCH_riscv32
+#if SUPPORT_ARCH_riscv
 							case ld::Fixup::kindStoreRISCVlo12PCRelGOT:
 								fit->kind = ld::Fixup::kindStoreRISCVlo12PCRelwasGOT;
 								fit[-1].binding = ld::Fixup::bindingDirectlyBound;

@@ -354,10 +354,6 @@ extern void print_rpath_command(
     struct rpath_command *rpath,
     struct load_command *lc);
 
-extern void print_target_triple_command(
-    struct target_triple_command *triple,
-    struct load_command *lc);
-
 extern void print_encryption_info_command(
     struct encryption_info_command *ec,
     uint64_t object_size);

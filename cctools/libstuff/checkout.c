@@ -103,8 +103,6 @@ struct object *object)
 	object->dyld_info = NULL;
 	object->dyld_exports_trie = NULL;
 	object->dyld_chained_fixups = NULL;
-	object->function_variants = NULL;
-	object->function_variant_fixups = NULL;
 	object->encryption_info_command = NULL;
 	object->encryption_info_command64 = NULL;
 	object->seg_bitcode = NULL;
@@ -168,27 +166,13 @@ struct object *object)
 		object->data_in_code_cmd =
 			(struct linkedit_data_command *)lc;
 	    }
-	    else if(lc->cmd == LC_ATOM_INFO){
+		else if(lc->cmd == LC_ATOM_INFO){
 		if(object->atom_info_cmd != NULL)
 			fatal_arch(arch, member, "malformed file (more than one "
 			"LC_ATOM_INFO load command): ");
 		object->atom_info_cmd =
 			(struct linkedit_data_command *)lc;
-	    }
-	    else if(lc->cmd == LC_FUNCTION_VARIANTS){
-		if(object->function_variants != NULL)
-			fatal_arch(arch, member, "malformed file (more than one "
-			"LC_FUNCTION_VARIANTS load command): ");
-		object->function_variants =
-			(struct linkedit_data_command *)lc;
-	    }
-	    else if(lc->cmd == LC_FUNCTION_VARIANT_FIXUPS){
-		if(object->function_variant_fixups != NULL)
-			fatal_arch(arch, member, "malformed file (more than one "
-			"LC_FUNCTION_VARIANT_FIXUPS load command): ");
-		object->function_variant_fixups =
-			(struct linkedit_data_command *)lc;
-	    }
+		}
 	    else if(lc->cmd == LC_DYLIB_CODE_SIGN_DRS){
 		if(object->code_sign_drs_cmd != NULL)
 		    fatal_arch(arch, member, "malformed file (more than one "
@@ -520,24 +504,6 @@ struct object *object)
 			"out of place");
 		offset = object->dyld_exports_trie->dataoff +
 			 object->dyld_exports_trie->datasize;
-	    }
-	}
-	if(object->function_variants != NULL){
-	    if (object->function_variants->dataoff != 0) {
-		if (object->function_variants->dataoff != offset)
-		    order_error(arch, member, "function variants "
-			"out of place");
-		offset = object->function_variants->dataoff +
-			 object->function_variants->datasize;
-	    }
-	}
-	if(object->function_variant_fixups != NULL){
-	    if (object->function_variant_fixups->dataoff != 0) {
-		if (object->function_variant_fixups->dataoff != offset)
-		    order_error(arch, member, "function variants "
-			"out of place");
-		offset = object->function_variant_fixups->dataoff +
-			 object->function_variant_fixups->datasize;
 	    }
 	}
 	if(object->dyst->nlocrel != 0){

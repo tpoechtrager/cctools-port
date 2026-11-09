@@ -1301,16 +1301,10 @@ static bool isPageOffsetKind(const ld::Fixup* fixup, bool mustBeGOT=false)
 		break; \
 	} 
 
-#if SUPPORT_ARCH_riscv32
+#if SUPPORT_ARCH_riscv
 // Extract bits V[Begin:End], where range is inclusive, and Begin must be < 63.
 static uint32_t extractBits(uint64_t v, uint32_t begin, uint32_t end) {
   return (v & ((1ULL << (begin + 1)) - 1)) >> end;
-}
-
-bool OutputFile::checkRISCVBranchDisplacement(int64_t displacement)
-{
-	const int64_t oneMegLimit  = 0xfffff;
-	return ( (displacement < oneMegLimit) && (displacement > (-oneMegLimit)) );
 }
 
 void OutputFile::rangeCheckRISCVBranch20(int64_t displacement, ld::Internal& state, const ld::Atom* atom, const ld::Fixup* fixup)
@@ -1342,7 +1336,7 @@ void OutputFile::applyFixUps(ld::Internal& state, uint64_t mhAddress, const ld::
 	int64_t delta;
 	uint32_t instruction;
 	uint32_t newInstruction;
-#if SUPPORT_ARCH_riscv32
+#if SUPPORT_ARCH_riscv
 	uint32_t imm20;
 	uint32_t imm10_1;
 	uint32_t imm11;
@@ -1359,7 +1353,6 @@ void OutputFile::applyFixUps(ld::Internal& state, uint64_t mhAddress, const ld::
 #if SUPPORT_ARCH_arm64e
 	Fixup::AuthData authData;
 #endif
-	Fixup* prevFixup = nullptr;
 	for (ld::Fixup::iterator fit = atom->fixupsBegin(), end=atom->fixupsEnd(); fit != end; ++fit) {
 		uint8_t* fixUpLocation = &buffer[fit->offsetInAtom];
 		if ( fit->firstInCluster() ) {
@@ -2231,40 +2224,29 @@ void OutputFile::applyFixUps(ld::Internal& state, uint64_t mhAddress, const ld::
 				set32LE(fixUpLocation, delta);
 				break;
 #endif
-#if SUPPORT_ARCH_riscv32
+#if SUPPORT_ARCH_riscv
 			case ld::Fixup::kindStoreRISCVBranch20:
-				if ( fit->contentAddendOnly )
-					break; // nothing to change in ld -r mode
-				if ( toTarget->contentType() == ld::Atom::typeBranchIsland ) {
-					// Branching to island.  If ultimate target is in range, branch there directly.
-					for (ld::Fixup::iterator islandfit = toTarget->fixupsBegin(), end=toTarget->fixupsEnd(); islandfit != end; ++islandfit) {
-						if ( islandfit->kind == ld::Fixup::kindIslandTarget ) {
-							const ld::Atom* islandTarget = NULL;
-							uint64_t islandTargetAddress = addressOf(state, islandfit, &islandTarget);
-							delta = islandTargetAddress - (atom->finalAddress() + fit->offsetInAtom + 8);
-							if ( checkRISCVBranchDisplacement(delta) ) {
-								toTarget    = islandTarget;
-								accumulator = islandTargetAddress;
-							}
-							break;
-						}
-					}
+				if ( fit->contentAddendOnly ) {
+					delta = accumulator;
 				}
-				delta = accumulator - (atom->finalAddress() + fit->offsetInAtom);
+				else {
+					delta = accumulator - (atom->finalAddress() + fit->offsetInAtom);
+				}
 				instruction = get32LE(fixUpLocation);
 				imm20    = extractBits(delta, 20, 20) << 31;
 				imm10_1  = extractBits(delta, 10,  1) << 21;
 				imm11    = extractBits(delta, 11, 11) << 20;
 				imm19_12 = extractBits(delta, 19, 12) << 12;
-				rangeCheckRISCVBranch20(delta, state, atom, prevFixup);	// JAL is always a two fixup cluster, the first of which holds the target
+				rangeCheckRISCVBranch20(delta, state, atom, fit);
 				newInstruction = instruction | imm20 | imm10_1 | imm11 | imm19_12;
 				set32LE(fixUpLocation, newInstruction);
 				break;
 			case ld::Fixup::kindStoreRISCVhi20:
 				// the lui instruction encodes the hi20 bits of the address to target
 				if ( fit->contentAddendOnly )
-					break; // nothing to change in ld -r mode
-				delta = accumulator;
+					delta = 0;
+				else
+					delta = accumulator;
 				if ( delta & 0x00000800 ) {
 					// paired addi or lw instruction sign extends its 12-bit imm, so we need to compensate
 					delta += 0x1000;
@@ -2276,8 +2258,9 @@ void OutputFile::applyFixUps(ld::Internal& state, uint64_t mhAddress, const ld::
 			case ld::Fixup::kindStoreRISCVlo12:
 				// the addi/load/store instruction encodes the lo12 bits of the address to target
 				if ( fit->contentAddendOnly )
-					break; // nothing to change in ld -r mode
-				delta = accumulator;
+					delta = 0; // FIXME: needs to be delta to paired hi20 instruction
+				else
+					delta = accumulator;
 				instruction = get32LE(fixUpLocation);
 				if ((instruction & 0x7F) == 0x23 || (instruction & 0x7F) == 0x27) {
 					// sw/sh/sb/fsw/fsd
@@ -2293,8 +2276,9 @@ void OutputFile::applyFixUps(ld::Internal& state, uint64_t mhAddress, const ld::
 			case ld::Fixup::kindStoreRISCVhi20PCRel:
 				// the auipc instruction encodes the hi20 bits of the 32-bit pc-rel address to target
 				if ( fit->contentAddendOnly )
-					break; // nothing to change in ld -r mode
-				delta = accumulator - ((atom->finalAddress() + fit->offsetInAtom));
+					delta = 0;
+				else
+					delta = accumulator - ((atom->finalAddress() + fit->offsetInAtom));
 				if ( delta & 0x00000800 ) {
 					// paired addi or lw instruction sign extends its 12-bit imm, so we need to compensate
 					delta += 0x1000;
@@ -2307,8 +2291,9 @@ void OutputFile::applyFixUps(ld::Internal& state, uint64_t mhAddress, const ld::
 			case ld::Fixup::kindStoreRISCVlo12PCRel:
 				// the addi instruction encodes the lo12 bits of the 32-bit pc-rel address to target
 				if ( fit->contentAddendOnly )
-					break; // nothing to change in ld -r mode
-				delta = accumulator - ((atom->finalAddress() + fit->offsetInAtom));
+					delta = 0; // FIXME: needs to be delta to paired hi20 instruction
+				else
+					delta = accumulator - ((atom->finalAddress() + fit->offsetInAtom));
 				instruction = get32LE(fixUpLocation);
 				if ((instruction & 0x7F) == 0x23 || (instruction & 0x7F) == 0x27) {
 					// sw/sh/sb/fsw/fsd
@@ -2338,8 +2323,10 @@ void OutputFile::applyFixUps(ld::Internal& state, uint64_t mhAddress, const ld::
 				break;
 			case ld::Fixup::kindStoreRISCVlo12PCRelwasGOT:
 				// was auipc/lw, change to auipc/addi
-				assert( !fit->contentAddendOnly ); // transform should not happen in ld -r mode
-				delta = accumulator - ((atom->finalAddress() + fit->offsetInAtom));
+				if ( fit->contentAddendOnly )
+					delta = 0; // FIXME: needs to be delta to paired hi20 instruction
+				else
+					delta = accumulator - ((atom->finalAddress() + fit->offsetInAtom));
 				instruction = get32LE(fixUpLocation);
 				imm12 = (instruction >> 20);
 				signedImm12 = (int32_t)imm12;
@@ -2353,16 +2340,17 @@ void OutputFile::applyFixUps(ld::Internal& state, uint64_t mhAddress, const ld::
 				break;
 			case ld::Fixup::kindStoreRISCVlo12wasGOT:
 				// was lui/lw, change to aui/addi
-				assert( !fit->contentAddendOnly ); // transform should not happen in ld -r mode
-				delta = accumulator;
+				if ( fit->contentAddendOnly )
+					delta = 0; // FIXME: needs to be delta to paired hi20 instruction
+				else
+					delta = accumulator;
 				instruction = get32LE(fixUpLocation);
 				newInstruction = (instruction & 0xFFFF8F80) | 0x00007013; // change LW to ADDI
 				newInstruction = (instruction & 0x000FFFFF) | ((delta & 0x00000FFF) << 20);
 				set32LE(fixUpLocation, newInstruction);
 				break;
-#endif // SUPPORT_ARCH_riscv32
+#endif // SUPPORT_ARCH_riscv
 		}
-		prevFixup = fit;
 	}
 
 
@@ -4244,7 +4232,7 @@ void OutputFile::partitionSymbolTable(ld::Internal& state)
 				(const_cast<ld::Atom*>(atom))->setMachoSection(machoSectionIndex);
 			else if ( sect->type() == ld::Section::typeMachHeader )
 				(const_cast<ld::Atom*>(atom))->setMachoSection(1); // __mh_execute_header is not in any section by needs n_sect==1
-			else if ( sect->type() == ld::Section::typeLastSection || sect->type() == ld::Section::typeLastContentSection )
+			else if ( sect->type() == ld::Section::typeLastSection )
 				(const_cast<ld::Atom*>(atom))->setMachoSection(machoSectionIndex); // use section index of previous section
 			else if ( sect->type() == ld::Section::typeFirstSection )
 				(const_cast<ld::Atom*>(atom))->setMachoSection(machoSectionIndex+1); // use section index of next section
@@ -4256,7 +4244,7 @@ void OutputFile::partitionSymbolTable(ld::Internal& state)
 #if SUPPORT_ARCH_arm64_32
 				  || (_options.architecture() == CPU_TYPE_ARM64_32)
 #endif
-#if SUPPORT_ARCH_riscv32
+#if SUPPORT_ARCH_riscv
 				  || (_options.architecture() == CPU_TYPE_RISCV32)
 #endif
 					) {
@@ -4656,7 +4644,7 @@ void OutputFile::addPreloadLinkEdit(ld::Internal& state)
 			}
 			break;
 #endif
-#if SUPPORT_ARCH_riscv32
+#if SUPPORT_ARCH_riscv
 		case CPU_TYPE_RISCV32:
 			if ( _hasLocalRelocations ) {
 				_localRelocsAtom = new LocalRelocationsAtom<riscv32>(_options, state, *this);
@@ -5059,7 +5047,7 @@ void OutputFile::addLinkEdit(ld::Internal& state)
 			}
 			break;
 #endif
-#if SUPPORT_ARCH_riscv32
+#if SUPPORT_ARCH_riscv
 		case CPU_TYPE_RISCV32:
 			if ( _hasSectionRelocations ) {
 				_sectionsRelocationsAtom = new SectionRelocationsAtom<riscv32>(_options, state, *this);
@@ -5133,7 +5121,7 @@ void OutputFile::addLinkEdit(ld::Internal& state)
 				codeSignatureSection = state.addAtom(*_codeSignatureAtom);
 			}
 			break;
-#endif // SUPPORT_ARCH_riscv32
+#endif // SUPPORT_ARCH_riscv
 
 		default:
 			throw "unknown architecture";
@@ -5173,7 +5161,7 @@ void OutputFile::addLoadCommands(ld::Internal& state)
 			headerAndLoadCommandsSection = state.addAtom(*_headersAndLoadCommandAtom);
 			break;
 #endif
-#if SUPPORT_ARCH_riscv32
+#if SUPPORT_ARCH_riscv
 		case CPU_TYPE_RISCV32:
 			_headersAndLoadCommandAtom = new HeaderAndLoadCommandsAtom<riscv32>(_options, state, *this);
 			headerAndLoadCommandsSection = state.addAtom(*_headersAndLoadCommandAtom);
@@ -7019,7 +7007,7 @@ void OutputFile::makeSplitSegInfoV2(ld::Internal& state)
 					if ( target->definition() != ld::Atom::definitionProxy && target->definition() != ld::Atom::definitionAbsolute ) {
 						if ( target->section().type() == ld::Section::typeMachHeader ) {
 							toSectionIndex = 0;
-						} else if ( target->section().type() == ld::Section::typeLastSection || target->section().type() == ld::Section::typeLastContentSection ) {
+						} else if ( target->section().type() == ld::Section::typeLastSection ) {
 							// use section index of previous section
 							ld::Internal::FinalSection* lastEmittedSectionSeen = nullptr;
 							for (std::vector<ld::Internal::FinalSection*>::iterator sit2 = state.sections.begin(); sit2 != state.sections.end(); ++sit2) {

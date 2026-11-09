@@ -94,7 +94,6 @@ private:
 	bool					atomIsDeadStripRoot(const ld::Atom*, bool forceDeadStrip) const;
 	void					resolveCurrentUndefines();
 	void					resolveAllUndefines();
-	void					resolveLTOSoftloadSymbols();
 	void					removeUnusedAliases(std::vector<std::string_view>& unresolvableUndefines);
 	void					checkUndefines(bool force=false);
 	void					checkDylibSymbolCollisions();

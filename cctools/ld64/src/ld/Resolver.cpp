@@ -236,7 +236,8 @@ SectionBoundaryAtom* SectionBoundaryAtom::makeOldSectionBoundaryAtom(const char*
 class SegmentBoundaryAtom : public ld::Atom
 {
 public:
-	static SegmentBoundaryAtom*			makeSegmentBoundaryAtom(const char* name, bool start, bool contentEnd, const char* segName);
+	static SegmentBoundaryAtom*			makeSegmentBoundaryAtom(const char* name, bool start, const char* segName);
+	static SegmentBoundaryAtom*			makeOldSegmentBoundaryAtom(const char* name, bool start);
 	
 	// overrides of ld::Atom
 	virtual const ld::File*				file() const		{ return NULL; }
@@ -262,7 +263,7 @@ private:
 	const char*							_name;
 };
 
-SegmentBoundaryAtom* SegmentBoundaryAtom::makeSegmentBoundaryAtom(const char* name, bool start, bool contentEnd, const char* segName)
+SegmentBoundaryAtom* SegmentBoundaryAtom::makeSegmentBoundaryAtom(const char* name, bool start, const char* segName)
 {
 	if ( *segName == '\0' )
 		throwf("malformed segment$ symbol name: %s", name);
@@ -273,10 +274,26 @@ SegmentBoundaryAtom* SegmentBoundaryAtom::makeSegmentBoundaryAtom(const char* na
 		const ld::Section* section = new ld::Section(segName, "__start", ld::Section::typeFirstSection, true);
 		return new SegmentBoundaryAtom(name, *section, ld::Atom::typeSectionStart);
 	}
-	else if ( contentEnd ){
-		const ld::Section* section = new ld::Section(segName, "__content_end", ld::Section::typeLastContentSection, true);
+	else {
+		const ld::Section* section = new ld::Section(segName, "__end", ld::Section::typeLastSection, true);
 		return new SegmentBoundaryAtom(name, *section, ld::Atom::typeSectionEnd);
-	} else {
+	}
+}
+
+SegmentBoundaryAtom* SegmentBoundaryAtom::makeOldSegmentBoundaryAtom(const char* name, bool start)
+{
+	// e.g. __DATA__begin
+	char temp[18];
+	strlcpy(temp, name, 7);
+	char* segName = strdup(temp);
+
+	warning("grandfathering in old symbol '%s' as alias for 'segment$%s$%s'", name, start ? "start" : "end", segName);
+
+	if ( start ) {
+		const ld::Section* section = new ld::Section(segName, "__start", ld::Section::typeFirstSection, true);
+		return new SegmentBoundaryAtom(name, *section, ld::Atom::typeSectionStart);
+	}
+	else {
 		const ld::Section* section = new ld::Section(segName, "__end", ld::Section::typeLastSection, true);
 		return new SegmentBoundaryAtom(name, *section, ld::Atom::typeSectionEnd);
 	}
@@ -911,7 +928,19 @@ void Resolver::addInitialUndefines()
 		_symbolTable.findSlotForName(*it);
 	}
 
-	resolveLTOSoftloadSymbols();
+#ifdef LTO_SUPPORT // ld64-port
+	if ( _haveLLVMObjs && _options.ltoSoftloadRuntimeSymbols() ) {
+		// when building firmware with LTO, make sure all surprise symbols libLTO might generate are loaded if possible
+		// add these symbols before resolving other undefines, because adding them might pull in other symbols
+		for ( const std::string& softName : lto::softloadRuntimeSymbols() ) {
+			if ( !_symbolTable.hasName(softName) ) {
+				_inputFiles.searchLibraries(softName.c_str(), false, true, false, *this);
+				// keep track of all soft loaded symbols, so that they won't be dead stripped before LTO compilation
+				_softloadLTORuntimeSymbols.insert(strdup(softName.c_str()));
+			}
+		}
+	}
+#endif
 }
 
 void Resolver::resolveCurrentUndefines() {
@@ -944,43 +973,31 @@ void Resolver::resolveCurrentUndefines() {
 				}
 				else if ( undefsv.starts_with("segment$") ) {
 					if ( undefsv.starts_with("segment$start$") ) {
-						this->doAtom(*SegmentBoundaryAtom::makeSegmentBoundaryAtom(undef, true, false, &undef[14]));
+						this->doAtom(*SegmentBoundaryAtom::makeSegmentBoundaryAtom(undef, true, &undef[14]));
 					}
 					else if ( undefsv.starts_with("segment$end$") ) {
-						this->doAtom(*SegmentBoundaryAtom::makeSegmentBoundaryAtom(undef, false, true, &undef[12]));
+						this->doAtom(*SegmentBoundaryAtom::makeSegmentBoundaryAtom(undef, false, &undef[12]));
 					}
-					else if ( undefsv.starts_with("segment$page-end$") ) {
-						this->doAtom(*SegmentBoundaryAtom::makeSegmentBoundaryAtom(undef, false, false, &undef[17]));
+				}
+				else if ( _options.outputKind() == Options::kPreload ) {
+					// for iBoot grandfather in old style section labels
+					size_t undefLen = undefsv.size();
+					if ( undefsv.ends_with("__begin") ) {
+						if ( undefLen > 13 )
+							this->doAtom(*SectionBoundaryAtom::makeOldSectionBoundaryAtom(undef, true));
+						else
+							this->doAtom(*SegmentBoundaryAtom::makeOldSegmentBoundaryAtom(undef, true));
+					}
+					else if ( undefsv.ends_with("__end") ) {
+						if ( undefLen > 11 )
+							this->doAtom(*SectionBoundaryAtom::makeOldSectionBoundaryAtom(undef, false));
+						else
+							this->doAtom(*SegmentBoundaryAtom::makeOldSegmentBoundaryAtom(undef, false));
 					}
 				}
 			}
 		}
 	}
-}
-
-void Resolver::resolveLTOSoftloadSymbols()
-{
-#ifdef LTO_SUPPORT // ld64-port
-	// only load if linking any LTO objects
-	if ( !_haveLLVMObjs || !_options.ltoSoftloadRuntimeSymbols() )
-		return;
-
-	// they might have been already loaded
-	if ( !_softloadLTORuntimeSymbols.empty() )
-		return;
-
-	// when building firmware with LTO, make sure all surprise symbols libLTO might generate are loaded if possible
-	// add these symbols before resolving other undefines, because adding them might pull in other symbols
-	for ( const std::string& softNameIn : lto::softloadRuntimeSymbols(_options.architecture()) ) {
-		// keep track of all soft loaded symbols (even those already loaded)
-		// so that they won't be dead stripped before LTO compilation
-		const char* softName = strdup(softNameIn.c_str());
-		_softloadLTORuntimeSymbols.insert(softName);
-		if ( !_symbolTable.hasName(softName) ) {
-			_inputFiles.searchLibraries(softName, false, true, false, *this);
-		}
-	}
-#endif
 }
 
 void Resolver::resolveAllUndefines()
@@ -1016,9 +1033,6 @@ void Resolver::resolveAllUndefines()
 				}
 			}
 		}
-
-		// rdar://137443248 (ld64 needs to (soft)load LTO runtime symbols even when only static archives have LTO objects)
-		resolveLTOSoftloadSymbols();
 	}
 	
 	// Use linker options to resolve any remaining undefined symbols

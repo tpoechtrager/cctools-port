@@ -751,7 +751,6 @@ replace_sections(void)
 	    case LC_ROUTINES_64:
 	    case LC_UUID:
 	    case LC_RPATH:
-	    case LC_TARGET_TRIPLE:
 	    case LC_LAZY_LOAD_DYLIB:
 	    case LC_ENCRYPTION_INFO:
 	    case LC_ENCRYPTION_INFO_64:

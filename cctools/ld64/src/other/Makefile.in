@@ -91,7 +91,8 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
-bin_PROGRAMS = ObjectDump$(EXEEXT) unwinddump$(EXEEXT)
+bin_PROGRAMS = ObjectDump$(EXEEXT) unwinddump$(EXEEXT) \
+	machocheck$(EXEEXT)
 subdir = ld64/src/other
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/libtool.m4 \
@@ -121,6 +122,9 @@ AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
+am_machocheck_OBJECTS = machochecker.$(OBJEXT)
+machocheck_OBJECTS = $(am_machocheck_OBJECTS)
+machocheck_DEPENDENCIES = $(top_builddir)/ld64/src/3rd/libhelper.la
 am_unwinddump_OBJECTS = unwinddump.$(OBJEXT)
 unwinddump_OBJECTS = $(am_unwinddump_OBJECTS)
 unwinddump_LDADD = $(LDADD)
@@ -175,8 +179,10 @@ AM_V_CXXLD = $(am__v_CXXLD_@AM_V@)
 am__v_CXXLD_ = $(am__v_CXXLD_@AM_DEFAULT_V@)
 am__v_CXXLD_0 = @echo "  CXXLD   " $@;
 am__v_CXXLD_1 = 
-SOURCES = $(ObjectDump_SOURCES) $(unwinddump_SOURCES)
-DIST_SOURCES = $(ObjectDump_SOURCES) $(unwinddump_SOURCES)
+SOURCES = $(ObjectDump_SOURCES) $(machocheck_SOURCES) \
+	$(unwinddump_SOURCES)
+DIST_SOURCES = $(ObjectDump_SOURCES) $(machocheck_SOURCES) \
+	$(unwinddump_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -386,6 +392,8 @@ AM_CFLAGS = \
     -I$(top_srcdir)/ld64/src/ld/passes 
 
 unwinddump_SOURCES = unwinddump.cpp
+machocheck_SOURCES = machochecker.cpp
+machocheck_LDADD = $(top_builddir)/ld64/src/3rd/libhelper.la
 ObjectDump_SOURCES = \
 	ObjectDump.cpp \
 	$(top_srcdir)/ld64/src/ld/PlatformSupport.cpp \
@@ -489,6 +497,10 @@ $(top_builddir)/ld64/src/ld/SymbolTable.$(OBJEXT):  \
 ObjectDump$(EXEEXT): $(ObjectDump_OBJECTS) $(ObjectDump_DEPENDENCIES) $(EXTRA_ObjectDump_DEPENDENCIES) 
 	@rm -f ObjectDump$(EXEEXT)
 	$(AM_V_CXXLD)$(CXXLINK) $(ObjectDump_OBJECTS) $(ObjectDump_LDADD) $(LIBS)
+
+machocheck$(EXEEXT): $(machocheck_OBJECTS) $(machocheck_DEPENDENCIES) $(EXTRA_machocheck_DEPENDENCIES)
+	@rm -f machocheck$(EXEEXT)
+	$(AM_V_CXXLD)$(CXXLINK) $(machocheck_OBJECTS) $(machocheck_LDADD) $(LIBS)
 
 unwinddump$(EXEEXT): $(unwinddump_OBJECTS) $(unwinddump_DEPENDENCIES) $(EXTRA_unwinddump_DEPENDENCIES) 
 	@rm -f unwinddump$(EXEEXT)

@@ -1057,7 +1057,7 @@ void dumper::dumpFixup(const ld::Fixup* ref)
 			printf("store auth 64-bit little endian address of %s", referenceTargetAtomName(ref));
 			break;
 #endif
-#if SUPPORT_ARCH_riscv32
+#if SUPPORT_ARCH_riscv
 		case ld::Fixup::kindStoreRISCVBranch20:
 			printf(", then store as RISC-V 20-bit pcrel branch");
 			break;
@@ -1085,7 +1085,7 @@ void dumper::dumpFixup(const ld::Fixup* ref)
 		case ld::Fixup::kindStoreRISCVlo12PCRelGOT:
 			printf(", then store as RISC-V lo20 pc-rel reference to GOT");
 			break;
-#endif // SUPPORT_ARCH_riscv32
+#endif // SUPPORT_ARCH_riscv
 
 		//default:
 		//	printf("unknown fixup");

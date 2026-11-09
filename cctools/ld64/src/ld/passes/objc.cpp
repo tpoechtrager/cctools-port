@@ -2767,7 +2767,7 @@ void doPass(const Options& opts, ld::Internal& state)
 			doPass<arm64_32, true>(opts, state);
 			break;
 #endif
-#if SUPPORT_ARCH_riscv32
+#if SUPPORT_ARCH_riscv
 		case CPU_TYPE_RISCV32:
 			doPass<riscv32, true>(opts, state);
 			break;

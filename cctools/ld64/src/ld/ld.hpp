@@ -665,7 +665,7 @@ public:
 				typeLazyDylibPointer, typeStubHelper, typeInitializerPointers, typeTerminatorPointers,
 				typeStubClose, typeLazyPointerClose, typeAbsoluteSymbols, typeThreadStarts, typeChainStarts,
 				typeTLVDefs, typeTLVZeroFill, typeTLVInitialValues, typeTLVInitializerPointers, typeTLVPointers,
-				typeFirstSection, typeLastContentSection, typeLastSection, typeDebug, typeSectCreate, typeInitOffsets, typeInterposing, typeRebaseRLE };
+				typeFirstSection, typeLastSection, typeDebug, typeSectCreate, typeInitOffsets, typeInterposing, typeRebaseRLE };
 
 
 					Section(const char* sgName, const char* sctName,
@@ -821,7 +821,7 @@ struct Fixup
 					kindStoreTargetAddressLittleEndianAuth64,	// kindSetTargetAddress + kindStoreLittleEndianAuth64
 					kindSetAuthData,
 #endif
-#if SUPPORT_ARCH_riscv32
+#if SUPPORT_ARCH_riscv
 					kindStoreRISCVBranch20,
 					kindStoreRISCVhi20,
 					kindStoreRISCVlo12,

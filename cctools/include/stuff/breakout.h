@@ -197,10 +197,6 @@ struct object {
 	*dyld_exports_trie;	    /* the exports trie */
     struct linkedit_data_command
 	*dyld_chained_fixups;	    /* the fixups */
-    struct linkedit_data_command
-        *function_variants;         /* the function variants table */
-    struct linkedit_data_command
-        *function_variant_fixups;   /* the internal uses of function variants */
     struct encryption_info_command
 	*encryption_info_command;   /* LC_ENCRYPTION_INFO */
     struct encryption_info_command_64
@@ -264,10 +260,6 @@ struct object {
     uint32_t      output_dyld_chained_fixups_data_size;
     char *output_dyld_exports_trie_data;
     uint32_t      output_dyld_exports_trie_data_size;
-    char *output_function_variants_data;
-    uint32_t      output_function_variants_data_size;
-    char *output_function_variant_fixups_data;
-    uint32_t      output_function_variant_fixups_data_size;
 
     uint32_t      output_ilocalsym;
     uint32_t      output_nlocalsym;

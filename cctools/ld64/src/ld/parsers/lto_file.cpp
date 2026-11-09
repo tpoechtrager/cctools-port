@@ -1831,35 +1831,28 @@ const char* archName(const uint8_t* fileContent, uint64_t fileLength)
 // used by ld to resolve runtime symbols early
 //
 // rdar://15476167 ("typeTempLTO should not make it to final linked image" when building a freestanding target)
-std::vector<std::string> softloadRuntimeSymbols(cpu_type_t arch)
+std::vector<std::string> softloadRuntimeSymbols()
 {
 	// TODO: rdar://15476167 ("typeTempLTO should not make it to final linked image" when building a freestanding target)
 	// adding all the symbols leads to a negative size impact and undefined symbols in some projects
-	bool useCompleteList;
-#if SUPPORT_ARCH_riscv32
-	useCompleteList = (arch == CPU_TYPE_RISCV32);
-#else
-	useCompleteList = false;
-#endif
+	//if ( runtime_api_version() >= 25 ) {
+	//	size_t  size = 0;
+	//	const char* const* symbols = ::lto_runtime_lib_symbols_list(&size);
 
-	if ( useCompleteList && runtime_api_version() >= 25 ) {
-		size_t  size = 0;
-		const char* const* symbols = ::lto_runtime_lib_symbols_list(&size);
+	//	if ( size != 0 ) {
+	//		std::vector<std::string> out;
 
-		if ( size != 0 ) {
-			std::vector<std::string> out;
+	//		for ( size_t i = 0; i < size; ++i ) {
+	//			// some of the names might be empty as LLVM reserves slots for some functions
+	//			// that can be configured dynamically depending on the target
+	//			if ( symbols[i] == nullptr ) continue;
 
-			for ( size_t i = 0; i < size; ++i ) {
-				// some of the names might be empty as LLVM reserves slots for some functions
-				// that can be configured dynamically depending on the target
-				if ( symbols[i] == nullptr ) continue;
-
-				// lto returns symbol names without the leading underscore
-				out.push_back(std::string("_") + symbols[i]);
-			}
-			return out;
-		}
-	}
+	//			// lto returns symbol names without the leading underscore
+	//			out.push_back(std::string("_") + symbols[i]);
+	//		}
+	//		return out;
+	//	}
+	//}
 
 	// fallback to a predefined (incomplete) list if libLTO didn't provide one
 	return std::vector<std::string>{ "___udivdi3", "___udivsi3", "___divsi3", "___muldi3",

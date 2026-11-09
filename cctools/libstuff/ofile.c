@@ -4011,8 +4011,7 @@ struct ofile *ofile)
     struct twolevel_hints_command *hints;
     struct linkedit_data_command *code_sig, *split_info, *func_starts,
 			     *data_in_code, *code_sign_drs, *linkedit_data,
-			     *exports_trie, *chained_fixups, *atom_info,
-			     *function_variants, *function_variant_fixups;
+			     *exports_trie, *chained_fixups, *atom_info;
     struct linkedit_data_command *link_opt_hint;
     struct version_min_command *vers;
     struct build_version_command *bv, *bv1, *bv2;
@@ -4024,7 +4023,6 @@ struct ofile *ofile)
     struct dyld_info_command *dyld_info;
     struct uuid_command *uuid;
     struct rpath_command *rpath;
-    struct target_triple_command *triple;
     struct entry_point_command *ep;
     struct source_version_command *sv;
     struct note_command *nc;
@@ -4130,8 +4128,6 @@ struct ofile *ofile)
 	code_sign_drs = NULL;
 	link_opt_hint = NULL;
 	exports_trie = NULL;
-	function_variants = NULL;
-	function_variant_fixups = NULL;
 	chained_fixups = NULL;
 	split_info = NULL;
 	cs = NULL;
@@ -4800,28 +4796,6 @@ struct ofile *ofile)
 		exports_trie = (struct linkedit_data_command *)lc;
 		goto check_linkedit_data_command;
 		
-	    case LC_FUNCTION_VARIANTS:
-		cmd_name = "LC_FUNCTION_VARIANTS";
-		element_name = "function variants";
-		if(function_variants != NULL){
-		    Mach_O_error(ofile, "malformed object (more than one "
-				 "%s command)", cmd_name);
-		    goto return_bad;
-		}
-		function_variants = (struct linkedit_data_command *)lc;
-		goto check_linkedit_data_command;
-
-	    case LC_FUNCTION_VARIANT_FIXUPS:
-		cmd_name = "LC_FUNCTION_VARIANT_FIXUPS";
-		element_name = "function variant fixups";
-		if(function_variant_fixups != NULL){
-		    Mach_O_error(ofile, "malformed object (more than one "
-				 "%s command)", cmd_name);
-		    goto return_bad;
-		}
-		function_variant_fixups = (struct linkedit_data_command *)lc;
-		goto check_linkedit_data_command;
-
 	    case LC_DYLD_CHAINED_FIXUPS:
 		cmd_name = "LC_DYLD_CHAINED_FIXUPS";
 		element_name = "chained fixups";
@@ -6836,25 +6810,6 @@ check_dylinker_command:
 		if(rpath->path.offset >= rpath->cmdsize){
 		    Mach_O_error(ofile, "truncated or malformed object (path."
 			"offset field of LC_RPATH command %u extends past the "
-			"end of the file)", i);
-		    goto return_bad;
-		}
-		break;
-	    case LC_TARGET_TRIPLE:
-		if(l.cmdsize < sizeof(struct target_triple_command)){
-		    Mach_O_error(ofile, "malformed object (LC_TARGET_TRIPLE: cmdsize "
-				 "too small) in command %u", i);
-		    goto return_bad;
-		}
-		triple = (struct target_triple_command *)lc;
-		if(triple->cmdsize < sizeof(struct target_triple_command)){
-		    Mach_O_error(ofile, "malformed object (LC_TARGET_TRIPLE command "
-			"%u has too small cmdsize field)", i);
-		    goto return_bad;
-		}
-		if(triple->triple.offset >= triple->cmdsize){
-		    Mach_O_error(ofile, "truncated or malformed object (path."
-			"offset field of LC_TARGET_TRIPLE command %u extends past the "
 			"end of the file)", i);
 		    goto return_bad;
 		}

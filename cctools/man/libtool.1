@@ -19,15 +19,6 @@ ranlib \- add or update the table of contents of archive libraries
 [
 .B \-no_warning_for_no_symbols
 ]
-[
-.B \-encode_sdk_libraries_as_references
-]
-[
-.B \-ref-l
-]
-[
-.B \-ref-framework
-]
 .IR file ...
 [-filelist listfile[,dirname]]
 .br
@@ -266,20 +257,6 @@ when used with it's
 .B -dynamiclib
 option.  This is done to allow selective loading of the GNU's compiler's runtime
 support library, libcc_dynamic.a .
-.TP
-.B \-encode_sdk_libraries_as_references
-When creating a static library, this option means any
-static libraries specified on the command line and found in the SDK,
-will be encoded as an auto-link hint rather than incorporated into the
-static library being built.
-.TP
-.B \-ref-lname
-This option is used with -static to mean encode an auto-link hint for the
-specified library name.
-.TP
-.BI \-ref-framework " name"
-This option is used with -static to mean encode an auto-link hint for the
-specified framework name.
 .TP
 .I "link editor flags"
 For a dynamic shared library the following

@@ -1,6 +1,7 @@
 bin_PROGRAMS =  \
 	ObjectDump \
-	unwinddump
+	unwinddump \
+	machocheck
 
 AM_CXXFLAGS = \
 	-D__DARWIN_UNIX03 \
@@ -33,6 +34,9 @@ AM_CFLAGS = \
     -I$(top_srcdir)/ld64/src/ld/passes 
 
 unwinddump_SOURCES = unwinddump.cpp
+
+machocheck_SOURCES = machochecker.cpp
+machocheck_LDADD = $(top_builddir)/ld64/src/3rd/libhelper.la
 
 ObjectDump_SOURCES = \
 	ObjectDump.cpp \

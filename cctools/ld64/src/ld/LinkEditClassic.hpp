@@ -2261,7 +2261,7 @@ void SectionRelocationsAtom<arm64_32>::encodeSectionReloc(ld::Internal::FinalSec
 }
 #endif // SUPPORT_ARCH_arm64_32
 
-#if SUPPORT_ARCH_riscv32
+#if SUPPORT_ARCH_riscv
 template <>
 void SectionRelocationsAtom<riscv32>::encodeSectionReloc(ld::Internal::FinalSection* sect,
 														  const Entry& entry, std::vector<macho_relocation_info<P> >& relocs)
