@@ -50,7 +50,7 @@ public:
 	std::vector<uint8_t>& bytes() { return _data; }
 	unsigned long size() const { return _data.size(); }
 	void reserve(unsigned long l) { _data.reserve(l); }
-	const uint8_t* start() const { return &_data[0]; }
+	const uint8_t* start() const { return _data.data(); }
 
 	void append_uleb128(uint64_t value) {
 		uint8_t byte;

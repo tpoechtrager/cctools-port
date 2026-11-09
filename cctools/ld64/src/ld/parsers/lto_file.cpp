@@ -81,8 +81,8 @@ public:
 	uint64_t							size() const override		{ return 0; }
 	uint64_t							objectAddress() const override { return 0; }
 	void								copyRawContent(uint8_t buffer[]) const override { }
-	ld::Fixup::iterator					fixupsBegin() const override	{ return &_undefs[0]; }
-	ld::Fixup::iterator					fixupsEnd()	const override 	{ return &_undefs[_undefs.size()]; }
+	ld::Fixup::iterator					fixupsBegin() const override	{ return _undefs.data(); }
+	ld::Fixup::iterator					fixupsEnd()	const override 	{ return _undefs.data() + _undefs.size(); }
 
 	// for adding references to symbols outside bitcode file
 	void										addReference(const char* nm)
