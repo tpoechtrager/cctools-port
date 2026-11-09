@@ -746,12 +746,12 @@ public:
 															{ if ( _hash == 0 ) _hash = sect().contentHash(this, ind); return _hash; }
 	virtual bool								canCoalesceWith(const ld::Atom& rhs, const ld::IndirectBindingTable& ind) const 
 															{ return sect().canCoalesceWith(this, rhs, ind); }
-	virtual ld::Fixup::iterator					fixupsBegin() const	{ return &machofile()._fixups[_fixupsStartIndex]; }
-	virtual ld::Fixup::iterator					fixupsEnd()	const	{ return &machofile()._fixups[_fixupsStartIndex+_fixupsCount]; }
-	virtual ld::Atom::UnwindInfo::iterator		beginUnwind() const	{ return &machofile()._unwindInfos[_unwindInfoStartIndex]; }
-	virtual ld::Atom::UnwindInfo::iterator		endUnwind()	const	{ return &machofile()._unwindInfos[_unwindInfoStartIndex+_unwindInfoCount];  }
-	virtual ld::Atom::LineInfo::iterator		beginLineInfo() const{ return &machofile()._lineInfos[_lineInfoStartIndex]; }
-	virtual ld::Atom::LineInfo::iterator		endLineInfo() const { return &machofile()._lineInfos[_lineInfoStartIndex+_lineInfoCount];  }
+	virtual ld::Fixup::iterator					fixupsBegin() const	{ return machofile()._fixups.data() + _fixupsStartIndex; }
+	virtual ld::Fixup::iterator					fixupsEnd()	const	{ return machofile()._fixups.data() + (_fixupsStartIndex+_fixupsCount); }
+	virtual ld::Atom::UnwindInfo::iterator		beginUnwind() const	{ return machofile()._unwindInfos.data() + _unwindInfoStartIndex; }
+	virtual ld::Atom::UnwindInfo::iterator		endUnwind()	const	{ return machofile()._unwindInfos.data() + (_unwindInfoStartIndex+_unwindInfoCount);  }
+	virtual ld::Atom::LineInfo::iterator		beginLineInfo() const{ return machofile()._lineInfos.data() + _lineInfoStartIndex; }
+	virtual ld::Atom::LineInfo::iterator		endLineInfo() const { return machofile()._lineInfos.data() + (_lineInfoStartIndex+_lineInfoCount);  }
 	virtual void								setFile(const ld::File* f);
 
 private:
