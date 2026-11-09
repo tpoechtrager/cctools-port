@@ -673,15 +673,6 @@ cpu_subtype_t cpusubtype)
 	    case CPU_SUBTYPE_ARM_V7EM:
 		printf("armv7em\n");
 		break;
-	    case CPU_SUBTYPE_ARM_V8M_MAIN:
-		printf("armv8m.main\n");
-		break;
-	    case CPU_SUBTYPE_ARM_V8M_BASE:
-		printf("armv8m.base\n");
-		break;
-	    case CPU_SUBTYPE_ARM_V8_1M_MAIN:
-		printf("armv8.1m.main\n");
-		break;
 	    default:
 		goto print_arch_unknown;
 		break;
@@ -1007,18 +998,6 @@ cpu_subtype_t cpusubtype)
 	    case CPU_SUBTYPE_ARM_V7EM:
 		printf("    cputype CPU_TYPE_ARM\n"
 		       "    cpusubtype CPU_SUBTYPE_ARM_V7EM\n");
-		break;
-	    case CPU_SUBTYPE_ARM_V8M_BASE:
-		printf("    cputype CPU_TYPE_ARM\n"
-		       "    cpusubtype CPU_SUBTYPE_ARM_V8M_BASE\n");
-		break;
-	    case CPU_SUBTYPE_ARM_V8M_MAIN:
-		printf("    cputype CPU_TYPE_ARM\n"
-		       "    cpusubtype CPU_SUBTYPE_ARM_V8M_MAIN\n");
-		break;
-	    case CPU_SUBTYPE_ARM_V8_1M_MAIN:
-		printf("    cputype CPU_TYPE_ARM\n"
-		       "    cpusubtype CPU_SUBTYPE_ARM_V8_1M_MAIN\n");
 		break;
 	    default:
 		goto print_arch_unknown;
@@ -2108,15 +2087,6 @@ NS32:
 		    break;
 		case CPU_SUBTYPE_ARM_V7EM:
 		    printf("       V7EM");
-		    break;
-		case CPU_SUBTYPE_ARM_V8M_MAIN:
-		    printf("       V8M.MAIN");
-		    break;
-		case CPU_SUBTYPE_ARM_V8M_BASE:
-		    printf("       V8M.BASE");
-		    break;
-		case CPU_SUBTYPE_ARM_V8_1M_MAIN:
-		    printf("       V8.1M.MAIN");
 		    break;
 		default:
 		    printf(" %10d", cpusubtype & ~CPU_SUBTYPE_MASK);
@@ -4243,10 +4213,10 @@ enum bool verbose)
 		printf("DRIVERKIT\n");
 		break;
 	    case PLATFORM_VISIONOS:
-		printf("VISIONOS\n");
+		printf("XROS\n");
 		break;
 	    case PLATFORM_VISIONOSSIMULATOR:
-		printf("VISIONOSSIMULATOR\n");
+		printf("XROSSIMULATOR\n");
 		break;
 	    case PLATFORM_FIRMWARE:
 		printf("FIRMWARE\n");

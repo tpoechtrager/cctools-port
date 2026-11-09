@@ -204,7 +204,6 @@ struct cmd_flags {
     enum bool fat64;	/* force the use of 64-bit fat files
 			   when a fat is to be created */
     enum bool sdk_libs_as_refs;
-    enum bool warn_dup_members;
 };
 static struct cmd_flags cmd_flags = { 0 };
 
@@ -1094,9 +1093,6 @@ char **envp)
 		}
 		else if(strcmp(argv[i], "-encode_sdk_libraries_as_references") == 0){
 		    cmd_flags.sdk_libs_as_refs = TRUE;
-		}
-		else if(strcmp(argv[i], "-warn_duplicate_member_names") == 0){
-		    cmd_flags.warn_dup_members = TRUE;
 		}
 		else if(strcmp(argv[i], "-pg") == 0){
 		    if(cmd_flags.ranlib == TRUE){
@@ -2175,7 +2171,8 @@ struct ofile *ofile)
 			get_arch_name_from_types(ofile->mh_cputype,
 				    (ofile->mh_cpusubtype & ~CPU_SUBTYPE_MASK));
 		    archs[narchs].arch_flag.cputype = ofile->mh_cputype;
-		    archs[narchs].arch_flag.cpusubtype = ofile->mh_cpusubtype;
+		    archs[narchs].arch_flag.cpusubtype =
+			(ofile->mh_cpusubtype & ~CPU_SUBTYPE_MASK);
 		}
 		else{
 		    family_arch_flag =
@@ -2636,7 +2633,7 @@ struct ofile *ofile)
 	}
 
 	/* if this is libtool warn about duplicate member names */
-	if(cmd_flags.ranlib == FALSE && cmd_flags.warn_dup_members == TRUE)
+	if(cmd_flags.ranlib == FALSE)
 	    warn_duplicate_member_names();
 
 	/*
@@ -3057,8 +3054,7 @@ struct ofile *ofile)
 		 * Warn for what really is a bad library that has an empty table
 		 * of contents but this is allowed in the original ranlib.
 		 */
-		if(arch->toc_nranlibs == 0 && cmd_flags.q == FALSE
-            && cmd_flags.no_warning_for_no_symbols == FALSE ){
+		if(arch->toc_nranlibs == 0 && cmd_flags.q == FALSE){
 		    if(narchs > 1)
 			warning("archive library: %s for architecture: %s "
 				"the table of contents is empty (no object "

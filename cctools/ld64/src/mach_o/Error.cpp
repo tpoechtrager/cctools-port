@@ -23,7 +23,7 @@
 
 #include <stdint.h>
 #include <stdio.h>
-#include <stdlib.h>
+#include <stdlib.h> // ld64-port
 #include <string.h>
 #include <assert.h>
 //#include <uuid/uuid.h> // ld64-port: commented

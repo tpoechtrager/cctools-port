@@ -240,7 +240,6 @@ public:
 	static bool						libLTOisLoaded() { return (::lto_get_version() != NULL); }
 	static bool						optimize(   const std::vector<const ld::Atom*>&	allAtoms,
 												ld::Internal&						state,
-												const Options&								ldOptions,
 												const OptimizeOptions&				options,
 												ld::File::AtomHandler&				handler,
 												std::vector<const ld::Atom*>&		newAtoms, 
@@ -278,7 +277,6 @@ private:
 
 	static void						setPreservedSymbols(const std::vector<const ld::Atom*>&	allAtoms,
 														ld::Internal&						state,
-														const Options&							  ldOptions,
 														const OptimizeOptions&				options,
 														CStringToAtom &deadllvmAtoms,
 														CStringToAtom &llvmAtoms,
@@ -301,7 +299,6 @@ private:
 	static bool optimizeLTO(const std::vector<File*> files,
 							const std::vector<const ld::Atom*>&	allAtoms,
 							ld::Internal&						state,
-							const Options&							  ldOptions,
 							const OptimizeOptions&				options,
 							ld::File::AtomHandler&				handler,
 							std::vector<const ld::Atom*>&		newAtoms,
@@ -690,7 +687,6 @@ void Parser::ltoDiagnosticHandler(lto_codegen_diagnostic_severity_t severity, co
 /// Instruct libLTO about the list of symbols to preserve, compute deadllvmAtoms and llvmAtoms
 void Parser::setPreservedSymbols(	const std::vector<const ld::Atom*>&	allAtoms,
 									ld::Internal&						state,
-									const Options&                ldOptions,
 									const OptimizeOptions&				options,
 									CStringToAtom &deadllvmAtoms,
 									CStringToAtom &llvmAtoms,
@@ -818,8 +814,6 @@ void Parser::setPreservedSymbols(	const std::vector<const ld::Atom*>&	allAtoms,
 		::lto_codegen_set_should_embed_uselists(generator, false);
 #endif
 		if ( ! ::lto_codegen_write_merged_modules(generator, options.outputFilePath) ) {
-			// rdar://152624294 (ld -r + LTO fails to emit -dependency_info files)
-			ldOptions.writeDependencyInfo();
 			// HACK, no good way to tell linker we are all done, so just quit
 			exit(0);
 		}
@@ -1026,7 +1020,6 @@ void Parser::loadMachO(ld::relocatable::File*				machoFile,
 bool Parser::optimizeLTO(const std::vector<File*>				files,
 						 const std::vector<const ld::Atom*>&	allAtoms,
 						 ld::Internal&							state,
-						 const Options&									ldOptions,
 						 const OptimizeOptions&					options,
 						 ld::File::AtomHandler&					handler,
 						 std::vector<const ld::Atom*>&			newAtoms,
@@ -1091,7 +1084,7 @@ bool Parser::optimizeLTO(const std::vector<File*>				files,
 
 	// Compute the preserved symbols
 	CStringToAtom deadllvmAtoms, llvmAtoms;
-	setPreservedSymbols(allAtoms, state, ldOptions, options, deadllvmAtoms, llvmAtoms, generator);
+	setPreservedSymbols(allAtoms, state, options, deadllvmAtoms, llvmAtoms, generator);
 
 	size_t machOFileLen = 0;
 	const uint8_t* machOFile = NULL;
@@ -1516,7 +1509,6 @@ bool Parser::optimizeThinLTO(const std::vector<File*>&              files,
 
 bool Parser::optimize(  const std::vector<const ld::Atom*>&	allAtoms,
 						ld::Internal&						state,
-						const Options&								ldOptions,
 						const OptimizeOptions&				options,
 						ld::File::AtomHandler&				handler,
 						std::vector<const ld::Atom*>&		newAtoms,
@@ -1556,7 +1548,7 @@ bool Parser::optimize(  const std::vector<const ld::Atom*>&	allAtoms,
 	}
 
 	auto result =  optimizeThinLTO(theThinLTOFiles, allAtoms, state, options, handler, newAtoms, additionalUndefines) &&
-				   optimizeLTO(theLTOFiles, allAtoms, state, ldOptions, options, handler, newAtoms, additionalUndefines);
+				   optimizeLTO(theLTOFiles, allAtoms, state, options, handler, newAtoms, additionalUndefines);
 
 	// Remove InternalAtoms from ld
 	for (std::vector<File*>::iterator it=_s_files.begin(); it != _s_files.end(); ++it) {
@@ -1879,14 +1871,13 @@ std::vector<std::string> softloadRuntimeSymbols(cpu_type_t arch)
 //
 bool optimize(  const std::vector<const ld::Atom*>&	allAtoms,
 				ld::Internal&						state,
-				const Options&								ldOptions,
 				const OptimizeOptions&				options,
 				ld::File::AtomHandler&				handler,
 				std::vector<const ld::Atom*>&		newAtoms, 
 				std::vector<const char*>&			additionalUndefines)
 { 
 	Mutex lock;
-	return Parser::optimize(allAtoms, state, ldOptions, options, handler, newAtoms, additionalUndefines);
+	return Parser::optimize(allAtoms, state, options, handler, newAtoms, additionalUndefines);
 }
 
 
