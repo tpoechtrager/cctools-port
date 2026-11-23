@@ -4872,6 +4872,13 @@ bool OutputFile::hasOrdinalForInstallPath(const char* path, int* ordinal)
 uint32_t OutputFile::dylibToOrdinal(const ld::dylib::File* dylib) const
 {
 	auto it = _dylibToOrdinal.find(dylib);
+	// ld64-port: another file with the same install name (e.g. a Swift overlay TBD) may be the one that got the ordinal
+	if ( it == _dylibToOrdinal.end() ) {
+		int ordinal;
+		if ( (dylib->installPath() != NULL) && const_cast<OutputFile*>(this)->hasOrdinalForInstallPath(dylib->installPath(), &ordinal) )
+			return ordinal;
+	}
+	// ld64-port end
 	assert(it != _dylibToOrdinal.end());
 	return it->second;
 }
@@ -5002,6 +5009,11 @@ int OutputFile::compressedOrdinalForAtom(const ld::Atom* target) const
 		std::map<const ld::dylib::File*, int>::const_iterator pos = _dylibToOrdinal.find(dylib);
 		if ( pos != _dylibToOrdinal.end() )
 			return pos->second;
+		// ld64-port: another file with the same install name (e.g. a Swift overlay TBD) may be the one that got the ordinal
+		int ordinal;
+		if ( (dylib->installPath() != NULL) && const_cast<OutputFile*>(this)->hasOrdinalForInstallPath(dylib->installPath(), &ordinal) )
+			return ordinal;
+		// ld64-port end
 		assert(0 && "dylib not assigned ordinal");
 	}
 	
