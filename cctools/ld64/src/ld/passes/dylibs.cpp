@@ -53,6 +53,24 @@ void doPass(const Options& opts, ld::Internal& state)
 {
 //	const bool log = false;
 	
+	// ld64-port: Several dylib files can share one install name: the SDK TBDs of the Swift overlays
+	// (libswiftDarwin, libswift_DarwinFoundation1-3, libswift_Builtin_float) get /usr/lib/swift/libswiftDarwin.dylib
+	// through $ld$previous$ when the deployment target is older than macOS 15.  Only the first file per install name
+	// is in state.dylibs, so a symbol used from another one does not mark that file as used and it would be removed
+	// below, leaving the atoms of the other files without an ordinal.  Keep a dylib whose install name is used by
+	// any import atom.
+	std::set<std::string> usedInstallPaths;
+	for (const ld::Internal::FinalSection* sect : state.sections) {
+		if ( sect->type() != ld::Section::typeImportProxies )
+			continue;
+		for (const ld::Atom* atom : sect->atoms) {
+			const ld::dylib::File* dylib = dynamic_cast<const ld::dylib::File*>(atom->file());
+			if ( (dylib != NULL) && (dylib->installPath() != NULL) )
+				usedInstallPaths.insert(dylib->installPath());
+		}
+	}
+	// ld64-port end
+
 	// clear "willRemoved" bit on all dylibs
 	for (std::vector<ld::dylib::File*>::iterator it = state.dylibs.begin(); it != state.dylibs.end(); ++it) {
 		ld::dylib::File* aDylib = *it;
@@ -60,8 +78,9 @@ void doPass(const Options& opts, ld::Internal& state)
 	}
 	for (std::vector<ld::dylib::File*>::iterator it = state.dylibs.begin(); it != state.dylibs.end(); ++it) {
 		ld::dylib::File* aDylib = *it;
+		const bool installPathUsed = ( aDylib->installPath() != NULL ) && ( usedInstallPaths.count(aDylib->installPath()) != 0 ); // ld64-port
 		// set "willRemoved" bit on implicit dylibs that did not provide any exports
-		if ( aDylib->implicitlyLinked() && !aDylib->explicitlyLinked() && !aDylib->providedExportAtom() && !aDylib->neededDylib() )
+		if ( aDylib->implicitlyLinked() && !aDylib->explicitlyLinked() && !aDylib->providedExportAtom() && !aDylib->neededDylib() && !installPathUsed ) // ld64-port: && !installPathUsed
 			aDylib->setWillBeRemoved(true);
 		// set "willRemoved" bit on dead strippable explicit dylibs that did not provide any exports
 		if ( aDylib->explicitlyLinked() && aDylib->deadStrippable() && !aDylib->providedExportAtom() && !aDylib->neededDylib() )
