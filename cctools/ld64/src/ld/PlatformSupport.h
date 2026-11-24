@@ -47,6 +47,8 @@ enum class Platform
     tvOS_simulator      = 8,    // PLATFORM_TVOSSIMULATOR
     watchOS_simulator   = 9,    // PLATFORM_WATCHOSSIMULATOR
     driverKit           = 10,   // PLATFORM_DRIVERKIT
+    xrOS                = 11,   // PLATFORM_XROS // ld64-port
+    xrOS_simulator      = 12,   // PLATFORM_XRSIMULATOR // ld64-port
     sepOS               = 14,   // PLATFORM_SEPOS
     freestanding        = 100   // this never shows up in mach-o files, it is for internal tracking in ld64
 };

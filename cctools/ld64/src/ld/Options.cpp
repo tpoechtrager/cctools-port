@@ -5312,6 +5312,7 @@ void Options::reconfigureDefaults()
 			ld::Platform::iOS,
 			ld::Platform::tvOS,
 			ld::Platform::watchOS,
+			ld::Platform::xrOS, // ld64-port
 			ld::Platform::sepOS,
 	} );
 	bool noEncryptablePlatforms = std::none_of(encryptablePlatforms.begin(), encryptablePlatforms.end(), [this](ld::Platform p) {
@@ -6101,6 +6102,8 @@ void Options::checkIllegalOptionCombinations()
 					case ld::Platform::freestanding:
 					case ld::Platform::driverKit:
 					case ld::Platform::sepOS:
+					case ld::Platform::xrOS: // ld64-port
+					case ld::Platform::xrOS_simulator: // ld64-port
 						if ( fOutputKind != kKextBundle )
 							warning("-undefined dynamic_lookup is deprecated on %s", nameFromPlatform(platform));
 						break;
@@ -6181,6 +6184,8 @@ void Options::checkIllegalOptionCombinations()
 				case ld::Platform::driverKit:
 				case ld::Platform::freestanding:
 				case ld::Platform::sepOS:
+				case ld::Platform::xrOS: // ld64-port
+				case ld::Platform::xrOS_simulator: // ld64-port
 					warning("-flat_namespace is deprecated on %s", nameFromPlatform(platform));
 					break;
 			}

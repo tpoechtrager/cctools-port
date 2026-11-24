@@ -249,6 +249,10 @@ static const PlatformVersion driverKit_20_0 		(Platform::driverKit, 0x00140000);
 static const PlatformVersion driverKit_21_0 		(Platform::driverKit, 0x00150000);
 static const PlatformVersion driverKit_22_0			(Platform::driverKit, 0x00160000);
 static const PlatformVersion driverKit_Future		(Platform::driverKit, 0x10000000);
+static const PlatformVersion xrOS_1_0			(Platform::xrOS, 0x00010000); // ld64-port
+static const PlatformVersion xrOS_1_1			(Platform::xrOS, 0x00010100); // ld64-port
+static const PlatformVersion xrOS_2_0			(Platform::xrOS, 0x00020000); // ld64-port
+static const PlatformVersion xrOS_Future		(Platform::xrOS, 0x10000000); // ld64-port
 
 static const PlatformVersion sepOS_1_0				(Platform::sepOS, 0x00010000);
 
@@ -258,6 +262,7 @@ static const PlatformSet simulatorPlatforms ( {
        Platform::iOS_simulator,
        Platform::tvOS_simulator,
        Platform::watchOS_simulator,
+       Platform::xrOS_simulator, // ld64-port
 } );
 
 //FIXME do we need to add simulatots to these?
@@ -276,11 +281,13 @@ static const VersionSet version2019Fall ({mac10_15, iOS_13_0, watchOS_6_0, tvOS_
 static const VersionSet version2020Fall ({mac10_16, iOS_14_0, watchOS_7_0, tvOS_14_0, bridgeOS_5_0});
 
 static const VersionSet version2021Fall ({mac12_0, iOS_15_0, watchOS_8_0, tvOS_15_0, bridgeOS_6_0,
-		sepOS_1_0
+		sepOS_1_0, // ld64-port
+	xrOS_1_0, // ld64-port
 });
 
 static const VersionSet version2022Fall ({mac13_0, iOS_16_0, watchOS_9_0, tvOS_16_0, bridgeOS_7_0,
-		sepOS_1_0
+		sepOS_1_0, // ld64-port
+	xrOS_1_0, // ld64-port
 });
 
 
@@ -288,7 +295,9 @@ static const VersionSet supportsSplitSegV2 		({mac10_12, iOS_9_0, watchOS_2_0, t
 // FIXME: Use the comment out line instead.
 static const VersionSet supportsLCBuildVersion 	({mac10_14, iOS_12_0, watchOS_5_0, tvOS_12_0, bridgeOS_1_0});
 
-static const VersionSet supportsPIE				({mac10_5, iOS_4_2});
+static const VersionSet supportsPIE				({mac10_5, iOS_4_2, // ld64-port
+	xrOS_1_0, // ld64-port
+}); // ld64-port
 
 static const VersionSet supportsTLV  			({mac10_7, iOS_9_0});
 static const VersionSet supportsChainedFixups 	({mac12_0, iOS_13_4, watchOS_7_0, tvOS_14_0, bridgeOS_Future});
