@@ -244,7 +244,11 @@ static const PlatformVersion driverKit_21_0 		(Platform::driverKit, 0x00150000);
 static const PlatformVersion driverKit_Future		(Platform::driverKit, 0x10000000);
 
 #if TARGET_FEATURE_REALITYOS
+#if 0 // ld64-port: version 1.0 is 0x00010000, as in ld64-957.1
 static const PlatformVersion realityOS_1_0			(Platform::realityOS, 0x00000001);
+#else
+static const PlatformVersion realityOS_1_0			(Platform::realityOS, 0x00010000); // ld64-port
+#endif
 static const PlatformVersion realityOS_Future		(Platform::realityOS, 0x10000000);
 #endif // TARGET_FEATURE_REALITYOS
 

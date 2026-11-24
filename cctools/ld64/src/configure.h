@@ -19,6 +19,7 @@
 #endif
 
 #define LD_PAGE_SIZE 0x1000
+#define TARGET_FEATURE_REALITYOS 1 // ld64-port: enable the platforms 11 and 12 (visionOS)
 #define CPU_SUBTYPE_X86_ALL     ((cpu_subtype_t)3)
 
 #define SUPPORT_ARCH_armv6 1
