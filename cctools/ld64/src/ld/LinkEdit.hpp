@@ -2237,6 +2237,8 @@ void CodeSignatureAtom::encode() const
 		case ld::Platform::driverKit:
 		case ld::Platform::watchOS:
 		case ld::Platform::sepOS:
+		case ld::Platform::xrOS: // ld64-port
+		case ld::Platform::xrOS_simulator: // ld64-port
 			sig_platform = platform;
 			sig_min_version = minVersion;
 			break;

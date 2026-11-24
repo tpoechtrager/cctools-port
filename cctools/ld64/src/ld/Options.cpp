@@ -5376,6 +5376,7 @@ void Options::reconfigureDefaults()
 			ld::Platform::iOS,
 			ld::Platform::tvOS,
 			ld::Platform::watchOS,
+			ld::Platform::xrOS, // ld64-port
 			ld::Platform::sepOS,
 			ld::Platform::driverKit
 	} );
@@ -6228,6 +6229,8 @@ static bool isModernPlatform(ld::Platform platform)
 		case ld::Platform::freestanding:
 		case ld::Platform::driverKit:
 		case ld::Platform::sepOS:
+		case ld::Platform::xrOS: // ld64-port
+		case ld::Platform::xrOS_simulator: // ld64-port
 			return true;
 	}
 }
